@@ -70,6 +70,10 @@ pub async fn join(code: &str) -> ApiResult<GuildState> {
     call(Method::POST, &format!("/invites/{code}"), NO_BODY).await
 }
 
+pub async fn update_me(display_name: &str) -> ApiResult<User> {
+    call(Method::PATCH, "/users/@me", Some(UpdateMe { display_name: Some(display_name.into()) })).await
+}
+
 pub async fn logout_all() -> ApiResult<()> {
     call(Method::POST, "/auth/logout-all", NO_BODY).await
 }

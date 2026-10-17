@@ -324,3 +324,67 @@ async fn logout_closes_that_sessions_gateway(pool: PgPool) {
     assert_eq!(made.status(), 201);
     assert!(matches!(read(&mut kept).await, ServerOp::Dispatch { event: Event::GuildCreate(_), .. }));
 }
+
+/// Nom affiché : modifiable, validé, diffusé en direct à ceux qui partagent un serveur.
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn display_name_changes_live(pool: PgPool) {
+    let base = spawn(pool).await;
+    let c = reqwest::Client::new();
+    let lou = register(&c, &base, "lou").await;
+    let sam = register(&c, &base, "sam").await;
+    let auth = |t: &str| format!("Session {t}");
+    let g: GuildState = c
+        .post(format!("http://{base}/api/v1/guilds"))
+        .header("authorization", auth(&lou.token))
+        .json(&json!({"name": "Abysse"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let inv: Invite = c
+        .post(format!(
+            "http://{base}/api/v1/channels/{}/invites",
+            g.channels.iter().find(|c| c.kind.is_textual()).unwrap().id
+        ))
+        .header("authorization", auth(&lou.token))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let joined = c
+        .post(format!("http://{base}/api/v1/invites/{}", inv.code))
+        .header("authorization", auth(&sam.token))
+        .send()
+        .await;
+    assert_eq!(joined.unwrap().status(), 200);
+
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{base}/gateway")).await.unwrap();
+    read(&mut ws).await;
+    let op = ClientOp::Identify { token: Some(sam.token.clone()) };
+    ws.send(Ws::Text(serde_json::to_string(&op).unwrap().into())).await.unwrap();
+    assert!(matches!(read(&mut ws).await, ServerOp::Ready(_)));
+
+    let patch = |name: serde_json::Value| {
+        c.patch(format!("http://{base}/api/v1/users/@me"))
+            .header("authorization", auth(&lou.token))
+            .json(&json!({ "display_name": name }))
+            .send()
+    };
+    assert_eq!(patch(json!("x".repeat(33))).await.unwrap().status(), 400);
+    assert_eq!(patch(json!("deux\nlignes")).await.unwrap().status(), 400);
+    let u: User = patch(json!("  Lou des abysses 🐙 ")).await.unwrap().json().await.unwrap();
+    assert_eq!((u.username.as_str(), u.name()), ("lou", "Lou des abysses 🐙"));
+    let ServerOp::Dispatch { event: Event::UserUpdate(seen), .. } = read(&mut ws).await else {
+        panic!("USER_UPDATE attendu")
+    };
+    assert_eq!(seen.name(), "Lou des abysses 🐙");
+    // Vide : on revient au pseudo unique.
+    let u: User = patch(json!("   ")).await.unwrap().json().await.unwrap();
+    assert_eq!(u.display_name, None);
+    assert_eq!(u.name(), "lou");
+}

@@ -195,6 +195,34 @@ impl Db {
         })
     }
 
+    pub async fn set_display_name(&self, id: Id, name: Option<&str>) -> Result<User> {
+        let r = sqlx::query(&format!(
+            "update users as u set display_name = $2 where u.id = $1 and u.deleted_at is null returning {}",
+            user_cols("u")
+        ))
+        .bind(id)
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await?;
+        match r {
+            Some(r) => user_from(&r, "u")?.ok_or(DbError::NotFound),
+            None => Err(DbError::NotFound),
+        }
+    }
+
+    /// Ceux qui voient cet utilisateur : membres de ses serveurs, ses MP, ses relations.
+    pub async fn related_users(&self, id: Id) -> Result<Vec<Id>> {
+        Ok(sqlx::query_scalar(
+            "select m2.user_id from members m1 join members m2 on m2.guild_id = m1.guild_id where m1.user_id = $1
+             union select r2.user_id from channel_recipients r1
+               join channel_recipients r2 on r2.channel_id = r1.channel_id where r1.user_id = $1
+             union select user_id from relationships where target_id = $1",
+        )
+        .bind(id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     /// Utilisateur et hash du mot de passe, par pseudo ou e-mail. Exclut les comptes
     /// supprimés ou en cours de suppression.
     pub async fn user_credentials(&self, login: &str) -> Result<Option<(User, String)>> {

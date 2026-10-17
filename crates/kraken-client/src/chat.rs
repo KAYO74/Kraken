@@ -226,6 +226,7 @@ fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
 #[component]
 fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
     let name = msg.author.as_ref().map(|u| u.name().to_string()).unwrap_or_else(|| "Compte supprimé".into());
+    let handle = msg.author.as_ref().map(|u| format!("@{}", u.username));
     let at = msg.created_at;
     view! {
         <article class=if cont { "k-msg k-msg--cont" } else { "k-msg" } aria-label=format!("{name}, {}", when(at))>
@@ -238,7 +239,7 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
                 }
             }}
             <div>
-                {(!cont).then(|| view! { <header><b>{name.clone()}</b><time datetime=iso(at)>{when(at)}</time></header> })}
+                {(!cont).then(|| view! { <header><b title=handle>{name.clone()}</b><time datetime=iso(at)>{when(at)}</time></header> })}
                 <p>{msg.content}</p>
             </div>
         </article>
@@ -308,10 +309,13 @@ fn Members(guild: Id) -> impl IntoView {
         <aside class="app-aside" aria-label="Membres">
             <h2 class="k-category">{move || format!("Membres — {}", members().len())}</h2>
             <ul class="app-members">
-                <For each=members key=|m| m.user.id let:m>
+                <For each=members key=|m| (m.user.id, m.user.display_name.clone(), m.nick.clone()) let:m>
                     <li class="k-dm">
                         <Avatar user=m.user.clone() size="md"/>
-                        <div class="app-ellipsis">{m.nick.clone().unwrap_or_else(|| m.user.name().to_string())}</div>
+                        <div class="app-ellipsis">
+                            {m.nick.clone().unwrap_or_else(|| m.user.name().to_string())}
+                            <small>{format!("@{}", m.user.username)}</small>
+                        </div>
                     </li>
                 </For>
             </ul>

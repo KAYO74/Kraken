@@ -166,6 +166,25 @@ pub async fn me(auth: Auth) -> Json<User> {
     Json(auth.user)
 }
 
+/// Changer son nom affiché. Le pseudo unique ne change pas ; il reste visible sous le nom.
+pub async fn update_me(State(state): State<AppState>, auth: Auth, Json(req): Json<UpdateMe>) -> ApiResult<Json<User>> {
+    let name = req.display_name.as_deref().map(str::trim).filter(|n| !n.is_empty());
+    if let Some(n) = name
+        && (n.chars().count() > MAX_DISPLAY_NAME || n.chars().any(char::is_control))
+    {
+        return Err(AppError::invalid(format!(
+            "Nom affiché : {MAX_DISPLAY_NAME} caractères au plus, sans retour à la ligne."
+        )));
+    }
+    let user = state.db.set_display_name(auth.user.id, name).await?;
+    let mut audience = state.db.related_users(user.id).await?;
+    audience.push(user.id);
+    audience.sort_unstable();
+    audience.dedup();
+    state.hub.send(&audience, Event::UserUpdate(user.clone()));
+    Ok(Json(user))
+}
+
 pub async fn verify_email(State(state): State<AppState>, Json(req): Json<TokenReq>) -> ApiResult<StatusCode> {
     let uid = state
         .db

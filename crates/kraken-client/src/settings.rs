@@ -105,6 +105,25 @@ fn Account() -> impl IntoView {
         });
     };
     let leave2 = leave.clone();
+    let display = RwSignal::new(s.me.get_untracked().and_then(|u| u.display_name).unwrap_or_default());
+    let saved = RwSignal::new(false);
+    let name_error = RwSignal::new(None::<String>);
+    let save_name = move |e: leptos::ev::SubmitEvent| {
+        e.prevent_default();
+        saved.set(false);
+        name_error.set(None);
+        spawn_local(async move {
+            match crate::api::update_me(&display.get_untracked()).await {
+                Ok(u) => {
+                    display.set(u.display_name.clone().unwrap_or_default());
+                    s.update_user(u);
+                    saved.set(true);
+                }
+                Err(e) => name_error.set(Some(e.message)),
+            }
+        });
+    };
+    let username = move || s.me.get().map(|u| u.username).unwrap_or_default();
     let delete = move |e: leptos::ev::SubmitEvent| {
         e.prevent_default();
         spawn_local(async move {
@@ -126,6 +145,15 @@ fn Account() -> impl IntoView {
                 </header>
             </div>
         })}
+        <form class="k-setting app-name-form" on:submit=save_name>
+            <label for="display-name">"Nom affiché"</label>
+            <p id="display-name-h">{move || format!("Ce que les autres voient. Ton pseudo unique @{} ne change pas : il reste écrit en dessous.", username())}</p>
+            <button class="k-btn k-btn--primary" type="submit">"Enregistrer"</button>
+            <input id="display-name" class="k-input" maxlength=kraken_proto::MAX_DISPLAY_NAME.to_string() placeholder=username bind:value=display
+                aria-describedby="display-name-h" aria-invalid=move || name_error.get().is_some().then_some("true")/>
+            <Show when=move || name_error.get().is_some()><p class="k-error" role="alert">{move || name_error.get()}</p></Show>
+            <Show when=move || saved.get()><p role="status">"Nom affiché enregistré."</p></Show>
+        </form>
         <div class="k-setting">
             <label for="logout">"Se déconnecter"</label>
             <button id="logout" class="k-btn" on:click=move |_| leave(false)>"Déconnexion"</button>

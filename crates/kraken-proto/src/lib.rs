@@ -55,6 +55,15 @@ pub struct PasswordReq {
     pub password: String,
 }
 
+/// Modifier son compte. `display_name` vide ou absent : on revient au pseudo unique.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct UpdateMe {
+    pub display_name: Option<String>,
+}
+
+/// Longueur maximale du nom affiché, en caractères.
+pub const MAX_DISPLAY_NAME: usize = 32;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthResp {
     pub token: String,
@@ -252,5 +261,10 @@ pub enum Event {
     MessageCreate(Message),
     ChannelCreate(Channel),
     GuildCreate(Box<GuildState>),
-    MemberAdd { guild_id: Id, member: Member },
+    MemberAdd {
+        guild_id: Id,
+        member: Member,
+    },
+    /// Nom affiché ou avatar changé : envoyé à l'intéressé et à ceux qui le voient.
+    UserUpdate(User),
 }

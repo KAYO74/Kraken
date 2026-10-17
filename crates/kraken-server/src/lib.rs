@@ -109,7 +109,7 @@ pub fn app(state: AppState) -> Router {
         .merge(limited)
         .route("/auth/logout", post(auth::logout))
         .route("/auth/logout-all", post(auth::logout_all))
-        .route("/users/@me", get(auth::me))
+        .route("/users/@me", get(auth::me).patch(auth::update_me))
         .route("/users/@me/delete", post(auth::delete_account))
         .route("/users/@me/relationships", get(api::relationships))
         .route("/users/@me/channels", get(api::private_channels))

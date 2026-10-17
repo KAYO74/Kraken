@@ -93,7 +93,7 @@ pub fn Friends() -> impl IntoView {
                         } else {
                             view! {
                                 <ul class="app-list">
-                                    <For each=move || rows.get() key=|r| (r.user.id, r.kind as u8, r.status as u8) let:r>
+                                    <For each=move || rows.get() key=|r| (r.user.id, r.kind as u8, r.status as u8, r.user.display_name.clone()) let:r>
                                         {
                                             let sub = match r.kind {
                                                 RelationshipKind::PendingIncoming => "Demande reçue".to_string(),
@@ -105,7 +105,7 @@ pub fn Friends() -> impl IntoView {
                                             view! {
                                                 <li class="app-row">
                                                     <Avatar user=r.user.clone() size="" status=r.status/>
-                                                    <div class="app-ellipsis"><b>{name.clone()}</b><small>{sub}</small></div>
+                                                    <div class="app-ellipsis"><b>{name.clone()}</b><small>{format!("@{} · {sub}", r.user.username)}</small></div>
                                                     {dm.map(|c| view! {
                                                         <a class="k-btn k-btn--icon" href=format!("/channels/@me/{c}") aria-label=format!("Écrire à {name}") title="Message">
                                                             <Icon icon=lu::LuMessageCircle/>

@@ -119,6 +119,27 @@ impl Store {
         self.logs.update(|l| f(l.entry(channel).or_default()));
     }
 
+    /// Remplace partout la fiche d'un utilisateur (nom affiché changé).
+    pub fn update_user(&self, u: User) {
+        if self.me.with_untracked(|m| m.as_ref().is_some_and(|m| m.id == u.id)) {
+            self.me.set(Some(u.clone()));
+        }
+        self.guilds.update(|gs| {
+            gs.iter_mut().flat_map(|g| &mut g.members).filter(|m| m.user.id == u.id).for_each(|m| m.user = u.clone())
+        });
+        self.friends.update(|fs| fs.iter_mut().filter(|r| r.user.id == u.id).for_each(|r| r.user = u.clone()));
+        self.dms.update(|ds| {
+            ds.iter_mut().flat_map(|c| &mut c.recipients).filter(|r| r.id == u.id).for_each(|r| *r = u.clone())
+        });
+        self.logs.update(|ls| {
+            ls.values_mut()
+                .flat_map(|l| &mut l.items)
+                .filter_map(|m| m.author.as_mut())
+                .filter(|a| a.id == u.id)
+                .for_each(|a| *a = u.clone())
+        });
+    }
+
     fn apply(&self, ev: Event) {
         match ev {
             Event::MessageCreate(m) => self.log(m.channel_id, |l| {
@@ -139,6 +160,7 @@ impl Store {
                 });
             }
             Event::GuildCreate(g) => self.upsert_guild(*g),
+            Event::UserUpdate(u) => self.update_user(u),
             Event::MemberAdd { guild_id, member } => self.guilds.update(|gs| {
                 if let Some(g) = gs.iter_mut().find(|g| g.guild.id == guild_id) {
                     g.members.push(member);

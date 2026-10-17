@@ -146,7 +146,7 @@ fn HomeSidebar() -> impl IntoView {
             <Show when=move || s.dms.with(|d| d.is_empty()) && s.conn.get() == Conn::Ready>
                 <p class="app-hint">"Aucune conversation pour l'instant."</p>
             </Show>
-            <For each=move || s.dms.get() key=|c| c.id let:c>
+            <For each=move || s.dms.get() key=|c| (c.id, c.recipients.iter().map(|u| u.name().to_string()).collect::<Vec<_>>()) let:c>
                 {
                     let id = c.id;
                     let names: Vec<String> = c.recipients.iter().map(|u| u.name().to_string()).collect();
@@ -308,7 +308,12 @@ fn UserPanel() -> impl IntoView {
             {move || s.me.get().map(|u| view! { <Avatar user=u size="md" status=kraken_proto::Status::Online/> })}
             <div>
                 <b class="app-ellipsis">{move || s.me.get().map(|u| u.name().to_string()).unwrap_or_default()}</b>
-                <small>{move || match s.conn.get() { Conn::Ready => "En ligne", Conn::Connecting => "Connexion…", Conn::Offline => "Hors ligne" }}</small>
+                // Le pseudo unique sous le nom affiché ; l'état de connexion s'il y a un souci.
+                <small class="app-ellipsis">{move || match s.conn.get() {
+                    Conn::Ready => s.me.get().map(|u| format!("@{}", u.username)).unwrap_or_default(),
+                    Conn::Connecting => "Connexion…".into(),
+                    Conn::Offline => "Hors ligne".into(),
+                }}</small>
             </div>
             <button class="k-btn k-btn--icon" aria-label="Micro" aria-pressed=move || mic_off.get().to_string() on:click=move |_| mic_off.update(|v| *v = !*v)>
                 {move || if mic_off.get() { view! { <Icon icon=lu::LuMicOff/> } } else { view! { <Icon icon=lu::LuMic/> } }}
