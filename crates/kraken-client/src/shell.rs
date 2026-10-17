@@ -10,7 +10,7 @@ use leptos_router::hooks::{use_location, use_navigate};
 
 use crate::icons::{Icon, lu};
 use crate::store::{Conn, store};
-use crate::ui::{Avatar, initials};
+use crate::ui::{Avatar, Logo, initials};
 
 /// Serveur affiché d'après l'URL `/channels/{guild}/…`, `None` sur l'accueil.
 pub fn current_ids() -> Memo<(Option<Id>, Option<Id>)> {
@@ -106,7 +106,7 @@ fn Rail() -> impl IntoView {
     view! {
         <nav class="k-rail app-rail" aria-label="Serveurs">
             <a class="k-server" href="/channels/@me" aria-label="Accueil et messages privés" aria-current=home_current>
-                <Icon icon=lu::LuMessageCircle/>
+                <Logo/>
             </a>
             <hr/>
             <For each=move || s.guilds.get() key=|g| g.guild.id let:g>

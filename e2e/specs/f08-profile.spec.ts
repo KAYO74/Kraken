@@ -19,6 +19,8 @@ test('F08-H1 changer son nom affiché : partout, en direct, @pseudo dessous', as
   await a.page.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(a.page.getByRole('status')).toHaveText('Nom affiché enregistré.');
   await expect(a.page.getByText(`@${a.name}`).first()).toBeVisible();
+  await a.page.reload();
+  await expect(a.page.getByLabel('Nom affiché')).toHaveValue('Pablo des grands fonds 🐙');
 
   // Le panneau utilisateur : nom affiché, pseudo unique en dessous.
   await a.page.getByRole('button', { name: 'Fermer les réglages (Échap)' }).click();

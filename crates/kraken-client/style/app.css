@@ -132,3 +132,4 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
 /* Réglages › Mon compte : le champ du nom affiché prend toute la largeur sous son libellé. */
 .app-name-form > :is(input, [role]) { grid-column: 1 / -1; }
 .app-name-form > [role="status"] { margin: 0; color: var(--text-muted); font-size: var(--text-sm-size); }
+.app-logo { width: 62%; height: 62%; }

@@ -87,9 +87,11 @@ test('F01-E6 hors ligne : échec visible, Réessayer envoie une seule fois', asy
   await expect(page.getByRole('alert')).toBeVisible();
   await u.context.setOffline(false);
   await page.getByRole('button', { name: 'Réessayer' }).click();
-  await expect(page.getByRole('alert')).toHaveCount(0);
+  // Le bandeau de reconnexion peut rester quelques secondes : on attend l'envoi lui-même.
+  await expect(page.getByRole('button', { name: 'Réessayer' })).toHaveCount(0, { timeout: 10_000 });
+  await expect(messages(page).filter({ hasText: 'Envoyé sans réseau' })).not.toHaveAttribute('data-pending', '');
   await page.reload();
-  await expect(messages(page).filter({ hasText: 'Envoyé sans réseau' })).toHaveCount(1);
+  await expect(messages(page).filter({ hasText: 'Envoyé sans réseau' })).toHaveCount(1, { timeout: 10_000 });
 });
 
 test('F01-E7 réponse perdue puis Réessayer : pas de doublon', async ({ user, allow }) => {
