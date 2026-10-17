@@ -1,30 +1,30 @@
 feature,area,priority,original,clone,notes
-Inscription et connexion par e-mail ou pseudo,comptes,must,yes,no,S28
+Inscription et connexion par e-mail ou pseudo,comptes,must,yes,yes,S28 ; QR et vérif e-mail plus tard
 Authentification multi-facteurs (TOTP),comptes,should,yes,no,S06
 Liste et révocation des appareils connectés,comptes,should,yes,no,S06
 Modifier pseudo e-mail téléphone mot de passe,comptes,must,yes,no,S06 ; téléphone facultatif
 Demande d'export de ses données,comptes,should,yes,no,S07 ; RGPD
 Suppression et désactivation du compte,comptes,must,yes,no,S07 ; RGPD
-Présence (en ligne inactif ne pas déranger invisible),social,must,yes,no,S01 S04
+Présence (en ligne inactif ne pas déranger invisible),social,must,yes,partial,"S01 S04 ; en ligne/hors ligne réels, autres statuts pas encore réglables"
 Statut personnalisé et activité en cours,social,should,yes,no,S01
 Ajouter un ami par pseudo,social,must,yes,no,F02
-Demandes d'ami en attente (accepter refuser),social,must,yes,no,S01
+Demandes d'ami en attente (accepter refuser),social,must,yes,partial,"S01 ; affichées, pas encore d'action"
 Bloquer ignorer et débloquer,social,must,yes,no,S08 F11
 Qui peut m'envoyer une demande d'ami,social,should,yes,no,S08
 Panneau d'activité des amis,social,could,yes,no,S01
-MP 1:1,mp,must,yes,no,S19
-MP de groupe,mp,must,yes,no,S03
+MP 1:1,mp,must,yes,partial,"S19 ; lire et écrire, ouvrir un nouveau MP pas encore"
+MP de groupe,mp,must,yes,partial,"S03 ; lire et écrire, créer un groupe pas encore"
 Permissions de MP par serveur et demandes de message,mp,should,yes,no,S08
 Filtre anti-spam des MP,mp,should,yes,no,S08
-Créer un serveur (avec modèles),serveurs,must,yes,no,S21 F05
-Rejoindre via invitation (expiration et usages max),serveurs,must,yes,no,F06
-Rail des serveurs avec non-lus et mentions,serveurs,must,yes,no,S02
+Créer un serveur (avec modèles),serveurs,must,yes,partial,S21 F05 ; sans modèles ni icône
+Rejoindre via invitation (expiration et usages max),serveurs,must,yes,partial,"F06 ; expiration et usages max côté API, pas encore dans l'UI"
+Rail des serveurs avec non-lus et mentions,serveurs,must,yes,partial,S02 ; sans non-lus ni mentions
 Dossiers de serveurs,serveurs,could,yes,no,S02
 Serveurs favoris,serveurs,could,yes,no,S11 ; nitro : gratuit
 Plus de serveurs par compte (200),serveurs,could,yes,no,nitro : gratuit ; plafond réglable par l'instance
 Explorer des serveurs publics,serveurs,could,yes,no,S30
-Salons texte annonces et catégories,salons,must,yes,no,S05
-Salons privés (surcharges de permissions),salons,must,yes,no,S05 S23
+Salons texte annonces et catégories,salons,must,yes,partial,"S05 ; affichage et catégories repliables, création par API seulement"
+Salons privés (surcharges de permissions),salons,must,yes,partial,"S05 S23 ; moteur et contrôle d'accès faits, pas d'écran d'édition"
 Mode lent et sujet du salon,salons,should,yes,no,S23
 Fils de discussion,salons,should,yes,no,S24
 Salons forum,salons,could,yes,no,S24
@@ -33,7 +33,7 @@ Expulser bannir exclure temporairement,moderation,must,yes,no,S22
 Journal d'audit,moderation,should,yes,no,S22
 AutoMod (mots interdits spam),moderation,could,yes,no,S22
 Filtre de contenu média sensible (flou bloquer),moderation,could,yes,no,S08 ; nécessite un classifieur
-Envoyer modifier supprimer un message,messages,must,yes,no,S05 S13
+Envoyer modifier supprimer un message,messages,must,yes,partial,"S05 ; envoi seulement (optimiste, nonce, réessai)"
 Markdown mentions et spoilers,messages,must,yes,no,S05 S11
 Répondre à un message,messages,must,yes,no,S05
 Réactions emoji,messages,must,yes,no,S05
@@ -42,7 +42,7 @@ Transférer un message,messages,could,yes,no,S13
 Aperçus de liens (embeds),messages,must,yes,no,S05
 Pièces jointes images vidéos fichiers,messages,must,yes,no,S05
 Envois lourds jusqu'à 500 Mo,messages,should,yes,no,nitro : gratuit ; plafond réglable par l'instance
-Messages longs (4000 caractères),messages,should,yes,no,nitro : gratuit
+Messages longs (4000 caractères),messages,should,yes,yes,nitro : gratuit
 Texte alternatif des images,messages,should,yes,no,S12
 Emojis perso de serveur,emojis,must,yes,no,S22
 Emojis perso utilisables partout et animés,emojis,must,yes,no,nitro : gratuit
@@ -78,7 +78,7 @@ Thème de profil et déco d'avatar,profil,could,yes,no,S20 ; nitro : gratuit
 Profil par serveur,profil,could,yes,no,S20 ; nitro : gratuit
 Styles de pseudo (police effet couleur),profil,could,yes,no,S12 ; nitro : gratuit
 Comptes liés affichés sur le profil,profil,could,yes,no,S15 ; OAuth public de chaque plateforme
-Thèmes clair sombre noir et auto,apparence,must,yes,no,S11
+Thèmes clair sombre noir et auto,apparence,must,yes,yes,"S11 ; stockés sur l'appareil, synchro plus tard"
 Thèmes de couleur perso,apparence,should,yes,no,S11 ; nitro : gratuit
 Icônes d'appli alternatives,apparence,could,yes,no,S11 ; nitro : gratuit ; icônes originales
 Synchro des réglages entre appareils,apparence,should,yes,no,S11
@@ -91,7 +91,7 @@ Raccourcis clavier perso,systeme,should,yes,no,S13
 Langues multiples et format 12 24 h,systeme,must,yes,no,S14 ; FR et EN d'abord
 Événements de serveur,serveurs,could,yes,no,S27
 Applications OAuth autorisées (bots),integrations,should,yes,no,S15 ; API publique KRAKEN pour bots
-Client desktop web et mobile,plateformes,must,yes,no,tranche 1 desktop + web
+Client desktop web et mobile,plateformes,must,yes,partial,web responsive (390 à 1728 px) ; coque Tauri pas encore
 Auto-hébergement d'une instance,plateformes,must,no,no,ajout KRAKEN ; libre
 Abonnement Nitro,monetisation,skip,yes,skip,tout est gratuit dans KRAKEN
 Boosts de serveur payants,monetisation,skip,yes,skip,avantages actifs pour tous
