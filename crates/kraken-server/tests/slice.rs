@@ -1,0 +1,140 @@
+//! Tranche verticale de bout en bout sur un vrai port : inscription, serveur, invitation,
+//! et un message reçu en direct par le second compte via le gateway.
+
+use futures_util::{SinkExt, StreamExt};
+use kraken_proto::*;
+use kraken_server::{AppState, Config};
+use serde_json::json;
+use tokio_tungstenite::tungstenite::Message as Ws;
+
+async fn spawn() -> String {
+    let cfg = Config { addr: "127.0.0.1:0".into(), web_dir: "/nonexistent".into(), seed: false };
+    let app = kraken_server::app(AppState::new(&cfg).await, &cfg);
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = l.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+    format!("{addr}")
+}
+
+async fn register(c: &reqwest::Client, base: &str, name: &str) -> AuthResp {
+    let r = c
+        .post(format!("http://{base}/api/v1/auth/register"))
+        .json(&json!({"username": name, "email": format!("{name}@example.org"), "password": "motdepasse"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 201);
+    r.json().await.unwrap()
+}
+
+#[tokio::test]
+async fn register_create_invite_and_chat_live() {
+    let base = spawn().await;
+    let c = reqwest::Client::new();
+    let a = register(&c, &base, "lou").await;
+    let b = register(&c, &base, "sam").await;
+    let auth = |t: &str| format!("Session {t}");
+
+    // Pseudo pris, mauvais mot de passe.
+    let dup = c
+        .post(format!("http://{base}/api/v1/auth/register"))
+        .json(&json!({"username": "Lou", "email": "x@example.org", "password": "motdepasse"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(dup.status(), 409);
+    let bad = c
+        .post(format!("http://{base}/api/v1/auth/login"))
+        .json(&json!({"login": "lou", "password": "faux-faux"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), 401);
+
+    let g: GuildState = c
+        .post(format!("http://{base}/api/v1/guilds"))
+        .header("authorization", auth(&a.token))
+        .json(&json!({"name": "Abysse"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let general = g.channels.iter().find(|ch| ch.kind == ChannelKind::Text).unwrap().id;
+
+    // Sam ne voit pas le salon avant d'avoir rejoint.
+    let hidden = c
+        .get(format!("http://{base}/api/v1/channels/{general}/messages"))
+        .header("authorization", auth(&b.token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(hidden.status(), 404);
+
+    let inv: Invite = c
+        .post(format!("http://{base}/api/v1/channels/{general}/invites"))
+        .header("authorization", auth(&a.token))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let preview: Invite =
+        c.get(format!("http://{base}/api/v1/invites/{}", inv.code)).send().await.unwrap().json().await.unwrap();
+    assert_eq!((preview.guild.name.as_str(), preview.member_count), ("Abysse", 1));
+    let joined = c
+        .post(format!("http://{base}/api/v1/invites/{}", inv.code))
+        .header("authorization", auth(&b.token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(joined.status(), 200);
+
+    // Sam ouvre le gateway.
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{base}/gateway")).await.unwrap();
+    assert!(matches!(read(&mut ws).await, ServerOp::Hello { .. }));
+    ws.send(Ws::Text(serde_json::to_string(&ClientOp::Identify { token: b.token.clone() }).unwrap().into()))
+        .await
+        .unwrap();
+    let ServerOp::Ready(ready) = read(&mut ws).await else { panic!("READY attendu") };
+    assert_eq!(ready.guilds.len(), 1);
+
+    // Lou écrit, deux fois avec le même nonce : un seul message, un seul événement.
+    for _ in 0..2 {
+        let r = c
+            .post(format!("http://{base}/api/v1/channels/{general}/messages"))
+            .header("authorization", auth(&a.token))
+            .json(&json!({"content": "Bienvenue à bord !", "nonce": "n-1"}))
+            .send()
+            .await
+            .unwrap();
+        assert!(r.status().is_success());
+    }
+    let ServerOp::Dispatch { seq: 1, event: Event::MessageCreate(m) } = read(&mut ws).await else {
+        panic!("MESSAGE_CREATE attendu")
+    };
+    assert_eq!(m.content, "Bienvenue à bord !");
+    assert_eq!(m.author.unwrap().username, "lou");
+
+    let hist: Vec<Message> = c
+        .get(format!("http://{base}/api/v1/channels/{general}/messages"))
+        .header("authorization", auth(&b.token))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(hist.len(), 1);
+}
+
+async fn read(ws: &mut (impl StreamExt<Item = Result<Ws, tokio_tungstenite::tungstenite::Error>> + Unpin)) -> ServerOp {
+    loop {
+        if let Ws::Text(t) = ws.next().await.unwrap().unwrap() {
+            return serde_json::from_str(&t).unwrap();
+        }
+    }
+}

@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/KAYO74/Kraken"
+
+[workspace.dependencies]
+kraken-proto = { path = "crates/kraken-proto" }
+kraken-core = { path = "crates/kraken-core" }
+kraken-db = { path = "crates/kraken-db" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[profile.release.package.kraken-client]
+opt-level = "z"
+
+[profile.dev.package."*"]
+opt-level = 1

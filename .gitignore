@@ -1,1 +1,3 @@
 replica/screens/
+target/
+crates/kraken-client/dist/

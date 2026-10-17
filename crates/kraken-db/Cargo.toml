@@ -1,0 +1,12 @@
+[package]
+name = "kraken-db"
+description = "Couche données (en mémoire pour l'instant, sqlx/Postgres ensuite)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+kraken-proto.workspace = true
+kraken-core.workspace = true
+uuid = { workspace = true, features = ["v7"] }
+rand = "0.9"
