@@ -1,4 +1,4 @@
-//! Appels REST `/api/v1`. Le jeton de session est lu dans le stockage local à chaque appel.
+//! Appels REST `/api/v1`. La session voyage dans le cookie `HttpOnly` posé par le serveur.
 
 use gloo_net::http::{Method, RequestBuilder};
 use kraken_proto::*;
@@ -13,10 +13,7 @@ fn network() -> ApiError {
 }
 
 async fn call<T: DeserializeOwned>(method: Method, path: &str, body: Option<impl Serialize>) -> ApiResult<T> {
-    let mut rb = RequestBuilder::new(&format!("/api/v1{path}")).method(method);
-    if let Some(t) = crate::store::saved_token() {
-        rb = rb.header("Authorization", &format!("Session {t}"));
-    }
+    let rb = RequestBuilder::new(&format!("/api/v1{path}")).method(method);
     let req = match body {
         Some(b) => rb.json(&b),
         None => rb.build(),
@@ -71,4 +68,24 @@ pub async fn invite(code: &str) -> ApiResult<Invite> {
 
 pub async fn join(code: &str) -> ApiResult<GuildState> {
     call(Method::POST, &format!("/invites/{code}"), NO_BODY).await
+}
+
+pub async fn logout_all() -> ApiResult<()> {
+    call(Method::POST, "/auth/logout-all", NO_BODY).await
+}
+
+pub async fn delete_account(password: &str) -> ApiResult<()> {
+    call(Method::POST, "/users/@me/delete", Some(json!({ "password": password }))).await
+}
+
+pub async fn forgot_password(email: &str) -> ApiResult<()> {
+    call(Method::POST, "/auth/reset", Some(json!({ "email": email }))).await
+}
+
+pub async fn reset_password(token: &str, password: &str) -> ApiResult<()> {
+    call(Method::POST, "/auth/reset/confirm", Some(json!({ "token": token, "password": password }))).await
+}
+
+pub async fn verify_email(token: &str) -> ApiResult<()> {
+    call(Method::POST, "/auth/verify-email", Some(json!({ "token": token }))).await
 }

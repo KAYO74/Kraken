@@ -93,12 +93,28 @@ pub fn Settings() -> impl IntoView {
 fn Account() -> impl IntoView {
     let s = store();
     let navigate = use_navigate();
-    let logout = move |_| {
+    let deleting = RwSignal::new(false);
+    let password = RwSignal::new(String::new());
+    let error = RwSignal::new(None::<String>);
+    let leave = move |all: bool| {
         let navigate = navigate.clone();
         spawn_local(async move {
-            let _ = crate::api::logout().await;
+            let _ = if all { crate::api::logout_all().await } else { crate::api::logout().await };
             s.sign_out();
             navigate("/login", Default::default());
+        });
+    };
+    let leave2 = leave.clone();
+    let delete = move |e: leptos::ev::SubmitEvent| {
+        e.prevent_default();
+        spawn_local(async move {
+            match crate::api::delete_account(&password.get_untracked()).await {
+                Ok(()) => {
+                    s.sign_out();
+                    let _ = web_sys::window().unwrap().location().set_href("/login");
+                }
+                Err(e) => error.set(Some(e.message)),
+            }
         });
     };
     view! {
@@ -112,9 +128,38 @@ fn Account() -> impl IntoView {
         })}
         <div class="k-setting">
             <label for="logout">"Se déconnecter"</label>
-            <button id="logout" class="k-btn k-btn--danger" on:click=logout>"Déconnexion"</button>
+            <button id="logout" class="k-btn" on:click=move |_| leave(false)>"Déconnexion"</button>
             <p>"Ferme la session sur cet appareil."</p>
         </div>
+        <div class="k-setting">
+            <label for="logout-all">"Se déconnecter partout"</label>
+            <button id="logout-all" class="k-btn" on:click=move |_| leave2(true)>"Tous les appareils"</button>
+            <p>"Ferme toutes tes sessions, y compris celle-ci. Utile après la perte d'un appareil."</p>
+        </div>
+        <div class="k-setting">
+            <label for="delete">"Supprimer le compte"</label>
+            <button id="delete" class="k-btn k-btn--danger" on:click=move |_| deleting.set(true)>"Supprimer"</button>
+            <p>"Ton compte est fermé tout de suite et effacé au bout de 14 jours. Tes messages restent, signés « compte supprimé »."</p>
+        </div>
+        <Show when=move || deleting.get()>
+            <div class="k-scrim" on:keydown=move |e| if e.key() == "Escape" { deleting.set(false) }>
+                <div class="k-dialog" role="alertdialog" aria-modal="true" aria-labelledby="del-t">
+                    <header><h2 id="del-t">"Supprimer ton compte ?"</h2></header>
+                    <form on:submit=delete>
+                        <div>
+                            <p>"Tu ne pourras plus te connecter. Confirme avec ton mot de passe."</p>
+                            <label class="k-field"><span class="k-label">"Mot de passe"</span>
+                                <input class="k-input" type="password" autocomplete="current-password" required bind:value=password/></label>
+                            <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+                        </div>
+                        <footer>
+                            <button type="button" class="k-btn k-btn--ghost" on:click=move |_| deleting.set(false) autofocus>"Annuler"</button>
+                            <button type="submit" class="k-btn k-btn--danger">"Supprimer définitivement"</button>
+                        </footer>
+                    </form>
+                </div>
+            </div>
+        </Show>
     }
 }
 

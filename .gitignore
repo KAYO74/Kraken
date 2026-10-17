@@ -1,3 +1,6 @@
 replica/screens/
 target/
 crates/kraken-client/dist/
+.env
+.env.*
+!.env.example

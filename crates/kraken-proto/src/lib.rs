@@ -35,6 +35,27 @@ pub struct LoginReq {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EmailReq {
+    pub email: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TokenReq {
+    pub token: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResetConfirmReq {
+    pub token: String,
+    pub password: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PasswordReq {
+    pub password: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthResp {
     pub token: String,
     pub user: User,
@@ -204,8 +225,14 @@ pub struct Ready {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", content = "d", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ClientOp {
-    Identify { token: String },
-    Heartbeat { seq: u64 },
+    /// `token` : jeton de session pour les clients natifs et les bots ; le client web
+    /// s'en passe, le cookie de session suffit.
+    Identify {
+        token: Option<String>,
+    },
+    Heartbeat {
+        seq: u64,
+    },
 }
 
 /// Serveur → client.

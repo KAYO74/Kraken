@@ -1,10 +1,10 @@
 feature,area,priority,original,clone,notes
-Inscription et connexion par e-mail ou pseudo,comptes,must,yes,yes,S28 ; QR et vérif e-mail plus tard
+Inscription et connexion par e-mail ou pseudo,comptes,must,yes,yes,S28 ; vérif e-mail et mot de passe oublié si l'instance a un SMTP ; QR plus tard
 Authentification multi-facteurs (TOTP),comptes,should,yes,no,S06
-Liste et révocation des appareils connectés,comptes,should,yes,no,S06
+Liste et révocation des appareils connectés,comptes,should,yes,partial,"S06 ; « se déconnecter partout » fait, liste des appareils pas encore"
 Modifier pseudo e-mail téléphone mot de passe,comptes,must,yes,no,S06 ; téléphone facultatif
 Demande d'export de ses données,comptes,should,yes,no,S07 ; RGPD
-Suppression et désactivation du compte,comptes,must,yes,no,S07 ; RGPD
+Suppression et désactivation du compte,comptes,must,yes,partial,"S07 ; suppression faite (fermeture immédiate, anonymisation à 14 jours), désactivation pas encore"
 Présence (en ligne inactif ne pas déranger invisible),social,must,yes,partial,"S01 S04 ; en ligne/hors ligne réels, autres statuts pas encore réglables"
 Statut personnalisé et activité en cours,social,should,yes,no,S01
 Ajouter un ami par pseudo,social,must,yes,no,F02
@@ -92,7 +92,7 @@ Langues multiples et format 12 24 h,systeme,must,yes,no,S14 ; FR et EN d'abord
 Événements de serveur,serveurs,could,yes,no,S27
 Applications OAuth autorisées (bots),integrations,should,yes,no,S15 ; API publique KRAKEN pour bots
 Client desktop web et mobile,plateformes,must,yes,partial,web responsive (390 à 1728 px) ; coque Tauri pas encore
-Auto-hébergement d'une instance,plateformes,must,no,no,ajout KRAKEN ; libre
+Auto-hébergement d'une instance,plateformes,must,no,partial,"ajout KRAKEN ; Dockerfile + docker-compose (Postgres 18), image construite par la CI ; doc d'admin à écrire"
 Abonnement Nitro,monetisation,skip,yes,skip,tout est gratuit dans KRAKEN
 Boosts de serveur payants,monetisation,skip,yes,skip,avantages actifs pour tous
 Boutique et Orbes,monetisation,skip,yes,skip,commerce de Discord

@@ -54,7 +54,7 @@ pub fn Shell() -> impl IntoView {
     let s = store();
     let navigate = use_navigate();
     Effect::new(move || {
-        if s.token.get().is_none() {
+        if !s.signed_in.get() {
             let next = use_location().pathname.get_untracked();
             navigate(&format!("/login?next={next}"), NavigateOptions { replace: true, ..Default::default() });
         }

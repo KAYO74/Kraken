@@ -27,7 +27,7 @@ Vérifiée par `cargo test -p kraken-server` (HTTP + WebSocket réels) et `e2e/s
 
 ## Écarts à savoir
 
-- Données en mémoire : tout est perdu au redémarrage. `/replica-backend` branche Postgres.
+- Données : en mémoire pendant le build, puis PostgreSQL avec `/replica-backend` (même API, aucun écran modifié). La tranche verticale a été rejouée sur Postgres.
 - Polices Inter et JetBrains Mono pas encore embarquées : repli sur la police système.
 - `.wasm` de 4 Mo sans `wasm-opt` (non installé ici).
-- Pas de `docker compose` tant que la base n'est pas branchée.
+- `docker compose` écrit avec le backend ; l'image est construite par la CI, pas ici (pas de démon Docker).

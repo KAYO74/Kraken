@@ -1,19 +1,39 @@
-//! Tranche verticale de bout en bout sur un vrai port : inscription, serveur, invitation,
-//! et un message reçu en direct par le second compte via le gateway.
+//! Tranche verticale de bout en bout sur un vrai port et une vraie base : inscription,
+//! serveur, invitation, message reçu en direct par le second compte via le gateway ; puis
+//! sessions (cookie, anti-CSRF, déconnexion partout), suppression de compte, limites.
 
 use futures_util::{SinkExt, StreamExt};
 use kraken_proto::*;
 use kraken_server::{AppState, Config};
 use serde_json::json;
+use sqlx::PgPool;
 use tokio_tungstenite::tungstenite::Message as Ws;
 
-async fn spawn() -> String {
-    let cfg = Config { addr: "127.0.0.1:0".into(), web_dir: "/nonexistent".into(), seed: false };
-    let app = kraken_server::app(AppState::new(&cfg).await, &cfg);
+fn config(auth_per_min: u32) -> Config {
+    Config {
+        addr: "127.0.0.1:0".into(),
+        web_dir: "/nonexistent".into(),
+        database_url: String::new(),
+        public_url: "http://127.0.0.1".into(),
+        smtp_url: None,
+        smtp_from: "KRAKEN <no-reply@localhost>".into(),
+        seed: false,
+        trust_proxy: false,
+        auth_per_min,
+    }
+}
+
+async fn spawn_with(pool: PgPool, cfg: Config) -> String {
+    let state = AppState::with_db(kraken_db::Db::from_pool(pool), cfg).await.unwrap();
+    let app = kraken_server::app(state);
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = l.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
     format!("{addr}")
+}
+
+async fn spawn(pool: PgPool) -> String {
+    spawn_with(pool, config(1000)).await
 }
 
 async fn register(c: &reqwest::Client, base: &str, name: &str) -> AuthResp {
@@ -27,9 +47,9 @@ async fn register(c: &reqwest::Client, base: &str, name: &str) -> AuthResp {
     r.json().await.unwrap()
 }
 
-#[tokio::test]
-async fn register_create_invite_and_chat_live() {
-    let base = spawn().await;
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn register_create_invite_and_chat_live(pool: PgPool) {
+    let base = spawn(pool).await;
     let c = reqwest::Client::new();
     let a = register(&c, &base, "lou").await;
     let b = register(&c, &base, "sam").await;
@@ -96,7 +116,7 @@ async fn register_create_invite_and_chat_live() {
     // Sam ouvre le gateway.
     let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{base}/gateway")).await.unwrap();
     assert!(matches!(read(&mut ws).await, ServerOp::Hello { .. }));
-    ws.send(Ws::Text(serde_json::to_string(&ClientOp::Identify { token: b.token.clone() }).unwrap().into()))
+    ws.send(Ws::Text(serde_json::to_string(&ClientOp::Identify { token: Some(b.token.clone()) }).unwrap().into()))
         .await
         .unwrap();
     let ServerOp::Ready(ready) = read(&mut ws).await else { panic!("READY attendu") };
@@ -137,4 +157,120 @@ async fn read(ws: &mut (impl StreamExt<Item = Result<Ws, tokio_tungstenite::tung
             return serde_json::from_str(&t).unwrap();
         }
     }
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn cookie_sessions_csrf_and_logout_everywhere(pool: PgPool) {
+    let base = spawn(pool).await;
+    let jar = reqwest::Client::builder().cookie_store(true).build().unwrap();
+    let r = jar
+        .post(format!("http://{base}/api/v1/auth/register"))
+        .json(&json!({"username": "lou", "email": "lou@example.org", "password": "motdepasse"}))
+        .send()
+        .await
+        .unwrap();
+    let set = r.headers().get("set-cookie").unwrap().to_str().unwrap().to_string();
+    assert!(set.contains("HttpOnly") && set.contains("SameSite=Lax"), "{set}");
+
+    // Lecture par cookie : oui. Écriture par cookie sans Origin : refusée (CSRF).
+    assert_eq!(jar.get(format!("http://{base}/api/v1/users/@me")).send().await.unwrap().status(), 200);
+    let csrf = jar.post(format!("http://{base}/api/v1/guilds")).json(&json!({"name": "Abysse"})).send().await.unwrap();
+    assert_eq!(csrf.status(), 403);
+    let foreign = jar
+        .post(format!("http://{base}/api/v1/guilds"))
+        .header("origin", "https://evil.example")
+        .json(&json!({"name": "Abysse"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(foreign.status(), 403);
+    let ok = jar
+        .post(format!("http://{base}/api/v1/guilds"))
+        .header("origin", format!("http://{base}"))
+        .json(&json!({"name": "Abysse"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), 201);
+
+    // Une seconde session (autre appareil) tombe aussi avec « déconnexion partout ».
+    let other: AuthResp = reqwest::Client::new()
+        .post(format!("http://{base}/api/v1/auth/login"))
+        .json(&json!({"login": "lou", "password": "motdepasse"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let out = jar
+        .post(format!("http://{base}/api/v1/auth/logout-all"))
+        .header("origin", format!("http://{base}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(out.status(), 204);
+    let me = reqwest::Client::new()
+        .get(format!("http://{base}/api/v1/users/@me"))
+        .header("authorization", format!("Session {}", other.token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(me.status(), 401);
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn delete_account_reset_without_smtp_and_rate_limit(pool: PgPool) {
+    let base = spawn_with(pool, config(6)).await;
+    let c = reqwest::Client::new();
+    let a = register(&c, &base, "lou").await;
+    let auth = format!("Session {}", a.token);
+
+    let wrong = c
+        .post(format!("http://{base}/api/v1/users/@me/delete"))
+        .header("authorization", &auth)
+        .json(&json!({"password": "pas-le-bon"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(wrong.status(), 403);
+    let gone = c
+        .post(format!("http://{base}/api/v1/users/@me/delete"))
+        .header("authorization", &auth)
+        .json(&json!({"password": "motdepasse"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(gone.status(), 202);
+    let me = c.get(format!("http://{base}/api/v1/users/@me")).header("authorization", &auth).send().await.unwrap();
+    assert_eq!(me.status(), 401);
+    let login = c
+        .post(format!("http://{base}/api/v1/auth/login"))
+        .json(&json!({"login": "lou", "password": "motdepasse"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(login.status(), 401);
+
+    // Sans SMTP, l'instance le dit au lieu de faire semblant.
+    let reset = c
+        .post(format!("http://{base}/api/v1/auth/reset"))
+        .json(&json!({"email": "lou@example.org"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(reset.status(), 501);
+
+    // 6 essais par minute : register + login + reset = 3, il en reste 3.
+    let mut codes = vec![];
+    for _ in 0..4 {
+        let r = c
+            .post(format!("http://{base}/api/v1/auth/login"))
+            .json(&json!({"login": "x", "password": "y"}))
+            .send()
+            .await
+            .unwrap();
+        codes.push(r.status().as_u16());
+    }
+    assert_eq!(codes, [401, 401, 401, 429]);
 }

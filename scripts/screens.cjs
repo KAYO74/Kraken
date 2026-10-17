@@ -23,7 +23,7 @@ const out = process.argv[2] || 'replica/clone-screens';
   await page.click('button[type=submit]');
   await page.waitForURL('**/channels/@me');
   await page.getByRole('tab', { name: 'Tous' }).click();
-  await page.getByText('Navigatrice des grands fonds abyssaux').first().waitFor();
+  await page.getByText('Navigatrice des fonds abyssaux').first().waitFor();
   await shot('S01');
 
   await page.getByRole('link', { name: 'Serveur Abysse' }).click();
@@ -42,7 +42,7 @@ const out = process.argv[2] || 'replica/clone-screens';
   await shot('S21');
 
   await page.goto(`${base}/settings/account`);
-  await page.getByRole('button', { name: 'Se déconnecter' }).waitFor();
+  await page.getByRole('button', { name: 'Se déconnecter', exact: true }).waitFor();
   await shot('S06');
   await page.getByRole('link', { name: 'Apparence' }).click();
   await page.getByText('Automatique').waitFor();

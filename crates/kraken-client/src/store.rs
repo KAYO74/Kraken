@@ -12,14 +12,16 @@ use kraken_proto::*;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
-const TOKEN_KEY: &str = "kraken.token";
+/// Simple indicateur « connecté » : la session elle-même est dans un cookie `HttpOnly`
+/// que le code du client ne peut pas lire.
+const SIGNED_IN_KEY: &str = "kraken.signed_in";
 
 fn storage() -> Option<web_sys::Storage> {
     web_sys::window()?.local_storage().ok()?
 }
 
-pub fn saved_token() -> Option<String> {
-    storage()?.get_item(TOKEN_KEY).ok()?
+fn saved_signed_in() -> bool {
+    storage().and_then(|s| s.get_item(SIGNED_IN_KEY).ok().flatten()).is_some()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -47,7 +49,7 @@ pub struct Log {
 
 #[derive(Clone, Copy)]
 pub struct Store {
-    pub token: RwSignal<Option<String>>,
+    pub signed_in: RwSignal<bool>,
     pub me: RwSignal<Option<User>>,
     pub guilds: RwSignal<Vec<GuildState>>,
     pub dms: RwSignal<Vec<Channel>>,
@@ -65,7 +67,7 @@ pub fn store() -> Store {
 impl Store {
     pub fn new() -> Self {
         Self {
-            token: RwSignal::new(saved_token()),
+            signed_in: RwSignal::new(saved_signed_in()),
             me: RwSignal::new(None),
             guilds: RwSignal::new(vec![]),
             dms: RwSignal::new(vec![]),
@@ -78,17 +80,17 @@ impl Store {
 
     pub fn sign_in(&self, auth: AuthResp) {
         if let Some(s) = storage() {
-            let _ = s.set_item(TOKEN_KEY, &auth.token);
+            let _ = s.set_item(SIGNED_IN_KEY, "1");
         }
         self.me.set(Some(auth.user));
-        self.token.set(Some(auth.token));
+        self.signed_in.set(true);
     }
 
     pub fn sign_out(&self) {
         if let Some(s) = storage() {
-            let _ = s.remove_item(TOKEN_KEY);
+            let _ = s.remove_item(SIGNED_IN_KEY);
         }
-        self.token.set(None);
+        self.signed_in.set(false);
         self.me.set(None);
         self.guilds.set(vec![]);
         self.dms.set(vec![]);
@@ -150,14 +152,14 @@ impl Store {
 pub fn keep_connected(store: Store) {
     let running = Rc::new(Cell::new(false));
     Effect::new(move || {
-        if store.token.get().is_none() || running.get() {
+        if !store.signed_in.get() || running.get() {
             return;
         }
         running.set(true);
         let running = running.clone();
         spawn_local(async move {
-            while let Some(token) = store.token.get_untracked() {
-                run(store, token).await;
+            while store.signed_in.get_untracked() {
+                run(store).await;
                 store.conn.set(Conn::Offline);
                 TimeoutFuture::new(2_000).await;
             }
@@ -172,7 +174,7 @@ fn gateway_url() -> String {
     format!("{scheme}://{}/gateway", loc.host().unwrap_or_default())
 }
 
-async fn run(store: Store, token: String) {
+async fn run(store: Store) {
     store.conn.set(Conn::Connecting);
     let Ok(ws) = WebSocket::open(&gateway_url()) else { return };
     let (mut sink, mut stream) = ws.split();
@@ -195,7 +197,7 @@ async fn run(store: Store, token: String) {
             }
         }
     });
-    let _ = out.unbounded_send(ClientOp::Identify { token });
+    let _ = out.unbounded_send(ClientOp::Identify { token: None });
     let seq = Rc::new(Cell::new(0u64));
     {
         let (out, seq) = (out.clone(), seq.clone());

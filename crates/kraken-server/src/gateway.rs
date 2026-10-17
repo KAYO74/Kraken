@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use axum::extract::State;
 use axum::extract::ws::{Message as WsMsg, WebSocket, WebSocketUpgrade};
+use axum::http::HeaderMap;
 use axum::response::Response;
 use kraken_db::Db;
 use kraken_proto::*;
@@ -41,6 +42,11 @@ impl Hub {
                 list.retain(|(_, tx)| tx.try_send(ev.clone()).is_ok());
             }
         }
+    }
+
+    /// Ferme toutes les connexions de cet utilisateur (déconnexion partout, suppression).
+    pub fn kick(&self, uid: Id) {
+        self.conns.write().unwrap().remove(&uid);
     }
 
     fn register(&self, uid: Id) -> (u64, mpsc::Receiver<Event>) {
@@ -83,7 +89,7 @@ impl Hub {
         ];
         let mut found = Vec::new();
         for (login, status) in demo {
-            if let Some((u, _)) = db.user_credentials(login).await {
+            if let Ok(Some((u, _))) = db.user_credentials(login).await {
                 found.push((u.id, status));
             }
         }
@@ -91,8 +97,12 @@ impl Hub {
     }
 }
 
-pub async fn upgrade(State(state): State<AppState>, ws: WebSocketUpgrade) -> Response {
-    ws.max_message_size(64 * 1024).on_upgrade(move |socket| session(state, socket))
+pub async fn upgrade(State(state): State<AppState>, headers: HeaderMap, ws: WebSocketUpgrade) -> Response {
+    // Le cookie n'est accepté que depuis notre propre origine (détournement de WebSocket).
+    let cookie = crate::auth::presented_token(&headers)
+        .filter(|(_, from_cookie)| !from_cookie || crate::auth::same_origin(&headers))
+        .map(|(t, _)| t);
+    ws.max_message_size(64 * 1024).on_upgrade(move |socket| session(state, socket, cookie))
 }
 
 async fn send(ws: &mut WebSocket, op: &ServerOp) -> bool {
@@ -108,13 +118,16 @@ fn parse(msg: Option<Result<WsMsg, axum::Error>>) -> Option<Option<ClientOp>> {
     }
 }
 
-async fn session(state: AppState, mut ws: WebSocket) {
+async fn session(state: AppState, mut ws: WebSocket, cookie: Option<String>) {
     if !send(&mut ws, &ServerOp::Hello { heartbeat_ms: HEARTBEAT_MS }).await {
         return;
     }
     let user = match timeout(Duration::from_secs(10), ws.recv()).await {
         Ok(m) => match parse(m) {
-            Some(Some(ClientOp::Identify { token })) => state.db.session_user(&token_hash(&token)).await,
+            Some(Some(ClientOp::Identify { token })) => match token.or(cookie) {
+                Some(t) => state.db.session_user(&token_hash(&t)).await.ok().flatten(),
+                None => None,
+            },
             _ => None,
         },
         Err(_) => None,
@@ -126,16 +139,22 @@ async fn session(state: AppState, mut ws: WebSocket) {
     let uid = user.id;
     let (conn, mut rx) = state.hub.register(uid);
 
-    let mut guilds = Vec::new();
-    for g in state.db.user_guilds(uid).await {
-        guilds.push(crate::api::visible_state(&state, uid, g).await);
-    }
-    let ready = Ready {
-        user,
-        guilds,
-        private_channels: state.db.private_channels(uid).await,
-        relationships: state.hub.with_presence(state.db.relationships(uid).await),
-        session_id: format!("{conn:x}"),
+    let loaded = async {
+        Ok::<_, kraken_db::DbError>(Ready {
+            user,
+            guilds: state.db.user_guilds(uid).await?,
+            private_channels: state.db.private_channels(uid).await?,
+            relationships: state.hub.with_presence(state.db.relationships(uid).await?),
+            session_id: format!("{conn:x}"),
+        })
+    };
+    let ready = match loaded.await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!("READY : {e:?}");
+            state.hub.unregister(uid, conn);
+            return;
+        }
     };
     if send(&mut ws, &ServerOp::Ready(Box::new(ready))).await {
         let mut seq = 0u64;

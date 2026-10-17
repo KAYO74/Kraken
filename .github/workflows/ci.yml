@@ -7,6 +7,18 @@ on:
 jobs:
   rust:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kraken
+          POSTGRES_PASSWORD: kraken
+          POSTGRES_DB: kraken
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kraken" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://kraken:kraken@127.0.0.1:5432/kraken
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -19,3 +31,9 @@ jobs:
       - run: cargo clippy -p kraken-client --target wasm32-unknown-unknown -- -D warnings
       - run: cargo test --workspace --exclude kraken-client
       - run: python3 replica/design/tokens.py
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t kraken:ci .

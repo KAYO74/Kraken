@@ -22,6 +22,9 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/login") view=auth::Login/>
                 <Route path=path!("/register") view=auth::Register/>
                 <Route path=path!("/invite/:code") view=auth::InvitePage/>
+                <Route path=path!("/forgot-password") view=auth::ForgotPassword/>
+                <Route path=path!("/reset-password") view=auth::ResetPassword/>
+                <Route path=path!("/verify-email") view=auth::VerifyEmail/>
                 <ParentRoute path=path!("") view=shell::Shell>
                     <Route path=path!("") view=|| view! { <Redirect path="/channels/@me"/> }/>
                     <Route path=path!("channels/@me") view=home::Friends/>

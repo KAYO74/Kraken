@@ -29,8 +29,25 @@ impl From<DbError> for AppError {
     fn from(e: DbError) -> Self {
         match e {
             DbError::NotFound => Self::not_found(),
+            DbError::Conflict("username") => Self(StatusCode::CONFLICT, "conflict", "Ce pseudo est déjà pris.".into()),
+            DbError::Conflict("email") => {
+                Self(StatusCode::CONFLICT, "conflict", "Un compte existe déjà avec cette adresse.".into())
+            }
             DbError::Conflict(f) => Self(StatusCode::CONFLICT, "conflict", format!("Déjà utilisé : {f}.")),
             DbError::Invalid(f) => Self::invalid(format!("Valeur refusée : {f}.")),
+            DbError::Forbidden("banned") => {
+                Self(StatusCode::FORBIDDEN, "banned", "Tu as été banni de ce serveur.".into())
+            }
+            DbError::Forbidden("owner") => Self(
+                StatusCode::CONFLICT,
+                "owns_guilds",
+                "Transfère ou supprime d'abord les serveurs dont tu es propriétaire.".into(),
+            ),
+            DbError::Forbidden(_) => Self::forbidden(),
+            DbError::Internal(e) => {
+                tracing::error!("base : {e}");
+                Self(StatusCode::INTERNAL_SERVER_ERROR, "internal", "Erreur du serveur, réessaie.".into())
+            }
         }
     }
 }
