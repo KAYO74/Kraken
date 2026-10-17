@@ -10,12 +10,17 @@ use crate::shell::first_text;
 use crate::store::store;
 
 /// Où aller après la connexion : `?next=` s'il pointe dans l'appli, sinon l'accueil.
+fn is_auth_page(path: &str) -> bool {
+    ["/login", "/register", "/forgot-password", "/reset-password"].iter().any(|p| path.starts_with(p))
+}
+
 fn next_path() -> Memo<String> {
     let q = use_query_map();
     Memo::new(move |_| {
         q.read()
             .get("next")
-            .filter(|n| n.starts_with('/') && !n.starts_with("//"))
+            // Jamais vers une page de connexion : on y resterait bloqué une fois connecté.
+            .filter(|n| n.starts_with('/') && !n.starts_with("//") && !is_auth_page(n))
             .unwrap_or_else(|| "/channels/@me".into())
     })
 }
@@ -150,11 +155,10 @@ pub fn InvitePage() -> impl IntoView {
         spawn_local(async move {
             match crate::api::join(&code()).await {
                 Ok(g) => {
-                    let to = format!(
-                        "/channels/{}/{}",
-                        g.guild.id,
-                        first_text(&g).map(|c| c.to_string()).unwrap_or_default()
-                    );
+                    // Le salon visé par l'invitation s'il est visible, sinon le premier salon texte.
+                    let target = invite.get_untracked().and_then(|i| i.ok()).and_then(|i| i.channel_id);
+                    let channel = target.filter(|t| g.channels.iter().any(|c| c.id == *t)).or_else(|| first_text(&g));
+                    let to = format!("/channels/{}/{}", g.guild.id, channel.map(|c| c.to_string()).unwrap_or_default());
                     s.upsert_guild(g);
                     navigate(&to, Default::default());
                 }

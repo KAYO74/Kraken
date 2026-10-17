@@ -21,12 +21,16 @@ use crate::auth::token_hash;
 const HEARTBEAT_MS: u32 = 30_000;
 const QUEUE: usize = 256;
 
-/// Connexions ouvertes d'un utilisateur : (numéro de connexion, file d'envoi).
-type Conns = Vec<(u64, mpsc::Sender<Event>)>;
+/// Une connexion ouverte : son numéro, la session qui l'a ouverte (empreinte), sa file d'envoi.
+struct Conn {
+    id: u64,
+    session: Vec<u8>,
+    tx: mpsc::Sender<Event>,
+}
 
 #[derive(Default)]
 pub struct Hub {
-    conns: RwLock<HashMap<Id, Conns>>,
+    conns: RwLock<HashMap<Id, Vec<Conn>>>,
     next: AtomicU64,
     /// Présence fixe des comptes de démo (ils ne se connectent jamais).
     demo_presence: RwLock<HashMap<Id, Status>>,
@@ -39,7 +43,7 @@ impl Hub {
         for u in users {
             if let Some(list) = conns.get_mut(u) {
                 // File pleine ou connexion fermée : on lâche l'émetteur, la connexion se termine.
-                list.retain(|(_, tx)| tx.try_send(ev.clone()).is_ok());
+                list.retain(|c| c.tx.try_send(ev.clone()).is_ok());
             }
         }
     }
@@ -49,17 +53,28 @@ impl Hub {
         self.conns.write().unwrap().remove(&uid);
     }
 
-    fn register(&self, uid: Id) -> (u64, mpsc::Receiver<Event>) {
+    /// Ferme les connexions ouvertes avec cette session (déconnexion de cet appareil).
+    pub fn kick_session(&self, uid: Id, session: &[u8]) {
+        let mut conns = self.conns.write().unwrap();
+        if let Some(list) = conns.get_mut(&uid) {
+            list.retain(|c| c.session != session);
+            if list.is_empty() {
+                conns.remove(&uid);
+            }
+        }
+    }
+
+    fn register(&self, uid: Id, session: Vec<u8>) -> (u64, mpsc::Receiver<Event>) {
         let (tx, rx) = mpsc::channel(QUEUE);
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        self.conns.write().unwrap().entry(uid).or_default().push((id, tx));
+        self.conns.write().unwrap().entry(uid).or_default().push(Conn { id, session, tx });
         (id, rx)
     }
 
     fn unregister(&self, uid: Id, conn: u64) {
         let mut conns = self.conns.write().unwrap();
         if let Some(list) = conns.get_mut(&uid) {
-            list.retain(|(id, _)| *id != conn);
+            list.retain(|c| c.id != conn);
             if list.is_empty() {
                 conns.remove(&uid);
             }
@@ -122,22 +137,23 @@ async fn session(state: AppState, mut ws: WebSocket, cookie: Option<String>) {
     if !send(&mut ws, &ServerOp::Hello { heartbeat_ms: HEARTBEAT_MS }).await {
         return;
     }
-    let user = match timeout(Duration::from_secs(10), ws.recv()).await {
+    let session = match timeout(Duration::from_secs(10), ws.recv()).await {
         Ok(m) => match parse(m) {
-            Some(Some(ClientOp::Identify { token })) => match token.or(cookie) {
-                Some(t) => state.db.session_user(&token_hash(&t)).await.ok().flatten(),
-                None => None,
-            },
+            Some(Some(ClientOp::Identify { token })) => token.or(cookie).map(|t| token_hash(&t)),
             _ => None,
         },
         Err(_) => None,
     };
-    let Some(user) = user else {
+    let user = match &session {
+        Some(h) => state.db.session_user(h).await.ok().flatten(),
+        None => None,
+    };
+    let (Some(user), Some(session)) = (user, session) else {
         send(&mut ws, &ServerOp::InvalidSession).await;
         return;
     };
     let uid = user.id;
-    let (conn, mut rx) = state.hub.register(uid);
+    let (conn, mut rx) = state.hub.register(uid, session);
 
     let loaded = async {
         Ok::<_, kraken_db::DbError>(Ready {

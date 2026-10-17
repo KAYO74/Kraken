@@ -162,10 +162,11 @@ fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
     });
     let retry = move |p: Pending| {
         s.log(channel, |l| l.pending.retain(|x| x.nonce != p.nonce));
-        send(channel, p.content);
+        // Même nonce : si le premier envoi était arrivé, le serveur renvoie ce message-là.
+        send(channel, p.content, Some(p.nonce));
     };
     view! {
-        <div class="app-log" node_ref=scroller role="log" aria-live="polite" aria-busy=move || (!log.get().loaded).to_string()>
+        <div class="app-log" node_ref=scroller role="log" tabindex="0" aria-label="Messages" aria-live="polite" aria-busy=move || (!log.get().loaded).to_string()>
             {move || {
                 let l = log.get();
                 if !l.loaded {
@@ -250,9 +251,9 @@ fn nonce() -> String {
 
 /// Envoi optimiste : le message apparaît grisé, puis est remplacé par le MESSAGE_CREATE du
 /// gateway (même nonce) ou par la réponse REST si le gateway est en retard.
-fn send(channel: Id, content: String) {
+fn send(channel: Id, content: String, again: Option<String>) {
     let s = store();
-    let n = nonce();
+    let n = again.unwrap_or_else(nonce);
     s.log(channel, |l| l.pending.push(Pending { nonce: n.clone(), content: content.clone(), error: None }));
     spawn_local(async move {
         match crate::api::send_message(channel, &content, &n).await {
@@ -281,7 +282,7 @@ fn Composer(channel: Id, placeholder: String) -> impl IntoView {
             return;
         }
         text.set(String::new());
-        send(channel, t.trim().to_string());
+        send(channel, t.trim().to_string(), None);
     };
     view! {
         <div class="app-compose">

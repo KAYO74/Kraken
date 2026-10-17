@@ -1,0 +1,10 @@
+{
+  "name": "kraken-e2e",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "scripts": { "test": "playwright test" },
+  "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
+    "@playwright/test": "1.56.1"
+  }
+}

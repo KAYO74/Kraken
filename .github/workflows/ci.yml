@@ -37,3 +37,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t kraken:ci .
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kraken
+          POSTGRES_PASSWORD: kraken
+          POSTGRES_DB: kraken
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kraken" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://kraken:kraken@127.0.0.1:5432/kraken
+      KRAKEN_AUTH_PER_MIN: "10000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.129
+      - run: ./scripts/build-client.sh
+      - run: cargo build -p kraken-server
+      - name: Lancer le serveur avec les données de démo
+        run: |
+          nohup ./target/debug/kraken-server --seed > server.log 2>&1 &
+          curl -sf --retry 30 --retry-connrefused --retry-delay 1 http://127.0.0.1:8080/ > /dev/null
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - working-directory: e2e
+        run: npm ci && npx playwright install --with-deps chromium
+      - working-directory: e2e
+        run: npx playwright test
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e
+          path: |
+            e2e/playwright-report
+            server.log

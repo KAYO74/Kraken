@@ -151,6 +151,7 @@ pub async fn login(
 
 pub async fn logout(State(state): State<AppState>, auth: Auth) -> ApiResult<impl IntoResponse> {
     state.db.revoke_session(&auth.token_hash).await?;
+    state.hub.kick_session(auth.user.id, &auth.token_hash);
     Ok((StatusCode::NO_CONTENT, clear_cookie(&state)))
 }
 

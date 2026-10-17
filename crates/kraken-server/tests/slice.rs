@@ -274,3 +274,53 @@ async fn delete_account_reset_without_smtp_and_rate_limit(pool: PgPool) {
     }
     assert_eq!(codes, [401, 401, 401, 429]);
 }
+
+/// BUG-002 : la déconnexion d'un appareil ferme son gateway (et seulement le sien).
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn logout_closes_that_sessions_gateway(pool: PgPool) {
+    let base = spawn(pool).await;
+    let c = reqwest::Client::new();
+    let first = register(&c, &base, "lou").await;
+    let second: AuthResp = c
+        .post(format!("http://{base}/api/v1/auth/login"))
+        .json(&json!({"login": "lou", "password": "motdepasse"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let open = |token: String| {
+        let base = base.clone();
+        async move {
+            let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{base}/gateway")).await.unwrap();
+            read(&mut ws).await;
+            let op = ClientOp::Identify { token: Some(token) };
+            ws.send(Ws::Text(serde_json::to_string(&op).unwrap().into())).await.unwrap();
+            assert!(matches!(read(&mut ws).await, ServerOp::Ready(_)));
+            ws
+        }
+    };
+    let mut gone = open(first.token.clone()).await;
+    let mut kept = open(second.token.clone()).await;
+
+    let out = c
+        .post(format!("http://{base}/api/v1/auth/logout"))
+        .header("authorization", format!("Session {}", first.token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(out.status(), 204);
+    let end = tokio::time::timeout(std::time::Duration::from_secs(2), gone.next()).await.expect("gateway fermé");
+    assert!(!matches!(end, Some(Ok(Ws::Text(_)))), "plus aucun événement : {end:?}");
+
+    let made = c
+        .post(format!("http://{base}/api/v1/guilds"))
+        .header("authorization", format!("Session {}", second.token))
+        .json(&json!({"name": "Abysse"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(made.status(), 201);
+    assert!(matches!(read(&mut kept).await, ServerOp::Dispatch { event: Event::GuildCreate(_), .. }));
+}
