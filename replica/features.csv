@@ -104,3 +104,10 @@ Jeux connectés (SDK social),partenaires,skip,yes,skip,SDK propriétaire
 Suppression de bruit Krisp,voix,skip,yes,skip,sous licence ; voir RNNoise
 Sons icônes arrière-plans et mascotte de Discord,assets,skip,yes,skip,propriété de Discord ; créer des originaux
 Vérification d'âge par prestataire et Centre familial,comptes,skip,yes,skip,à repenser plus tard
+Aucune pub boutique quête ni bouton d'abonnement,confiance,must,no,yes,replica-entrepreneur : 207 avis ; tout est inclus ; test e2e à ajouter
+Inscription sans téléphone ni pièce d'identité,comptes,must,no,yes,replica-entrepreneur : 164 avis ; module de vérification d'âge optionnel pour l'hébergeur si la loi l'exige
+Jamais bloqué hors de son compte (codes de secours et reset par l'admin),comptes,should,no,no,replica-entrepreneur : 52 avis
+Bannissement motivé avec recours lu par un humain,moderation,should,no,no,replica-entrepreneur : 31 avis
+Rouvrir au dernier salon et garder la mise en page choisie,apparence,should,no,no,replica-entrepreneur : 74 avis refonte + 2 demandes
+Export complet d'une communauté pour changer d'hébergeur,serveurs,should,no,no,replica-entrepreneur : 56 avis auto-hébergement ; docker compose déjà fait
+Muet veut dire muet (plus aucune notification),notifications,could,no,no,replica-entrepreneur : 4 avis (mince)
