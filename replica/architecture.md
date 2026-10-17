@@ -25,7 +25,7 @@ Date : 2026-10-17. Sources : `recon.md`, `features.csv`. Tout en Rust, un seul d
 | push | Web Push (VAPID) + UnifiedPush ; FCM/APNs si l'instance fournit ses clés | libre par défaut |
 | hébergement | image Docker unique + `docker-compose.yml` (kraken, postgres, garage facultatif) ; instance publique sur un VPS | l'auto-hébergement est une fonction « must » |
 | CI | GitHub Actions : `cargo fmt`, `clippy`, `test`, `sqlx prepare --check` | |
-| licence | **AGPL-3.0-or-later** (proposé) | garde les forks hébergés libres |
+| licence | **AGPL-3.0-or-later** (choisie, `LICENSE`) | garde libres les forks hébergés ; `license = "AGPL-3.0-or-later"` dans chaque `Cargo.toml` |
 
 Dépôt (workspace Cargo) :
 
