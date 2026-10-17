@@ -29,7 +29,7 @@ docker compose up -d    # Postgres 18 + KRAKEN sur le port 8080
 
 ```sh
 cargo test --workspace --exclude kraken-client   # DATABASE_URL vers un Postgres où l'on peut créer des bases
-NODE_PATH=$(npm root -g) node e2e/slice.cjs      # serveur lancé, Playwright installé
+cd e2e && npm ci && npx playwright test   # serveur lancé avec KRAKEN_AUTH_PER_MIN=10000
 ```
 
 ## Dépôt

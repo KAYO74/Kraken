@@ -23,7 +23,7 @@ Une ligne par écran. Statut : **fait**, **partiel** (manque listé), **route** 
 
 Faite le 2026-10-17, sur la couche données **en mémoire** (`kraken-db`, mêmes signatures que la future version Postgres) :
 inscription de deux comptes, création d'un serveur, lien d'invitation, adhésion, message reçu en direct par l'autre compte (gateway), et dans l'autre sens.
-Vérifiée par `cargo test -p kraken-server` (HTTP + WebSocket réels) et `e2e/slice.cjs` (deux navigateurs Chromium, zéro erreur console).
+Vérifiée par `cargo test -p kraken-server` (HTTP + WebSocket réels) et `e2e/specs/f05-f06-invite.spec.ts` (deux navigateurs Chromium, zéro erreur console).
 
 ## Écarts à savoir
 
