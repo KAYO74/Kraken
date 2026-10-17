@@ -105,11 +105,9 @@ pub fn iso(ms: i64) -> String {
     js_sys::Date::new(&(ms as f64).into()).to_iso_string().into()
 }
 
-/// Glyphe KRAKEN (kraken de profil, style tribal) en `currentColor`, pour le bouton d'accueil du rail.
-/// Généré avec l'icône `replica/brand/logo.svg` par `python3 replica/brand/logo.py`.
+/// Logo KRAKEN pour le bouton d'accueil du rail : l'icône carrée, arrondie par le bouton.
+/// Source et tailles : `replica/brand/` (`python3 replica/brand/icons.py`).
 #[component]
 pub fn Logo() -> impl IntoView {
-    view! { <svg class="app-logo" viewBox="30 38 477 477" aria-hidden="true" inner_html=LOGO_GLYPH></svg> }
+    view! { <img class="app-logo" src="/icon-128.png" alt="" width="128" height="128"/> }
 }
-
-const LOGO_GLYPH: &str = include_str!("logo-glyph.svg");

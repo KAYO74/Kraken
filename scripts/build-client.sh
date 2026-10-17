@@ -10,5 +10,6 @@ out=crates/kraken-client/dist
 rm -rf "$out" && mkdir -p "$out"
 wasm-bindgen --target web --no-typescript --out-dir "$out" "target/wasm32-unknown-unknown/$profile/kraken-client.wasm"
 cp crates/kraken-client/index.html crates/kraken-client/boot.js crates/kraken-client/style/app.css "$out/"
-cp replica/design/tokens.css replica/design/components.css replica/brand/logo.svg "$out/"
+cp replica/design/tokens.css replica/design/components.css "$out/"
+cp replica/brand/icons/favicon.ico replica/brand/icons/icon-128.png replica/brand/icons/icon-180.png replica/brand/icons/icon-192.png "$out/"
 echo "client prêt dans $out"
