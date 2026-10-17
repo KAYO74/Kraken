@@ -107,7 +107,9 @@ fn Account() -> impl IntoView {
     let leave2 = leave.clone();
     let display = RwSignal::new(String::new());
     // Suit le compte chargé (le READY peut arriver après l'ouverture des réglages).
-    Effect::new(move || display.set(s.me.with(|m| m.as_ref().and_then(|u| u.display_name.clone())).unwrap_or_default()));
+    Effect::new(move || {
+        display.set(s.me.with(|m| m.as_ref().and_then(|u| u.display_name.clone())).unwrap_or_default())
+    });
     let saved = RwSignal::new(false);
     let name_error = RwSignal::new(None::<String>);
     let save_name = move |e: leptos::ev::SubmitEvent| {
