@@ -11,6 +11,8 @@ test('F01-H1 Entrée envoie, le message reste après rechargement', async ({ use
   await say(page, 'général', 'Premier message au fond.');
   await expect(messages(page).filter({ hasText: 'Premier message au fond.' })).toHaveCount(1);
   await expect(page.getByLabel('Écrire dans #général')).toHaveValue('');
+  // Recharger avant la réponse du serveur annulerait l'envoi : on attend la confirmation.
+  await expect(messages(page).filter({ hasText: 'Premier message au fond.' })).not.toHaveAttribute('data-pending', '');
   await page.reload();
   await expect(messages(page).filter({ hasText: 'Premier message au fond.' })).toHaveCount(1);
   await a11y(page);
@@ -27,6 +29,8 @@ test('F01-E1 accents, emoji et retours à la ligne arrivent intacts', async ({ u
   await box.press('Enter');
   await say(page, 'général', text);
   await expect(messages(page).filter({ hasText: text })).toHaveCount(1);
+  await expect(messages(page).filter({ hasText: text })).not.toHaveAttribute('data-pending', '');
+  await expect(messages(page).filter({ hasText: 'ligne une' })).not.toHaveAttribute('data-pending', '');
   await page.reload();
   await expect(messages(page).filter({ hasText: text })).toHaveCount(1);
   await expect(messages(page).filter({ hasText: 'ligne une' })).toContainText('ligne deux');
