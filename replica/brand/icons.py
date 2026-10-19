@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Icônes KRAKEN à partir du logo fourni par Fred (replica/brand/source.png, carré, fond vert).
+"""Icônes KRAKEN à partir du logo fourni par Fred (replica/brand/source.png : kraken noir et turquoise sur fond vert, carré).
 
     python3 replica/brand/icons.py      # demande Pillow
 

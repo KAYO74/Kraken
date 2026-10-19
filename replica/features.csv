@@ -72,7 +72,7 @@ Aperçu du stream,video,could,yes,no,S10
 Soundboard,voix,should,yes,no,S10 S22
 Sons du soundboard de tous les serveurs,voix,could,yes,no,nitro : gratuit
 Son d'entrée en vocal,voix,could,yes,no,S10 ; nitro : gratuit
-Profil avec avatar bio pronoms,profil,must,yes,partial,S20 ; nom affiché modifiable (pseudo unique dessous), avatar bio pronoms pas encore
+Profil avec avatar bio pronoms,profil,must,yes,partial,"S20 ; nom affiché modifiable (pseudo unique dessous), avatar bio pronoms pas encore"
 Avatar animé et bannière,profil,should,yes,no,S20 ; nitro : gratuit
 Thème de profil et déco d'avatar,profil,could,yes,no,S20 ; nitro : gratuit
 Profil par serveur,profil,could,yes,no,S20 ; nitro : gratuit
