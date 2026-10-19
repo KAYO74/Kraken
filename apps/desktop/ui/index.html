@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KRAKEN</title>
+<link rel="stylesheet" href="style.css">
+<script src="main.js" defer></script>
+</head>
+<body>
+<main>
+  <img src="logo.png" alt="" width="96" height="96">
+  <h1>Bienvenue sur KRAKEN</h1>
+  <p>Indique l'adresse de ton instance, celle que tu ouvres dans ton navigateur.</p>
+  <form>
+    <label for="address">Adresse de l'instance</label>
+    <input id="address" name="address" type="text" inputmode="url" spellcheck="false" autocapitalize="off" autocomplete="url" required
+      placeholder="https://chat.exemple.org" aria-describedby="error" autofocus>
+    <p id="error" role="alert"></p>
+    <button type="submit">Ouvrir</button>
+  </form>
+  <p class="hint">Tu pourras en changer depuis le menu KRAKEN.</p>
+</main>
+</body>
+</html>

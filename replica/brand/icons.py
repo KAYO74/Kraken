@@ -28,10 +28,9 @@ OUT.mkdir(exist_ok=True)
 for s, img in sizes.items():
     png(img, OUT / f"icon-{s}.png")
 sizes[48].save(OUT / "favicon.ico", sizes=[(16, 16), (32, 32), (48, 48)])
-png(sizes[32], OUT / "32x32.png")
-png(sizes[128], OUT / "128x128.png")
-png(sizes[256], OUT / "128x128@2x.png")
-png(sizes[512], OUT / "icon.png")
+# Tauri refuse les PNG à palette : son jeu reste en RGBA.
+for name, s in (("32x32.png", 32), ("128x128.png", 128), ("128x128@2x.png", 256), ("icon.png", 512)):
+    sizes[s].convert("RGBA").save(OUT / name, optimize=True)
 sizes[256].save(OUT / "icon.ico", sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 sizes[1024].save(OUT / "icon.icns")
 print("icônes écrites dans", OUT.relative_to(HERE.parents[1]))

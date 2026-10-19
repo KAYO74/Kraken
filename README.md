@@ -4,6 +4,16 @@ Messagerie libre et auto-hébergeable, écrite en Rust : serveurs, salons, MP, e
 
 État : tranche verticale (comptes, serveurs, invitations, messages en direct) sur PostgreSQL. Voir `replica/build-log.md` et `replica/backend.md`.
 
+![Un salon de KRAKEN](docs/screens/salon.png)
+
+| Accueil | Réglages | Sur téléphone |
+| --- | --- | --- |
+| ![Accueil et amis](docs/screens/accueil.png) | ![Réglages, apparence](docs/screens/reglages.png) | ![Un salon sur téléphone](docs/screens/mobile-salon.png) |
+
+## Télécharger
+
+Appli de bureau pour Windows, macOS et Linux : [dernière version](https://github.com/KAYO74/Kraken/releases/latest). Au premier lancement, elle demande l'adresse de ton instance. Sur téléphone, ouvre l'instance dans le navigateur.
+
 ## Lancer en local
 
 Il faut Rust, PostgreSQL 16 ou plus, et une base vide.
@@ -47,6 +57,8 @@ npx playwright test                       # serveur lancé avec KRAKEN_AUTH_PER_
 | `crates/kraken-db` | PostgreSQL : migrations, requêtes, file de tâches |
 | `crates/kraken-server` | REST `/api/v1`, gateway `/gateway`, client web |
 | `crates/kraken-client` | client Leptos (WASM) |
+| `apps/desktop` | appli de bureau (Tauri), construite par `.github/workflows/desktop.yml` |
+| `deploy/` | configuration de Caddy pour `docker compose` |
 | `replica/` | recon, architecture, design, journal de construction |
 
 Licence proposée : AGPL-3.0-or-later.

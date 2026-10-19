@@ -1,0 +1,23 @@
+[package]
+name = "kraken-desktop"
+description = "KRAKEN pour Windows, macOS et Linux : une fenêtre sur ton instance"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/KAYO74/Kraken"
+
+# Hors de l'espace de travail principal : il lui faut WebKitGTK sous Linux.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde_json = "1"
+url = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

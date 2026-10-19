@@ -126,7 +126,8 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
   .app-main { border: 0; border-radius: 0; }
   .app-topic { display: none; }
   .app-header { padding: 0 var(--space-3); }
-  .app-header .k-tabs { margin-left: 0; }
+  .app-header .k-tabs { margin-left: 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .app-header .k-tab { flex: none; white-space: nowrap; }
   .app-friends { padding: var(--space-4); }
   .app-dialog-alt { flex-direction: column; align-items: stretch; }
   .k-settings { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; width: 100vw; height: 100dvh; border-radius: 0; border: 0; }
