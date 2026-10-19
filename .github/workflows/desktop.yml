@@ -1,8 +1,11 @@
 name: desktop
-# Appli de bureau (Tauri) pour Windows, macOS et Linux. Sur une étiquette v*, publie une Release.
+# Appli de bureau (Tauri) pour Windows, macOS et Linux. Sur main (ou une étiquette v*), publie la
+# Release de la version de apps/desktop/Cargo.toml si elle n'existe pas encore.
 on:
   push:
+    branches: [main]
     tags: ['v*']
+    paths: ['apps/desktop/**', 'replica/brand/icons/**', '.github/workflows/desktop.yml']
   pull_request:
     paths: ['apps/desktop/**', 'replica/brand/icons/**', '.github/workflows/desktop.yml']
   workflow_dispatch:
@@ -47,18 +50,31 @@ jobs:
             apps/desktop/target/**/release/bundle/dmg/*.dmg
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$(grep -m1 '^version' apps/desktop/Cargo.toml | cut -d'"' -f2)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" > /dev/null 2>&1; then echo "exists=1" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.version.outputs.exists != '1'
+        uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - if: steps.version.outputs.exists != '1'
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: KRAKEN ${{ steps.version.outputs.tag }}
           files: dist/**/*
           generate_release_notes: true
           body: |
