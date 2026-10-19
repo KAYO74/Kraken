@@ -20,6 +20,7 @@ fn config(auth_per_min: u32) -> Config {
         seed: false,
         trust_proxy: false,
         auth_per_min,
+        instance: Default::default(),
     }
 }
 
@@ -220,11 +221,13 @@ async fn cookie_sessions_csrf_and_logout_everywhere(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]
-async fn unknown_api_route_is_json_404(pool: PgPool) {
+async fn health_and_unknown_api_route(pool: PgPool) {
     let base = spawn(pool).await;
     let r = reqwest::get(format!("http://{base}/api/v1/pas-de-route")).await.unwrap();
     assert_eq!(r.status(), 404);
     assert_eq!(r.json::<serde_json::Value>().await.unwrap()["code"], "not_found");
+    let health = reqwest::get(format!("http://{base}/api/v1/health")).await.unwrap();
+    assert_eq!(health.status(), 200);
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]

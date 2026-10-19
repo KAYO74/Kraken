@@ -34,6 +34,16 @@ async fn require_guild(state: &AppState, uid: Id, gid: Id, need: u64) -> ApiResu
     Ok(())
 }
 
+/// Pour les sondes de disponibilité : 200 si la base répond.
+pub async fn health(State(state): State<AppState>) -> ApiResult<&'static str> {
+    state.db.ping().await?;
+    Ok("ok")
+}
+
+pub async fn instance(State(state): State<AppState>) -> Json<Instance> {
+    Json(state.cfg.instance.clone())
+}
+
 pub async fn create_guild(
     State(state): State<AppState>,
     auth: Auth,

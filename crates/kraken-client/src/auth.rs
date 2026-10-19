@@ -41,6 +41,7 @@ fn AuthCard(title: &'static str, sub: &'static str, children: Children) -> impl 
                 <header><h1>{title}</h1><p class="app-hint">{sub}</p></header>
                 {children()}
             </div>
+            <p class="app-hint"><a href="/privacy">"Confidentialité"</a>" · "<a href="/terms">"Conditions"</a></p>
         </main>
     }
 }

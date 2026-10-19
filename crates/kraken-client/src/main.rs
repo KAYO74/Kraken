@@ -7,6 +7,7 @@ mod auth;
 mod chat;
 mod home;
 mod icons;
+mod legal;
 mod settings;
 mod shell;
 mod store;

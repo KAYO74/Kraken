@@ -4,6 +4,7 @@ description = "Serveur KRAKEN : REST, gateway WebSocket, tâches de fond, fichie
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 kraken-proto.workspace = true

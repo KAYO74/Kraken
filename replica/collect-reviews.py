@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Collecte des avis publics sur l'original, uniquement par des flux et API officiels.
 
-    python3 scripts/collect-reviews.py > replica/reviews.csv
+    python3 replica/collect-reviews.py > replica/reviews.csv
 
 Sources (une source injoignable est signalée sur stderr et sautée, jamais remplacée) :
 - App Store : flux RSS public des avis (Apple), plusieurs pays, 10 pages chacun ;

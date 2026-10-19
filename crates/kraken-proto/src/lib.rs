@@ -64,6 +64,17 @@ pub struct UpdateMe {
 /// Longueur maximale du nom affiché, en caractères.
 pub const MAX_DISPLAY_NAME: usize = 32;
 
+/// Ce que l'instance dit d'elle-même sur ses pages de confidentialité et de conditions.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Instance {
+    /// Comment joindre l'exploitant (e-mail ou page).
+    pub contact: Option<String>,
+    /// Hébergeur, fournisseur d'e-mails… tels que l'exploitant les déclare.
+    pub processors: Option<String>,
+    /// Code source de la version en service (AGPL : offert à chaque utilisateur).
+    pub source_url: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AuthResp {
     pub token: String,

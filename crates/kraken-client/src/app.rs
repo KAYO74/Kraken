@@ -7,7 +7,7 @@ use leptos_router::path;
 
 use crate::store::{Store, keep_connected};
 use crate::ui::{NotFound, Stub};
-use crate::{auth, chat, home, settings, shell};
+use crate::{auth, chat, home, legal, settings, shell};
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -25,6 +25,8 @@ pub fn App() -> impl IntoView {
                 <Route path=path!("/forgot-password") view=auth::ForgotPassword/>
                 <Route path=path!("/reset-password") view=auth::ResetPassword/>
                 <Route path=path!("/verify-email") view=auth::VerifyEmail/>
+                <Route path=path!("/privacy") view=legal::Privacy/>
+                <Route path=path!("/terms") view=legal::Terms/>
                 <ParentRoute path=path!("") view=shell::Shell>
                     <Route path=path!("") view=|| view! { <Redirect path="/channels/@me"/> }/>
                     <Route path=path!("channels/@me") view=home::Friends/>

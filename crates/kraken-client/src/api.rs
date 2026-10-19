@@ -32,6 +32,10 @@ async fn call<T: DeserializeOwned>(method: Method, path: &str, body: Option<impl
 
 const NO_BODY: Option<()> = None;
 
+pub async fn instance() -> ApiResult<Instance> {
+    call(Method::GET, "/instance", NO_BODY).await
+}
+
 pub async fn register(username: &str, email: &str, password: &str) -> ApiResult<AuthResp> {
     call(Method::POST, "/auth/register", Some(json!({ "username": username, "email": email, "password": password })))
         .await

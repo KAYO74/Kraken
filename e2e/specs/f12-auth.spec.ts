@@ -175,3 +175,15 @@ test.describe('largeur mobile', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   });
 });
+
+test('F12-H3 Confidentialité et Conditions se lisent sans compte', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('link', { name: 'Confidentialité' }).click();
+  await expect(page.getByRole('heading', { name: 'Confidentialité', level: 1 })).toBeVisible();
+  await expect(page.getByText('argon2id')).toBeVisible();
+  await a11y(page);
+  await page.getByRole('link', { name: 'Conditions' }).click();
+  await expect(page.getByRole('heading', { name: "Conditions d'utilisation", level: 1 })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Code source de cette instance' })).toHaveAttribute('href', /^https:\/\//);
+  await a11y(page);
+});

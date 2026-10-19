@@ -139,4 +139,11 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
 /* Réglages › Mon compte : le champ du nom affiché prend toute la largeur sous son libellé. */
 .app-name-form > :is(input, [role]) { grid-column: 1 / -1; }
 .app-name-form > [role="status"] { margin: 0; color: var(--text-muted); font-size: var(--text-sm-size); }
+/* Confidentialité et Conditions : un texte à lire, pas un formulaire. */
+.app-legal { width: min(var(--size-dialog-wide), 100%); max-height: 100%; overflow-y: auto; }
+.app-legal > div { display: grid; gap: var(--space-3); padding: var(--space-5) var(--space-7); color: var(--text-secondary); }
+.app-legal h2 { margin: var(--space-3) 0 0; font-size: var(--text-lg-size); color: var(--text-strong); }
+.app-legal p { margin: 0; }
+.app-legal p a { text-decoration: underline; }
+.app-legal > footer { padding: var(--space-5) var(--space-7); color: var(--text-muted); }
 .app-logo { width: 100%; height: 100%; border-radius: inherit; }

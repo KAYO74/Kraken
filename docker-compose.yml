@@ -1,4 +1,5 @@
 # Instance KRAKEN auto-hébergée : `cp .env.example .env`, remplir, puis `docker compose up -d`.
+# Caddy sert l'instance en HTTPS (certificat Let's Encrypt automatique) ; seul Caddy est exposé.
 services:
   db:
     image: postgres:18
@@ -21,14 +22,56 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://kraken:${POSTGRES_PASSWORD}@db/kraken
-      KRAKEN_PUBLIC_URL: ${KRAKEN_PUBLIC_URL:-http://localhost:8080}
+      # Le mot de passe passe à part : dans l'URL, un `/`, `#` ou `%` la casserait.
+      DATABASE_URL: postgres://kraken@db/kraken
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      KRAKEN_PUBLIC_URL: https://${KRAKEN_DOMAIN:?à définir dans .env}
+      KRAKEN_TRUST_PROXY: "1"
       KRAKEN_SMTP_URL: ${KRAKEN_SMTP_URL:-}
       KRAKEN_SMTP_FROM: ${KRAKEN_SMTP_FROM:-}
-      KRAKEN_TRUST_PROXY: ${KRAKEN_TRUST_PROXY:-0}
       KRAKEN_AUTH_PER_MIN: ${KRAKEN_AUTH_PER_MIN:-20}
+      KRAKEN_CONTACT: ${KRAKEN_CONTACT:-}
+      KRAKEN_PROCESSORS: ${KRAKEN_PROCESSORS:-}
+      KRAKEN_SOURCE_URL: ${KRAKEN_SOURCE_URL:-}
+      KRAKEN_SEED: ${KRAKEN_SEED:-}
+      RUST_LOG: ${RUST_LOG:-info}
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - kraken
+    environment:
+      KRAKEN_DOMAIN: ${KRAKEN_DOMAIN}
     ports:
-      - "8080:8080"
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy:/data
+
+  # Sauvegarde quotidienne de la base dans ./backups, gardée 14 jours.
+  backup:
+    image: postgres:18
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: kraken
+      PGDATABASE: kraken
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    entrypoint:
+      - sh
+      - -c
+      - while true; do pg_dump -Fc -f /backups/kraken-$$(date +%F).dump && find /backups -name '*.dump' -mtime +14 -delete; sleep 86400; done
 
 volumes:
   db:
+  caddy:

@@ -40,6 +40,8 @@ pub struct Config {
     pub trust_proxy: bool,
     /// Essais par minute et par IP sur les routes de connexion.
     pub auth_per_min: u32,
+    /// Pages Confidentialité et Conditions : contact et sous-traitants de l'exploitant, code source.
+    pub instance: kraken_proto::Instance,
 }
 
 impl Config {
@@ -58,6 +60,11 @@ impl Config {
             seed: std::env::args().any(|a| a == "--seed") || var("KRAKEN_SEED").as_deref() == Some("1"),
             trust_proxy: var("KRAKEN_TRUST_PROXY").as_deref() == Some("1"),
             auth_per_min: var("KRAKEN_AUTH_PER_MIN").and_then(|v| v.parse().ok()).unwrap_or(20),
+            instance: kraken_proto::Instance {
+                contact: var("KRAKEN_CONTACT"),
+                processors: var("KRAKEN_PROCESSORS"),
+                source_url: var("KRAKEN_SOURCE_URL").unwrap_or_else(|| env!("CARGO_PKG_REPOSITORY").into()),
+            },
         }
     }
 
@@ -117,6 +124,8 @@ pub fn app(state: AppState) -> Router {
         .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
     let api = Router::new()
         .merge(limited)
+        .route("/health", get(api::health))
+        .route("/instance", get(api::instance))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/logout-all", post(auth::logout_all))
         .route("/users/@me", get(auth::me).patch(auth::update_me))

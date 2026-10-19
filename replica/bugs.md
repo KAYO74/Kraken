@@ -5,7 +5,7 @@ Trouvés par la suite `e2e/` (Playwright, Chromium) le 2026-10-17, build 2ece10f
 | | S1 | S2 | S3 | S4 |
 | --- | --- | --- | --- | --- |
 | trouvés | 1 | 6 | 17 | 19 |
-| corrigés | 1 | 6 | 14 | 17 |
+| corrigés | 1 | 6 | 17 | 19 |
 
 ### BUG-001 : se reconnecter après une déconnexion ne mène nulle part
 
@@ -112,7 +112,7 @@ Relecture de toute la pile (sécurité, base, gateway, client, exploitation) : 5
 | MOB-1 | S3 | Sous 1024 px, liste des membres inaccessible | corrigé : panneau par-dessus le fil, e2e |
 | A11Y-1 | S3 | Les modales ne prennent pas le focus ; Échap inopérant | corrigé, e2e |
 | A11Y-2 | S3 | Le lien d'évitement ne déplace pas le focus | corrigé, e2e |
-| OPS-3, OPS-6, OPS-7 | S3 | Compose : port ouvert à tous, sans TLS, URL publique par défaut, mot de passe dans l'URL | voir `replica/deploy.md` |
+| OPS-3, OPS-6, OPS-7 | S3 | Compose : port ouvert à tous, sans TLS, URL publique par défaut, mot de passe dans l'URL | corrigé : Caddy en HTTPS seul exposé, domaine obligatoire, `PGPASSWORD` |
 | UI-1 | S4 | Échap dans la confirmation ferme tous les réglages | corrigé, e2e |
 | SEC-7, ERR-2 | S4 | Caractère nul : erreur 500 au lieu de 400 | corrigé, test |
 | SEC-8 | S4 | Texte du refus SMTP (avec l'adresse) dans les logs | corrigé : code seul |
@@ -129,7 +129,7 @@ Relecture de toute la pile (sécurité, base, gateway, client, exploitation) : 5
 | CHAT-5 | S4 | Champ de saisie qui ne grandit pas | corrigé |
 | SHUT-1 | S4 | SIGTERM ignoré dans le conteneur | corrigé |
 | OPS-10 | S4 | E-mails envoyés depuis `no-reply@localhost` | corrigé : domaine de `KRAKEN_PUBLIC_URL` |
-| OPS-11, OPS-13 | S4 | `.env.example` et README trompeurs | voir `replica/deploy.md` |
+| OPS-11, OPS-13 | S4 | `.env.example` et README trompeurs | corrigé |
 
 ## À vérifier (non reproduit comme bug)
 

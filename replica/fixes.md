@@ -1,6 +1,6 @@
 # Corrections et angle : KRAKEN
 
-Échantillon : **2 645 avis uniques** (2 719 lignes, 74 doublons retirés), collectés le 2026-10-17 par `scripts/collect-reviews.py`, flux et API officiels seulement :
+Échantillon : **2 645 avis uniques** (2 719 lignes, 74 doublons retirés), collectés le 2026-10-17 par `replica/collect-reviews.py`, flux et API officiels seulement :
 
 | source | avis | période |
 | --- | --- | --- |

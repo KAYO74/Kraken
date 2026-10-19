@@ -162,6 +162,11 @@ impl Db {
         Self { pool }
     }
 
+    pub async fn ping(&self) -> Result<()> {
+        sqlx::query("select 1").execute(&self.pool).await?;
+        Ok(())
+    }
+
     pub async fn migrate(&self) -> Result<()> {
         MIGRATOR.run(&self.pool).await.map_err(|e| DbError::Internal(e.to_string()))
     }

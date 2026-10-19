@@ -4,3 +4,5 @@ crates/kraken-client/dist
 .env
 replica/screens
 replica/clone-screens
+e2e/node_modules
+backups

@@ -20,16 +20,22 @@ Les migrations s'appliquent au démarrage. Toutes les variables sont dans `.env.
 
 ## Héberger son instance
 
+Il faut un serveur Linux avec Docker, ports 80 et 443 ouverts, et un nom de domaine dont l'enregistrement A pointe sur lui.
+
 ```sh
-cp .env.example .env    # mettre au moins POSTGRES_PASSWORD et KRAKEN_PUBLIC_URL
-docker compose up -d    # Postgres 18 + KRAKEN sur le port 8080
+git clone https://github.com/KAYO74/Kraken && cd Kraken
+cp .env.example .env    # KRAKEN_DOMAIN, POSTGRES_PASSWORD, KRAKEN_CONTACT, KRAKEN_PROCESSORS
+docker compose up -d    # Postgres 18, KRAKEN, Caddy (HTTPS automatique), sauvegarde quotidienne
 ```
+
+Mise à jour : `git pull && docker compose up -d --build`. Sauvegardes dans `backups/` (14 jours) ; restauration : `docker compose exec -T db pg_restore -U kraken -d kraken --clean < backups/kraken-AAAA-MM-JJ.dump`. Sonde de disponibilité : `https://<domaine>/api/v1/health` répond `ok`. Détails : `replica/deploy.md`.
 
 ## Tests
 
 ```sh
 cargo test --workspace --exclude kraken-client   # DATABASE_URL vers un Postgres où l'on peut créer des bases
-cd e2e && npm ci && npx playwright test   # serveur lancé avec KRAKEN_AUTH_PER_MIN=10000
+cd e2e && npm ci && npx playwright install chromium
+npx playwright test                       # serveur lancé avec KRAKEN_AUTH_PER_MIN=10000
 ```
 
 ## Dépôt

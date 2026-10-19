@@ -1,0 +1,5 @@
+{
+  "avoid": ["Discord", "Nitro", "Wumpus", "Clyde", "blurple"],
+  "domains": ["discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media"],
+  "colors": ["#5865f2", "#7289da", "#57f287", "#fee75c", "#eb459e", "#ed4245"]
+}
