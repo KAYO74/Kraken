@@ -1,0 +1,32 @@
+[package]
+name = "kraken-server"
+description = "Serveur KRAKEN : REST, gateway WebSocket, tâches de fond, fichiers statiques du client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+kraken-proto.workspace = true
+kraken-core.workspace = true
+kraken-db.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
+tower-http = { version = "0.6", features = ["fs", "set-header"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+argon2 = "0.5"
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.9"
+governor = "0.10"
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "hostname", "tokio1-rustls-tls"] }
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "cookies"] }
+tokio-tungstenite = "0.27"
+futures-util = "0.3"
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio", "macros", "migrate"] }

@@ -192,7 +192,7 @@ a:hover { text-decoration: underline; }
 /* Zone de saisie */
 .k-composer { display: flex; align-items: flex-end; gap: var(--space-2); min-height: var(--size-composer-min); margin: 0 var(--space-4) var(--space-4);
   padding: var(--space-3) var(--space-3); border-radius: var(--radius-md); background: var(--surface-overlay); border: 1px solid var(--border); }
-.k-composer textarea { flex: 1; min-height: 38px; max-height: 50vh; resize: none; border: 0; background: none; padding: 9px var(--space-2); color: var(--text); }
+.k-composer textarea { flex: 1; field-sizing: content; min-height: 38px; max-height: 50vh; resize: none; border: 0; background: none; padding: 9px var(--space-2); color: var(--text); }
 .k-composer textarea::placeholder { color: var(--text-faint); }
 .k-composer textarea:focus-visible { outline: none; }
 .k-composer:focus-within { border-color: var(--border-input); }

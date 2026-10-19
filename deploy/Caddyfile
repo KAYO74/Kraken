@@ -1,0 +1,6 @@
+# HTTPS automatique pour KRAKEN_DOMAIN (Let's Encrypt), puis tout vers le serveur KRAKEN.
+{$KRAKEN_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy kraken:8080
+	header Strict-Transport-Security "max-age=31536000"
+}

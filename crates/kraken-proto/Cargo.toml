@@ -1,0 +1,10 @@
+[package]
+name = "kraken-proto"
+description = "Types REST et gateway partagés entre client et serveur"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+uuid.workspace = true

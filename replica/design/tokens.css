@@ -98,6 +98,8 @@
   --size-server-icon: 40px;
   --size-icon: 20px;
   --size-message-gap: 16px;
+  --size-card: 480px;
+  --size-dialog-wide: 520px;
   --z-base: 0;
   --z-sticky: 10;
   --z-popover: 100;

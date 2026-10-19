@@ -1,0 +1,365 @@
+{
+ "_about": "Thèmes pour une messagerie de communautés (voix, serveurs, abonnement payant). Base : themes.json de replica-entrepreneur, plus les mots du domaine, en anglais et en français.",
+ "request_patterns": [
+  "\\bi wish\\b",
+  "\\bplease add\\b",
+  "\\bwould be (nice|great|good|helpful)\\b",
+  "\\bwould love\\b",
+  "\\bneeds? (a|an|the|to|more)\\b",
+  "\\bno way to\\b",
+  "\\bthere'?s no (way|option)\\b",
+  "\\b(can'?t|cannot|unable to) (even )?(add|change|edit|set|choose|export|import|customi[sz]e|connect|undo|delete|turn off)\\b",
+  "\\b(missing|lacks|lacking)\\b",
+  "\\bdoesn'?t (have|support|let|allow)\\b",
+  "\\bif only\\b",
+  "\\bfeature request\\b",
+  "\\bwhy (can'?t|isn'?t|doesn'?t)\\b",
+  "\\bj'aimerais\\b",
+  "\\bil manque\\b",
+  "\\bajoutez\\b",
+  "\\bpas moyen de\\b",
+  "\\bimpossible de\\b"
+ ],
+ "themes": [
+  {
+   "id": "nitro",
+   "label": "Fonctions réservées à l'abonnement payant",
+   "kind": "complaint",
+   "patterns": [
+    "\\bnitro\\b",
+    "\\bboosts?\\b",
+    "\\bupload limit\\b",
+    "\\bfile size\\b",
+    "\\b(8|10|25|50) ?mb\\b",
+    "\\bhd stream",
+    "\\b1080p\\b",
+    "\\babonnement\\b"
+   ]
+  },
+  {
+   "id": "voice",
+   "label": "Qualité audio, vocal et partage d'écran",
+   "kind": "complaint",
+   "patterns": [
+    "\\bvoice (chat|channel|call|quality)\\b",
+    "\\baudio\\b",
+    "\\bmic(rophone)?\\b",
+    "\\bscreen ?shar",
+    "\\bstream(ing)?\\b",
+    "\\becho\\b",
+    "\\brobotic\\b",
+    "\\bcut(s|ting)? out\\b",
+    "\\bvocal\\b",
+    "\\bmicro\\b"
+   ]
+  },
+  {
+   "id": "verification",
+   "label": "Vérification d'identité ou d'âge, données personnelles",
+   "kind": "complaint",
+   "patterns": [
+    "\\bage verification\\b",
+    "\\bverify (my|your) (age|identity)\\b",
+    "\\b(id|identity) (check|verification|scan)\\b",
+    "\\bface scan\\b",
+    "\\bselfie\\b",
+    "\\bphone (number|verification)\\b",
+    "\\bdata breach\\b",
+    "\\bleak(ed)?\\b",
+    "\\bvérification d'âge\\b"
+   ]
+  },
+  {
+   "id": "moderation",
+   "label": "Bans, modération, spam et raids",
+   "kind": "complaint",
+   "patterns": [
+    "\\bbann(ed|ing)?\\b",
+    "\\bdisabled (my )?account\\b",
+    "\\bterminated\\b",
+    "\\bfalse(ly)? (flag|report)",
+    "\\bappeal\\b",
+    "\\bscam(mers?|s)?\\b",
+    "\\bbots?\\b",
+    "\\braid(s|ed)?\\b",
+    "\\bmoderat",
+    "\\btrust ?(and|&) ?safety\\b"
+   ]
+  },
+  {
+   "id": "resources",
+   "label": "Lourd en mémoire et en processeur",
+   "kind": "complaint",
+   "patterns": [
+    "\\bram\\b",
+    "\\bmemory\\b",
+    "\\bcpu\\b",
+    "\\belectron\\b",
+    "\\bbloat(ed|ware)?\\b",
+    "\\bresource hog\\b",
+    "\\bgigabytes?\\b"
+   ]
+  },
+  {
+   "id": "ownership",
+   "label": "Dépendance à une entreprise : code fermé, IPO, enshittification",
+   "kind": "request",
+   "patterns": [
+    "\\bopen.?source\\b",
+    "\\bself.?host",
+    "\\bfederat",
+    "\\bmatrix\\b",
+    "\\brevolt\\b",
+    "\\bipo\\b",
+    "\\benshittif",
+    "\\bvendor lock",
+    "\\bown (your|our) data\\b",
+    "\\bcentrali[sz]ed\\b",
+    "\\bdecentrali[sz]ed\\b",
+    "\\bend.?to.?end\\b|\\be2ee\\b"
+   ]
+  },
+  {
+   "id": "search",
+   "label": "Recherche et mémoire des conversations",
+   "kind": "request",
+   "patterns": [
+    "\\bsearch(ing|able)?\\b",
+    "\\bindexed\\b",
+    "\\bknowledge\\b",
+    "\\bdocumentation\\b",
+    "\\barchive\\b",
+    "\\bthreads?\\b"
+   ]
+  },
+  {
+   "id": "pricing",
+   "label": "Price and paywalls",
+   "kind": "complaint",
+   "patterns": [
+    "\\bexpensive\\b",
+    "\\boverpriced\\b",
+    "\\bpric(e|es|ey|ing)\\b",
+    "\\bpaywall",
+    "\\bsubscription\\b",
+    "\\bper (month|seat|user)\\b",
+    "\\bfree (plan|tier|version)\\b",
+    "\\bupgrade to\\b",
+    "\\bpremium\\b",
+    "\\bnot worth\\b",
+    "\\bcost(s|ly)?\\b"
+   ]
+  },
+  {
+   "id": "billing",
+   "label": "Billing, cancelling and refunds",
+   "kind": "complaint",
+   "patterns": [
+    "\\bcharged\\b",
+    "\\brefund",
+    "\\bcancel(l?ing|l?ed|lation)?\\b",
+    "\\bauto.?renew",
+    "\\bhidden (fee|charge)",
+    "\\bbilling\\b",
+    "\\bscam\\b",
+    "\\bcredit card\\b"
+   ]
+  },
+  {
+   "id": "bugs",
+   "label": "Bugs and crashes",
+   "kind": "complaint",
+   "patterns": [
+    "\\bcrash(es|ed|ing)?\\b",
+    "\\bbugs?\\b",
+    "\\bbuggy\\b",
+    "\\bglitch",
+    "\\bfreez(e|es|ing)\\b",
+    "\\bbroken\\b",
+    "\\b(doesn'?t|does not|stopped) work",
+    "\\bnot working\\b",
+    "\\berror\\b"
+   ]
+  },
+  {
+   "id": "performance",
+   "label": "Slow, laggy, heavy",
+   "kind": "complaint",
+   "patterns": [
+    "\\bslow\\b",
+    "\\blag(gy|s)?\\b",
+    "\\bloading\\b",
+    "\\btakes forever\\b",
+    "\\bbattery\\b",
+    "\\bsluggish\\b",
+    "\\bheavy\\b"
+   ]
+  },
+  {
+   "id": "data",
+   "label": "Sync and lost data",
+   "kind": "complaint",
+   "patterns": [
+    "\\bsync(ing|s|ed)?\\b",
+    "\\blost (my|all)\\b",
+    "\\bdisappear",
+    "\\bdata loss\\b",
+    "\\bwiped\\b",
+    "\\bbackup\\b",
+    "\\bduplicat"
+   ]
+  },
+  {
+   "id": "ux",
+   "label": "Confusing or clunky to use",
+   "kind": "complaint",
+   "patterns": [
+    "\\bconfus",
+    "\\bhard to (use|find|navigate|understand)\\b",
+    "\\bcomplicated\\b",
+    "\\bcluttered\\b",
+    "\\bunintuitive\\b",
+    "\\bnot intuitive\\b",
+    "\\bclunky\\b",
+    "\\btoo many (steps|clicks|taps)\\b",
+    "\\blearning curve\\b",
+    "\\bcan'?t find\\b"
+   ]
+  },
+  {
+   "id": "support",
+   "label": "Support that does not answer",
+   "kind": "complaint",
+   "patterns": [
+    "\\bcustomer (service|support)\\b",
+    "\\bsupport (team|is|was)\\b",
+    "\\bno (response|reply)\\b",
+    "\\bnever (replied|responded|heard back)\\b",
+    "\\bticket\\b",
+    "\\bchat ?bot\\b"
+   ]
+  },
+  {
+   "id": "account",
+   "label": "Login and account problems",
+   "kind": "complaint",
+   "patterns": [
+    "\\blog ?in\\b",
+    "\\bsign ?in\\b",
+    "\\bpassword\\b",
+    "\\blocked out\\b",
+    "\\bverification\\b",
+    "\\b2fa\\b",
+    "\\bdelete (my )?account\\b"
+   ]
+  },
+  {
+   "id": "notifications",
+   "label": "Notifications and spam",
+   "kind": "complaint",
+   "patterns": [
+    "\\bnotification",
+    "\\bspam",
+    "\\btoo many emails\\b",
+    "\\bpush\\b",
+    "\\breminders?\\b"
+   ]
+  },
+  {
+   "id": "ads",
+   "label": "Ads",
+   "kind": "complaint",
+   "patterns": [
+    "\\bads\\b",
+    "\\badvert",
+    "\\bad.?supported\\b",
+    "\\bpop.?ups?\\b"
+   ]
+  },
+  {
+   "id": "updates",
+   "label": "A redesign or update made it worse",
+   "kind": "complaint",
+   "patterns": [
+    "\\b(new|latest|recent) (update|version|design)\\b",
+    "\\bredesign",
+    "\\bused to be\\b",
+    "\\bbring back\\b",
+    "\\bsince the update\\b"
+   ]
+  },
+  {
+   "id": "privacy",
+   "label": "Privacy and permissions",
+   "kind": "complaint",
+   "patterns": [
+    "\\bprivacy\\b",
+    "\\btracking\\b",
+    "\\bsell(s|ing)? (my )?data\\b",
+    "\\bpermissions?\\b",
+    "\\bcreepy\\b"
+   ]
+  },
+  {
+   "id": "integrations",
+   "label": "Integrations, import and export",
+   "kind": "request",
+   "patterns": [
+    "\\bintegrat",
+    "\\bzapier\\b",
+    "\\bgoogle (calendar|sheets|drive)\\b",
+    "\\boutlook\\b",
+    "\\bslack\\b",
+    "\\bapi\\b",
+    "\\bexport\\b",
+    "\\bimport\\b",
+    "\\bcsv\\b",
+    "\\bwebhook"
+   ]
+  },
+  {
+   "id": "platforms",
+   "label": "Platforms, offline and mobile",
+   "kind": "request",
+   "patterns": [
+    "\\boffline\\b",
+    "\\bandroid\\b",
+    "\\bipad\\b",
+    "\\btablet\\b",
+    "\\bdesktop app\\b",
+    "\\bmac app\\b",
+    "\\bwindows\\b",
+    "\\bmobile (app|version)\\b",
+    "\\bweb version\\b"
+   ]
+  },
+  {
+   "id": "customisation",
+   "label": "Customisation and control",
+   "kind": "request",
+   "patterns": [
+    "\\bcustomi[sz]",
+    "\\bdark mode\\b",
+    "\\btheme\\b",
+    "\\bbranding\\b",
+    "\\bwhite.?label\\b",
+    "\\btemplates?\\b",
+    "\\bsettings?\\b",
+    "\\boption to\\b"
+   ]
+  },
+  {
+   "id": "collaboration",
+   "label": "Teams and sharing",
+   "kind": "request",
+   "patterns": [
+    "\\bteam(s|mates?)?\\b",
+    "\\bshar(e|ing)\\b",
+    "\\bcollaborat",
+    "\\bmultiple (users|accounts|people)\\b",
+    "\\broles?\\b",
+    "\\bpermissions for\\b"
+   ]
+  }
+ ]
+}

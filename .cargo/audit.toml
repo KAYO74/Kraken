@@ -1,0 +1,4 @@
+[advisories]
+# rsa (attaque Marvin) : n'arrive que par sqlx-mysql, listé dans Cargo.lock mais jamais
+# compilé (KRAKEN n'utilise que Postgres ; `cargo tree -i rsa --target all` est vide).
+ignore = ["RUSTSEC-2023-0071"]

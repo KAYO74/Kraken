@@ -1,0 +1,8 @@
+target
+crates/kraken-client/dist
+.git
+.env
+replica/screens
+replica/clone-screens
+e2e/node_modules
+backups
