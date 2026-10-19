@@ -61,4 +61,4 @@ npx playwright test                       # serveur lancé avec KRAKEN_AUTH_PER_
 | `deploy/` | configuration de Caddy pour `docker compose` |
 | `replica/` | recon, architecture, design, journal de construction |
 
-Licence proposée : AGPL-3.0-or-later.
+Licence : [AGPL-3.0-or-later](LICENSE).
