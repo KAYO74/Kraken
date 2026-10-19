@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KRAKEN · primitives</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<style>
+  /* Mise en page de la galerie seulement. */
+  body { padding: 24px 32px 64px; }
+  .g-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .g-top h1 { margin: 0; font-size: var(--text-xl-size); color: var(--text-strong); }
+  section { margin: 0 0 32px; }
+  section > h2 { margin: 0 0 12px; font-size: var(--text-xs-size); text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; align-items: start; }
+  .panel { background: var(--surface-raised); border-radius: var(--radius-lg); padding: 16px 24px; }
+  .chat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 8px 0 0; --presence-ring: var(--surface); }
+  .swatch-tokens { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .swatch-tokens div { display: flex; gap: 8px; align-items: center; font-size: var(--text-xs-size); color: var(--text-secondary); }
+  .swatch-tokens i { width: 28px; height: 28px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); flex: none; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-hash" viewBox="0 0 24 24"><path d="M5 9h15M4 15h15M10 3 8 21M16 3l-2 18"/></symbol>
+  <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 21h20z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+  <symbol id="i-head" viewBox="0 0 24 24"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
+  <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 14a5 5 0 0 0 8 0M9 9h.01M15 9h.01"/></symbol>
+  <symbol id="i-reply" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 5 5v5"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-12 7l-5 1 1-4a8 8 0 1 1 16-4z"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="i-chevr" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+</svg>
+
+<div class="g-top">
+  <h1>KRAKEN · primitives</h1>
+  <div class="k-tabs" role="tablist" aria-label="Thème">
+    <button class="k-tab" role="tab" data-t="dark" aria-selected="true">Sombre</button>
+    <button class="k-tab" role="tab" data-t="light">Clair</button>
+    <button class="k-tab" role="tab" data-t="black">Noir</button>
+  </div>
+</div>
+
+<section><h2>Couleurs (rôles)</h2><div class="swatch-tokens" id="sw"></div></section>
+
+<section><h2>Typo</h2>
+  <div class="panel" style="display:grid;gap:4px">
+    <div class="type-2xl text-strong">Bienvenue à bord</div>
+    <div class="type-xl text-strong">Profil et confidentialité</div>
+    <div class="type-lg text-strong">Notifications</div>
+    <div class="type-base text-default">Corps de message, 16/22, le texte que l'on lit le plus.</div>
+    <div class="type-sm text-secondary">Texte secondaire 14/18 pour les descriptions de réglage.</div>
+    <div class="type-xs text-muted">LÉGENDE 12/16 · horodatage, catégorie</div>
+  </div>
+</section>
+
+<section><h2>Boutons</h2>
+  <div class="row">
+    <button class="k-btn k-btn--primary">Rejoindre</button>
+    <button class="k-btn">Modifier</button>
+    <button class="k-btn k-btn--ghost">Annuler</button>
+    <button class="k-btn k-btn--danger">Quitter le serveur</button>
+    <button class="k-btn k-btn--link">Voir plus</button>
+    <button class="k-btn k-btn--primary" disabled>Désactivé</button>
+    <button class="k-btn k-btn--primary" aria-busy="true">Envoi<span class="k-sr"> en cours</span></button>
+    <button class="k-btn k-btn--primary k-btn--sm">Petit</button>
+    <button class="k-btn k-btn--primary k-btn--lg">Grand</button>
+    <button class="k-btn k-btn--icon" aria-label="Couper le micro"><svg class="k-icon"><use href="#i-mic"/></svg></button>
+    <button class="k-btn k-btn--icon" aria-label="Micro coupé" aria-pressed="true"><svg class="k-icon"><use href="#i-mic"/></svg></button>
+  </div>
+</section>
+
+<section><h2>Formulaires</h2>
+  <div class="cols">
+    <div class="panel" style="display:grid;gap:16px">
+      <label class="k-field"><span class="k-label">Nom d'affichage</span><input class="k-input" placeholder="Comment t'appelle-t-on ?"></label>
+      <label class="k-field"><span class="k-label">Pseudo</span><input class="k-input" value="kr" aria-invalid="true" aria-describedby="e1"><span class="k-error" id="e1">Au moins 2 caractères, déjà pris.</span></label>
+      <div class="k-search"><svg class="k-icon"><use href="#i-search"/></svg><input class="k-input" type="search" placeholder="Chercher un ami" aria-label="Chercher un ami"></div>
+      <label class="k-field"><span class="k-label">Langue</span><select class="k-select"><option>Français</option><option>English</option></select></label>
+      <div class="k-field"><span class="k-label" id="zl">Zoom</span><input class="k-slider" type="range" min="50" max="200" step="25" value="100" aria-labelledby="zl"><div class="k-ticks"><span>50</span><span>75</span><span aria-current="true">100</span><span>125</span><span>150</span><span>175</span><span>200</span></div></div>
+    </div>
+    <div class="panel">
+      <div class="k-setting"><label for="s1">Afficher l'activité en cours</label><input id="s1" class="k-switch" type="checkbox" role="switch" checked><p>Tes amis voient à quoi tu joues.</p></div>
+      <div class="k-setting"><label for="s2">Mode streamer</label><input id="s2" class="k-switch" type="checkbox" role="switch"><p>Cache tes infos perso quand tu diffuses.</p></div>
+      <div class="k-setting"><label for="s3">Option verrouillée</label><input id="s3" class="k-switch" type="checkbox" role="switch" disabled><p>Gérée par l'admin de l'instance.</p></div>
+      <fieldset class="k-radios" style="margin-top:16px"><legend class="k-label" style="margin-bottom:8px">Qui peut m'ajouter en ami</legend>
+        <label class="k-radio"><input type="radio" name="r" checked><div><b>Tout le monde</b><span>N'importe qui peut t'envoyer une demande.</span></div></label>
+        <label class="k-radio"><input type="radio" name="r"><div><b>Amis d'amis</b><span>Seulement si vous avez un ami en commun.</span></div></label>
+      </fieldset>
+    </div>
+  </div>
+</section>
+
+<section><h2>Onglets, badges, bandeaux</h2>
+  <div style="display:grid;gap:12px">
+    <div class="k-tabs" role="tablist"><button class="k-tab" role="tab">Amis</button><button class="k-tab" role="tab" aria-selected="true">En ligne</button><button class="k-tab" role="tab">Tous</button><button class="k-tab" role="tab">En attente</button><button class="k-tab k-tab--accent" role="tab">Ajouter</button></div>
+    <div class="row"><span class="k-badge">Nouveau</span><span class="k-badge k-badge--neutral">Bêta</span><span class="k-badge k-badge--count">3</span><span class="k-badge k-badge--count">99+</span></div>
+    <div class="k-banner" role="status"><svg class="k-icon"><use href="#i-info"/></svg><span>Les comptes bloqués se gèrent dans les réglages. <a href="#">Y aller</a></span><button class="k-btn k-btn--icon" aria-label="Fermer"><svg class="k-icon"><use href="#i-x"/></svg></button></div>
+    <div class="k-banner k-banner--warning" role="status"><svg class="k-icon"><use href="#i-alert"/></svg><span>Ton e-mail n'est pas encore vérifié.</span></div>
+  </div>
+</section>
+
+<section><h2>Avatars et présence</h2>
+  <div class="row" style="gap:20px">
+    <span class="k-avatar k-avatar--xs">K</span><span class="k-avatar k-avatar--sm">K</span><span class="k-avatar k-avatar--md">K</span><span class="k-avatar">K</span><span class="k-avatar k-avatar--lg">K</span><span class="k-avatar k-avatar--xl">K</span>
+    <span class="k-avatar" role="img" aria-label="Alex, en ligne">A<i class="k-presence k-presence--online"></i></span>
+    <span class="k-avatar" role="img" aria-label="Alex, inactif">A<i class="k-presence k-presence--idle"></i></span>
+    <span class="k-avatar" role="img" aria-label="Alex, ne pas déranger">A<i class="k-presence k-presence--dnd"></i></span>
+    <span class="k-avatar" role="img" aria-label="Alex, hors ligne">A<i class="k-presence k-presence--offline"></i></span>
+    <span class="k-avatar" role="img" aria-label="Alex, en stream">A<i class="k-presence k-presence--stream"></i></span>
+  </div>
+</section>
+
+<section><h2>Navigation : rail, salons, MP, panneau utilisateur</h2>
+  <div style="display:flex;border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border);width:max-content">
+    <nav class="k-rail" aria-label="Serveurs">
+      <button class="k-server" aria-label="Accueil"><svg class="k-icon"><use href="#i-msg"/></svg></button><hr>
+      <button class="k-server" aria-current="page" aria-label="Serveur Abysse">Ab</button>
+      <button class="k-server" data-unread aria-label="Serveur Récif, non lu">Ré</button>
+      <button class="k-server" aria-label="Serveur Marée, 4 mentions">Ma<span class="k-badge k-badge--count">4</span></button>
+      <button class="k-server k-server--action" aria-label="Ajouter un serveur"><svg class="k-icon"><use href="#i-plus"/></svg></button>
+      <button class="k-server k-server--action" aria-label="Explorer"><svg class="k-icon"><use href="#i-compass"/></svg></button>
+    </nav>
+    <div style="display:flex;flex-direction:column;background:var(--bg)">
+      <div class="k-sidebar">
+        <button class="k-category" aria-expanded="true"><svg class="k-icon k-icon--sm"><use href="#i-chev"/></svg>Salons ouverts</button>
+        <a class="k-channel" href="#"><svg class="k-icon"><use href="#i-hash"/></svg>général</a>
+        <a class="k-channel" href="#" aria-current="page"><svg class="k-icon"><use href="#i-hash"/></svg>musique</a>
+        <a class="k-channel" href="#" data-unread><svg class="k-icon"><use href="#i-hash"/></svg>captures<span class="k-badge k-badge--count">2</span></a>
+        <a class="k-channel" href="#" data-muted><svg class="k-icon"><use href="#i-hash"/></svg>hors-sujet</a>
+        <a class="k-channel" href="#"><svg class="k-icon"><use href="#i-speaker"/></svg>Salle vocale</a>
+        <button class="k-category" aria-expanded="false"><svg class="k-icon k-icon--sm"><use href="#i-chev"/></svg>Équipe</button>
+        <a class="k-channel" href="#"><svg class="k-icon"><use href="#i-lock"/></svg>staff</a>
+        <button class="k-category" aria-expanded="true" style="justify-content:space-between">Messages privés<svg class="k-icon k-icon--sm"><use href="#i-plus"/></svg></button>
+        <div class="k-dm" aria-current="page"><span class="k-avatar k-avatar--md">Lu<i class="k-presence k-presence--online"></i></span><div>Lou</div><button class="k-btn k-btn--icon" aria-label="Fermer la conversation"><svg class="k-icon k-icon--sm"><use href="#i-x"/></svg></button></div>
+        <div class="k-dm"><span class="k-avatar k-avatar--md">G</span><div>Lou, Sam, Noa<small>4 membres</small></div><button class="k-btn k-btn--icon" aria-label="Fermer la conversation"><svg class="k-icon k-icon--sm"><use href="#i-x"/></svg></button></div>
+      </div>
+      <div class="k-userpanel"><span class="k-avatar k-avatar--md">K<i class="k-presence k-presence--online"></i></span><div><b>kayo</b><small>En ligne</small></div>
+        <button class="k-btn k-btn--icon" aria-label="Couper le micro"><svg class="k-icon"><use href="#i-mic"/></svg></button>
+        <button class="k-btn k-btn--icon" aria-label="Couper le son" aria-pressed="true"><svg class="k-icon"><use href="#i-head"/></svg></button>
+        <button class="k-btn k-btn--icon" aria-label="Réglages"><svg class="k-icon"><use href="#i-gear"/></svg></button></div>
+    </div>
+  </div>
+</section>
+
+<section><h2>Messages, embed, réactions, saisie</h2>
+  <div class="chat">
+    <article class="k-msg"><span class="k-avatar">S</span><div><header><b style="color:var(--accent-text)">Sam</b><time>Aujourd'hui à 21:04</time></header><p>Quelqu'un pour une partie ce soir ?</p>
+      <div class="k-embed" style="--embed-color:var(--info)"><small>exemple.org</small><a href="#"><b style="color:inherit">Guide du débutant</b></a><span class="type-sm text-secondary">Tout ce qu'il faut savoir avant la première manche.</span></div></div>
+      <div class="k-reactions"><button class="k-reaction" aria-pressed="true" aria-label="Pouce, 3 réactions, dont toi">👍 3</button><button class="k-reaction" aria-pressed="false" aria-label="Rire, 1 réaction">😂 1</button></div>
+      <div class="k-msg-actions" role="toolbar" aria-label="Actions du message"><button class="k-btn k-btn--icon" aria-label="Réagir"><svg class="k-icon"><use href="#i-smile"/></svg></button><button class="k-btn k-btn--icon" aria-label="Répondre"><svg class="k-icon"><use href="#i-reply"/></svg></button><button class="k-btn k-btn--icon" aria-label="Plus"><svg class="k-icon"><use href="#i-dots"/></svg></button></div></article>
+    <article class="k-msg k-msg--cont"><span class="k-avatar">S</span><div><p>Je lance le vocal dans 10 min.</p><button class="k-spoiler">SPOILER</button></div></article>
+    <article class="k-msg k-msg--mention"><div class="k-reply"><svg class="k-icon k-icon--sm"><use href="#i-reply"/></svg><b>@Sam</b> Quelqu'un pour une partie…</div><span class="k-avatar">L<i class="k-presence k-presence--idle" style="--presence-ring:var(--mention-soft)"></i></span><div><header><b style="color:var(--warning)">Lou</b><time>21:06</time></header><p><a href="#">@kayo</a> tu viens ?</p>
+      <div class="k-attachment"><svg class="k-icon"><use href="#i-file"/></svg><div><a href="#">carte.png</a><div class="type-xs text-muted">1,2 Mo</div></div></div></div></article>
+    <article class="k-msg k-msg--system"><span></span><p>Noa a rejoint le serveur.</p></article>
+    <div style="height:12px"></div>
+    <div class="k-composer"><button class="k-btn k-btn--icon" aria-label="Joindre un fichier"><svg class="k-icon"><use href="#i-plus"/></svg></button><textarea rows="1" placeholder="Écrire dans #musique" aria-label="Écrire dans #musique"></textarea><button class="k-btn k-btn--icon" aria-label="Emoji"><svg class="k-icon"><use href="#i-smile"/></svg></button></div>
+  </div>
+</section>
+
+<section><h2>Superpositions</h2>
+  <div class="cols">
+    <div role="menu" class="k-menu" aria-label="Actions sur Lou"><div role="menuitem" tabindex="-1">Profil</div><div role="menuitem" tabindex="-1">Envoyer un message</div><div role="menuitem" tabindex="-1">Copier l'identifiant <span class="k-kbd"><kbd>Ctrl</kbd><kbd>C</kbd></span></div><hr><div role="menuitem" tabindex="-1" class="is-danger">Bloquer</div></div>
+    <div style="display:grid;gap:12px;justify-items:start"><span class="k-tooltip" role="tooltip">Réglages utilisateur</span><div class="k-toast" role="status">Lien d'invitation copié.</div><div class="k-toast k-toast--danger" role="alert">Fichier trop lourd (500 Mo max).</div></div>
+    <div class="k-dialog" role="dialog" aria-labelledby="dl"><header><h2 id="dl">Quitter « Abysse » ?</h2></header><div>Tu ne pourras revenir qu'avec une nouvelle invitation.</div><footer><button class="k-btn k-btn--ghost">Annuler</button><button class="k-btn k-btn--danger">Quitter</button></footer></div>
+  </div>
+</section>
+
+<section><h2>Réglages : nav, ligne, raccourci, pastilles, carte, vide</h2>
+  <div class="cols">
+    <nav class="panel" style="background:var(--surface);display:grid;gap:2px" aria-label="Réglages">
+      <a class="k-navitem" href="#">Mon compte</a><a class="k-navitem" href="#" aria-current="page">Messagerie</a>
+      <div class="k-subnav"><a href="#" aria-current="true">Filtres de contenu</a><a href="#">Demandes d'ami</a></div>
+      <a class="k-navitem" href="#">Apparence <span class="k-badge" style="margin-left:auto">Nouveau</span></a>
+    </nav>
+    <div class="panel">
+      <div class="k-shortcut">Basculer le micro <span class="k-kbd"><kbd>Ctrl</kbd><kbd>Maj</kbd><kbd>M</kbd></span></div>
+      <div class="k-shortcut">Recherche rapide <span class="k-kbd"><kbd>Ctrl</kbd><kbd>K</kbd></span></div>
+      <a class="k-related" href="#" style="margin-top:16px"><svg class="k-icon"><use href="#i-smile"/></svg><div>Apparence<small>Médias et spoilers dans la discussion</small></div><svg class="k-icon" style="margin-left:auto"><use href="#i-chevr"/></svg></a>
+    </div>
+    <div class="panel" style="display:grid;gap:16px">
+      <ul class="k-swatches" role="radiogroup" aria-label="Thème de couleur">
+        <li><button class="k-swatch" role="radio" aria-checked="true" aria-label="Sombre" style="--swatch:var(--surface)"></button></li>
+        <li><button class="k-swatch" role="radio" aria-checked="false" aria-label="Marée" style="--swatch:linear-gradient(135deg,var(--accent),var(--info))"><span class="k-badge">Nouveau</span></button></li>
+        <li><button class="k-swatch" role="radio" aria-checked="false" aria-label="Corail" style="--swatch:linear-gradient(135deg,var(--danger-solid),var(--warning))"></button></li>
+      </ul>
+      <div class="k-card"><header><span class="k-avatar k-avatar--md">B</span><div><b class="text-strong">Bot Musique</b><div class="type-xs text-muted">Autorisé le 12/10/2026</div></div><button class="k-btn k-btn--sm" style="margin-left:auto">Retirer</button></header><details><summary>Permissions</summary>Lire ton pseudo et ton avatar.</details></div>
+      <div class="k-empty"><b>Rien pour l'instant</b>Quand un ami lancera une activité, elle apparaîtra ici.</div>
+      <div class="k-skeleton" style="height:40px"></div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const roles = ["bg","surface","surface-raised","surface-overlay","surface-hover","control","input","border","border-input","text-strong","text","text-secondary","text-muted","text-faint","link","accent","accent-text","accent-soft","danger","danger-solid","success","warning","info","status-stream"];
+  document.getElementById("sw").innerHTML = roles.map(r => `<div><i style="background:var(--${r})"></i>${r}</div>`).join("");
+  const set = t => { document.documentElement.dataset.theme = t; document.querySelectorAll("[data-t]").forEach(b => b.setAttribute("aria-selected", b.dataset.t === t)); };
+  document.querySelectorAll("[data-t]").forEach(b => b.onclick = () => set(b.dataset.t));
+  const q = new URLSearchParams(location.search).get("theme"); if (q) set(q);
+  document.querySelectorAll(".k-category").forEach(b => b.addEventListener("click", () => b.setAttribute("aria-expanded", b.getAttribute("aria-expanded") !== "true")));
+</script>
+</body>
+</html>

@@ -1,0 +1,264 @@
+/* Généré par tokens.py depuis tokens.json. Ne pas éditer à la main. */
+/* Thèmes : data-theme="dark" (défaut) | "light" | "black" | "auto" sur <html>. */
+/* Points de rupture (pas de variables CSS dans @media) : bp-mobile 640px, bp-tablet 1024px, bp-wide 1440px */
+
+:root {
+  color-scheme: dark;
+  --bg: #121214;
+  --surface: #1a1a1e;
+  --surface-raised: #202024;
+  --surface-overlay: #242429;
+  --surface-hover: #2c2c30;
+  --control: #333338;
+  --control-hover: #3c3c42;
+  --input: #17171a;
+  --border: #29292d;
+  --border-strong: #3a3a40;
+  --border-input: #74757d;
+  --text-strong: #fbfbfb;
+  --text: #efeff1;
+  --text-secondary: #abacb2;
+  --text-muted: #96979e;
+  --text-faint: #8a8b93;
+  --link: #6c9ced;
+  --accent: #2b7a78;
+  --accent-hover: #236664;
+  --accent-text: #5cc2bd;
+  --accent-soft: #1d3433;
+  --on-accent: #ffffff;
+  --danger: #f37479;
+  --danger-solid: #c4313b;
+  --on-danger: #ffffff;
+  --success: #5fa16c;
+  --warning: #f6c363;
+  --info: #6c9ced;
+  --info-soft: #212632;
+  --mention-soft: #2c2820;
+  --status-offline: #80818a;
+  --status-stream: #9a7fe0;
+  --font-sans: "Inter", "Noto Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-xs-size: 0.75rem;
+  --text-xs-line: 1rem;
+  --text-xs-weight: 500;
+  --text-sm-size: 0.875rem;
+  --text-sm-line: 1.125rem;
+  --text-sm-weight: 500;
+  --text-base-size: 1rem;
+  --text-base-line: 1.375rem;
+  --text-base-weight: 400;
+  --text-lg-size: 1.25rem;
+  --text-lg-line: 1.5rem;
+  --text-lg-weight: 600;
+  --text-xl-size: 1.5rem;
+  --text-xl-line: 1.875rem;
+  --text-xl-weight: 600;
+  --text-2xl-size: 2rem;
+  --text-2xl-line: 2.5rem;
+  --text-2xl-weight: 700;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --space-0: 0px;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 20px;
+  --space-7: 24px;
+  --space-8: 32px;
+  --space-9: 40px;
+  --space-10: 48px;
+  --space-11: 64px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+  --shadow-low: 0 1px 2px rgba(0,0,0,.24);
+  --shadow-pop: 0 8px 24px rgba(0,0,0,.32), 0 0 0 1px rgba(255,255,255,.04);
+  --shadow-modal: 0 16px 48px rgba(0,0,0,.48);
+  --shadow-scrim: rgba(0,0,0,.72);
+  --motion-fast: 100ms;
+  --motion-base: 180ms;
+  --motion-slow: 280ms;
+  --motion-ease: cubic-bezier(.2,.8,.2,1);
+  --size-titlebar: 32px;
+  --size-rail: 72px;
+  --size-sidebar: 304px;
+  --size-header: 48px;
+  --size-aside: 360px;
+  --size-composer-min: 56px;
+  --size-user-panel: 56px;
+  --size-settings-nav: 252px;
+  --size-settings-content: 700px;
+  --size-server-icon: 40px;
+  --size-icon: 20px;
+  --size-message-gap: 16px;
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-popover: 100;
+  --z-modal: 200;
+  --z-toast: 300;
+  --z-tooltip: 400;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #e9e9ec;
+  --surface: #ffffff;
+  --surface-raised: #f6f6f7;
+  --surface-overlay: #f1f1f3;
+  --surface-hover: #e3e3e7;
+  --control: #dadade;
+  --control-hover: #cfcfd4;
+  --input: #ececef;
+  --border: #dcdce0;
+  --border-strong: #c4c4ca;
+  --border-input: #7c7d85;
+  --text-strong: #060607;
+  --text: #1d1d21;
+  --text-secondary: #45464d;
+  --text-muted: #55565e;
+  --text-faint: #5f6068;
+  --link: #1a5bc4;
+  --accent-text: #1d6563;
+  --accent-soft: #d7eceb;
+  --danger: #c42b35;
+  --success: #1d7a3a;
+  --warning: #9a6400;
+  --info: #1a5bc4;
+  --info-soft: #e6eefb;
+  --mention-soft: #fbf3df;
+  --status-offline: #74757d;
+  --status-stream: #6c4fc4;
+}
+
+:root[data-theme="black"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #0b0b0c;
+  --surface-raised: #111113;
+  --surface-overlay: #161618;
+  --surface-hover: #1f1f22;
+  --control: #27272b;
+  --control-hover: #303035;
+  --input: #0d0d0f;
+  --border: #1c1c1f;
+  --border-strong: #2c2c31;
+  --border-input: #6a6b73;
+  --info-soft: #141821;
+  --mention-soft: #1e1b14;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="auto"] {
+    color-scheme: light;
+    --bg: #e9e9ec;
+    --surface: #ffffff;
+    --surface-raised: #f6f6f7;
+    --surface-overlay: #f1f1f3;
+    --surface-hover: #e3e3e7;
+    --control: #dadade;
+    --control-hover: #cfcfd4;
+    --input: #ececef;
+    --border: #dcdce0;
+    --border-strong: #c4c4ca;
+    --border-input: #7c7d85;
+    --text-strong: #060607;
+    --text: #1d1d21;
+    --text-secondary: #45464d;
+    --text-muted: #55565e;
+    --text-faint: #5f6068;
+    --link: #1a5bc4;
+    --accent-text: #1d6563;
+    --accent-soft: #d7eceb;
+    --danger: #c42b35;
+    --success: #1d7a3a;
+    --warning: #9a6400;
+    --info: #1a5bc4;
+    --info-soft: #e6eefb;
+    --mention-soft: #fbf3df;
+    --status-offline: #74757d;
+    --status-stream: #6c4fc4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; }
+}
+
+/* Utilitaires rôle -> classe (équivalent du thème Tailwind, sans chaîne Node). */
+.bg-bg { background-color: var(--bg); }
+.text-bg { color: var(--bg); }
+.bg-surface { background-color: var(--surface); }
+.text-surface { color: var(--surface); }
+.bg-surface-raised { background-color: var(--surface-raised); }
+.text-surface-raised { color: var(--surface-raised); }
+.bg-surface-overlay { background-color: var(--surface-overlay); }
+.text-surface-overlay { color: var(--surface-overlay); }
+.bg-surface-hover { background-color: var(--surface-hover); }
+.text-surface-hover { color: var(--surface-hover); }
+.bg-control { background-color: var(--control); }
+.text-control { color: var(--control); }
+.bg-control-hover { background-color: var(--control-hover); }
+.text-control-hover { color: var(--control-hover); }
+.bg-input { background-color: var(--input); }
+.text-input { color: var(--input); }
+.bg-border { background-color: var(--border); }
+.border { border-color: var(--border); }
+.bg-border-strong { background-color: var(--border-strong); }
+.border-strong { border-color: var(--border-strong); }
+.bg-border-input { background-color: var(--border-input); }
+.border-input { border-color: var(--border-input); }
+.bg-text-strong { background-color: var(--text-strong); }
+.text-strong { color: var(--text-strong); }
+.bg-text { background-color: var(--text); }
+.text-default { color: var(--text); }
+.bg-text-secondary { background-color: var(--text-secondary); }
+.text-secondary { color: var(--text-secondary); }
+.bg-text-muted { background-color: var(--text-muted); }
+.text-muted { color: var(--text-muted); }
+.bg-text-faint { background-color: var(--text-faint); }
+.text-faint { color: var(--text-faint); }
+.bg-link { background-color: var(--link); }
+.text-link { color: var(--link); }
+.bg-accent { background-color: var(--accent); }
+.text-accent { color: var(--accent); }
+.bg-accent-hover { background-color: var(--accent-hover); }
+.text-accent-hover { color: var(--accent-hover); }
+.bg-accent-text { background-color: var(--accent-text); }
+.text-accent-text { color: var(--accent-text); }
+.bg-accent-soft { background-color: var(--accent-soft); }
+.text-accent-soft { color: var(--accent-soft); }
+.bg-on-accent { background-color: var(--on-accent); }
+.text-on-accent { color: var(--on-accent); }
+.bg-danger { background-color: var(--danger); }
+.text-danger { color: var(--danger); }
+.bg-danger-solid { background-color: var(--danger-solid); }
+.text-danger-solid { color: var(--danger-solid); }
+.bg-on-danger { background-color: var(--on-danger); }
+.text-on-danger { color: var(--on-danger); }
+.bg-success { background-color: var(--success); }
+.text-success { color: var(--success); }
+.bg-warning { background-color: var(--warning); }
+.text-warning { color: var(--warning); }
+.bg-info { background-color: var(--info); }
+.text-info { color: var(--info); }
+.bg-info-soft { background-color: var(--info-soft); }
+.text-info-soft { color: var(--info-soft); }
+.bg-mention-soft { background-color: var(--mention-soft); }
+.text-mention-soft { color: var(--mention-soft); }
+.bg-status-offline { background-color: var(--status-offline); }
+.text-status-offline { color: var(--status-offline); }
+.bg-status-stream { background-color: var(--status-stream); }
+.text-status-stream { color: var(--status-stream); }
+.type-xs { font-size: var(--text-xs-size); line-height: var(--text-xs-line); font-weight: var(--text-xs-weight); }
+.type-sm { font-size: var(--text-sm-size); line-height: var(--text-sm-line); font-weight: var(--text-sm-weight); }
+.type-base { font-size: var(--text-base-size); line-height: var(--text-base-line); font-weight: var(--text-base-weight); }
+.type-lg { font-size: var(--text-lg-size); line-height: var(--text-lg-line); font-weight: var(--text-lg-weight); }
+.type-xl { font-size: var(--text-xl-size); line-height: var(--text-xl-line); font-weight: var(--text-xl-weight); }
+.type-2xl { font-size: var(--text-2xl-size); line-height: var(--text-2xl-line); font-weight: var(--text-2xl-weight); }
