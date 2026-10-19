@@ -34,7 +34,11 @@ impl Mailer {
             .subject(subject)
             .body(body)
             .map_err(|e| e.to_string())?;
-        self.transport.send(msg).await.map(|_| ()).map_err(|e| e.to_string())
+        // Le texte d'un refus SMTP cite souvent le destinataire : seul le code va dans les logs.
+        self.transport.send(msg).await.map(|_| ()).map_err(|e| match e.status() {
+            Some(code) => format!("refus SMTP {code}"),
+            None => "SMTP injoignable".into(),
+        })
     }
 }
 
@@ -61,16 +65,23 @@ async fn handle(state: &AppState, job: Job) {
     let result = match job.kind.as_str() {
         "email_verify" => email(state, &job, "verify_email").await,
         "email_reset" => email(state, &job, "reset_password").await,
-        "account_purge" => match state.db.purge_deleted_accounts(GRACE_DAYS).await {
-            Ok(n) => {
-                if n > 0 {
-                    tracing::info!("{n} compte(s) anonymisé(s)");
+        "account_purge" => {
+            // Tâche permanente : jamais en lettre morte, reprise dans une heure en cas d'échec.
+            let next = match state.db.purge_deleted_accounts(GRACE_DAYS).await {
+                Ok(n) => {
+                    if n > 0 {
+                        tracing::info!("{n} compte(s) anonymisé(s)");
+                    }
+                    24 * 3600
                 }
-                let _ = state.db.job_reschedule(job.id, 24 * 3600).await;
-                return;
-            }
-            Err(e) => Err(format!("{e:?}")),
-        },
+                Err(e) => {
+                    tracing::error!("purge des comptes : {e:?}");
+                    3600
+                }
+            };
+            let _ = state.db.job_reschedule(job.id, next).await;
+            return;
+        }
         other => Err(format!("tâche inconnue : {other}")),
     };
     let saved = match result {

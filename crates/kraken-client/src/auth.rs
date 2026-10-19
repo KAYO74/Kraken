@@ -10,6 +10,14 @@ use crate::shell::first_text;
 use crate::store::store;
 
 /// Où aller après la connexion : `?next=` s'il pointe dans l'appli, sinon l'accueil.
+/// Un chemin local seulement : sans `\` ni caractère de contrôle ou d'espacement, que le
+/// navigateur réécrit ou retire (`/\hôte` deviendrait `//hôte`, une autre origine).
+fn is_local(path: &str) -> bool {
+    path.starts_with('/')
+        && !path.starts_with("//")
+        && !path.chars().any(|c| c == '\\' || c.is_control() || c.is_whitespace())
+}
+
 fn is_auth_page(path: &str) -> bool {
     ["/login", "/register", "/forgot-password", "/reset-password"].iter().any(|p| path.starts_with(p))
 }
@@ -20,7 +28,7 @@ fn next_path() -> Memo<String> {
         q.read()
             .get("next")
             // Jamais vers une page de connexion : on y resterait bloqué une fois connecté.
-            .filter(|n| n.starts_with('/') && !n.starts_with("//") && !is_auth_page(n))
+            .filter(|n| is_local(n) && !is_auth_page(n))
             .unwrap_or_else(|| "/channels/@me".into())
     })
 }
@@ -162,9 +170,10 @@ pub fn InvitePage() -> impl IntoView {
                     s.upsert_guild(g);
                     navigate(&to, Default::default());
                 }
-                Err(e) => error.set(Some(e.message)),
+                Err(e) => _ = error.try_set(Some(e.message)),
             }
-            busy.set(false);
+            // La page a pu être quittée pendant l'adhésion.
+            busy.try_set(false);
         });
     };
     let here = move || format!("/invite/{}", code());

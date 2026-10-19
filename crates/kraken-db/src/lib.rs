@@ -46,7 +46,8 @@ impl From<sqlx::Error> for DbError {
                         "unique"
                     });
                 }
-                Some("23514") | Some("22001") => return Self::Invalid("value"),
+                // Contrainte, texte trop long, caractère nul ou inencodable.
+                Some("23514" | "22001" | "22021" | "22P05") => return Self::Invalid("value"),
                 _ => {}
             }
         }
@@ -364,16 +365,24 @@ impl Db {
 
     /// Demande de suppression : le compte est fermé tout de suite (sessions révoquées,
     /// connexion refusée) et anonymisé par la tâche `account_purge` après le délai de grâce.
+    /// Ses serveurs sans autre membre disparaissent ; les autres passent au plus ancien membre.
     pub async fn request_deletion(&self, uid: Id) -> Result<()> {
-        let owns: bool = sqlx::query_scalar("select exists(select 1 from guilds where owner_id = $1)")
-            .bind(uid)
-            .fetch_one(&self.pool)
-            .await?;
-        if owns {
-            return Err(DbError::Forbidden("owner"));
-        }
         let mut tx = self.pool.begin().await?;
+        // La ligne verrouillée d'abord : un `create_guild` concurrent attend, puis voit le compte fermé.
         sqlx::query("update users set deletion_requested_at = now() where id = $1").bind(uid).execute(&mut *tx).await?;
+        let heir = "from members m join users u on u.id = m.user_id
+                    where m.guild_id = g.id and m.user_id <> $1 and u.deletion_requested_at is null";
+        sqlx::query(&format!("delete from guilds g where owner_id = $1 and not exists(select 1 {heir})"))
+            .bind(uid)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(&format!(
+            "update guilds g set owner_id = (select m.user_id {heir} order by m.joined_at, m.user_id limit 1)
+             where owner_id = $1"
+        ))
+        .bind(uid)
+        .execute(&mut *tx)
+        .await?;
         sqlx::query("update sessions set revoked_at = now() where user_id = $1 and revoked_at is null")
             .bind(uid)
             .execute(&mut *tx)
@@ -421,6 +430,12 @@ impl Db {
             return Err(DbError::Invalid("name"));
         }
         let mut tx = self.pool.begin().await?;
+        // FOR SHARE : sérialisé avec `request_deletion`, un compte fermé ne crée plus rien.
+        sqlx::query("select 1 from users where id = $1 and deletion_requested_at is null for share")
+            .bind(owner)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(DbError::NotFound)?;
         let gid: Id = sqlx::query_scalar("insert into guilds (owner_id, name) values ($1, $2) returning id")
             .bind(owner)
             .bind(name)
@@ -670,8 +685,10 @@ impl Db {
         }
         let id: Option<Id> = sqlx::query_scalar(
             "with m as (insert into messages (channel_id, author_id, content, nonce) values ($1, $2, $3, $4)
-                        on conflict (author_id, nonce) where nonce is not null do nothing returning id, channel_id)
-             update channels c set last_message_id = m.id from m where c.id = m.channel_id returning m.id",
+                        on conflict (author_id, channel_id, nonce) where nonce is not null do nothing
+                        returning id, channel_id)
+             update channels c set last_message_id = greatest(c.last_message_id, m.id) from m
+             where c.id = m.channel_id returning m.id",
         )
         .bind(cid)
         .bind(author)
@@ -682,9 +699,10 @@ impl Db {
         let r = match id {
             Some(id) => sqlx::query(&message_sql("where m.id = $1")).bind(id).fetch_one(&self.pool).await?,
             None => {
-                sqlx::query(&message_sql("where m.author_id = $1 and m.nonce = $2"))
+                sqlx::query(&message_sql("where m.author_id = $1 and m.nonce = $2 and m.channel_id = $3"))
                     .bind(author)
                     .bind(&nonce)
+                    .bind(cid)
                     .fetch_one(&self.pool)
                     .await?
             }
@@ -765,12 +783,14 @@ impl Db {
         if banned {
             return Err(DbError::Forbidden("banned"));
         }
-        let already: bool =
-            sqlx::query_scalar("select exists(select 1 from members where guild_id = $1 and user_id = $2)")
-                .bind(gid)
-                .bind(uid)
-                .fetch_one(&mut *tx)
-                .await?;
+        // Adhésion d'abord : une seconde en parallèle attend la première, puis ne fait rien.
+        let already = sqlx::query("insert into members (guild_id, user_id) values ($1, $2) on conflict do nothing")
+            .bind(gid)
+            .bind(uid)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected()
+            == 0;
         if !already {
             sqlx::query(
                 "update invites set uses = uses + 1 where code = $1
@@ -781,11 +801,6 @@ impl Db {
             .fetch_optional(&mut *tx)
             .await?
             .ok_or(DbError::NotFound)?;
-            sqlx::query("insert into members (guild_id, user_id) values ($1, $2)")
-                .bind(gid)
-                .bind(uid)
-                .execute(&mut *tx)
-                .await?;
         }
         tx.commit().await?;
         let state = self.guild_state(gid, uid).await?.ok_or(DbError::NotFound)?;

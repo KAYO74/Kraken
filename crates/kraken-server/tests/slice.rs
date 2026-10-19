@@ -220,11 +220,28 @@ async fn cookie_sessions_csrf_and_logout_everywhere(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn unknown_api_route_is_json_404(pool: PgPool) {
+    let base = spawn(pool).await;
+    let r = reqwest::get(format!("http://{base}/api/v1/pas-de-route")).await.unwrap();
+    assert_eq!(r.status(), 404);
+    assert_eq!(r.json::<serde_json::Value>().await.unwrap()["code"], "not_found");
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
 async fn delete_account_reset_without_smtp_and_rate_limit(pool: PgPool) {
     let base = spawn_with(pool, config(6)).await;
     let c = reqwest::Client::new();
     let a = register(&c, &base, "lou").await;
     let auth = format!("Session {}", a.token);
+    // Propriétaire d'un serveur : il peut quand même partir.
+    let g = c
+        .post(format!("http://{base}/api/v1/guilds"))
+        .header("authorization", &auth)
+        .json(&json!({"name": "Récif"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(g.status(), 201);
 
     let wrong = c
         .post(format!("http://{base}/api/v1/users/@me/delete"))
@@ -261,7 +278,7 @@ async fn delete_account_reset_without_smtp_and_rate_limit(pool: PgPool) {
         .unwrap();
     assert_eq!(reset.status(), 501);
 
-    // 6 essais par minute : register + login + reset = 3, il en reste 3.
+    // 6 essais par minute : register + 2 suppressions + login + reset = 5, il en reste 1.
     let mut codes = vec![];
     for _ in 0..4 {
         let r = c
@@ -272,7 +289,7 @@ async fn delete_account_reset_without_smtp_and_rate_limit(pool: PgPool) {
             .unwrap();
         codes.push(r.status().as_u16());
     }
-    assert_eq!(codes, [401, 401, 401, 429]);
+    assert_eq!(codes, [401, 429, 429, 429]);
 }
 
 /// BUG-002 : la déconnexion d'un appareil ferme son gateway (et seulement le sien).

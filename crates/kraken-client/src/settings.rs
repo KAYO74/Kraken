@@ -7,7 +7,7 @@ use leptos_router::hooks::{use_navigate, use_params_map};
 
 use crate::icons::{Icon, lu};
 use crate::store::store;
-use crate::ui::Avatar;
+use crate::ui::{Avatar, modal};
 
 const SECTIONS: &[(&str, &str, &str, &str)] = &[
     ("Utilisateur", "account", "Mon compte", "S06"),
@@ -55,6 +55,8 @@ pub fn Settings() -> impl IntoView {
     let navigate = use_navigate();
     let close = move || navigate("/channels/@me", Default::default());
     let close2 = close.clone();
+    let root = NodeRef::new();
+    modal(root, close.clone());
     let mut group = "";
     let nav = SECTIONS.iter().map(|(g, slug, label, _)| {
         let head = (*g != group).then(|| view! { <h3>{*g}</h3> });
@@ -65,7 +67,7 @@ pub fn Settings() -> impl IntoView {
         }
     }).collect_view();
     view! {
-        <div class="k-scrim app-settings" on:keydown=move |e| if e.key() == "Escape" { close() }>
+        <div class="k-scrim app-settings" node_ref=root>
             <div class="k-settings" role="dialog" aria-modal="true" aria-label="Réglages">
                 <nav aria-label="Sections des réglages">{nav}</nav>
                 <main>
@@ -106,10 +108,10 @@ fn Account() -> impl IntoView {
     };
     let leave2 = leave.clone();
     let display = RwSignal::new(String::new());
-    // Suit le compte chargé (le READY peut arriver après l'ouverture des réglages).
-    Effect::new(move || {
-        display.set(s.me.with(|m| m.as_ref().and_then(|u| u.display_name.clone())).unwrap_or_default())
-    });
+    // Suit le nom enregistré (le READY peut arriver après l'ouverture des réglages), sans
+    // écraser la saisie quand autre chose change dans le compte.
+    let saved_name = Memo::new(move |_| s.me.with(|m| m.as_ref().and_then(|u| u.display_name.clone())));
+    Effect::new(move || display.set(saved_name.get().unwrap_or_default()));
     let saved = RwSignal::new(false);
     let name_error = RwSignal::new(None::<String>);
     let save_name = move |e: leptos::ev::SubmitEvent| {
@@ -174,7 +176,11 @@ fn Account() -> impl IntoView {
             <p>"Ton compte est fermé tout de suite et effacé au bout de 14 jours. Tes messages restent, signés « compte supprimé »."</p>
         </div>
         <Show when=move || deleting.get()>
-            <div class="k-scrim" on:keydown=move |e| if e.key() == "Escape" { deleting.set(false) }>
+            <div class="k-scrim" node_ref={
+                let root = NodeRef::new();
+                modal(root, move || deleting.set(false));
+                root
+            }>
                 <div class="k-dialog" role="alertdialog" aria-modal="true" aria-labelledby="del-t">
                     <header><h2 id="del-t">"Supprimer ton compte ?"</h2></header>
                     <form on:submit=delete>

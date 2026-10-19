@@ -115,16 +115,28 @@ async fn sessions_tokens_and_deletion(pool: PgPool) {
     assert_eq!(db.use_auth_token("reset_password", b"r1").await.unwrap(), None, "usage unique");
     assert_eq!(db.use_auth_token("verify_email", b"r1").await.unwrap(), None, "mauvais type");
 
-    // Un propriétaire de serveur doit d'abord le transférer.
-    db.create_guild(b.id, "Récif").await.unwrap();
-    assert_eq!(db.request_deletion(b.id).await, Err(DbError::Forbidden("owner")));
+    // Un propriétaire peut partir : son serveur vide disparaît, l'autre passe au plus ancien membre.
+    let c = db.create_user("noa", "noa@example.org", "h".into()).await.unwrap();
+    let solo = db.create_guild(b.id, "Récif").await.unwrap().guild.id;
+    let shared = db.create_guild(b.id, "Lagon").await.unwrap().guild.id;
+    let inv = db.create_invite(shared, None, b.id, 0, None).await.unwrap();
+    db.use_invite(&inv.code, a.id).await.unwrap();
+    db.use_invite(&inv.code, c.id).await.unwrap();
+    db.request_deletion(b.id).await.unwrap();
+    let owners: Vec<(Id, Id)> = sqlx::query_as("select id, owner_id from guilds where id = any($1)")
+        .bind(vec![solo, shared])
+        .fetch_all(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(owners, vec![(shared, a.id)]);
+    assert_eq!(db.create_guild(b.id, "Trop tard").await.err(), Some(DbError::NotFound), "compte fermé");
 
     db.create_session(a.id, b"t3", "web", "web").await.unwrap();
     db.request_deletion(a.id).await.unwrap();
     assert!(db.session_user(b"t3").await.unwrap().is_none());
     assert!(db.user_credentials("lou").await.unwrap().is_none());
     assert_eq!(db.purge_deleted_accounts(14).await.unwrap(), 0, "délai de grâce");
-    assert_eq!(db.purge_deleted_accounts(-1).await.unwrap(), 1);
+    assert_eq!(db.purge_deleted_accounts(-1).await.unwrap(), 2, "lou et sam");
     let left: Option<String> =
         sqlx::query_scalar("select email from users where id = $1").bind(a.id).fetch_one(&db.pool).await.unwrap();
     assert!(left.is_none());
@@ -145,6 +157,9 @@ async fn jobs_retry_then_dead_letter(pool: PgPool) {
         .await
         .unwrap();
     assert!(dead);
+    // La lettre morte ne bloque pas la même tâche plus tard (mot de passe oublié, purge).
+    db.enqueue("email", serde_json::json!({"to": "x"}), Some("k1"), 0).await.unwrap();
+    assert_eq!(db.claim_jobs(10).await.unwrap().len(), 1, "remise en file");
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -158,4 +173,27 @@ async fn seed_is_idempotent(pool: PgPool) {
     assert!(!guilds[0].channels.iter().any(|c| c.name.as_deref() == Some("staff")), "staff caché à demo");
     assert_eq!(db.private_channels(demo.id).await.unwrap().len(), 2);
     assert_eq!(db.relationships(demo.id).await.unwrap().len(), 5);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn odd_inputs_and_races(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (a, b) = two_users(&db).await;
+    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
+    // Un caractère nul est une valeur refusée, pas une erreur du serveur.
+    assert_eq!(db.create_message(general, a.id, "a\0b", None).await.err(), Some(DbError::Invalid("value")));
+    // Le même nonce dans un autre salon est un autre message.
+    let other = db
+        .create_channel(g.guild.id, &CreateChannel { name: "staff".into(), kind: ChannelKind::Text, parent_id: None })
+        .await
+        .unwrap();
+    db.create_message(general, a.id, "un", Some("n".into())).await.unwrap();
+    let (m, new) = db.create_message(other.id, a.id, "deux", Some("n".into())).await.unwrap();
+    assert!(new && m.channel_id == other.id && m.content == "deux");
+    // Deux adhésions simultanées (double clic, deux onglets) réussissent ; une seule compte.
+    let inv = db.create_invite(g.guild.id, Some(general), a.id, 1, None).await.unwrap();
+    let (r1, r2) = tokio::join!(db.use_invite(&inv.code, b.id), db.use_invite(&inv.code, b.id));
+    let joined = [r1.unwrap().1, r2.unwrap().1];
+    assert_eq!(joined.iter().filter(|m| m.is_some()).count(), 1);
 }

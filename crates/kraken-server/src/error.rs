@@ -38,11 +38,6 @@ impl From<DbError> for AppError {
             DbError::Forbidden("banned") => {
                 Self(StatusCode::FORBIDDEN, "banned", "Tu as été banni de ce serveur.".into())
             }
-            DbError::Forbidden("owner") => Self(
-                StatusCode::CONFLICT,
-                "owns_guilds",
-                "Transfère ou supprime d'abord les serveurs dont tu es propriétaire.".into(),
-            ),
             DbError::Forbidden(_) => Self::forbidden(),
             DbError::Internal(e) => {
                 tracing::error!("base : {e}");

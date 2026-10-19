@@ -15,7 +15,7 @@ use axum::http::{HeaderValue, header};
 use axum::routing::{get, post};
 use kraken_db::Db;
 use tower_http::services::{ServeDir, ServeFile};
-use tower_http::set_header::SetResponseHeaderLayer;
+use tower_http::set_header::{SetResponseHeader, SetResponseHeaderLayer};
 
 pub use gateway::Hub;
 pub use jobs::Mailer;
@@ -46,13 +46,15 @@ impl Config {
     pub fn from_env() -> Self {
         let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
         let addr = var("KRAKEN_ADDR").unwrap_or_else(|| "127.0.0.1:8080".into());
+        let public_url = var("KRAKEN_PUBLIC_URL").unwrap_or_else(|| format!("http://{addr}"));
+        let smtp_from = var("KRAKEN_SMTP_FROM").unwrap_or_else(|| format!("KRAKEN <no-reply@{}>", host(&public_url)));
         Self {
-            public_url: var("KRAKEN_PUBLIC_URL").unwrap_or_else(|| format!("http://{addr}")),
+            public_url,
             addr,
             web_dir: var("KRAKEN_WEB_DIR").unwrap_or_else(|| "crates/kraken-client/dist".into()),
             database_url: var("DATABASE_URL").unwrap_or_else(|| "postgres://kraken:kraken@127.0.0.1/kraken".into()),
             smtp_url: var("KRAKEN_SMTP_URL"),
-            smtp_from: var("KRAKEN_SMTP_FROM").unwrap_or_else(|| "KRAKEN <no-reply@localhost>".into()),
+            smtp_from,
             seed: std::env::args().any(|a| a == "--seed") || var("KRAKEN_SEED").as_deref() == Some("1"),
             trust_proxy: var("KRAKEN_TRUST_PROXY").as_deref() == Some("1"),
             auth_per_min: var("KRAKEN_AUTH_PER_MIN").and_then(|v| v.parse().ok()).unwrap_or(20),
@@ -62,6 +64,13 @@ impl Config {
     pub fn secure_cookies(&self) -> bool {
         self.public_url.starts_with("https://")
     }
+}
+
+/// Le domaine d'une adresse, sans schéma, port ni chemin.
+fn host(url: &str) -> &str {
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    let authority = rest.split('/').next().unwrap_or(rest);
+    authority.rsplit_once(':').filter(|(_, p)| p.bytes().all(|b| b.is_ascii_digit())).map_or(authority, |(h, _)| h)
 }
 
 #[derive(Clone)]
@@ -104,13 +113,13 @@ pub fn app(state: AppState) -> Router {
         .route("/auth/verify-email", post(auth::verify_email))
         .route("/auth/reset", post(auth::reset))
         .route("/auth/reset/confirm", post(auth::reset_confirm))
+        .route("/users/@me/delete", post(auth::delete_account))
         .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
     let api = Router::new()
         .merge(limited)
         .route("/auth/logout", post(auth::logout))
         .route("/auth/logout-all", post(auth::logout_all))
         .route("/users/@me", get(auth::me).patch(auth::update_me))
-        .route("/users/@me/delete", post(auth::delete_account))
         .route("/users/@me/relationships", get(api::relationships))
         .route("/users/@me/channels", get(api::private_channels))
         .route("/guilds", post(api::create_guild))
@@ -118,12 +127,18 @@ pub fn app(state: AppState) -> Router {
         .route("/guilds/{id}/channels", get(api::guild_channels).post(api::create_channel))
         .route("/channels/{id}/messages", get(api::messages).post(api::create_message))
         .route("/channels/{id}/invites", post(api::create_invite))
-        .route("/invites/{code}", get(api::invite).post(api::join));
+        .route("/invites/{code}", get(api::invite).post(api::join))
+        .fallback(|| async { error::AppError::not_found() });
     let index = format!("{}/index.html", state.cfg.web_dir);
     Router::new()
         .nest("/api/v1", api)
         .route("/gateway", get(gateway::upgrade))
-        .fallback_service(ServeDir::new(&state.cfg.web_dir).fallback(ServeFile::new(index)))
+        // Noms de fichiers fixes d'une version à l'autre : le navigateur revalide toujours.
+        .fallback_service(SetResponseHeader::if_not_present(
+            ServeDir::new(&state.cfg.web_dir).fallback(ServeFile::new(index)),
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-cache"),
+        ))
         .layer(SetResponseHeaderLayer::overriding(
             header::CONTENT_SECURITY_POLICY,
             HeaderValue::from_static(
@@ -139,4 +154,13 @@ pub fn app(state: AppState) -> Router {
 /// Lance les tâches de fond (e-mails, purge des comptes supprimés).
 pub fn spawn_workers(state: &AppState) {
     tokio::spawn(jobs::run(state.clone()));
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn host_of_public_url() {
+        assert_eq!(super::host("https://chat.example.org/"), "chat.example.org");
+        assert_eq!(super::host("http://127.0.0.1:8080"), "127.0.0.1");
+    }
 }

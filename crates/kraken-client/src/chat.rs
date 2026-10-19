@@ -12,6 +12,10 @@ use crate::shell::first_text;
 use crate::store::{Conn, Pending, store};
 use crate::ui::{Avatar, Header, Stub, initials, iso, when};
 
+thread_local! {
+    static DRAFTS: std::cell::RefCell<std::collections::HashMap<Id, String>> = Default::default();
+}
+
 fn param(name: &'static str) -> Memo<Option<Id>> {
     let p = use_params_map();
     Memo::new(move |_| p.read().get(name).and_then(|v| v.parse().ok()))
@@ -88,7 +92,9 @@ fn ChannelView(channel: Channel) -> impl IntoView {
     let cid = channel.id;
     let title = title_of(&channel);
     let is_dm = channel.guild_id.is_none();
-    let members_open = RwSignal::new(true);
+    // Ouverte d'office seulement là où elle tient à côté du fil.
+    let members_open =
+        RwSignal::new(window().match_media("(min-width: 1024px)").ok().flatten().is_some_and(|m| m.matches()));
     let header_icon = match channel.kind {
         ChannelKind::Announcement => lu::LuMegaphone,
         ChannelKind::Dm | ChannelKind::GroupDm => lu::LuMessageCircle,
@@ -106,8 +112,10 @@ fn ChannelView(channel: Channel) -> impl IntoView {
         spawn_local(async move {
             match crate::api::messages(cid).await {
                 Ok(items) => s.log(cid, |l| {
-                    let live: Vec<Message> =
-                        l.items.drain(..).filter(|m| !items.iter().any(|x| x.id == m.id)).collect();
+                    // Seuls les messages arrivés pendant le chargement, plus récents que la page
+                    // reçue, s'y ajoutent ; les anciens affichés sont remplacés par la page.
+                    let newest = items.last().map(|m| m.id);
+                    let live: Vec<Message> = l.items.drain(..).filter(|m| newest.is_none_or(|n| m.id > n)).collect();
                     l.items = items;
                     l.items.extend(live);
                     l.loaded = true;
@@ -153,20 +161,32 @@ fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
     let s = store();
     let log = Memo::new(move |_| s.logs.with(|l| l.get(&channel).cloned().unwrap_or_default()));
     let scroller = NodeRef::<html::Div>::new();
-    // Rester collé en bas quand un message arrive.
+    // Rester collé en bas quand un message arrive, sauf pour qui lit plus haut ; un envoi
+    // de sa part y ramène toujours.
+    let stick = StoredValue::new(true);
+    let sent = StoredValue::new(0usize);
     Effect::new(move || {
-        log.track();
-        if let Some(el) = scroller.get() {
+        let pending = log.with(|l| l.pending.len());
+        let mine = pending > sent.get_value();
+        sent.set_value(pending);
+        if let Some(el) = scroller.get()
+            && (stick.get_value() || mine)
+        {
             request_animation_frame(move || el.set_scroll_top(el.scroll_height()));
         }
     });
+    let on_scroll = move |_| {
+        if let Some(el) = scroller.get_untracked() {
+            stick.set_value(el.scroll_top() + el.client_height() >= el.scroll_height() - 48);
+        }
+    };
     let retry = move |p: Pending| {
         s.log(channel, |l| l.pending.retain(|x| x.nonce != p.nonce));
         // Même nonce : si le premier envoi était arrivé, le serveur renvoie ce message-là.
         send(channel, p.content, Some(p.nonce));
     };
     view! {
-        <div class="app-log" node_ref=scroller role="log" tabindex="0" aria-label="Messages" aria-live="polite" aria-busy=move || (!log.get().loaded).to_string()>
+        <div class="app-log" node_ref=scroller on:scroll=on_scroll role="log" tabindex="0" aria-label="Messages" aria-live="polite" aria-busy=move || (!log.get().loaded).to_string()>
             {move || {
                 let l = log.get();
                 if !l.loaded {
@@ -260,9 +280,7 @@ fn send(channel: Id, content: String, again: Option<String>) {
         match crate::api::send_message(channel, &content, &n).await {
             Ok(m) => s.log(channel, |l| {
                 l.pending.retain(|p| p.nonce != n);
-                if !l.items.iter().any(|x| x.id == m.id) {
-                    l.items.push(m);
-                }
+                l.insert(m);
             }),
             Err(e) => s.log(channel, |l| {
                 if let Some(p) = l.pending.iter_mut().find(|p| p.nonce == n) {
@@ -275,7 +293,12 @@ fn send(channel: Id, content: String, again: Option<String>) {
 
 #[component]
 fn Composer(channel: Id, placeholder: String) -> impl IntoView {
-    let text = RwSignal::new(String::new());
+    // Le brouillon survit au changement de salon et au rafraîchissement de la vue.
+    let text = RwSignal::new(DRAFTS.with_borrow_mut(|d| d.remove(&channel)).unwrap_or_default());
+    Effect::new(move || {
+        let t = text.get();
+        DRAFTS.with_borrow_mut(|d| d.insert(channel, t));
+    });
     let too_long = move || text.with(|t| t.chars().count() > MAX_MESSAGE_LEN);
     let submit = move || {
         let t = text.get_untracked();
@@ -306,7 +329,7 @@ fn Members(guild: Id) -> impl IntoView {
     let s = store();
     let members = move || s.guild(guild).map(|g| g.members).unwrap_or_default();
     view! {
-        <aside class="app-aside" aria-label="Membres">
+        <aside class="app-aside app-aside--members" aria-label="Membres">
             <h2 class="k-category">{move || format!("Membres — {}", members().len())}</h2>
             <ul class="app-members">
                 <For each=members key=|m| (m.user.id, m.user.display_name.clone(), m.nick.clone()) let:m>

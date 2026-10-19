@@ -103,8 +103,15 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
 .app-settings-top h2 { margin: 0; font-size: var(--text-xl-size); color: var(--text-strong); }
 .app-account { margin-bottom: var(--space-7); }
 
+/* `hidden` l'emporte sur les `display` des composants (salons d'une catégorie repliée). */
+[hidden] { display: none !important; }
+
 @media (max-width: 1023px) {
   .app-aside { display: none; }
+  /* La liste des membres passe par-dessus le fil, sous l'en-tête et son bouton. */
+  .app-body { position: relative; }
+  .app-aside--members { display: block; position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-popover);
+    max-width: 100%; box-shadow: var(--shadow-pop); }
 }
 
 @media (max-width: 639px) {

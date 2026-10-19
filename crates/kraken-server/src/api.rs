@@ -97,10 +97,10 @@ pub async fn create_message(
         return Err(AppError::invalid("nonce trop long"));
     }
     let (m, created) = state.db.create_message(cid, auth.user.id, &req.content, req.nonce).await?;
-    if created {
-        let audience = state.db.channel_audience(cid).await?;
-        state.hub.send(&audience, Event::MessageCreate(m.clone()));
-    }
+    // Même pour un renvoi (même nonce) : si la diffusion avait échoué, elle a lieu cette fois ;
+    // les clients ignorent un message qu'ils ont déjà.
+    let audience = state.db.channel_audience(cid).await?;
+    state.hub.send(&audience, Event::MessageCreate(m.clone()));
     Ok((if created { StatusCode::CREATED } else { StatusCode::OK }, Json(m)))
 }
 

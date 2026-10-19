@@ -115,7 +115,7 @@ impl Hub {
 pub async fn upgrade(State(state): State<AppState>, headers: HeaderMap, ws: WebSocketUpgrade) -> Response {
     // Le cookie n'est accepté que depuis notre propre origine (détournement de WebSocket).
     let cookie = crate::auth::presented_token(&headers)
-        .filter(|(_, from_cookie)| !from_cookie || crate::auth::same_origin(&headers))
+        .filter(|(_, from_cookie)| !from_cookie || crate::auth::same_origin(&headers, &state.cfg.public_url))
         .map(|(t, _)| t);
     ws.max_message_size(64 * 1024).on_upgrade(move |socket| session(state, socket, cookie))
 }
@@ -145,7 +145,15 @@ async fn session(state: AppState, mut ws: WebSocket, cookie: Option<String>) {
         Err(_) => None,
     };
     let user = match &session {
-        Some(h) => state.db.session_user(h).await.ok().flatten(),
+        Some(h) => match state.db.session_user(h).await {
+            Ok(u) => u,
+            // Panne passagère de la base : on coupe sans INVALID_SESSION, le client se reconnecte
+            // au lieu de se déconnecter.
+            Err(e) => {
+                tracing::error!("IDENTIFY : {e:?}");
+                return;
+            }
+        },
         None => None,
     };
     let (Some(user), Some(session)) = (user, session) else {

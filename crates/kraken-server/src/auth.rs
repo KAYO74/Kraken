@@ -12,13 +12,20 @@ use base64::Engine;
 use kraken_proto::*;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
+use std::sync::LazyLock;
+use tokio::sync::Semaphore;
 
 use crate::AppState;
 use crate::error::{ApiResult, AppError};
 
 const COOKIE: &str = "kraken_session";
 
+/// Argon2 prend ~19 Mio et un cœur par appel : au plus deux appels par cœur à la fois.
+static ARGON2: LazyLock<Semaphore> =
+    LazyLock::new(|| Semaphore::new(std::thread::available_parallelism().map_or(4, |n| n.get() * 2)));
+
 pub async fn hash_password(pw: String) -> Option<String> {
+    let _permit = ARGON2.acquire().await.ok()?;
     tokio::task::spawn_blocking(move || {
         let mut bytes = [0u8; 16];
         rand::rng().fill_bytes(&mut bytes);
@@ -31,6 +38,7 @@ pub async fn hash_password(pw: String) -> Option<String> {
 }
 
 async fn verify_password(pw: String, hash: String) -> bool {
+    let Ok(_permit) = ARGON2.acquire().await else { return false };
     tokio::task::spawn_blocking(move || {
         PasswordHash::new(&hash).is_ok_and(|h| Argon2::default().verify_password(pw.as_bytes(), &h).is_ok())
     })
@@ -78,14 +86,11 @@ pub fn presented_token(headers: &HeaderMap) -> Option<(String, bool)> {
 }
 
 /// Une requête authentifiée par cookie doit venir de notre propre origine (anti-CSRF et
-/// anti-détournement de WebSocket).
-pub fn same_origin(headers: &HeaderMap) -> bool {
+/// anti-détournement de WebSocket) : l'adresse publique de l'instance, ou l'hôte demandé.
+pub fn same_origin(headers: &HeaderMap, public_url: &str) -> bool {
+    let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) else { return false };
     let host = headers.get(header::HOST).and_then(|v| v.to_str().ok());
-    let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
-    match (host, origin) {
-        (Some(h), Some(o)) => o.split_once("://").is_some_and(|(_, rest)| rest == h),
-        _ => false,
-    }
+    origin == public_url.trim_end_matches('/') || origin.split_once("://").is_some_and(|(_, rest)| Some(rest) == host)
 }
 
 fn platform(headers: &HeaderMap) -> (String, &'static str) {
@@ -257,11 +262,32 @@ where
         let state = AppState::from_ref(s);
         let (token, from_cookie) = presented_token(&parts.headers).ok_or_else(AppError::unauthorized)?;
         let safe = matches!(parts.method, Method::GET | Method::HEAD);
-        if from_cookie && !safe && !same_origin(&parts.headers) {
+        if from_cookie && !safe && !same_origin(&parts.headers, &state.cfg.public_url) {
             return Err(AppError::forbidden());
         }
         let token_hash = token_hash(&token);
         let user = state.db.session_user(&token_hash).await?.ok_or_else(AppError::unauthorized)?;
         Ok(Self { user, token_hash })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn origin_is_the_public_url_or_the_host() {
+        let h = |origin: &str, host: &str| {
+            let mut h = HeaderMap::new();
+            h.insert(header::ORIGIN, origin.parse().unwrap());
+            h.insert(header::HOST, host.parse().unwrap());
+            h
+        };
+        let public = "https://chat.example.org/";
+        // Derrière un proxy qui réécrit Host.
+        assert!(same_origin(&h("https://chat.example.org", "127.0.0.1:8080"), public));
+        assert!(same_origin(&h("http://127.0.0.1:8080", "127.0.0.1:8080"), public));
+        assert!(!same_origin(&h("https://evil.example", "127.0.0.1:8080"), public));
+        assert!(!same_origin(&HeaderMap::new(), public));
     }
 }

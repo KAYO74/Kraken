@@ -47,6 +47,17 @@ pub struct Log {
     pub pending: Vec<Pending>,
 }
 
+impl Log {
+    /// Ajoute un message à sa place dans l'ordre des ids, sans doublon : deux envois
+    /// simultanés peuvent arriver dans le désordre.
+    pub fn insert(&mut self, m: Message) {
+        let at = self.items.partition_point(|x| x.id < m.id);
+        if self.items.get(at).is_none_or(|x| x.id != m.id) {
+            self.items.insert(at, m);
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Store {
     pub signed_in: RwSignal<bool>,
@@ -144,17 +155,22 @@ impl Store {
         match ev {
             Event::MessageCreate(m) => self.log(m.channel_id, |l| {
                 l.pending.retain(|p| Some(&p.nonce) != m.nonce.as_ref());
-                if !l.items.iter().any(|x| x.id == m.id) {
-                    l.items.push(m);
-                }
+                l.insert(m);
             }),
             Event::ChannelCreate(c) => {
+                // Déjà là si l'événement a croisé le READY.
                 let Some(gid) = c.guild_id else {
-                    self.dms.update(|d| d.push(c));
+                    self.dms.update(|d| {
+                        if !d.iter().any(|x| x.id == c.id) {
+                            d.push(c)
+                        }
+                    });
                     return;
                 };
                 self.guilds.update(|gs| {
-                    if let Some(g) = gs.iter_mut().find(|g| g.guild.id == gid) {
+                    if let Some(g) = gs.iter_mut().find(|g| g.guild.id == gid)
+                        && !g.channels.iter().any(|x| x.id == c.id)
+                    {
                         g.channels.push(c);
                     }
                 });
@@ -162,7 +178,9 @@ impl Store {
             Event::GuildCreate(g) => self.upsert_guild(*g),
             Event::UserUpdate(u) => self.update_user(u),
             Event::MemberAdd { guild_id, member } => self.guilds.update(|gs| {
-                if let Some(g) = gs.iter_mut().find(|g| g.guild.id == guild_id) {
+                if let Some(g) = gs.iter_mut().find(|g| g.guild.id == guild_id)
+                    && !g.members.iter().any(|m| m.user.id == member.user.id)
+                {
                     g.members.push(member);
                 }
             }),

@@ -4,8 +4,8 @@ Trouvés par la suite `e2e/` (Playwright, Chromium) le 2026-10-17, build 2ece10f
 
 | | S1 | S2 | S3 | S4 |
 | --- | --- | --- | --- | --- |
-| trouvés | 1 | 1 | 3 | 0 |
-| corrigés | 1 | 1 | 3 | 0 |
+| trouvés | 1 | 6 | 17 | 19 |
+| corrigés | 1 | 6 | 14 | 17 |
 
 ### BUG-001 : se reconnecter après une déconnexion ne mène nulle part
 
@@ -89,6 +89,47 @@ Attendu : la zone des messages reçoit le focus et défile avec les flèches.
 Constaté : aucune étape de tabulation ne l'atteint.
 Preuve : axe, règle `scrollable-region-focusable` sur `.app-log`.
 Statut : corrigé dans c313fe7 (`tabindex="0"` et nom accessible « Messages »).
+
+## Relecture du code (2026-10-19)
+
+Relecture de toute la pile (sécurité, base, gateway, client, exploitation) : 51 constats, 46 confirmés, regroupés ci-dessous en 38 bugs distincts. Tests : `crates/*/src/tests.rs`, `crates/kraken-server/tests/slice.rs`, `e2e/specs/regressions.spec.ts`.
+
+| ID | Gravité | Bug | État |
+| --- | --- | --- | --- |
+| SEC-1 | S2 | Limite de débit contournable : clé prise à gauche de `X-Forwarded-For` (choisie par le client) | corrigé : entrée de droite, IP validée, test `limit::tests` |
+| OPS-2 | S2 | Table de la limite de débit jamais purgée (mémoire sans fin) | corrigé : purge chaque minute |
+| SEC-2 | S2 | Tâche en lettre morte garde sa clé : mot de passe oublié bloqué pour toujours, purge arrêtée | corrigé : index unique partiel (0003), purge jamais en lettre morte |
+| SEC-3 | S2 | Suppression de compte impossible pour qui a créé un serveur | corrigé : serveur vide supprimé, sinon transmis au plus ancien membre |
+| SEC-1c | S2 | Redirection ouverte via `?next=/%5Chôte` | corrigé, e2e |
+| SEC-6 | S3 | Un /64 IPv6 contourne la limite | corrigé : un /64 = un client |
+| SEC-5 | S3 | Mot de passe de suppression sans limite ; argon2 sans plafond (mémoire) | corrigé : route limitée, sémaphore argon2 |
+| OPS-5 | S3 | Derrière un proxy qui réécrit `Host`, toute écriture renvoie 403 | corrigé : `Origin` comparé aussi à `KRAKEN_PUBLIC_URL` |
+| OPS-8 | S3 | Fichiers du client sans `Cache-Control` : vieux client après mise à jour | corrigé : `no-cache` |
+| GW-1 | S3 | Panne passagère de la base au IDENTIFY : le client se déconnecte | corrigé : coupure simple, le client se reconnecte |
+| CHAT-1 | S3 | Après reconnexion, les vieux messages passent en bas | corrigé |
+| CHAT-2 | S3 | Chaque message reçu ramène en bas qui lit l'historique | corrigé, e2e |
+| NAV-1 | S3 | Replier une catégorie ne cache pas ses salons | corrigé, e2e |
+| MOB-1 | S3 | Sous 1024 px, liste des membres inaccessible | corrigé : panneau par-dessus le fil, e2e |
+| A11Y-1 | S3 | Les modales ne prennent pas le focus ; Échap inopérant | corrigé, e2e |
+| A11Y-2 | S3 | Le lien d'évitement ne déplace pas le focus | corrigé, e2e |
+| OPS-3, OPS-6, OPS-7 | S3 | Compose : port ouvert à tous, sans TLS, URL publique par défaut, mot de passe dans l'URL | voir `replica/deploy.md` |
+| UI-1 | S4 | Échap dans la confirmation ferme tous les réglages | corrigé, e2e |
+| SEC-7, ERR-2 | S4 | Caractère nul : erreur 500 au lieu de 400 | corrigé, test |
+| SEC-8 | S4 | Texte du refus SMTP (avec l'adresse) dans les logs | corrigé : code seul |
+| API-1 | S4 | Diffusion perdue si elle échoue après l'insertion | corrigé : un renvoi rediffuse |
+| ORD-1, ORD-2 | S4 | Messages simultanés dans le désordre ; `last_message_id` qui recule | corrigé |
+| ERR-1 | S4 | Route `/api/v1/*` inconnue : page HTML au lieu d'un 404 JSON | corrigé, test |
+| DB-3 | S4 | Nonce réutilisé dans un autre salon : renvoie le mauvais message | corrigé : nonce par salon, test |
+| DB-4 | S4 | Double clic sur « Rejoindre » : erreur alors que l'adhésion a marché | corrigé, test |
+| DB-5 | S4 | Création de serveur et suppression de compte en même temps | corrigé : verrou de ligne |
+| GW-2, STORE-1 | S4 | Salons et membres en double après le READY | corrigé : dédoublonnés |
+| CRASH-1 | S4 | Quitter la page pendant l'adhésion fait planter l'appli | corrigé |
+| CHAT-4 | S4 | Brouillon de MP effacé quand l'autre change de profil | corrigé : brouillons gardés par salon |
+| SET-1 | S4 | Saisie du nom affiché écrasée | corrigé |
+| CHAT-5 | S4 | Champ de saisie qui ne grandit pas | corrigé |
+| SHUT-1 | S4 | SIGTERM ignoré dans le conteneur | corrigé |
+| OPS-10 | S4 | E-mails envoyés depuis `no-reply@localhost` | corrigé : domaine de `KRAKEN_PUBLIC_URL` |
+| OPS-11, OPS-13 | S4 | `.env.example` et README trompeurs | voir `replica/deploy.md` |
 
 ## À vérifier (non reproduit comme bug)
 

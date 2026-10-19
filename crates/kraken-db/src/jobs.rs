@@ -16,11 +16,12 @@ pub struct Job {
 }
 
 impl Db {
-    /// Ajoute une tâche. Avec `dedupe`, une tâche de même clé déjà en file n'est pas doublée.
+    /// Ajoute une tâche. Avec `dedupe`, une tâche de même clé déjà en file (hors lettre morte)
+    /// n'est pas doublée.
     pub async fn enqueue(&self, kind: &str, payload: Value, dedupe: Option<&str>, delay_s: i32) -> Result<()> {
         sqlx::query(
             "insert into jobs (kind, payload, dedupe_key, run_at) values ($1, $2, $3, now() + make_interval(secs => $4))
-             on conflict (dedupe_key) do nothing",
+             on conflict (dedupe_key) where failed_at is null do nothing",
         )
         .bind(kind)
         .bind(payload)

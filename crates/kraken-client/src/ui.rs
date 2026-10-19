@@ -1,10 +1,51 @@
 //! Petits composants partagés : avatar, écrans à venir, page introuvable, dates.
 
+use std::cell::RefCell;
+
 use kraken_proto::{Status, User};
+use leptos::html;
 use leptos::prelude::*;
+use wasm_bindgen::JsCast;
 
 use crate::icons::{Icon, lu};
 use crate::store::store;
+
+thread_local! {
+    /// Boîtes de dialogue ouvertes, la plus haute en dernier : ce qui avait le focus avant chacune.
+    static MODALS: RefCell<Vec<Option<web_sys::Element>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Comportement d'une boîte de dialogue : le focus va sur son élément `autofocus` à
+/// l'ouverture (l'attribut ne joue qu'une fois par page), Échap ferme la plus haute
+/// seulement, et le focus revient à son déclencheur à la fermeture.
+pub fn modal(root: NodeRef<html::Div>, close: impl Fn() + 'static) {
+    let depth = MODALS.with_borrow_mut(|m| {
+        m.push(document().active_element());
+        m.len()
+    });
+    Effect::new(move || {
+        let target = root.get().and_then(|el| el.query_selector("[autofocus]").ok().flatten());
+        if let Some(h) = target.and_then(|t| t.dyn_into::<web_sys::HtmlElement>().ok()) {
+            let _ = h.focus();
+        }
+    });
+    let esc = window_event_listener(leptos::ev::keydown, move |e| {
+        if e.key() == "Escape" && MODALS.with_borrow(Vec::len) == depth {
+            close();
+        }
+    });
+    on_cleanup(move || {
+        esc.remove();
+        let before = MODALS.with_borrow_mut(|m| {
+            let b = m.get_mut(depth - 1).and_then(Option::take);
+            m.truncate(depth - 1);
+            b
+        });
+        if let Some(h) = before.and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok()) {
+            let _ = h.focus();
+        }
+    });
+}
 
 /// Deux lettres pour un nom : initiales des deux premiers mots, sinon deux premières lettres.
 pub fn initials(name: &str) -> String {

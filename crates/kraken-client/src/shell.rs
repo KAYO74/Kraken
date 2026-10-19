@@ -10,7 +10,7 @@ use leptos_router::hooks::{use_location, use_navigate};
 
 use crate::icons::{Icon, lu};
 use crate::store::{Conn, store};
-use crate::ui::{Avatar, Logo, initials};
+use crate::ui::{Avatar, Logo, initials, modal};
 
 /// Serveur affiché d'après l'URL `/channels/{guild}/…`, `None` sur l'accueil.
 pub fn current_ids() -> Memo<(Option<Id>, Option<Id>)> {
@@ -75,7 +75,12 @@ pub fn Shell() -> impl IntoView {
 
     view! {
         <div class="app" data-drawer=move || s.drawer.get().then_some("open")>
-            <a class="app-skip" href="#main">"Aller au contenu"</a>
+            // Hors routeur : le navigateur suit l'ancre, et le focus va bien dans le contenu.
+            <a class="app-skip" href="#main" rel="external" on:click=|_| {
+                use wasm_bindgen::JsCast;
+                let main = document().get_element_by_id("main").and_then(|m| m.dyn_into::<web_sys::HtmlElement>().ok());
+                if let Some(m) = main { let _ = m.focus(); }
+            }>"Aller au contenu"</a>
             <Rail/>
             <div class="app-nav" on:click=close_on_link>
                 {move || match ids.get().0 {
@@ -270,8 +275,10 @@ fn InviteDialog(guild: Id, close: impl Fn() + Copy + Send + Sync + 'static) -> i
         }
     };
     let name = s.guild(guild).map(|g| g.guild.name).unwrap_or_default();
+    let root = NodeRef::new();
+    modal(root, close);
     view! {
-        <div class="k-scrim" on:click=move |_| close() on:keydown=move |e| if e.key() == "Escape" { close() }>
+        <div class="k-scrim" node_ref=root on:click=move |_| close()>
             <div class="k-dialog" role="dialog" aria-modal="true" aria-labelledby="inv-t" on:click=|e| e.stop_propagation()>
                 <header><h2 id="inv-t">{format!("Inviter dans {name}")}</h2></header>
                 <div>
