@@ -1,0 +1,106 @@
+feature,area,priority,original,clone,notes
+Inscription et connexion par e-mail ou pseudo,comptes,must,yes,no,S28
+Authentification multi-facteurs (TOTP),comptes,should,yes,no,S06
+Liste et révocation des appareils connectés,comptes,should,yes,no,S06
+Modifier pseudo e-mail téléphone mot de passe,comptes,must,yes,no,S06 ; téléphone facultatif
+Demande d'export de ses données,comptes,should,yes,no,S07 ; RGPD
+Suppression et désactivation du compte,comptes,must,yes,no,S07 ; RGPD
+Présence (en ligne inactif ne pas déranger invisible),social,must,yes,no,S01 S04
+Statut personnalisé et activité en cours,social,should,yes,no,S01
+Ajouter un ami par pseudo,social,must,yes,no,F02
+Demandes d'ami en attente (accepter refuser),social,must,yes,no,S01
+Bloquer ignorer et débloquer,social,must,yes,no,S08 F11
+Qui peut m'envoyer une demande d'ami,social,should,yes,no,S08
+Panneau d'activité des amis,social,could,yes,no,S01
+MP 1:1,mp,must,yes,no,S19
+MP de groupe,mp,must,yes,no,S03
+Permissions de MP par serveur et demandes de message,mp,should,yes,no,S08
+Filtre anti-spam des MP,mp,should,yes,no,S08
+Créer un serveur (avec modèles),serveurs,must,yes,no,S21 F05
+Rejoindre via invitation (expiration et usages max),serveurs,must,yes,no,F06
+Rail des serveurs avec non-lus et mentions,serveurs,must,yes,no,S02
+Dossiers de serveurs,serveurs,could,yes,no,S02
+Serveurs favoris,serveurs,could,yes,no,S11 ; nitro : gratuit
+Plus de serveurs par compte (200),serveurs,could,yes,no,nitro : gratuit ; plafond réglable par l'instance
+Explorer des serveurs publics,serveurs,could,yes,no,S30
+Salons texte annonces et catégories,salons,must,yes,no,S05
+Salons privés (surcharges de permissions),salons,must,yes,no,S05 S23
+Mode lent et sujet du salon,salons,should,yes,no,S23
+Fils de discussion,salons,should,yes,no,S24
+Salons forum,salons,could,yes,no,S24
+Rôles avec couleur et permissions,moderation,must,yes,no,S22 F07
+Expulser bannir exclure temporairement,moderation,must,yes,no,S22
+Journal d'audit,moderation,should,yes,no,S22
+AutoMod (mots interdits spam),moderation,could,yes,no,S22
+Filtre de contenu média sensible (flou bloquer),moderation,could,yes,no,S08 ; nécessite un classifieur
+Envoyer modifier supprimer un message,messages,must,yes,no,S05 S13
+Markdown mentions et spoilers,messages,must,yes,no,S05 S11
+Répondre à un message,messages,must,yes,no,S05
+Réactions emoji,messages,must,yes,no,S05
+Épingler un message,messages,should,yes,no,S05
+Transférer un message,messages,could,yes,no,S13
+Aperçus de liens (embeds),messages,must,yes,no,S05
+Pièces jointes images vidéos fichiers,messages,must,yes,no,S05
+Envois lourds jusqu'à 500 Mo,messages,should,yes,no,nitro : gratuit ; plafond réglable par l'instance
+Messages longs (4000 caractères),messages,should,yes,no,nitro : gratuit
+Texte alternatif des images,messages,should,yes,no,S12
+Emojis perso de serveur,emojis,must,yes,no,S22
+Emojis perso utilisables partout et animés,emojis,must,yes,no,nitro : gratuit
+Autocollants perso partout,emojis,should,yes,no,nitro : gratuit
+Super réactions,emojis,could,yes,no,nitro : gratuit
+GIF dans la zone de saisie,emojis,could,yes,no,S05 ; fournisseur GIF libre ou clé de l'instance
+Non-lus et accusés de lecture,notifications,must,yes,no,S13 raccourcis non-lus
+Notifications bureau et push,notifications,must,yes,no,S09
+Réglages de notif par serveur et salon,notifications,must,yes,no,S09
+Boîte de réception mentions,notifications,should,yes,no,S25
+Notifications par e-mail,notifications,could,yes,no,S09
+Recherche dans les messages,recherche,should,yes,no,S26
+Quick Switcher Ctrl+K,recherche,should,yes,no,S29
+Salon vocal,voix,must,yes,no,S18 F04
+Appel en MP,voix,must,yes,no,F03
+Muet et sourdine,voix,must,yes,no,S04
+Choix des périphériques et test micro,voix,must,yes,no,S10
+Détection de voix et push-to-talk,voix,must,yes,no,S10
+Suppression de bruit et annulation d'écho,voix,should,yes,no,S10 ; RNNoise au lieu de Krisp
+Chiffrement de bout en bout du vocal,voix,should,yes,no,S07 ; MLS
+Qualité audio 384 kbps,voix,could,yes,no,boost : gratuit
+Caméra en appel,video,must,yes,no,S10 S18
+Flou et arrière-plans vidéo perso,video,could,yes,no,S10 ; nitro : gratuit ; images originales
+Partage d'écran,video,must,yes,no,S18 F04
+Stream 1080p60 et plus,video,should,yes,no,nitro : gratuit
+Aperçu du stream,video,could,yes,no,S10
+Soundboard,voix,should,yes,no,S10 S22
+Sons du soundboard de tous les serveurs,voix,could,yes,no,nitro : gratuit
+Son d'entrée en vocal,voix,could,yes,no,S10 ; nitro : gratuit
+Profil avec avatar bio pronoms,profil,must,yes,no,S20
+Avatar animé et bannière,profil,should,yes,no,S20 ; nitro : gratuit
+Thème de profil et déco d'avatar,profil,could,yes,no,S20 ; nitro : gratuit
+Profil par serveur,profil,could,yes,no,S20 ; nitro : gratuit
+Styles de pseudo (police effet couleur),profil,could,yes,no,S12 ; nitro : gratuit
+Comptes liés affichés sur le profil,profil,could,yes,no,S15 ; OAuth public de chaque plateforme
+Thèmes clair sombre noir et auto,apparence,must,yes,no,S11
+Thèmes de couleur perso,apparence,should,yes,no,S11 ; nitro : gratuit
+Icônes d'appli alternatives,apparence,could,yes,no,S11 ; nitro : gratuit ; icônes originales
+Synchro des réglages entre appareils,apparence,should,yes,no,S11
+Mode streamer,apparence,could,yes,no,S11
+Taille du texte densité zoom,accessibilite,must,yes,no,S12
+Contraste élevé saturation mouvement réduit,accessibilite,should,yes,no,S12
+Synthèse vocale des messages,accessibilite,could,yes,no,S12
+Raccourcis clavier par défaut,systeme,must,yes,no,S13
+Raccourcis clavier perso,systeme,should,yes,no,S13
+Langues multiples et format 12 24 h,systeme,must,yes,no,S14 ; FR et EN d'abord
+Événements de serveur,serveurs,could,yes,no,S27
+Applications OAuth autorisées (bots),integrations,should,yes,no,S15 ; API publique KRAKEN pour bots
+Client desktop web et mobile,plateformes,must,yes,no,tranche 1 desktop + web
+Auto-hébergement d'une instance,plateformes,must,no,no,ajout KRAKEN ; libre
+Abonnement Nitro,monetisation,skip,yes,skip,tout est gratuit dans KRAKEN
+Boosts de serveur payants,monetisation,skip,yes,skip,avantages actifs pour tous
+Boutique et Orbes,monetisation,skip,yes,skip,commerce de Discord
+Quêtes sponsorisées,monetisation,skip,yes,skip,publicité de partenaires
+Cadeaux et facturation,monetisation,skip,yes,skip,pas de paiement
+Récompenses Xbox Game Pass,partenaires,skip,yes,skip,accord commercial de Discord
+Activités de jeux partenaires,partenaires,skip,yes,skip,contenu sous licence
+Jeux connectés (SDK social),partenaires,skip,yes,skip,SDK propriétaire
+Suppression de bruit Krisp,voix,skip,yes,skip,sous licence ; voir RNNoise
+Sons icônes arrière-plans et mascotte de Discord,assets,skip,yes,skip,propriété de Discord ; créer des originaux
+Vérification d'âge par prestataire et Centre familial,comptes,skip,yes,skip,à repenser plus tard
