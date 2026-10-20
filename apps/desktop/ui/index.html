@@ -9,17 +9,32 @@
 </head>
 <body>
 <main>
-  <img src="logo.png" alt="" width="96" height="96">
+  <img src="logo.png" alt="" width="80" height="80">
   <h1>Bienvenue sur KRAKEN</h1>
-  <p>Indique l'adresse de ton instance, celle que tu ouvres dans ton navigateur.</p>
-  <form>
-    <label for="address">Adresse de l'instance</label>
-    <input id="address" name="address" type="text" inputmode="url" spellcheck="false" autocapitalize="off" autocomplete="url" required
-      placeholder="https://chat.exemple.org" aria-describedby="error" autofocus>
-    <p id="error" role="alert"></p>
-    <button type="submit">Ouvrir</button>
-  </form>
-  <p class="hint">Tu pourras en changer depuis le menu KRAKEN.</p>
+  <p>Rejoins un serveur, ou crée le tien sur cet ordinateur.</p>
+
+  <section class="choice" aria-labelledby="join-title">
+    <h2 id="join-title">Rejoindre un serveur</h2>
+    <form id="join" novalidate>
+      <label for="address">Adresse ou lien d'invitation</label>
+      <input id="address" name="address" type="text" inputmode="url" spellcheck="false" autocapitalize="off" autocomplete="url"
+        placeholder="https://chat.exemple.org" aria-describedby="join-hint join-error" autofocus>
+      <p id="join-hint" class="hint">Colle l'adresse du serveur, ou le lien qu'on t'a envoyé.</p>
+      <p id="join-error" class="error" role="alert"></p>
+      <button type="submit">Rejoindre</button>
+    </form>
+  </section>
+
+  <p class="or" aria-hidden="true">ou</p>
+
+  <section class="choice" aria-labelledby="host-title">
+    <h2 id="host-title">Héberger sur cet ordinateur</h2>
+    <p id="host-hint" class="hint">Ton propre serveur, en un clic. Les personnes sur le même Wi-Fi ou le même réseau pourront te rejoindre.</p>
+    <p id="host-error" class="error" role="alert"></p>
+    <button id="host" type="button" aria-describedby="host-hint host-error">Héberger sur cet ordinateur</button>
+  </section>
+
+  <p class="hint">Tu pourras changer plus tard : menu KRAKEN, « Changer de serveur… ».</p>
 </main>
 </body>
 </html>

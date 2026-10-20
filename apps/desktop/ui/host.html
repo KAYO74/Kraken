@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ton serveur KRAKEN</title>
+<link rel="stylesheet" href="style.css">
+<script src="host.js" defer></script>
+</head>
+<body>
+<main>
+  <img src="logo.png" alt="" width="80" height="80">
+  <h1 id="title" tabindex="-1">Démarrage de ton serveur…</h1>
+
+  <section id="starting">
+    <progress aria-labelledby="step"></progress>
+    <p id="step" role="status">Préparation…</p>
+    <p class="hint">La première fois, ça peut prendre une minute.</p>
+  </section>
+
+  <section id="failed" hidden>
+    <p id="error" class="error" role="alert"></p>
+    <details id="more">
+      <summary>Détails techniques</summary>
+      <pre id="details"></pre>
+    </details>
+    <button id="retry" type="button">Réessayer</button>
+    <p><a href="index.html">Revenir à l'accueil</a></p>
+  </section>
+
+  <section id="ready" hidden>
+    <label for="address">Les personnes sur le même Wi-Fi ou le même réseau peuvent le rejoindre à cette adresse :</label>
+    <div class="share">
+      <input id="address" type="text" readonly spellcheck="false">
+      <button id="copy" type="button" class="secondary">Copier</button>
+    </div>
+    <p id="copied" class="hint" role="status"></p>
+    <p id="alone" class="hint" hidden>Cet ordinateur n'est relié à aucun réseau : pour l'instant, toi seul peux l'ouvrir.</p>
+    <p class="hint">Garde KRAKEN ouvert : quand l'appli est fermée, ton serveur s'arrête. Si ton ordinateur demande d'autoriser KRAKEN sur le réseau, accepte.</p>
+    <button id="open" type="button">Ouvrir KRAKEN</button>
+  </section>
+
+  <section id="idle" hidden>
+    <p>Aucun serveur ne tourne sur cet ordinateur.</p>
+    <p><a href="index.html">Revenir à l'accueil</a></p>
+  </section>
+</main>
+</body>
+</html>

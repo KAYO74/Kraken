@@ -1,7 +1,7 @@
 [package]
 name = "kraken-desktop"
-description = "KRAKEN pour Windows, macOS et Linux : une fenêtre sur ton instance"
-version = "0.1.0"
+description = "KRAKEN pour Windows, macOS et Linux : rejoindre une instance, ou en héberger une sur cet ordinateur"
+version = "0.2.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/KAYO74/Kraken"
@@ -11,11 +11,23 @@ repository = "https://github.com/KAYO74/Kraken"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+sha2 = "0.10"
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2.12", features = [] }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2"
+# Mode « héberger » : le serveur KRAKEN tourne dans l'appli, avec un PostgreSQL embarqué.
+kraken-server = { path = "../../crates/kraken-server" }
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "io-util", "macros"] }
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio"] }
+# 0.20.2 : la dernière qui partage sqlx 0.8 avec kraken-db. L'archive est embarquée par build.rs.
+postgresql_embedded = { version = "=0.20.2", default-features = false, features = ["tokio"] }
+postgresql_archive = { version = "0.20", default-features = false, features = ["zonky"] }
+postgresql_commands = { version = "=0.20.2", features = ["tokio"] }
+rand = "0.9"
 
 [profile.release]
 lto = true

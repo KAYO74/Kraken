@@ -5,9 +5,11 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths: ['apps/desktop/**', 'replica/brand/icons/**', '.github/workflows/desktop.yml']
+    paths: ['apps/desktop/**', 'crates/**', 'Cargo.toml', 'Cargo.lock', 'scripts/build-client.sh', 'replica/design/**',
+      'replica/brand/icons/**', '.github/workflows/desktop.yml']
   pull_request:
-    paths: ['apps/desktop/**', 'replica/brand/icons/**', '.github/workflows/desktop.yml']
+    paths: ['apps/desktop/**', 'crates/**', 'Cargo.toml', 'Cargo.lock', 'scripts/build-client.sh', 'replica/design/**',
+      'replica/brand/icons/**', '.github/workflows/desktop.yml']
   workflow_dispatch:
 
 jobs:
@@ -28,15 +30,47 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin,wasm32-unknown-unknown' || 'wasm32-unknown-unknown' }}
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: apps/desktop
+          workspaces: |
+            apps/desktop
+            .
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.129
+      # Le client web est livré dans l'appli (mode « héberger ») : à construire avant.
+      - name: Client web
+        shell: bash
+        run: sh scripts/build-client.sh release
       - run: npm install -g @tauri-apps/cli@2
       - name: tauri build
         working-directory: apps/desktop
         shell: bash
         run: tauri build ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+      # PostgreSQL et le serveur démarrent pour de vrai, avec le client livré dans le paquet.
+      - name: Self-test
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          set -eu
+          cd apps/desktop/target
+          case "$RUNNER_OS" in
+            Linux)
+              dpkg-deb -x release/bundle/deb/*.deb "$RUNNER_TEMP/deb"
+              for bin in "$RUNNER_TEMP"/deb/usr/bin/*; do "$bin" --self-test; done
+              ;;
+            Windows)
+              release/kraken-desktop.exe --self-test
+              ;;
+            macOS)
+              for bin in universal-apple-darwin/release/bundle/macos/*.app/Contents/MacOS/*; do
+                "$bin" --self-test
+                # La tranche Intel aussi, si Rosetta est là.
+                if arch -x86_64 /usr/bin/true 2> /dev/null; then arch -x86_64 "$bin" --self-test; fi
+              done
+              ;;
+          esac
       - uses: actions/upload-artifact@v4
         with:
           name: kraken-${{ matrix.name }}
