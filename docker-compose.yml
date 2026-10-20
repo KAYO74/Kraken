@@ -30,7 +30,8 @@ services:
       # Le mot de passe passe à part : dans l'URL, un `/`, `#` ou `%` la casserait.
       DATABASE_URL: postgres://kraken@db/kraken
       PGPASSWORD: ${POSTGRES_PASSWORD}
-      KRAKEN_PUBLIC_URL: ${KRAKEN_PUBLIC_URL:-https://${KRAKEN_DOMAIN:?à définir dans .env (ou KRAKEN_PUBLIC_URL sans domaine)}}
+      # Pas de `:?` dans une valeur par défaut imbriquée : Compose 2.x l'évaluerait toujours.
+      KRAKEN_PUBLIC_URL: ${KRAKEN_PUBLIC_URL:-https://${KRAKEN_DOMAIN}}
       KRAKEN_TRUST_PROXY: "1"
       KRAKEN_SMTP_URL: ${KRAKEN_SMTP_URL:-}
       KRAKEN_SMTP_FROM: ${KRAKEN_SMTP_FROM:-}
