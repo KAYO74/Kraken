@@ -1,6 +1,9 @@
-# HTTPS automatique pour KRAKEN_DOMAIN (Let's Encrypt), puis tout vers le serveur KRAKEN.
-{$KRAKEN_DOMAIN} {
+# KRAKEN_SITE vient de docker-compose.yml : le domaine (HTTPS automatique, Let's Encrypt), ou
+# `http://` sans domaine (HTTP simple sur le réseau local). Puis tout vers le serveur KRAKEN.
+{$KRAKEN_SITE} {
 	encode zstd gzip
 	reverse_proxy kraken:8080
-	header Strict-Transport-Security "max-age=31536000"
+	# HSTS seulement en HTTPS : en mode local, il bloquerait le site.
+	@https protocol https
+	header @https Strict-Transport-Security "max-age=31536000"
 }

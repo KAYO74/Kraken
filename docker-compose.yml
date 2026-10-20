@@ -1,5 +1,7 @@
-# Instance KRAKEN auto-hébergée : `cp .env.example .env`, remplir, puis `docker compose up -d`.
-# Caddy sert l'instance en HTTPS (certificat Let's Encrypt automatique) ; seul Caddy est exposé.
+# Instance KRAKEN auto-hébergée. Le plus simple : `sh install.sh` (pose les questions, écrit .env,
+# démarre tout). À la main : `cp .env.example .env`, remplir, puis `docker compose up -d`.
+# Avec un domaine, Caddy sert l'instance en HTTPS (certificat Let's Encrypt automatique) ; sans
+# domaine, en HTTP simple sur le réseau local. Seul Caddy est exposé.
 services:
   db:
     image: postgres:18
@@ -16,6 +18,9 @@ services:
       retries: 10
 
   kraken:
+    # Image publiée par la CI (amd64 et arm64). Si elle est introuvable, compose la construit
+    # depuis le code source (dans un clone du dépôt seulement).
+    image: ${KRAKEN_IMAGE:-ghcr.io/kayo74/kraken:latest}
     build: .
     restart: unless-stopped
     depends_on:
@@ -25,7 +30,7 @@ services:
       # Le mot de passe passe à part : dans l'URL, un `/`, `#` ou `%` la casserait.
       DATABASE_URL: postgres://kraken@db/kraken
       PGPASSWORD: ${POSTGRES_PASSWORD}
-      KRAKEN_PUBLIC_URL: https://${KRAKEN_DOMAIN:?à définir dans .env}
+      KRAKEN_PUBLIC_URL: ${KRAKEN_PUBLIC_URL:-https://${KRAKEN_DOMAIN:?à définir dans .env (ou KRAKEN_PUBLIC_URL sans domaine)}}
       KRAKEN_TRUST_PROXY: "1"
       KRAKEN_SMTP_URL: ${KRAKEN_SMTP_URL:-}
       KRAKEN_SMTP_FROM: ${KRAKEN_SMTP_FROM:-}
@@ -44,11 +49,12 @@ services:
     depends_on:
       - kraken
     environment:
-      KRAKEN_DOMAIN: ${KRAKEN_DOMAIN}
+      # Le domaine (HTTPS), ou `http://` sans domaine : HTTP simple, quelle que soit l'adresse.
+      KRAKEN_SITE: ${KRAKEN_DOMAIN:-http://}
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "${KRAKEN_HTTP_PORT:-80}:80"
+      - "${KRAKEN_HTTPS_PORT:-443}:443"
+      - "${KRAKEN_HTTPS_PORT:-443}:443/udp"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy:/data

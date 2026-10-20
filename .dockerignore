@@ -1,8 +1,18 @@
-target
+# Contexte de construction de l'image : le code et ce que build-client.sh copie, rien d'autre.
+**/target
 crates/kraken-client/dist
 .git
+.github
 .env
+.env.*
+apps
+e2e
 replica/screens
 replica/clone-screens
-e2e/node_modules
 backups
+docs
+deploy
+docker-compose.yml
+install.sh
+install.ps1
+**/*.md

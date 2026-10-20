@@ -4,6 +4,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   rust:
     runs-on: ubuntu-latest
@@ -32,11 +35,128 @@ jobs:
       - run: cargo test --workspace --exclude kraken-client
       - run: python3 replica/design/tokens.py
 
+  # Image Docker : sur main, amd64 + arm64 publiées sur ghcr.io/<propriétaire>/kraken (latest et
+  # le commit) ; sur une PR, amd64 seulement, rien de publié. Compilation croisée, pas d'émulation.
   docker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t kraken:ci .
+      - uses: docker/setup-buildx-action@v3
+      - name: Nom de l'image (propriétaire en minuscules)
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kraken" >> "$GITHUB_OUTPUT"
+      - if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ env.PUBLISH == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: |
+            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=kraken
+          cache-to: type=gha,scope=kraken,mode=max
+
+  # install.sh de bout en bout, en mode local, avec l'image construite ici (sans ghcr.io).
+  installer:
+    runs-on: ubuntu-latest
+    env:
+      # Domaine .invalid : le téléchargement échoue toujours, l'installeur prend l'image locale.
+      KRAKEN_IMAGE: kraken.invalid/kraken:ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck et syntaxe POSIX
+        run: |
+          command -v shellcheck || sudo apt-get install -y shellcheck
+          shellcheck install.sh
+          dash -n install.sh
+          bash --posix -n install.sh
+      - uses: docker/setup-buildx-action@v3
+      - name: Image locale
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ env.KRAKEN_IMAGE }}
+          cache-from: type=gha,scope=kraken
+      - name: Installation
+        run: |
+          echo "KRAKEN_DIR=$RUNNER_TEMP/kraken" >> "$GITHUB_ENV"
+          KRAKEN_DIR="$RUNNER_TEMP/kraken" sh install.sh --local --yes
+      - name: Vérifications, puis un compte créé avant la relance
+        run: |
+          set -eu
+          port=$(sed -n 's/^KRAKEN_HTTP_PORT=//p' "$KRAKEN_DIR/.env")
+          base="http://127.0.0.1:${port:-80}"
+          echo "BASE=$base" >> "$GITHUB_ENV"
+          test "$(curl -fsS "$base/api/v1/health")" = ok
+          curl -fsS "$base/" | grep -q '<title>KRAKEN</title>'
+          test "$(stat -c %a "$KRAKEN_DIR/.env")" = 600
+          grep -Eq '^POSTGRES_PASSWORD=[A-Za-z0-9]{32,}$' "$KRAKEN_DIR/.env"
+          sha256sum "$KRAKEN_DIR/.env" > "$RUNNER_TEMP/env.sha256"
+          curl -fsS -o /dev/null -H 'Content-Type: application/json' \
+            -d '{"username":"ci_test","email":"ci@example.invalid","password":"mot-de-passe-ci-123"}' \
+            "$base/api/v1/auth/register"
+      - name: Relance (mise à jour)
+        run: sh install.sh --local --yes
+      - name: Après la relance, .env intact et le compte toujours là
+        run: |
+          set -eu
+          sha256sum -c "$RUNNER_TEMP/env.sha256"
+          test "$(curl -fsS "$BASE/api/v1/health")" = ok
+          curl -fsS -o /dev/null -H 'Content-Type: application/json' \
+            -d '{"login":"ci_test","password":"mot-de-passe-ci-123"}' "$BASE/api/v1/auth/login"
+      - if: failure()
+        run: cd "$KRAKEN_DIR" && docker compose ps -a && docker compose logs --tail 200
+
+  # install.ps1 : analyse par PowerShell, puis plan sans rien installer (-DryRun), en Windows
+  # PowerShell 5.1 et en PowerShell 7, comme fichier et comme avec irm | iex.
+  installer-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $tokens = $null; $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD\install.ps1", [ref]$tokens, [ref]$errors)
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Host ("ligne {0} : {1}" -f $_.Extent.StartLineNumber, $_.Message) }
+            exit 1
+          }
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -Help
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DryRun -Yes
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $env:KRAKEN_DRY_RUN = '1'
+          Get-Content -Raw -Encoding UTF8 .\install.ps1 | Invoke-Expression
+      - name: PowerShell 7
+        shell: pwsh
+        run: |
+          $tokens = $null; $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD\install.ps1", [ref]$tokens, [ref]$errors)
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Host ("ligne {0} : {1}" -f $_.Extent.StartLineNumber, $_.Message) }
+            exit 1
+          }
+          if (Get-Module -ListAvailable -Name PSScriptAnalyzer) {
+            $issues = Invoke-ScriptAnalyzer -Path .\install.ps1 -Severity Error
+            if ($issues) { $issues | Format-Table -AutoSize | Out-String | Write-Host; exit 1 }
+          }
+          pwsh -NoProfile -File .\install.ps1 -DryRun -Yes
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $env:KRAKEN_DRY_RUN = '1'
+          Get-Content -Raw .\install.ps1 | Invoke-Expression
 
   e2e:
     runs-on: ubuntu-latest
