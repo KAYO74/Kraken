@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "La page locale de choix d'instance ; le contenu distant n'a accès à rien.",
+  "description": "Les pages locales (accueil, serveur hébergé) seulement : sans « remote », une page distante n'a droit à aucune commande.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["allow-join", "allow-host-start", "allow-host-status", "allow-host-open"]
 }

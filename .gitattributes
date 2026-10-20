@@ -1,0 +1,5 @@
+# Fins de ligne LF partout, même dans un clone Windows : l'image Docker exécute les scripts,
+# et sqlx vérifie les migrations octet par octet.
+* text=auto eol=lf
+# Avis copiés tels quels, retours à la ligne d'origine compris.
+replica/reviews.csv -text

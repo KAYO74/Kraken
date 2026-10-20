@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-host-open"
+description = "Enables the host_open command without any pre-configured scope."
+commands.allow = ["host_open"]
+
+[[permission]]
+identifier = "deny-host-open"
+description = "Denies the host_open command without any pre-configured scope."
+commands.deny = ["host_open"]
