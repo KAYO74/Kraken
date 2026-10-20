@@ -12,7 +12,12 @@ Messagerie libre et auto-hébergeable, écrite en Rust : serveurs, salons, MP, e
 
 ## Télécharger
 
-Appli de bureau pour Windows, macOS et Linux : [dernière version](https://github.com/KAYO74/Kraken/releases/latest). Au premier lancement, elle demande l'adresse de ton instance. Sur téléphone, ouvre l'instance dans le navigateur.
+Appli de bureau pour Windows, macOS et Linux : [dernière version](https://github.com/KAYO74/Kraken/releases/latest). Au premier lancement, deux choix :
+
+- **Rejoindre un serveur** : colle son adresse ou le lien d'invitation qu'on t'a envoyé.
+- **Héberger sur cet ordinateur** : un clic, rien d'autre à installer. L'appli lance son propre serveur KRAKEN et affiche l'adresse à donner aux personnes du même Wi-Fi ou du même réseau. Pour les inviter : dans KRAKEN, crée ton serveur avec « + », puis « Inviter ». Ton serveur tourne tant que l'appli est ouverte ; n'héberge que sur un réseau de confiance (chez toi, au travail), jamais sur un Wi-Fi public.
+
+Le menu KRAKEN permet de changer de serveur et de revoir l'adresse à partager. Sur téléphone, ouvre l'instance dans le navigateur.
 
 ## Lancer en local
 
@@ -30,15 +35,21 @@ Les migrations s'appliquent au démarrage. Toutes les variables sont dans `.env.
 
 ## Héberger son instance
 
-Il faut un serveur Linux avec Docker, ports 80 et 443 ouverts, et un nom de domaine dont l'enregistrement A pointe sur lui.
+Une seule commande, sur un serveur loué (VPS), un PC, un Mac ou un Raspberry Pi (système 64 bits) :
 
 ```sh
-git clone https://github.com/KAYO74/Kraken && cd Kraken
-cp .env.example .env    # KRAKEN_DOMAIN, POSTGRES_PASSWORD, KRAKEN_CONTACT, KRAKEN_PROCESSORS
-docker compose up -d    # Postgres 18, KRAKEN, Caddy (HTTPS automatique), sauvegarde quotidienne
+curl -fsSL https://raw.githubusercontent.com/KAYO74/Kraken/main/install.sh | sh         # Linux, macOS
 ```
 
-Mise à jour : `git pull && docker compose up -d --build`. Sauvegardes dans `backups/` (14 jours) ; restauration : `docker compose exec -T db pg_restore -U kraken -d kraken --clean < backups/kraken-AAAA-MM-JJ.dump`. Sonde de disponibilité : `https://<domaine>/api/v1/health` répond `ok`. Détails : `replica/deploy.md`.
+```powershell
+irm https://raw.githubusercontent.com/KAYO74/Kraken/main/install.ps1 | iex              # Windows (PowerShell)
+```
+
+Le script installe Docker s'il manque, pose une seule question (ton nom de domaine, facultatif), crée les mots de passe et démarre KRAKEN : PostgreSQL 18, Caddy pour le HTTPS automatique, sauvegarde quotidienne. Sans nom de domaine, un serveur loué reçoit une adresse `<ip>.sslip.io` avec un vrai HTTPS (ouvre aussi les ports 80 et 443 dans le pare-feu de l'hébergeur) ; un ordinateur à la maison sert ton réseau local. `sh install.sh --help` liste les options (`--domain`, `--local`, `--dir`, `--yes`).
+
+Mise à jour : relance la même commande (avec `sudo` si tu as installé avec `sudo`) ; tes réglages et tes données sont gardés. Sauvegardes dans `backups/` du dossier d'installation (14 jours) ; restauration : `docker compose exec -T db pg_restore -U kraken -d kraken --clean < backups/kraken-AAAA-MM-JJ.dump`. Sonde de disponibilité : `https://<domaine>/api/v1/health` répond `ok`.
+
+À la main : `cp .env.example .env`, remplis-le, puis `docker compose up -d`. Détails : `replica/deploy.md`.
 
 ## Tests
 
@@ -57,7 +68,8 @@ npx playwright test                       # serveur lancé avec KRAKEN_AUTH_PER_
 | `crates/kraken-db` | PostgreSQL : migrations, requêtes, file de tâches |
 | `crates/kraken-server` | REST `/api/v1`, gateway `/gateway`, client web |
 | `crates/kraken-client` | client Leptos (WASM) |
-| `apps/desktop` | appli de bureau (Tauri), construite par `.github/workflows/desktop.yml` |
+| `apps/desktop` | appli de bureau (Tauri) : rejoindre ou héberger, construite par `.github/workflows/desktop.yml` |
+| `install.sh`, `install.ps1` | installation en une commande (Linux et macOS, Windows) |
 | `deploy/` | configuration de Caddy pour `docker compose` |
 | `replica/` | recon, architecture, design, journal de construction |
 

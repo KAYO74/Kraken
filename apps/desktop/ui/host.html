@@ -29,13 +29,20 @@
   </section>
 
   <section id="ready" hidden>
-    <label for="address">Les personnes sur le même Wi-Fi ou le même réseau peuvent le rejoindre à cette adresse :</label>
+    <div id="stale" class="notice" hidden>
+      <p>Ton ordinateur a changé d'adresse sur le réseau : redémarre ton serveur pour avoir la bonne adresse à donner.</p>
+      <button id="restart" type="button" class="secondary">Redémarrer ton serveur</button>
+    </div>
+    <label for="address">Adresse de ton KRAKEN sur le réseau :</label>
     <div class="share">
       <input id="address" type="text" readonly spellcheck="false">
       <button id="copy" type="button" class="secondary">Copier</button>
     </div>
     <p id="copied" class="hint" role="status"></p>
+    <p id="fresh" class="hint" hidden>Cette adresse a changé depuis la dernière fois : les anciens liens ne marchent plus, envoie les nouveaux.</p>
     <p id="alone" class="hint" hidden>Cet ordinateur n'est relié à aucun réseau : pour l'instant, toi seul peux l'ouvrir.</p>
+    <p class="hint">Pour inviter des gens sur le même Wi-Fi ou le même réseau : dans KRAKEN, ouvre ton serveur (ou crée-le avec « + »), clique sur « Inviter » et envoie-leur le lien.</p>
+    <p class="hint">Seulement sur un réseau de confiance (chez toi, au travail) : sur un Wi-Fi public, n'importe qui pourrait y accéder.</p>
     <p class="hint">Garde KRAKEN ouvert : quand l'appli est fermée, ton serveur s'arrête. Si ton ordinateur demande d'autoriser KRAKEN sur le réseau, accepte.</p>
     <button id="open" type="button">Ouvrir KRAKEN</button>
   </section>

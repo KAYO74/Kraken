@@ -5,6 +5,10 @@
 //! choisie pour la cible compilée, pas pour la machine qui compile : le build universel macOS
 //! compile x86_64 sur une machine arm64. `KRAKEN_PG_ARCHIVE` donne un fichier déjà téléchargé
 //! (build hors ligne).
+//!
+//! Sous Windows, ces binaires ont aussi besoin du runtime Visual C++, absent de bien des PC : ses
+//! DLL (redistribuables) sont embarquées avec, depuis les outils de build Visual Studio ou le
+//! dossier donné par `KRAKEN_VC_RUNTIME_DIR` (`…\x64\Microsoft.VC143.CRT`).
 
 use std::env;
 use std::fs;
@@ -25,10 +29,15 @@ const ARCHIVES: &[(&str, &str, &str)] = &[
     ("aarch64-apple-darwin", "darwin-arm64v8", "ab698c4486a795d2aa8a158b3a41e1201a77e7ff72a6255094cd5900080853c2"),
 ];
 
+/// DLL du runtime Visual C++ que demandent initdb, pg_ctl, postgres et ICU.
+const VC_RUNTIME: &[&str] = &["vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll"];
+
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=KRAKEN_PG_ARCHIVE");
+    println!("cargo:rerun-if-env-changed=KRAKEN_VC_RUNTIME_DIR");
     embed_postgresql();
+    embed_vc_runtime();
     // Les commandes de l'appli passent par l'ACL : seule la page locale y a droit
     // (capabilities/default.json), jamais une page distante.
     let manifest = tauri_build::AppManifest::new().commands(&["join", "host_start", "host_status", "host_open"]);
@@ -73,6 +82,69 @@ fn embed_postgresql() {
     let got = digest(&part).unwrap_or_default();
     assert!(got == sha, "archive PostgreSQL altérée : SHA-256 {got}, attendu {sha}");
     fs::rename(&part, &out).expect("OUT_DIR");
+}
+
+/// Écrit `runtime.rs` : la liste (nom, contenu) des DLL à poser à côté de PostgreSQL, vide hors
+/// de Windows.
+fn embed_vc_runtime() {
+    let target = env::var("TARGET").expect("TARGET");
+    let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
+    let mut list = String::from("&[");
+    if target == "x86_64-pc-windows-msvc" {
+        let dir = vc_runtime_dir().unwrap_or_else(|| {
+            panic!(
+                "runtime Visual C++ introuvable : installe les outils de build Visual Studio (C++), ou donne le dossier \
+                 x64\\Microsoft.VC14x.CRT avec KRAKEN_VC_RUNTIME_DIR"
+            )
+        });
+        for name in VC_RUNTIME {
+            let (from, to) = (dir.join(name), out.join(name));
+            if let Err(e) = fs::copy(&from, &to) {
+                panic!("{} : {e}", from.display());
+            }
+            list += &format!("({name:?}, include_bytes!({:?})),", to.display().to_string());
+        }
+    }
+    list += "]";
+    fs::write(out.join("runtime.rs"), list).expect("OUT_DIR");
+}
+
+fn vc_runtime_dir() -> Option<PathBuf> {
+    if let Some(dir) = env::var_os("KRAKEN_VC_RUNTIME_DIR") {
+        return Some(dir.into());
+    }
+    // Invite de commandes Visual Studio : VCToolsRedistDir ; sinon, vswhere trouve l'installation.
+    let versions = match env::var_os("VCToolsRedistDir") {
+        Some(dir) => vec![PathBuf::from(dir)],
+        None => {
+            let vswhere =
+                PathBuf::from(env::var_os("ProgramFiles(x86)")?).join(r"Microsoft Visual Studio\Installer\vswhere.exe");
+            let found = Command::new(vswhere)
+                .args(["-latest", "-products", "*", "-utf8", "-property", "installationPath"])
+                .args(["-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"])
+                .output()
+                .ok()?;
+            let install = PathBuf::from(String::from_utf8_lossy(&found.stdout).trim());
+            // VC\Redist\MSVC\<version>, la plus récente d'abord.
+            let mut versions: Vec<PathBuf> = fs::read_dir(install.join(r"VC\Redist\MSVC"))
+                .ok()?
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.file_name().is_some_and(|n| n.to_string_lossy().starts_with(|c: char| c.is_ascii_digit()))
+                })
+                .collect();
+            versions.sort();
+            versions.reverse();
+            versions
+        }
+    };
+    versions.iter().find_map(|v| {
+        fs::read_dir(v.join("x64")).ok()?.flatten().map(|e| e.path()).find(|p| {
+            let name = p.file_name().unwrap_or_default().to_string_lossy();
+            name.starts_with("Microsoft.VC") && name.ends_with(".CRT") && VC_RUNTIME.iter().all(|f| p.join(f).is_file())
+        })
+    })
 }
 
 fn digest(path: &Path) -> Option<String> {

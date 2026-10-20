@@ -13,11 +13,13 @@ mod selftest;
 use std::fs;
 use std::net::IpAddr;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use host::Hosting;
 use tauri::menu::{MenuBuilder, MenuItem, MenuItemBuilder, SubmenuBuilder};
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager, RunEvent, State, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry};
+use url::Host;
 
 /// Une page locale, selon la plateforme (schéma `tauri://` ou `http://tauri.localhost`).
 fn local_page(page: &str) -> Url {
@@ -99,11 +101,44 @@ fn parse_address(input: &str) -> Result<Url, String> {
     Ok(url)
 }
 
+const UNREACHABLE: &str =
+    "Ce serveur ne répond pas. Vérifie l'adresse, ou que l'ordinateur qui l'héberge a KRAKEN ouvert.";
+
+/// Pour une adresse du réseau local seulement : vrai si quelque chose y répond. Les autres ne
+/// sont pas vérifiées : derrière un proxy d'entreprise, la fenêtre peut les ouvrir alors
+/// qu'une connexion directe ne passe pas.
+async fn reachable(url: &Url, wait: Duration) -> bool {
+    let local = match url.host() {
+        Some(Host::Ipv4(ip)) => ip.is_private() || ip.is_loopback() || ip.is_link_local(),
+        Some(Host::Ipv6(ip)) => ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local(),
+        Some(Host::Domain(d)) => d == "localhost" || d.ends_with(".local"),
+        None => false,
+    };
+    let (true, Some(host), Some(port)) = (local, url.host_str(), url.port_or_known_default()) else { return true };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    let connect = async {
+        for addr in tokio::net::lookup_host((host, port)).await.ok()? {
+            if tokio::net::TcpStream::connect(addr).await.is_ok() {
+                return Some(());
+            }
+        }
+        None
+    };
+    matches!(tokio::time::timeout(wait, connect).await, Ok(Some(())))
+}
+
 /// Appelée par la page d'accueil : retient l'instance (son origine) et ouvre le lien tel quel,
-/// pour qu'un lien d'invitation affiche sa page. Arrête le serveur hébergé s'il tourne.
+/// pour qu'un lien d'invitation affiche sa page. Arrête le serveur hébergé s'il tourne, sauf si
+/// c'est lui qu'on rejoint.
 #[tauri::command]
-fn join(app: AppHandle, hosting: State<'_, Hosting>, address: String) -> Result<(), String> {
+async fn join(app: AppHandle, hosting: State<'_, Hosting>, address: String) -> Result<(), String> {
     let link = parse_address(&address)?;
+    if let Some(own) = hosting.own_link(&link) {
+        return main_window(&app)?.navigate(own).map_err(|e| e.to_string());
+    }
+    if !reachable(&link, Duration::from_secs(4)).await {
+        return Err(UNREACHABLE.into());
+    }
     let origin = Url::parse(&link.origin().ascii_serialization()).map_err(|e| e.to_string())?;
     save(&app, "join", Some(&origin));
     hosting.stop();
@@ -195,6 +230,11 @@ fn main() {
                     }
                     Err(_) => WebviewUrl::App("index.html".into()),
                 },
+                // Un serveur du réseau local éteint : l'accueil, avec l'adresse prête à réessayer.
+                Saved::Join(url) if !tauri::async_runtime::block_on(reachable(&url, Duration::from_secs(2))) => {
+                    let address: String = url::form_urlencoded::byte_serialize(url.as_str().as_bytes()).collect();
+                    WebviewUrl::App(format!("index.html#injoignable={address}").into())
+                }
                 Saved::Join(url) => WebviewUrl::External(url),
                 Saved::Welcome => WebviewUrl::App("index.html".into()),
             };
@@ -217,7 +257,24 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_address;
+    use std::time::Duration;
+
+    use tauri::Url;
+
+    use super::{parse_address, reachable};
+
+    #[tokio::test]
+    async fn only_local_addresses_are_checked() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let open = Url::parse(&format!("http://127.0.0.1:{port}/invite/x")).unwrap();
+        assert!(reachable(&open, Duration::from_secs(2)).await);
+        drop(listener);
+        assert!(!reachable(&open, Duration::from_secs(2)).await);
+        assert!(!reachable(&Url::parse(&format!("http://localhost:{port}")).unwrap(), Duration::from_secs(2)).await);
+        // Une adresse publique n'est pas vérifiée (un proxy peut être le seul chemin).
+        assert!(reachable(&Url::parse("https://chat.exemple.org").unwrap(), Duration::from_millis(1)).await);
+    }
 
     #[test]
     fn addresses_and_invite_links() {

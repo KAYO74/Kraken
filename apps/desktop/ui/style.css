@@ -28,6 +28,8 @@ button.secondary { padding: 10px 14px; border: 1px solid var(--border); backgrou
 .error { min-height: 1.5em; margin: 0; color: var(--danger); }
 .error:empty { min-height: 0; }
 .hint { margin: 0; font-size: 14px; color: var(--muted); }
+.notice { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--accent); border-radius: 8px; }
+.notice p { margin: 0; color: var(--text); }
 main > .hint { margin-top: 16px; }
 progress { width: 100%; accent-color: var(--accent); }
 details { color: var(--muted); font-size: 14px; }

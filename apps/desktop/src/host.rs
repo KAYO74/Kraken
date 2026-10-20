@@ -22,10 +22,13 @@ use rand::distr::{Alphanumeric, SampleString};
 use serde::Serialize;
 use sqlx::Connection;
 use tokio::sync::oneshot;
+use url::{Host, Url};
 
 const PG_VERSION: &str = env!("KRAKEN_PG_VERSION");
 /// Archive zonky (`.jar`) pour la cible compilée ; vide si la cible n'en a pas.
 static PG_ARCHIVE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/postgresql.jar"));
+/// Windows : les DLL du runtime Visual C++, posées à côté des binaires de PostgreSQL (vide ailleurs).
+static VC_RUNTIME: &[(&str, &[u8])] = include!(concat!(env!("OUT_DIR"), "/runtime.rs"));
 const PG_USER: &str = postgresql_embedded::BOOTSTRAP_SUPERUSER;
 const DB_NAME: &str = "kraken";
 /// Port de KRAKEN au premier lancement, s'il est libre.
@@ -43,7 +46,12 @@ pub enum Status {
     Ready {
         url: String,
         lan: bool,
+        /// Aucun compte pour l'instant.
         first: bool,
+        /// L'adresse n'est plus celle du lancement précédent : à redonner.
+        fresh: bool,
+        /// L'ordinateur a changé d'adresse depuis le démarrage : à redémarrer.
+        stale: bool,
     },
     Failed {
         message: String,
@@ -88,6 +96,8 @@ pub struct Server {
     pub url: String,
     /// Faux si aucune adresse réseau n'a été trouvée (l'adresse est alors 127.0.0.1).
     pub lan: bool,
+    /// Vrai si l'adresse a changé depuis le lancement précédent.
+    pub fresh: bool,
     pub port: u16,
 }
 
@@ -115,7 +125,13 @@ impl Server {
         let url = state.cfg.public_url.clone();
         let lan = !url.starts_with("http://127.0.0.1:");
         let _ = fs::write(data.join("port"), port.to_string());
-        Ok(Self { rt, pg, state, stop_http, http, _lock: lock, url, lan, port })
+        // Seulement les adresses réseau : sans réseau, la prochaine fois sera sans doute comme avant.
+        let previous = fs::read_to_string(data.join("address")).unwrap_or_default();
+        let fresh = lan && !previous.is_empty() && previous != url;
+        if lan {
+            let _ = fs::write(data.join("address"), &url);
+        }
+        Ok(Self { rt, pg, state, stop_http, http, _lock: lock, url, lan, fresh, port })
     }
 
     /// Arrête KRAKEN puis PostgreSQL. Les données restent.
@@ -142,6 +158,12 @@ impl Server {
         };
         // Sur un fil à part : `block_on` refuse de tourner depuis un autre runtime.
         thread::scope(|s| s.spawn(|| self.rt.block_on(query)).join().unwrap_or(false))
+    }
+
+    /// Vrai si l'ordinateur a maintenant une autre adresse sur le réseau (nouveau Wi-Fi, réseau
+    /// revenu après le démarrage…) : l'adresse partagée ne mène plus ici.
+    pub fn stale(&self) -> bool {
+        lan_ip().is_some_and(|ip| !self.url.starts_with(&format!("http://{ip}:")))
     }
 
     /// Port de PostgreSQL (sur 127.0.0.1 seulement).
@@ -226,6 +248,12 @@ async fn install(data: &Path, progress: &dyn Fn(&'static str)) -> Result<PathBuf
         postgresql_archive::extract(postgresql_archive::configuration::zonky::URL, &archive, &dir)
             .await
             .or_fail("PostgreSQL n'a pas pu être installé.")?;
+    }
+    for (name, bytes) in VC_RUNTIME {
+        let path = dir.join("bin").join(name);
+        if fs::metadata(&path).map(|m| m.len()).ok() != Some(bytes.len() as u64) {
+            fs::write(&path, bytes).or_fail("PostgreSQL n'a pas pu être installé.")?;
+        }
     }
     // Les anciennes versions mineures ne servent plus (même format de données).
     let major = PG_VERSION.split('.').next().unwrap_or_default();
@@ -455,16 +483,24 @@ impl Hosting {
     }
 
     pub fn status(&self) -> Status {
-        self.lock().status.clone()
+        let mut inner = self.lock();
+        let inner = &mut *inner;
+        if let (Status::Ready { first, stale, .. }, Some(server)) = (&mut inner.status, &inner.server) {
+            // Le premier compte peut avoir été créé depuis (ça ne va que dans ce sens).
+            *first = *first && server.first();
+            *stale = server.stale();
+        }
+        inner.status.clone()
     }
 
-    /// Démarre en arrière-plan, sauf si c'est déjà fait ou en cours.
+    /// Démarre en arrière-plan, sauf si c'est déjà fait ou en cours. Si l'ordinateur a changé
+    /// d'adresse, redémarre pour partager la bonne.
     pub fn start(&self, data: PathBuf, web: PathBuf) {
         let mut inner = self.lock();
-        if matches!(inner.status, Status::Starting { .. } | Status::Ready { .. }) {
+        if matches!(inner.status, Status::Starting { .. }) || inner.server.as_ref().is_some_and(|s| !s.stale()) {
             return;
         }
-        inner.run += 1;
+        inner.halt();
         let run = inner.run;
         inner.status = Status::Starting { step: "Préparation…" };
         // Un démarrage annulé ou un arrêt en cours doit d'abord avoir libéré la base.
@@ -486,7 +522,8 @@ impl Hosting {
             let mut inner = lock();
             match result {
                 Ok(server) if inner.run == run => {
-                    inner.status = Status::Ready { url: server.url.clone(), lan: server.lan, first };
+                    let (url, lan, fresh) = (server.url.clone(), server.lan, server.fresh);
+                    inner.status = Status::Ready { url, lan, first, fresh, stale: false };
                     inner.server = Some(server);
                 }
                 // Arrêt demandé pendant le démarrage.
@@ -502,18 +539,7 @@ impl Hosting {
 
     /// Arrête le serveur sans attendre ; les données restent.
     pub fn stop(&self) {
-        let mut inner = self.lock();
-        inner.run += 1;
-        inner.status = Status::Idle;
-        if let Some(server) = inner.server.take() {
-            let previous = inner.stopping.take();
-            inner.stopping = Some(thread::spawn(move || {
-                if let Some(h) = previous {
-                    let _ = h.join();
-                }
-                server.stop();
-            }));
-        }
+        self.lock().halt();
     }
 
     /// Arrête et attend que tout soit fini : à la fermeture de l'appli.
@@ -534,5 +560,42 @@ impl Hosting {
         let inner = self.lock();
         let server = inner.server.as_ref()?;
         Some(format!("{}{}", server.url, if server.first() { "/register" } else { "/" }))
+    }
+
+    /// Si `link` mène au serveur hébergé ici (par son adresse réseau ou par 127.0.0.1), le même
+    /// lien sur son adresse réseau, celle que reprennent les liens d'invitation.
+    pub fn own_link(&self, link: &Url) -> Option<Url> {
+        let inner = self.lock();
+        let server = inner.server.as_ref()?;
+        let mut own = Url::parse(&server.url).ok()?;
+        let here = match link.host()? {
+            Host::Ipv4(ip) => ip.is_loopback() || own.host() == Some(Host::Ipv4(ip)),
+            Host::Ipv6(ip) => ip.is_loopback(),
+            Host::Domain(d) => d == "localhost",
+        };
+        if !here || link.port_or_known_default() != Some(server.port) {
+            return None;
+        }
+        own.set_path(link.path());
+        own.set_query(link.query());
+        own.set_fragment(link.fragment());
+        Some(own)
+    }
+}
+
+impl Inner {
+    /// Arrête le serveur en arrière-plan et annule un démarrage en cours.
+    fn halt(&mut self) {
+        self.run += 1;
+        self.status = Status::Idle;
+        if let Some(server) = self.server.take() {
+            let previous = self.stopping.take();
+            self.stopping = Some(thread::spawn(move || {
+                if let Some(h) = previous {
+                    let _ = h.join();
+                }
+                server.stop();
+            }));
+        }
     }
 }

@@ -268,11 +268,25 @@ fn InviteDialog(guild: Id, close: impl Fn() + Copy + Send + Sync + 'static) -> i
             crate::api::create_invite(c).await.map(|i| format!("{origin}/invite/{}", i.code)).map_err(|e| e.message),
         ));
     });
+    let input = NodeRef::<leptos::html::Input>::new();
     let copy = move |_| {
-        if let Some(Ok(l)) = link.get_untracked() {
-            let _ = web_sys::window().unwrap().navigator().clipboard().write_text(&l);
-            copied.set(true);
-        }
+        use wasm_bindgen::JsCast;
+        let Some(Ok(l)) = link.get_untracked() else { return };
+        let w = web_sys::window().unwrap();
+        // En HTTP (instance sur le réseau local), pas d'API presse-papiers : on copie la sélection.
+        let done = if w.is_secure_context() {
+            let _ = w.navigator().clipboard().write_text(&l);
+            true
+        } else {
+            input.get_untracked().is_some_and(|i| {
+                i.select();
+                w.document()
+                    .and_then(|d| d.dyn_into::<web_sys::HtmlDocument>().ok())
+                    .and_then(|d| d.exec_command("copy").ok())
+                    .unwrap_or(false)
+            })
+        };
+        copied.set(done);
     };
     let name = s.guild(guild).map(|g| g.guild.name).unwrap_or_default();
     let root = NodeRef::new();
@@ -288,7 +302,7 @@ fn InviteDialog(guild: Id, close: impl Fn() + Copy + Send + Sync + 'static) -> i
                         Some(Ok(l)) => view! {
                             <label class="k-field">
                                 <span class="k-label">"Lien à partager"</span>
-                                <input class="k-input" readonly value=l.clone() on:focus=|e| { event_target::<web_sys::HtmlInputElement>(&e).select(); }/>
+                                <input class="k-input" readonly node_ref=input value=l.clone() on:focus=|e| { event_target::<web_sys::HtmlInputElement>(&e).select(); }/>
                             </label>
                             <p class="app-hint">"Ce lien n'expire pas. Toute personne qui l'a peut rejoindre."</p>
                         }.into_any(),

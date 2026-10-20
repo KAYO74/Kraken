@@ -133,7 +133,25 @@ function Install-Kraken {
 
     function Get-PublicIPv4 {
         foreach ($ip in (Get-LocalIPv4)) { if (Test-PublicIPv4 $ip) { return $ip } }
+        # Serveur loué chez AWS, Google, Azure, Oracle... : l'adresse publique passe par un NAT.
+        if (Test-CloudVm) {
+            $external = Get-ExternalIPv4
+            if (Test-PublicIPv4 $external) { return $external }
+        }
         return ''
+    }
+
+    # Machine virtuelle d'un grand hébergeur cloud (reconnue à ses infos SMBIOS, comme le fait cloud-init).
+    function Test-CloudVm {
+        try {
+            $system = Get-CimInstance -ClassName Win32_ComputerSystem
+            $bios = Get-CimInstance -ClassName Win32_BIOS
+            $tags = @(Get-CimInstance -ClassName Win32_SystemEnclosure | ForEach-Object { $_.SMBIOSAssetTag })
+            $info = (@($system.Manufacturer, $system.Model, $bios.SMBIOSBIOSVersion) + $tags) -join '|'
+            return ($info -match 'Amazon EC2|amazon|Google Compute Engine|7783-7084-3265-9085-8269-3286-77|OracleCloud\.com|Alibaba Cloud|Tencent Cloud|Scaleway|HUAWEICLOUD')
+        } catch {
+            return $false
+        }
     }
 
     # Adresse publique vue d'Internet (derrière une box, ce n'est pas celle de la machine).
@@ -415,6 +433,12 @@ function Install-Kraken {
         }
         if ($K.Src) {
             Step 'L''image n''est pas disponible en ligne : je la construis depuis le code source'
+            # Clone fait avec les fins de ligne Windows (CRLF, réglage par défaut de Git pour Windows) :
+            # les scripts ne marchent pas dans le conteneur.
+            $buildScript = Join-Path $K.Src 'scripts\build-client.sh'
+            if ((Test-Path -LiteralPath $buildScript) -and ([System.IO.File]::ReadAllText($buildScript)).Contains("`r")) {
+                Fail 'ce clone a les fins de ligne de Windows (CRLF), qui cassent la construction de l''image. Refais le clone avec : git clone -c core.autocrlf=false https://github.com/KAYO74/Kraken , puis lance install.ps1 dans ce nouveau dossier.'
+            }
             Say 'Ça prend de 10 à 30 minutes la première fois.'
             if ((Invoke-Tool 'docker' @('build', '-t', $K.Image, $K.Src)) -ne 0) {
                 Fail 'la construction de l''image a échoué (voir les messages au-dessus).'
@@ -425,16 +449,31 @@ function Install-Kraken {
             Warn 'impossible de télécharger la nouvelle version de KRAKEN : je garde celle déjà installée.'
             return
         }
-        Fail 'impossible de télécharger l''image de KRAKEN ({0}). Soit elle n''est pas encore publiée, soit elle est privée. Si tu as accès au dépôt : docker login ghcr.io, puis relance cette commande. Sinon, installe depuis le code source : git clone https://github.com/KAYO74/Kraken, puis lance install.ps1 dans ce dossier.' $K.Image
+        Fail 'impossible de télécharger l''image de KRAKEN ({0}). Soit elle n''est pas encore publiée, soit elle est privée. Si tu as accès au dépôt : docker login ghcr.io, puis relance cette commande. Sinon, installe depuis le code source : git clone -c core.autocrlf=false https://github.com/KAYO74/Kraken , puis lance install.ps1 dans ce dossier.' $K.Image
     }
 
-    # Une ancienne base sans son .env aurait un autre mot de passe : KRAKEN ne pourrait pas s'y connecter.
+    # Une base existe déjà sous ce nom de projet Docker (nom du dossier) : celle d'une autre instance,
+    # ou une ancienne sans son .env (autre mot de passe : KRAKEN ne pourrait pas s'y connecter).
     function Test-OldVolume {
         $project = ((Split-Path -Leaf $K.Dir).ToLowerInvariant() -replace '[^a-z0-9_-]', '') -replace '^[-_]+', ''
         $volume = $project + '_db'
-        if ((Invoke-Tool 'docker' @('volume', 'inspect', $volume) -Quiet) -eq 0) {
-            Fail 'une base KRAKEN existe déjà sur cette machine (volume Docker {0}), mais son fichier .env a disparu, et avec lui son mot de passe. Remets l''ancien .env dans {1}, ou efface cette base (toutes ses données !) avec : docker volume rm {0}' $volume $K.Dir
+        if ((Invoke-Tool 'docker' @('volume', 'inspect', $volume) -Quiet) -ne 0) { return }
+        # Dossier de l'instance à qui elle appartient (étiquette posée par docker compose).
+        $owner = ''
+        $ids = Get-ToolOutput 'docker' @('ps', '-aq', '--filter', ('label=com.docker.compose.project=' + $project))
+        if ($ids) {
+            $labels = Get-ToolOutput 'docker' @('inspect', '--format', '{{json .Config.Labels}}', ($ids -split "`n")[0].Trim())
+            if ($labels) {
+                try { $owner = [string](($labels | ConvertFrom-Json).'com.docker.compose.project.working_dir') } catch { }
+            }
         }
+        if ($owner -and -not (Test-Path -LiteralPath $owner)) { $owner = '' }
+        if ($owner -and -not (Test-SamePath $owner $K.Dir)) {
+            Fail 'KRAKEN est déjà installé sur ce PC, dans {0}. Pour le mettre à jour, relance avec -Dir et ce dossier (ou $env:KRAKEN_DIR). Pour une deuxième instance à côté, choisis un dossier d''un autre nom.' $owner
+        }
+        $elsewhere = ''
+        if (-not $owner) { $elsewhere = Format-Text ' Si KRAKEN est installé dans un autre dossier nommé {0}, relance avec -Dir et ce dossier.' (Split-Path -Leaf $K.Dir) }
+        Fail 'une base KRAKEN existe déjà sur ce PC (volume Docker {0}), mais il n''y a pas de .env dans {1}.{2} Si c''est une ancienne installation dont le .env a disparu, remets-le dans {1} ; sinon, en dernier recours, efface cette base (toutes ses données !) avec : docker volume rm {0}' $volume $K.Dir $elsewhere
     }
 
     function Start-Kraken {
@@ -562,6 +601,10 @@ function Install-Kraken {
             if (-not $K.HttpsPort) { $K.HttpsPort = '443' }
             foreach ($p in @($K.HttpPort, $K.HttpsPort)) {
                 if (Test-PortBusy ([int]$p)) {
+                    if ($K.DryRun) {
+                        Warn 'le port {0} est déjà pris : la vraie installation s''arrêterait ici.' $p
+                        continue
+                    }
                     Fail 'le port {0} est déjà pris par un autre programme (un autre serveur web ?). Le HTTPS a besoin des ports 80 et 443 : arrête ce programme, ou installe KRAKEN pour ton réseau local seulement avec -Local.' $p
                 }
             }
@@ -747,14 +790,12 @@ function Install-Kraken {
         $env:KRAKEN_IMAGE = $K.Image
 
         Initialize-Docker
+        if (-not $K.Update) { Test-OldVolume }
         [void](New-Item -ItemType Directory -Force -Path $K.Dir)
         Install-Files
         # L'image d'abord : si elle manque, rien n'est écrit et la prochaine fois repose la question.
         Initialize-Image
-        if (-not $K.Update) {
-            Test-OldVolume
-            Write-EnvFile
-        }
+        if (-not $K.Update) { Write-EnvFile }
         Start-Kraken
         Wait-Health
         Show-Summary

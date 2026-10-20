@@ -18,10 +18,11 @@
     <form id="join" novalidate>
       <label for="address">Adresse ou lien d'invitation</label>
       <input id="address" name="address" type="text" inputmode="url" spellcheck="false" autocapitalize="off" autocomplete="url"
-        placeholder="https://chat.exemple.org" aria-describedby="join-hint join-error" autofocus>
+        placeholder="https://chat.exemple.org" aria-describedby="join-hint hosting join-error" autofocus>
       <p id="join-hint" class="hint">Colle l'adresse du serveur, ou le lien qu'on t'a envoyé.</p>
+      <p id="hosting" class="hint" hidden>Ton serveur tourne sur cet ordinateur : en rejoindre un autre l'arrêtera (tes données restent).</p>
       <p id="join-error" class="error" role="alert"></p>
-      <button type="submit">Rejoindre</button>
+      <button id="join-submit" type="submit">Rejoindre</button>
     </form>
   </section>
 
@@ -29,7 +30,8 @@
 
   <section class="choice" aria-labelledby="host-title">
     <h2 id="host-title">Héberger sur cet ordinateur</h2>
-    <p id="host-hint" class="hint">Ton propre serveur, en un clic. Les personnes sur le même Wi-Fi ou le même réseau pourront te rejoindre.</p>
+    <p id="host-hint" class="hint">Ton propre serveur, en un clic. Les personnes sur le même Wi-Fi ou le même réseau pourront te rejoindre.
+      Seulement sur un réseau de confiance (chez toi, au travail) : sur un Wi-Fi public, n'importe qui pourrait y accéder.</p>
     <p id="host-error" class="error" role="alert"></p>
     <button id="host" type="button" aria-describedby="host-hint host-error">Héberger sur cet ordinateur</button>
   </section>

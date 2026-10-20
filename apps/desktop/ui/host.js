@@ -3,12 +3,21 @@ const { invoke } = window.__TAURI__.core;
 const $ = (id) => document.getElementById(id);
 // Ouverte depuis le menu « Adresse à partager… » : la page reste affichée.
 const sharing = location.hash === '#partager';
+// Sinon, KRAKEN s'ouvre directement dès qu'il est prêt, sauf s'il y a quelque chose à lire.
+let auto = !sharing;
 const titles = {
   starting: 'Démarrage de ton serveur…',
   failed: "Ton serveur n'a pas pu démarrer",
   idle: 'Aucun serveur',
 };
 let shown = '';
+let timer = 0;
+
+// Un seul suivi à la fois, même après « Réessayer ».
+function later(ms) {
+  clearTimeout(timer);
+  timer = setTimeout(poll, ms);
+}
 
 async function poll() {
   let s;
@@ -17,8 +26,7 @@ async function poll() {
   } catch (err) {
     s = { state: 'failed', message: String(err), details: '' };
   }
-  if (s.state === 'ready' && !sharing && !s.first) {
-    // Lancements suivants : on ouvre directement KRAKEN.
+  if (s.state === 'ready' && auto && !s.first && s.lan && !s.fresh && !s.stale) {
     try {
       await invoke('host_open');
       return;
@@ -26,8 +34,11 @@ async function poll() {
       // Sinon, la page affiche l'adresse et le bouton.
     }
   }
+  if (s.state !== 'starting') auto = false;
   show(s);
-  if (s.state === 'starting') setTimeout(poll, 400);
+  // Prêt : on suit le premier compte et les changements de réseau.
+  if (s.state === 'starting') later(400);
+  else if (s.state === 'ready') later(3000);
 }
 
 function show(s) {
@@ -42,7 +53,9 @@ function show(s) {
     $('more').hidden = !s.details;
   } else if (s.state === 'ready') {
     $('address').value = s.url;
-    $('alone').hidden = s.lan;
+    $('alone').hidden = s.lan || s.stale;
+    $('fresh').hidden = !s.fresh || s.first;
+    $('stale').hidden = !s.stale;
     $('open').textContent = s.first ? 'Créer ton compte' : 'Ouvrir KRAKEN';
   }
   $('title').textContent = s.state === 'ready' ? (s.first ? 'Ton serveur est prêt' : 'Ton serveur KRAKEN') : titles[s.state];
@@ -51,15 +64,19 @@ function show(s) {
   }
 }
 
-$('retry').addEventListener('click', async () => {
+async function restart(errorId) {
   try {
     await invoke('host_start');
   } catch (err) {
-    $('error').textContent = String(err);
+    $(errorId).textContent = String(err);
     return;
   }
+  auto = !sharing;
   poll();
-});
+}
+
+$('retry').addEventListener('click', () => restart('error'));
+$('restart').addEventListener('click', () => restart('copied'));
 
 $('open').addEventListener('click', async () => {
   try {

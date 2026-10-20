@@ -112,7 +112,7 @@ jobs:
           files: dist/**/*
           generate_release_notes: true
           body: |
-            KRAKEN de bureau : au premier lancement, indique l'adresse de ton instance.
+            KRAKEN de bureau : au premier lancement, rejoins un serveur (son adresse ou un lien d'invitation) ou héberge le tien sur cet ordinateur en un clic.
 
             - Windows : `.msi` ou `-setup.exe`
             - macOS (Intel et Apple Silicon) : `.dmg`

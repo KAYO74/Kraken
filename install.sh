@@ -94,6 +94,25 @@ public_ipv4() {
 			return 0
 		fi
 	done
+	# Serveur loué chez AWS, Google, Azure, Oracle… : l'adresse publique passe par un NAT.
+	if cloud_vm; then
+		pub_ext=$(external_ipv4 || true)
+		if is_public_ipv4 "$pub_ext"; then
+			printf '%s\n' "$pub_ext"
+			return 0
+		fi
+	fi
+	return 1
+}
+
+# Machine virtuelle d'un grand hébergeur cloud (reconnue à ses infos DMI, comme le fait cloud-init).
+cloud_vm() {
+	[ "$os" = linux ] && [ -d /sys/class/dmi/id ] || return 1
+	cv_info=$(cd /sys/class/dmi/id && cat sys_vendor product_name chassis_asset_tag bios_version 2>/dev/null || true)
+	case $cv_info in
+	*"Amazon EC2"* | *amazon* | *"Google Compute Engine"* | *7783-7084-3265-9085-8269-3286-77* | \
+		*OracleCloud.com* | *"Alibaba Cloud"* | *"Tencent Cloud"* | *Scaleway* | *HUAWEICLOUD*) return 0 ;;
+	esac
 	return 1
 }
 
@@ -285,13 +304,13 @@ confirm() {
 
 # --- Docker --------------------------------------------------------------------------------
 
-# Docker répond-il, directement ou avec sudo ?
+# Docker répond-il, directement ou avec sudo (Linux seulement : Docker Desktop n'en a pas besoin) ?
 docker_ready() {
 	if docker info >/dev/null 2>&1; then
 		docker_sudo=
 		return 0
 	fi
-	if [ "$(id -u)" != 0 ] && have sudo && sudo docker info >/dev/null 2>&1; then
+	if [ "$os" = linux ] && [ "$(id -u)" != 0 ] && have sudo && sudo docker info >/dev/null 2>&1; then
 		docker_sudo=1
 		return 0
 	fi
@@ -343,8 +362,27 @@ ensure_docker_linux() {
 			as_root yum install -y docker-compose-plugin </dev/null || true
 		fi
 		dk compose version >/dev/null 2>&1 ||
-			die "docker compose est introuvable. Installe le paquet docker-compose-plugin, puis relance cette commande."
+			die "docker compose est introuvable. Installe le paquet docker-compose-plugin (ou docker-compose-v2), ou remplace le Docker de ta distribution par celui de Docker (https://docs.docker.com/engine/install/), puis relance cette commande."
 	fi
+}
+
+# Construire depuis le code source demande BuildKit, donc docker buildx.
+ensure_buildx() {
+	if dk buildx version >/dev/null 2>&1; then return 0; fi
+	if [ "$os" = linux ]; then
+		step "Installation de docker buildx (pour construire l'image)"
+		if have apt-get; then
+			as_root apt-get update -qq </dev/null || true
+			as_root apt-get install -y -qq docker-buildx-plugin </dev/null ||
+				as_root apt-get install -y -qq docker-buildx </dev/null || true
+		elif have dnf; then
+			as_root dnf install -y docker-buildx-plugin </dev/null || true
+		elif have yum; then
+			as_root yum install -y docker-buildx-plugin </dev/null || true
+		fi
+	fi
+	dk buildx version >/dev/null 2>&1 ||
+		die "pour construire KRAKEN depuis le code source, il faut docker buildx. Installe le paquet docker-buildx-plugin (ou docker-buildx), puis relance cette commande."
 }
 
 ensure_docker_mac() {
@@ -500,7 +538,8 @@ find_checkout() {
 default_dir() {
 	if [ -n "$src" ]; then
 		printf '%s\n' "$src"
-	elif [ "$os" = linux ] && [ "$(id -u)" = 0 ]; then
+	elif [ "$os" = linux ] && { [ "$(id -u)" = 0 ] || [ -e /opt/kraken/.env ]; }; then
+		# Sans root aussi, si KRAKEN y est déjà (installé avec sudo).
 		printf '%s\n' /opt/kraken
 	else
 		[ -n "${HOME:-}" ] || die "HOME n'est pas défini : indique un dossier avec --dir."
@@ -622,12 +661,23 @@ open_firewall() {
 	fi
 }
 
-# Une ancienne base sans son .env aurait un autre mot de passe : KRAKEN ne pourrait pas s'y connecter.
+# Une base existe déjà sous ce nom de projet Docker (nom du dossier) : celle d'une autre instance,
+# ou une ancienne sans son .env (autre mot de passe : KRAKEN ne pourrait pas s'y connecter).
 check_old_volume() {
 	ov_project=$(basename "$dir" | tr '[:upper:]' '[:lower:]' | LC_ALL=C tr -cd 'a-z0-9_-' | sed 's/^[-_]*//')
-	if dk volume inspect "${ov_project}_db" >/dev/null 2>&1; then
-		die "une base KRAKEN existe déjà sur cette machine (volume Docker ${ov_project}_db), mais son fichier .env a disparu, et avec lui son mot de passe. Remets l'ancien .env dans $dir, ou efface cette base (toutes ses données !) avec : ${docker_sudo:+sudo }docker volume rm ${ov_project}_db"
+	dk volume inspect "${ov_project}_db" >/dev/null 2>&1 || return 0
+	ov_owner=$(dk ps -a --filter "label=com.docker.compose.project=$ov_project" \
+		--format '{{.Label "com.docker.compose.project.working_dir"}}' 2>/dev/null | head -n 1) || ov_owner=
+	if [ -n "$ov_owner" ]; then ov_owner=$(cd "$ov_owner" 2>/dev/null && pwd -P) || ov_owner=; fi
+	ov_here=$(cd "$dir" 2>/dev/null && pwd -P) || ov_here=$dir
+	if [ -n "$ov_owner" ] && [ "$ov_owner" != "$ov_here" ]; then
+		die "KRAKEN est déjà installé sur cette machine, dans $ov_owner. Pour le mettre à jour, relance avec --dir $(quote "$ov_owner") (et sudo si tu l'as installé avec sudo). Pour une deuxième instance à côté, choisis un dossier d'un autre nom avec --dir."
 	fi
+	ov_elsewhere=
+	if [ -z "$ov_owner" ]; then
+		ov_elsewhere=" Si KRAKEN est installé dans un autre dossier nommé $(basename "$dir"), relance avec --dir et ce dossier."
+	fi
+	die "une base KRAKEN existe déjà sur cette machine (volume Docker ${ov_project}_db), mais il n'y a pas de .env dans $dir.$ov_elsewhere Si c'est une ancienne installation dont le .env a disparu, remets-le dans $dir ; sinon, en dernier recours, efface cette base (toutes ses données !) avec : $(sudo_word)docker volume rm ${ov_project}_db"
 }
 
 prepare_image() {
@@ -639,15 +689,17 @@ prepare_image() {
 	fi
 	if [ -n "$src" ]; then
 		step "L'image n'est pas disponible en ligne : je la construis depuis le code source"
+		ensure_buildx
 		say "Ça prend de 10 à 30 minutes la première fois (bien plus sur un Raspberry Pi)."
-		dk build -t "$image" "$src" </dev/null || die "la construction de l'image a échoué (voir les messages au-dessus)."
+		dk buildx build --load -t "$image" "$src" </dev/null ||
+			die "la construction de l'image a échoué (voir les messages au-dessus)."
 		return 0
 	fi
 	if dk image inspect "$image" >/dev/null 2>&1; then
 		warn "impossible de télécharger la nouvelle version de KRAKEN : je garde celle déjà installée."
 		return 0
 	fi
-	die "impossible de télécharger l'image de KRAKEN ($image). Soit elle n'est pas encore publiée, soit elle est privée. Si tu as accès au dépôt : ${docker_sudo:+sudo }docker login ghcr.io, puis relance cette commande. Sinon, installe depuis le code source : git clone https://github.com/KAYO74/Kraken && cd Kraken && sh install.sh"
+	die "impossible de télécharger l'image de KRAKEN ($image). Soit elle n'est pas encore publiée, soit elle est privée. Si tu as accès au dépôt : $(sudo_word)docker login ghcr.io, puis relance cette commande. Sinon, installe depuis le code source : git clone https://github.com/KAYO74/Kraken && cd Kraken && sh install.sh"
 }
 
 # Un chemin prêt à copier-coller dans un terminal.
@@ -658,7 +710,26 @@ quote() {
 	esac
 }
 
-compose_cmd() { printf 'cd %s && %sdocker compose' "$(quote "$dir")" "${docker_sudo:+sudo }"; }
+# « sudo » devant les commandes à retaper, quand il en faut (Docker par sudo, ou script lancé avec sudo).
+sudo_word() { if [ -n "$docker_sudo" ] || [ -n "$by_sudo" ]; then printf 'sudo '; fi; }
+
+compose_cmd() { printf 'cd %s && %sdocker compose' "$(quote "$dir")" "$(sudo_word)"; }
+
+# La commande de mise à jour ($1 : sudo pour la forcer).
+update_cmd() {
+	uc_sudo=
+	if [ -n "$by_sudo" ] || [ "${1:-}" = sudo ]; then uc_sudo='sudo '; fi
+	if [ -n "$src" ]; then
+		uc="cd $(quote "$src") && git pull && ${uc_sudo}sh install.sh"
+	else
+		uc="curl -fsSL $RAW_BASE/$ref/install.sh | ${uc_sudo}sh"
+	fi
+	if [ "$dir" != "$(default_dir)" ]; then
+		if [ -n "$src" ]; then uc="$uc --dir"; else uc="$uc -s -- --dir"; fi
+		uc="$uc $(quote "$dir")"
+	fi
+	printf '%s' "$uc"
+}
 
 start() {
 	step "Démarrage de KRAKEN"
@@ -714,15 +785,6 @@ wait_health() {
 }
 
 summary() {
-	if [ -n "$src" ]; then
-		sm_update="cd $(quote "$src") && git pull && sh install.sh"
-	else
-		sm_update="curl -fsSL $RAW_BASE/$ref/install.sh | sh"
-	fi
-	if [ "$dir" != "$(default_dir)" ]; then
-		if [ -n "$src" ]; then sm_update="$sm_update --dir"; else sm_update="$sm_update -s -- --dir"; fi
-		sm_update="$sm_update $(quote "$dir")"
-	fi
 	say ""
 	say "=================================================================="
 	if [ -n "$https_pending" ]; then
@@ -740,7 +802,7 @@ summary() {
 	fi
 	say ""
 	say "Mettre à jour : relance la même commande (réglages et données sont gardés) :"
-	say "  $sm_update"
+	say "  $(update_cmd)"
 	say "Fichiers : $dir (réglages dans .env, à garder secret)"
 	say "Sauvegardes : $dir/backups (une par jour, gardées 14 jours)"
 	say "Journaux : $(compose_cmd) logs -f"
@@ -777,6 +839,8 @@ main() {
 	tty_ok=
 	if [ -z "$yes" ] && (exec </dev/tty) 2>/dev/null; then tty_ok=1; fi
 	docker_sudo=
+	by_sudo=
+	if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then by_sudo=1; fi
 
 	detect_platform
 	if [ "$(id -u)" = 0 ]; then
@@ -796,6 +860,7 @@ main() {
 	say "KRAKEN : installation dans $dir ($os, $arch)"
 	update=
 	if [ -f "$dir/.env" ]; then
+		[ -r "$dir/.env" ] || die "KRAKEN est déjà installé dans $dir, mais tu n'as pas le droit de lire son fichier .env (installé avec sudo ?). Relance avec sudo : $(update_cmd sudo)"
 		update=1
 		say "Déjà installé : mise à jour, en gardant les réglages et les données."
 		read_settings
@@ -809,12 +874,12 @@ main() {
 	*) die "Docker tourne ici en 32 bits : KRAKEN a besoin d'un système 64 bits." ;;
 	esac
 
+	if [ -z "$update" ]; then check_old_volume; fi
 	mkdir -p "$dir"
 	install_files
 	# L'image d'abord : si elle manque, rien n'est écrit et la prochaine fois repose la question.
 	prepare_image
 	if [ -z "$update" ]; then
-		check_old_volume
 		write_env
 		open_firewall
 	fi
