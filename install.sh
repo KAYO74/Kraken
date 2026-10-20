@@ -108,7 +108,8 @@ public_ipv4() {
 # Machine virtuelle d'un grand hébergeur cloud (reconnue à ses infos DMI, comme le fait cloud-init).
 cloud_vm() {
 	[ "$os" = linux ] && [ -d /sys/class/dmi/id ] || return 1
-	cv_info=$(cd /sys/class/dmi/id && cat sys_vendor product_name chassis_asset_tag bios_version 2>/dev/null || true)
+	cv_info=$(cat /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name \
+		/sys/class/dmi/id/chassis_asset_tag /sys/class/dmi/id/bios_version 2>/dev/null) || true
 	case $cv_info in
 	*"Amazon EC2"* | *amazon* | *"Google Compute Engine"* | *7783-7084-3265-9085-8269-3286-77* | \
 		*OracleCloud.com* | *"Alibaba Cloud"* | *"Tencent Cloud"* | *Scaleway* | *HUAWEICLOUD*) return 0 ;;

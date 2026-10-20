@@ -125,7 +125,8 @@ jobs:
           curl -fsS -o /dev/null -H 'Content-Type: application/json' \
             -d '{"login":"ci_test","password":"mot-de-passe-ci-123"}' "$BASE/api/v1/auth/login"
       - if: failure()
-        run: cd "$KRAKEN_DIR" && docker compose ps -a && docker compose logs --tail 200
+        run: |
+          if [ -f "$KRAKEN_DIR/.env" ]; then cd "$KRAKEN_DIR"; docker compose ps -a; docker compose logs --tail 200; fi
 
   # install.ps1 : analyse par PowerShell, puis plan sans rien installer (-DryRun), en Windows
   # PowerShell 5.1 et en PowerShell 7, comme fichier et comme avec irm | iex.
