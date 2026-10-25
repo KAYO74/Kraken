@@ -32,6 +32,9 @@ const TICK: Duration = Duration::from_millis(20);
 const KEYFRAME_GAP: Duration = Duration::from_millis(500);
 /// Message du canal de données plus long : ignoré.
 const MAX_MESSAGE: usize = 256 * 1024;
+/// Messages `state` et `watch` par client : rafale, puis débit par seconde.
+const BURST: f32 = 10.0;
+const PER_SECOND: f32 = 4.0;
 
 /// Une piste relayée vers ce client : à qui elle est, et où en est sa négociation.
 struct Out {
@@ -78,14 +81,38 @@ pub(crate) struct Client {
     /// Pistes à renégocier dès que possible.
     stale: bool,
     last_keyframe: Option<Instant>,
+    /// Messages `state` et `watch` encore permis (seau à jetons).
+    tokens: f32,
+    tokens_at: Instant,
 }
 
 /// Ce qu'un client produit et qui concerne les autres.
 enum Item {
-    Media { from: Id, room: Id, kind: Kind, data: Box<MediaData> },
-    Keyframe { user: Id, kind: KeyframeRequestKind },
-    State { session: u64, self_mute: bool, self_deaf: bool, streaming: bool },
-    Watch { session: u64, user: Id, on: bool },
+    Media {
+        from: Id,
+        room: Id,
+        kind: Kind,
+        data: Box<MediaData>,
+    },
+    Keyframe {
+        user: Id,
+        kind: KeyframeRequestKind,
+    },
+    State {
+        session: u64,
+        self_mute: bool,
+        self_deaf: bool,
+        streaming: bool,
+    },
+    Watch {
+        session: u64,
+        user: Id,
+        on: bool,
+    },
+    /// Son canal de données vient de s'ouvrir : les autres peuvent recevoir son micro.
+    Ready {
+        room: Id,
+    },
 }
 
 impl Client {
@@ -112,6 +139,8 @@ impl Client {
             dirty: true,
             stale: true,
             last_keyframe: None,
+            tokens: BURST,
+            tokens_at: now,
         }
     }
 
@@ -162,6 +191,7 @@ impl Client {
             Event::ChannelOpen(id, label) if label == VOICE_DATA_CHANNEL && self.channel.is_none() => {
                 self.channel = Some(id);
                 self.stale = true;
+                items.push(Item::Ready { room: self.room });
             }
             Event::ChannelClose(id) if Some(id) == self.channel => {
                 tracing::debug!("vocal {} : canal de données fermé", self.user);
@@ -198,6 +228,9 @@ impl Client {
             return;
         }
         let Ok(msg) = serde_json::from_slice::<VoiceClientMsg>(&d.data) else { return };
+        if !matches!(msg, VoiceClientMsg::Answer { .. }) && !self.allow() {
+            return;
+        }
         match msg {
             VoiceClientMsg::Answer { sdp } => self.answer(&sdp, items),
             VoiceClientMsg::State { self_mute, self_deaf, streaming } => {
@@ -207,6 +240,19 @@ impl Client {
                 items.push(Item::Watch { session: self.session, user: user_id, on })
             }
         }
+    }
+
+    /// Quelques messages par seconde suffisent à un humain ; au-delà, ils sont ignorés.
+    fn allow(&mut self) -> bool {
+        let now = Instant::now();
+        let refill = now.duration_since(self.tokens_at).as_secs_f32() * PER_SECOND;
+        self.tokens = (self.tokens + refill).min(BURST);
+        self.tokens_at = now;
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+        true
     }
 
     fn answer(&mut self, sdp: &str, items: &mut Vec<Item>) {
@@ -461,8 +507,14 @@ impl Sfu {
         if !self.clients.iter().any(|c| c.stale && c.channel.is_some() && c.pending.is_none()) {
             return;
         }
-        let members: Vec<(Id, Id, bool, bool)> =
-            self.clients.iter().map(|c| (c.room, c.user, c.can_speak, c.can_stream && c.streaming)).collect();
+        // Seuls comptent ceux dont le canal de données est ouvert : une connexion qui n'aboutit
+        // jamais n'ajoute pas de piste chez les autres.
+        let members: Vec<(Id, Id, bool, bool)> = self
+            .clients
+            .iter()
+            .filter(|c| c.channel.is_some())
+            .map(|c| (c.room, c.user, c.can_speak, c.can_stream && c.streaming))
+            .collect();
         for c in self.clients.iter_mut().filter(|c| c.stale) {
             let mut wanted = HashSet::new();
             for &(room, user, speaks, streams) in &members {
@@ -488,6 +540,7 @@ impl Sfu {
                     c.forward(from, kind, &data);
                 }
             }
+            Item::Ready { room } => self.touch(room),
             Item::Keyframe { user, kind } => {
                 if let Some(c) = self.clients.iter_mut().find(|c| c.user == user && c.streaming) {
                     c.request_keyframe(kind);

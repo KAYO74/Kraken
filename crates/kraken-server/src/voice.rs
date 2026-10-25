@@ -1,8 +1,9 @@
 //! Salons vocaux côté HTTP : rejoindre (offre WebRTC → réponse), quitter, et la diffusion des
 //! états vocaux par le gateway. Le son et l'image passent ailleurs, en UDP (`kraken-voice`).
 
+use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::Json;
@@ -12,7 +13,7 @@ use kraken_core::perms;
 use kraken_db::Db;
 use kraken_proto::*;
 use kraken_voice::{JoinError, Settings, Sfu};
-use tokio::sync::mpsc;
+use tokio::sync::Notify;
 
 use crate::auth::Auth;
 use crate::error::{ApiResult, AppError};
@@ -147,7 +148,13 @@ async fn announced_ips(cfg: &Config) -> Vec<IpAddr> {
             ips.push(ip);
         }
     }
-    for ip in kraken_voice::interface_ips() {
+    // Les adresses des interfaces seulement pour une instance locale (ou si rien ne se résout) :
+    // sinon elles dévoileraient le réseau interne du serveur.
+    let public = ips.iter().any(|ip| match ip {
+        IpAddr::V4(v4) => !(v4.is_private() || v4.is_loopback() || v4.is_link_local()),
+        IpAddr::V6(_) => false,
+    });
+    for ip in kraken_voice::interface_ips().into_iter().filter(|_| !public) {
         if !ips.contains(&ip) {
             ips.push(ip);
         }
@@ -155,34 +162,49 @@ async fn announced_ips(cfg: &Config) -> Vec<IpAddr> {
     ips
 }
 
-/// Le rappel du SFU : chaque changement passe par une file vers une tâche qui le diffuse, dans
-/// l'ordre.
+/// Le rappel du SFU : seul le dernier état de chaque personne attend d'être diffusé (une
+/// rafale de changements n'en fait qu'un), par une tâche qui les envoie un à un.
 fn notifier(db: Db, hub: Arc<Hub>) -> impl Fn(VoiceState) + Send + Sync + 'static {
-    let (tx, mut rx) = mpsc::unbounded_channel::<VoiceState>();
+    let waiting: Arc<Mutex<HashMap<Id, VoiceState>>> = Arc::default();
+    let wake = Arc::new(Notify::new());
+    let (queue, signal) = (waiting.clone(), wake.clone());
     tokio::spawn(async move {
-        while let Some(s) = rx.recv().await {
-            if let Err(e) = broadcast(&db, &hub, s).await {
-                tracing::warn!("VOICE_STATE_UPDATE : {e:?}");
+        // Le dernier salon diffusé de chacun, pour prévenir ceux qui le voyaient quand il le quitte.
+        let mut last: HashMap<Id, Id> = HashMap::new();
+        loop {
+            signal.notified().await;
+            let batch: Vec<VoiceState> = queue.lock().unwrap().drain().map(|(_, s)| s).collect();
+            for s in batch {
+                let before = match s.channel_id {
+                    Some(c) => last.insert(s.user_id, c),
+                    None => last.remove(&s.user_id),
+                };
+                if let Err(e) = broadcast(&db, &hub, s, before).await {
+                    tracing::warn!("VOICE_STATE_UPDATE : {e:?}");
+                }
             }
         }
     });
     move |s| {
-        let _ = tx.send(s);
+        waiting.lock().unwrap().insert(s.user_id, s);
+        wake.notify_one();
     }
 }
 
-/// À tout le serveur ; ceux qui ne voient pas le salon apprennent seulement que la personne
-/// n'est dans aucun salon qu'ils voient.
-async fn broadcast(db: &Db, hub: &Hub, s: VoiceState) -> Result<(), kraken_db::DbError> {
-    let members = db.member_ids(s.guild_id).await?;
+/// À ceux qui voient le salon. Ceux qui voyaient le salon d'avant, mais pas celui-ci, apprennent
+/// seulement que la personne l'a quitté ; les autres ne reçoivent rien.
+async fn broadcast(db: &Db, hub: &Hub, s: VoiceState, before: Option<Id>) -> Result<(), kraken_db::DbError> {
     let viewers = match s.channel_id {
         Some(c) => db.channel_audience(c).await?,
         None => vec![],
     };
-    let (see, rest): (Vec<Id>, Vec<Id>) = members.into_iter().partition(|u| viewers.contains(u));
+    let left = match before.filter(|b| Some(*b) != s.channel_id) {
+        Some(b) => db.channel_audience(b).await?.into_iter().filter(|u| !viewers.contains(u)).collect(),
+        None => vec![],
+    };
     let hidden = VoiceState { channel_id: None, self_mute: false, self_deaf: false, streaming: false, ..s.clone() };
-    hub.send(&see, Event::VoiceStateUpdate(s));
-    hub.send(&rest, Event::VoiceStateUpdate(hidden));
+    hub.send(&viewers, Event::VoiceStateUpdate(s));
+    hub.send(&left, Event::VoiceStateUpdate(hidden));
     Ok(())
 }
 

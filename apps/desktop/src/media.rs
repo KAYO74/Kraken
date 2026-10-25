@@ -19,23 +19,34 @@ use url::Host;
 /// L'origine d'une instance en http hors de cet ordinateur : sans réglage, le navigateur
 /// intégré n'y donne ni micro ni partage d'écran.
 pub fn insecure_origin(url: &Url) -> Option<String> {
-    let local = match url.host() {
-        Some(Host::Domain(d)) => d == "localhost" || d.ends_with(".localhost"),
-        Some(Host::Ipv4(ip)) => ip.is_loopback(),
-        Some(Host::Ipv6(ip)) => ip.is_loopback(),
-        None => true,
+    // Seulement le réseau local : adresse privée, `.local` ou nom sans point. Une instance
+    // publique en http reste sans micro ni partage (le trafic y est lisible en chemin).
+    let lan = match url.host() {
+        Some(Host::Domain(d)) => (!d.contains('.') && d != "localhost") || d.ends_with(".local"),
+        Some(Host::Ipv4(ip)) => ip.is_private() || ip.is_link_local(),
+        Some(Host::Ipv6(ip)) => {
+            let first = ip.segments()[0];
+            first & 0xfe00 == 0xfc00 || first & 0xffc0 == 0xfe80
+        }
+        None => false,
     };
-    (url.scheme() == "http" && !local).then(|| url.origin().ascii_serialization())
+    (url.scheme() == "http" && lan).then(|| url.origin().ascii_serialization())
 }
 
-/// Une page demande le micro, la caméra ou l'écran : oui pour l'instance, non pour les autres.
-/// Le reste (notifications…) suit le comportement du navigateur intégré.
+/// Une page demande le micro ou l'écran : seule l'instance peut l'obtenir, et sous Windows et
+/// macOS le navigateur intégré pose quand même sa question (WebKitGTK n'en pose pas : la
+/// demande ne vient que d'un clic sur « Rejoindre »). La caméra, que le client n'utilise pas,
+/// est refusée. Le reste (notifications…) suit le comportement du navigateur intégré.
 pub fn permission(webview: Webview, kind: PermissionKind) -> PermissionResponse {
-    if !matches!(kind, PermissionKind::Microphone | PermissionKind::Camera | PermissionKind::DisplayCapture) {
-        return PermissionResponse::Default;
+    match kind {
+        PermissionKind::Camera => return PermissionResponse::Deny,
+        PermissionKind::Microphone | PermissionKind::DisplayCapture => {}
+        _ => return PermissionResponse::Default,
     }
     match webview.url() {
-        Ok(page) if crate::is_instance(webview.app_handle(), &page) => PermissionResponse::Allow,
+        Ok(page) if crate::is_instance(webview.app_handle(), &page) => {
+            if cfg!(target_os = "linux") { PermissionResponse::Allow } else { PermissionResponse::Default }
+        }
         _ => PermissionResponse::Deny,
     }
 }
@@ -147,6 +158,8 @@ mod tests {
         assert_eq!(o("http://192.168.1.20:8080/invite/x").as_deref(), Some("http://192.168.1.20:8080"));
         assert_eq!(o("http://kraken.local/").as_deref(), Some("http://kraken.local"));
         assert_eq!(o("https://chat.exemple.org/"), None);
+        assert_eq!(o("http://chat.exemple.org:8080/"), None);
+        assert_eq!(o("http://203.0.113.7:8080/"), None);
         assert_eq!(o("http://localhost:8080/"), None);
         assert_eq!(o("http://127.0.0.1:8080/"), None);
         assert_eq!(o("http://[::1]:8080/"), None);
