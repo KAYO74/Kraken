@@ -47,5 +47,6 @@ COPY --from=client /src/crates/kraken-client/dist /srv/kraken/web
 ENV KRAKEN_ADDR=0.0.0.0:8080 KRAKEN_WEB_DIR=/srv/kraken/web
 # Utilisateur sans droits (pas de useradd : il faudrait exécuter une commande arm64)
 USER 10001:10001
-EXPOSE 8080
+# 8080 : HTTP et gateway (derrière Caddy) ; 3478/udp : son et image des salons vocaux.
+EXPOSE 8080 3478/udp
 CMD ["kraken-server"]

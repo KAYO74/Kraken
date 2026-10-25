@@ -56,18 +56,18 @@ Boîte de réception mentions,notifications,should,yes,no,S25
 Notifications par e-mail,notifications,could,yes,no,S09
 Recherche dans les messages,recherche,should,yes,no,S26
 Quick Switcher Ctrl+K,recherche,should,yes,no,S29
-Salon vocal,voix,must,yes,no,S18 F04
+Salon vocal,voix,must,yes,yes,"S18 F04 ; SFU kraken-voice sur un port UDP (pas de TURN : le port doit être joignable), 25 personnes par salon, qui est là dans la barre latérale, panneau « Vocal connecté », contour de qui parle, Reconnecter après une coupure"
 Appel en MP,voix,must,yes,no,F03
-Muet et sourdine,voix,must,yes,no,S04
+Muet et sourdine,voix,must,yes,yes,"S04 S18 ; visibles de tous ; le son coupé coupe aussi le micro ; le serveur ne relaie rien d'un micro coupé"
 Choix des périphériques et test micro,voix,must,yes,no,S10
 Détection de voix et push-to-talk,voix,must,yes,no,S10
-Suppression de bruit et annulation d'écho,voix,should,yes,no,S10 ; RNNoise au lieu de Krisp
+Suppression de bruit et annulation d'écho,voix,should,yes,partial,"S10 ; celles du navigateur (echoCancellation, noiseSuppression, autoGainControl) ; RNNoise au lieu de Krisp plus tard"
 Chiffrement de bout en bout du vocal,voix,should,yes,no,S07 ; MLS
 Qualité audio 384 kbps,voix,could,yes,no,boost : gratuit
 Caméra en appel,video,must,yes,no,S10 S18
 Flou et arrière-plans vidéo perso,video,could,yes,no,S10 ; nitro : gratuit ; images originales
-Partage d'écran,video,must,yes,no,S18 F04
-Stream 1080p60 et plus,video,should,yes,no,nitro : gratuit
+Partage d'écran,video,must,yes,yes,"S18 F04 ; image (30 i/s) et son de l'écran quand le navigateur le permet ; envoyé seulement à qui clique « Regarder » ; plein écran ; impossible sur navigateur mobile ou page en HTTP (bouton désactivé, raison affichée)"
+Stream 1080p60 et plus,video,should,yes,partial,"nitro : gratuit ; résolution de l'écran sans limite payante, mais 30 i/s pour l'instant"
 Aperçu du stream,video,could,yes,no,S10
 Soundboard,voix,should,yes,no,S10 S22
 Sons du soundboard de tous les serveurs,voix,could,yes,no,nitro : gratuit

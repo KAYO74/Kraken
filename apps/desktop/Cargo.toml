@@ -20,6 +20,9 @@ serde_json = "1"
 url = "2"
 # Mode « héberger » : le serveur KRAKEN tourne dans l'appli, avec un PostgreSQL embarqué.
 kraken-server = { path = "../../crates/kraken-server" }
+kraken-proto = { path = "../../crates/kraken-proto" }
+# `--self-test` rejoint un salon vocal comme un navigateur (même version que kraken-voice).
+str0m = { version = "=0.24.1", default-features = false, features = ["rust-crypto"] }
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "io-util", "macros"] }
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio"] }
@@ -28,6 +31,11 @@ postgresql_embedded = { version = "=0.20.2", default-features = false, features 
 postgresql_archive = { version = "0.20", default-features = false, features = ["zonky"] }
 postgresql_commands = { version = "=0.20.2", features = ["tokio"] }
 rand = "0.9"
+
+# Linux : réglages de WebKitGTK pour le vocal (même version que wry).
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "2.0", features = ["v2_38"] }
+libc = "0.2"
 
 [profile.release]
 lto = true

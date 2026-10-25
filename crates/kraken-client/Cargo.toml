@@ -15,7 +15,17 @@ gloo-net = { version = "0.6", default-features = false, features = ["http", "jso
 wasm-bindgen = "=0.2.129"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
-web-sys = { version = "0.3", features = ["Storage", "Window", "Document", "Element", "HtmlElement", "KeyboardEvent", "Location", "Navigator", "Clipboard", "HtmlInputElement", "HtmlDocument", "MediaQueryList"] }
+web-sys = { version = "0.3", features = [
+    "Storage", "Window", "Document", "Element", "HtmlElement", "KeyboardEvent", "Location", "Navigator", "Clipboard",
+    "HtmlInputElement", "HtmlDocument", "MediaQueryList",
+    # Salons vocaux : WebRTC, micro, partage d'écran.
+    "RtcPeerConnection", "RtcConfiguration", "RtcBundlePolicy", "RtcPeerConnectionState", "RtcRtpTransceiver",
+    "RtcRtpTransceiverInit", "RtcRtpTransceiverDirection", "RtcRtpSender", "RtcDataChannel", "RtcDataChannelState",
+    "RtcSessionDescription", "RtcSessionDescriptionInit", "RtcSdpType", "RtcTrackEvent", "MessageEvent",
+    "MediaDevices", "MediaStream", "MediaStreamTrack", "MediaStreamTrackState", "MediaStreamConstraints",
+    "DisplayMediaStreamConstraints", "HtmlMediaElement", "HtmlVideoElement", "HtmlAudioElement",
+    "AudioContext", "BaseAudioContext", "AudioNode", "AnalyserNode", "MediaStreamAudioSourceNode",
+] }
 futures = "0.3"
 console_error_panic_hook = "0.1"
 gloo-timers = { version = "0.3", features = ["futures"] }

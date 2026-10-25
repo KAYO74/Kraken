@@ -1,4 +1,4 @@
-//! Salon textuel de serveur (S05), conversation privée (S19), et l'entrée du vocal (S18).
+//! Salon textuel de serveur (S05), conversation privée (S19) ; le salon vocal (S18) est dans `call`.
 
 use kraken_proto::{Channel, ChannelKind, Id, MAX_MESSAGE_LEN, Message};
 use leptos::html;
@@ -7,6 +7,7 @@ use leptos::task::spawn_local;
 use leptos_router::NavigateOptions;
 use leptos_router::hooks::{use_navigate, use_params_map};
 
+use crate::call::VoiceRoom;
 use crate::icons::{Icon, lu};
 use crate::shell::first_text;
 use crate::store::{Conn, Pending, store};
@@ -56,7 +57,7 @@ pub fn GuildChannel() -> impl IntoView {
     view! {
         {move || match current.get() {
             None => view! { <Loading/> }.into_any(),
-            Some(c) if c.kind == ChannelKind::Voice || c.kind == ChannelKind::Stage => view! { <Stub id="S18" title="Salon vocal"/> }.into_any(),
+            Some(c) if c.kind == ChannelKind::Voice || c.kind == ChannelKind::Stage => view! { <VoiceRoom channel=c/> }.into_any(),
             Some(c) if c.kind == ChannelKind::Forum => view! { <Stub id="S24" title="Forum"/> }.into_any(),
             Some(c) => view! { <ChannelView channel=c/> }.into_any(),
         }}

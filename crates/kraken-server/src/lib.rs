@@ -7,18 +7,21 @@ mod error;
 mod gateway;
 mod jobs;
 mod limit;
+mod voice;
 
+use std::net::IpAddr;
 use std::sync::Arc;
 
 use axum::Router;
 use axum::http::{HeaderValue, header};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use kraken_db::Db;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::{SetResponseHeader, SetResponseHeaderLayer};
 
 pub use gateway::Hub;
 pub use jobs::Mailer;
+pub use kraken_voice::{self, Sfu};
 
 /// Mot de passe des comptes de démonstration créés par `--seed`.
 pub const DEMO_PASSWORD: &str = "kraken-demo";
@@ -42,6 +45,15 @@ pub struct Config {
     pub auth_per_min: u32,
     /// Pages Confidentialité et Conditions : contact et sous-traitants de l'exploitant, code source.
     pub instance: kraken_proto::Instance,
+    /// Port UDP des salons vocaux, sur toutes les interfaces ; 0 : n'importe quel port libre.
+    pub rtc_port: u16,
+    /// Port pris : n'importe quel port libre plutôt que pas de vocal (appli de bureau).
+    pub rtc_fallback: bool,
+    /// Adresses annoncées aux navigateurs pour le vocal. Vide : celles de `public_url`
+    /// (127.0.0.1 si elle est locale) et celles des interfaces réseau de la machine.
+    pub rtc_ips: Vec<IpAddr>,
+    /// Port UDP annoncé s'il diffère de `rtc_port` (redirection de port).
+    pub rtc_public_port: Option<u16>,
 }
 
 impl Config {
@@ -64,7 +76,17 @@ impl Config {
                 contact: var("KRAKEN_CONTACT"),
                 processors: var("KRAKEN_PROCESSORS"),
                 source_url: var("KRAKEN_SOURCE_URL").unwrap_or_else(|| env!("CARGO_PKG_REPOSITORY").into()),
+                public_url: String::new(),
             },
+            rtc_port: var("KRAKEN_RTC_PORT").map_or(kraken_voice::DEFAULT_PORT, |v| {
+                v.trim().parse().unwrap_or_else(|_| {
+                    tracing::warn!("KRAKEN_RTC_PORT invalide ({v}) : {}", kraken_voice::DEFAULT_PORT);
+                    kraken_voice::DEFAULT_PORT
+                })
+            }),
+            rtc_fallback: false,
+            rtc_ips: var("KRAKEN_RTC_IPS").map(|v| voice::parse_ips(&v)).unwrap_or_default(),
+            rtc_public_port: var("KRAKEN_RTC_PUBLIC_PORT").and_then(|v| v.trim().parse().ok()).filter(|p| *p != 0),
         }
     }
 
@@ -86,6 +108,8 @@ pub struct AppState {
     pub hub: Arc<Hub>,
     pub cfg: Arc<Config>,
     pub mailer: Option<Arc<Mailer>>,
+    /// Salons vocaux ; `None` si le port UDP n'a pas pu être ouvert.
+    pub voice: Option<Arc<Sfu>>,
 }
 
 impl AppState {
@@ -109,7 +133,26 @@ impl AppState {
             }
             hub.seed_presence(&db).await;
         }
-        Ok(Self { db, hub: Arc::new(hub), cfg: Arc::new(cfg), mailer })
+        let hub = Arc::new(hub);
+        let voice = voice::start(&cfg, &db, &hub).await;
+        Ok(Self { db, hub, cfg: Arc::new(cfg), mailer, voice })
+    }
+
+    /// Ajoute à ce serveur ses états vocaux, pour les salons que le membre voit.
+    pub fn with_voice(&self, mut g: kraken_proto::GuildState) -> kraken_proto::GuildState {
+        if let Some(v) = &self.voice {
+            let visible = |c: Option<kraken_proto::Id>| c.is_some_and(|c| g.channels.iter().any(|ch| ch.id == c));
+            g.voice_states = v.states(g.guild.id).into_iter().filter(|s| visible(s.channel_id)).collect();
+        }
+        g
+    }
+
+    /// Coupe tout ce que cet utilisateur a d'ouvert : gateway et vocal.
+    pub fn kick(&self, uid: kraken_proto::Id) {
+        self.hub.kick(uid);
+        if let Some(v) = &self.voice {
+            v.leave(uid);
+        }
     }
 }
 
@@ -122,8 +165,14 @@ pub fn app(state: AppState) -> Router {
         .route("/auth/reset/confirm", post(auth::reset_confirm))
         .route("/users/@me/delete", post(auth::delete_account))
         .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
+    // Rejoindre un salon vocal coûte une clé DTLS : même limite, compteur à part.
+    let voice_join = Router::new()
+        .route("/channels/{id}/voice", post(voice::join))
+        .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
     let api = Router::new()
         .merge(limited)
+        .merge(voice_join)
+        .route("/voice", delete(voice::leave))
         .route("/health", get(api::health))
         .route("/instance", get(api::instance))
         .route("/auth/logout", post(auth::logout))

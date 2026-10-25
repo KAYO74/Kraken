@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>KRAKEN utilise ton micro quand tu parles dans un salon vocal.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>KRAKEN ne se sert de la caméra que si tu l'allumes toi-même dans un salon vocal.</string>
+</dict>
+</plist>

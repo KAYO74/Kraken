@@ -41,7 +41,9 @@ pub async fn health(State(state): State<AppState>) -> ApiResult<&'static str> {
 }
 
 pub async fn instance(State(state): State<AppState>) -> Json<Instance> {
-    Json(state.cfg.instance.clone())
+    let mut i = state.cfg.instance.clone();
+    i.public_url = state.cfg.public_url.trim_end_matches('/').to_string();
+    Json(i)
 }
 
 pub async fn create_guild(
@@ -55,7 +57,8 @@ pub async fn create_guild(
 }
 
 pub async fn guild(State(state): State<AppState>, auth: Auth, Path(gid): Path<Id>) -> ApiResult<Json<GuildState>> {
-    state.db.guild_state(gid, auth.user.id).await?.map(Json).ok_or_else(AppError::not_found)
+    let g = state.db.guild_state(gid, auth.user.id).await?.ok_or_else(AppError::not_found)?;
+    Ok(Json(state.with_voice(g)))
 }
 
 pub async fn guild_channels(
@@ -139,6 +142,7 @@ pub async fn invite(State(state): State<AppState>, Path(code): Path<String>) -> 
 
 pub async fn join(State(state): State<AppState>, auth: Auth, Path(code): Path<String>) -> ApiResult<Json<GuildState>> {
     let (g, new) = state.db.use_invite(&code, auth.user.id).await?;
+    let g = state.with_voice(g);
     if let Some(member) = new {
         let others: Vec<Id> = g.members.iter().map(|m| m.user.id).filter(|u| *u != auth.user.id).collect();
         state.hub.send(&others, Event::MemberAdd { guild_id: g.guild.id, member });

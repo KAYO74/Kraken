@@ -129,7 +129,7 @@ Onglets pilule                  .k-tabs, .k-tab
   used on   S01, S25
 
 Badge                           .k-badge
-  variants  nouveau (accent), neutre (bêta), compteur (danger-solid, « 99+ » au-delà)
+  variants  nouveau (accent), neutre (bêta), compteur (danger-solid, « 99+ » au-delà), en direct (--live, danger-solid)
   a11y      le compteur est doublé dans le nom accessible du parent (« 4 mentions »)
   used on   S02, S03, S05, S06, S11
 
@@ -226,6 +226,27 @@ Toast                           .k-toast
   a11y      role="status" (erreur : role="alert") ; reste au moins 5 s, pause au survol
   used on   copie de lien, erreurs d'envoi
 
+Tuile de participant vocal      .k-tile, .k-tile-name, .k-tile-video
+  variants  avatar lg centré, ou aperçu de mon écran partagé (vidéo, object-fit contain)
+  states    parle (data-speaking : contour success), en direct (data-live : bordure danger-solid)
+  tokens    surface-raised, border ; nom sur shadow-scrim + on-media ; media derrière la vidéo
+  a11y      <li> d'une liste « Participants » ; micro / son coupés en role="img" étiquetés ;
+            « Regarder » nomme la personne (« Regarder l'écran de Lou ») et porte aria-pressed
+  used on   S18
+
+Barre de commandes d'appel      .k-callbar, .k-callbtn
+  variants  bascule (micro, son : aria-pressed, danger-solid quand pressé), partage (data-on : accent),
+            quitter (--danger)
+  tokens    control, control-hover, danger-solid, accent ; boutons ronds de space-10
+  a11y      role="group" étiqueté ; chaque bouton a son aria-label (le texte disparaît sous 640 px) ;
+            partage désactivé relié à son explication par aria-describedby
+  used on   S18
+
+Panneau « Vocal connecté »      .k-voicebar
+  states    connecté (success), connexion / instable (warning), perdue (danger + « Reconnecter »)
+  a11y      section étiquetée « Connexion vocale » ; l'état en role="status" ; « Quitter le salon vocal »
+  used on   coquille, au-dessus du panneau utilisateur, pendant un appel
+
 États vides et chargement       .k-empty, .k-skeleton
   a11y      skeleton aria-hidden + aria-busy sur la zone ; animation coupée en mouvement réduit
   used on   S01 (« rien pour l'instant »), S13, S16, toutes les listes au chargement
@@ -233,6 +254,6 @@ Toast                           .k-toast
 
 ## Écrans non capturés
 
-S18 à S30 réutilisent ces primitives. Ajouts prévus au build, avec les mêmes jetons : tuile de participant vocal (contour success quand il parle), barre de contrôles d'appel, popout de profil (bannière + avatar lg), liste de membres (groupes par rôle), Quick Switcher (combobox plein écran).
+S18 à S30 réutilisent ces primitives. Faits au build : tuile de participant vocal, barre de commandes d'appel, panneau « Vocal connecté » (ci-dessus). Prévus, avec les mêmes jetons : popout de profil (bannière + avatar lg), liste de membres (groupes par rôle), Quick Switcher (combobox plein écran).
 
 Étape suivante : `/replica-build`.

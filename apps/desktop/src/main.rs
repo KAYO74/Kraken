@@ -3,11 +3,13 @@
 //! - héberger sur cet ordinateur : l'appli fait tourner son propre serveur (`host.rs`).
 //!
 //! Le choix est gardé dans le dossier de configuration de l'appli ; le menu KRAKEN permet d'en
-//! changer. `--self-test` vérifie le mode « héberger » sans ouvrir de fenêtre (CI).
+//! changer. Micro et partage d'écran (salons vocaux) : `media.rs`. `--self-test` vérifie le mode
+//! « héberger », vocal compris, sans ouvrir de fenêtre (CI).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod host;
+mod media;
 mod selftest;
 
 use std::fs;
@@ -63,6 +65,33 @@ fn save(app: &AppHandle, mode: &str, instance: Option<&Url>) {
         let _ = fs::write(dir.join("instance.txt"), url.as_str());
     }
 }
+
+/// Le lien à ouvrir au prochain lancement, quand l'appli se relance pour le vocal (Windows).
+#[cfg(windows)]
+fn save_link(app: &AppHandle, link: &Url) {
+    if let Some(dir) = config_dir(app) {
+        let _ = fs::write(dir.join("open.txt"), link.as_str());
+    }
+}
+
+/// Le lien laissé par [`save_link`], une seule fois.
+fn take_link(app: &AppHandle) -> Option<Url> {
+    let path = config_dir(app)?.join("open.txt");
+    let link = fs::read_to_string(&path).ok();
+    let _ = fs::remove_file(&path);
+    Url::parse(link?.trim()).ok()
+}
+
+/// Vrai si `page` est sur l'instance : celle qu'on a rejointe, ou le serveur hébergé ici.
+fn is_instance(app: &AppHandle, page: &Url) -> bool {
+    let origin = page.origin();
+    let hosted = app.state::<Hosting>().local_url().and_then(|u| Url::parse(&u).ok());
+    hosted.is_some_and(|u| u.origin() == origin) || matches!(saved(app), Saved::Join(url) if url.origin() == origin)
+}
+
+/// Windows : l'instance en http que WebView2 traite comme sécurisée depuis le lancement.
+#[cfg(windows)]
+struct SecureOrigin(Option<String>);
 
 /// Dossier des données du serveur hébergé, et client web livré avec l'appli.
 fn host_dirs(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
@@ -129,7 +158,7 @@ async fn reachable(url: &Url, wait: Duration) -> bool {
 
 /// Appelée par la page d'accueil : retient l'instance (son origine) et ouvre le lien tel quel,
 /// pour qu'un lien d'invitation affiche sa page. Arrête le serveur hébergé s'il tourne, sauf si
-/// c'est lui qu'on rejoint.
+/// c'est lui qu'on rejoint (ouvert alors par localhost).
 #[tauri::command]
 async fn join(app: AppHandle, hosting: State<'_, Hosting>, address: String) -> Result<(), String> {
     let link = parse_address(&address)?;
@@ -143,7 +172,17 @@ async fn join(app: AppHandle, hosting: State<'_, Hosting>, address: String) -> R
     save(&app, "join", Some(&origin));
     hosting.stop();
     share_enabled(&app, false);
-    main_window(&app)?.navigate(link).map_err(|e| e.to_string())
+    // WebView2 ne change d'origine traitée comme sécurisée (et de dossier de données) qu'à son
+    // démarrage : l'appli se relance sur le lien.
+    #[cfg(windows)]
+    if media::insecure_origin(&origin) != app.state::<SecureOrigin>().0 {
+        save_link(&app, &link);
+        app.request_restart();
+        return Ok(());
+    }
+    let window = main_window(&app)?;
+    media::prepare(&window, media::insecure_origin(&origin).is_some());
+    window.navigate(link).map_err(|e| e.to_string())
 }
 
 /// Appelée par la page d'accueil : passe en mode « héberger » et démarre le serveur.
@@ -161,8 +200,8 @@ fn host_status(hosting: State<'_, Hosting>) -> host::Status {
     hosting.status()
 }
 
-/// Ouvre le serveur hébergé dans la fenêtre, par son adresse réseau : les liens
-/// d'invitation la reprennent.
+/// Ouvre le serveur hébergé dans la fenêtre, par localhost (micro et partage d'écran permis) ;
+/// les liens d'invitation prennent son adresse sur le réseau (`public_url`).
 #[tauri::command]
 fn host_open(app: AppHandle, hosting: State<'_, Hosting>) -> Result<(), String> {
     let url = hosting.open_url().ok_or("Ton serveur n'est pas encore prêt.")?;
@@ -222,6 +261,12 @@ fn main() {
                     let _ = w.navigate(local_page(page));
                 }
             });
+            // Une instance en http sur le réseau local : micro et partage d'écran quand même.
+            let insecure = match &saved {
+                Saved::Join(url) => media::insecure_origin(url),
+                _ => None,
+            };
+            let link = take_link(app.handle());
             let start = match saved {
                 Saved::Host => match host_dirs(app.handle()) {
                     Ok((data, web)) => {
@@ -235,14 +280,22 @@ fn main() {
                     let address: String = url::form_urlencoded::byte_serialize(url.as_str().as_bytes()).collect();
                     WebviewUrl::App(format!("index.html#injoignable={address}").into())
                 }
-                Saved::Join(url) => WebviewUrl::External(url),
+                Saved::Join(url) => WebviewUrl::External(link.filter(|l| l.origin() == url.origin()).unwrap_or(url)),
                 Saved::Welcome => WebviewUrl::App("index.html".into()),
             };
-            WebviewWindowBuilder::new(app, "main", start)
+            let builder = WebviewWindowBuilder::new(app, "main", start)
                 .title("KRAKEN")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(400.0, 500.0)
-                .build()?;
+                .on_permission_request(media::permission);
+            #[cfg(windows)]
+            let (builder, insecure) = match (insecure, app.path().app_local_data_dir()) {
+                (Some(origin), Ok(data)) => (media::treat_as_secure(builder, &data, &origin), Some(origin)),
+                _ => (builder, None),
+            };
+            #[cfg(windows)]
+            app.manage(SecureOrigin(insecure.clone()));
+            media::prepare(&builder.build()?, insecure.is_some());
             Ok(())
         })
         .build(context)

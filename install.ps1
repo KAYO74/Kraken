@@ -182,8 +182,8 @@ function Install-Kraken {
         return [bool](@($listeners) | Where-Object { $_.Port -eq $Number })
     }
 
-    function Get-FreePort([int]$From) {
-        for ($p = $From; $p -lt $From + 100; $p++) { if (-not (Test-PortBusy $p)) { return $p } }
+    function Get-FreePort([int]$From, [string]$Proto = 'tcp') {
+        for ($p = $From; $p -lt $From + 100; $p++) { if (-not (Test-PortBusy $p $Proto)) { return $p } }
         Fail 'aucun port libre trouvé à partir de {0}.' $From
     }
 
@@ -316,6 +316,10 @@ function Install-Kraken {
         }
         if ($K.Mode -eq 'local') { $values['KRAKEN_PUBLIC_URL'] = $K.PublicUrl } else { $values['KRAKEN_DOMAIN'] = $K.Domain }
         if ($K.ImageExplicit) { $values['KRAKEN_IMAGE'] = $K.Image }
+        # Vocal : le port, et l'adresse publique si on l'a trouvée (dans un conteneur, le serveur ne
+        # voit que des adresses internes).
+        $values['KRAKEN_RTC_PORT'] = [string]$K.RtcPort
+        if ($K.RtcIps) { $values['KRAKEN_RTC_IPS'] = $K.RtcIps }
         $template = Join-Path $K.Dir '.env.example'
         $lines = @()
         if (Test-Path -LiteralPath $template) { $lines = [System.IO.File]::ReadAllLines($template) }
@@ -476,6 +480,15 @@ function Install-Kraken {
         Fail 'une base KRAKEN existe déjà sur ce PC (volume Docker {0}), mais il n''y a pas de .env dans {1}.{2} Si c''est une ancienne installation dont le .env a disparu, remets-le dans {1} ; sinon, en dernier recours, efface cette base (toutes ses données !) avec : docker volume rm {0}' $volume $K.Dir $elsewhere
     }
 
+    # Mise à jour d'une instance d'avant le vocal : son port UDP ne doit pas être pris par un autre
+    # programme, sinon docker compose ne démarrerait plus rien.
+    function Test-RtcPort {
+        if (-not (Test-PortBusy ([int]$K.RtcPort) 'udp')) { return }
+        # Déjà le nôtre : l'instance tourne.
+        if ((Invoke-Compose @('port', '--protocol', 'udp', 'kraken', $K.RtcPort) -Quiet) -eq 0) { return }
+        Fail 'le port UDP {0}, celui des salons vocaux, est déjà pris par un autre programme. Choisis-en un autre : ajoute une ligne KRAKEN_RTC_PORT={1} (ou un autre port libre) dans {2}, puis relance.' $K.RtcPort ([int]$K.RtcPort + 1) $K.EnvFile
+    }
+
     function Start-Kraken {
         Step 'Démarrage de KRAKEN'
         if ((Invoke-Compose @('pull', '--quiet', 'db', 'caddy', 'backup')) -ne 0) {
@@ -539,7 +552,8 @@ function Install-Kraken {
         Say ''
         Say 'Avec irm | iex, passe les options par les variables, par exemple :'
         Say '  $env:KRAKEN_DOMAIN = ''chat.exemple.org''; irm {0} | iex' $InstallUrl
-        Say 'Autres variables : KRAKEN_REF (branche des fichiers, défaut main), KRAKEN_IMAGE, KRAKEN_HTTPS_PORT.'
+        Say 'Autres variables : KRAKEN_REF (branche des fichiers, défaut main), KRAKEN_IMAGE, KRAKEN_HTTPS_PORT,'
+        Say 'KRAKEN_RTC_PORT (port UDP des salons vocaux, défaut 3478, ou le suivant s''il est pris).'
     }
 
     # Première installation : la seule question (le domaine), puis le mode et les ports.
@@ -578,6 +592,19 @@ function Install-Kraken {
 
         if ($K.HttpPort -and -not (Test-Port $K.HttpPort)) { Fail 'port HTTP invalide : {0}' $K.HttpPort }
         if ($K.HttpsPort -and -not (Test-Port $K.HttpsPort)) { Fail 'port HTTPS invalide : {0}' $K.HttpsPort }
+        if ($K.RtcPort) {
+            if (-not (Test-Port $K.RtcPort)) { Fail 'port des salons vocaux invalide : {0}' $K.RtcPort }
+            if (Test-PortBusy ([int]$K.RtcPort) 'udp') {
+                Fail 'le port UDP {0} est déjà pris par un autre programme. Choisis-en un autre avec KRAKEN_RTC_PORT.' $K.RtcPort
+            }
+        } elseif (Test-PortBusy 3478 'udp') {
+            $K.RtcPort = [string](Get-FreePort 3479 'udp')
+            Say 'Le port UDP 3478 est déjà pris sur ce PC : les salons vocaux utiliseront le port {0}.' $K.RtcPort
+        } else {
+            $K.RtcPort = '3478'
+        }
+        # Adresse publique trouvée : c'est elle que les navigateurs joignent pour le vocal.
+        $K.RtcIps = $public
         if ($K.Mode -eq 'local') {
             if (-not $K.HttpPort) {
                 if (Test-PortBusy 80) {
@@ -625,6 +652,9 @@ function Install-Kraken {
         if (-not $K.HttpPort) { $K.HttpPort = '80' }
         $K.HttpsPort = Get-EnvValue 'KRAKEN_HTTPS_PORT'
         if (-not $K.HttpsPort) { $K.HttpsPort = '443' }
+        $K.RtcPort = Get-EnvValue 'KRAKEN_RTC_PORT'
+        if (-not $K.RtcPort) { $K.RtcPort = '3478' }
+        if (-not (Test-Port $K.RtcPort)) { Fail 'KRAKEN_RTC_PORT invalide dans {0} : {1} (un port UDP, 3478 par défaut).' $K.EnvFile $K.RtcPort }
         if ($K.Domain) {
             $K.Mode = 'domain'
             if (-not $K.PublicUrl) { $K.PublicUrl = 'https://' + $K.Domain }
@@ -653,7 +683,7 @@ function Install-Kraken {
         if ($K.Update) {
             Say '  Déjà installé : mise à jour, .env gardé tel quel'
         } else {
-            Say '  Mode : {0} ; adresse : {1} ; ports {2} (HTTP) et {3} (HTTPS)' $K.Mode $K.PublicUrl $K.HttpPort $K.HttpsPort
+            Say '  Mode : {0} ; adresse : {1} ; ports {2} (HTTP), {3} (HTTPS) et {4} (UDP, salons vocaux)' $K.Mode $K.PublicUrl $K.HttpPort $K.HttpsPort $K.RtcPort
         }
         if ($K.Src) {
             Say '  Fichiers : ceux du clone {0}' $K.Src
@@ -678,8 +708,8 @@ function Install-Kraken {
         Say $line
         if ($K.HttpsPending) {
             Say 'KRAKEN tourne, mais son certificat HTTPS n''est pas encore prêt.'
-            Say 'Vérifie que {0} pointe bien sur ce PC et que les ports 80 et 443 sont ouverts' $K.Domain
-            Say '(box, pare-feu, hébergeur). Caddy réessaie tout seul ; pour suivre :'
+            Say 'Vérifie que {0} pointe bien sur ce PC et que les ports 80 et 443 (TCP) et {1} (UDP)' $K.Domain $K.RtcPort
+            Say 'sont ouverts (box, pare-feu, hébergeur). Caddy réessaie tout seul ; pour suivre :'
             Say '  {0} logs -f caddy' (Get-ComposeHint)
             Say 'Ensuite, KRAKEN sera ici : {0}' $K.PublicUrl
         } else {
@@ -689,6 +719,12 @@ function Install-Kraken {
                 Say 'Si elles n''y arrivent pas, autorise Docker dans le pare-feu Windows (réseaux privés).'
             }
             Say 'Ouvre-la dans ton navigateur et crée ton compte.'
+        }
+        Say ''
+        Say 'Salons vocaux : le port UDP {0} doit être joignable (pare-feu Windows, hébergeur, box).' $K.RtcPort
+        if ($K.Mode -eq 'local') {
+            Say 'En HTTP simple, les navigateurs ne donnent le micro et le partage d''écran qu''à ce PC'
+            Say '(http://localhost) : sur les autres, on écoute et on regarde.'
         }
         Say ''
         Say 'Mettre à jour : relance la même commande (réglages et données sont gardés) :'
@@ -718,6 +754,8 @@ function Install-Kraken {
         Dir           = Get-Setting $Options.Dir 'KRAKEN_DIR'
         HttpPort      = Get-Setting $Options.Port 'KRAKEN_HTTP_PORT'
         HttpsPort     = Get-Setting '' 'KRAKEN_HTTPS_PORT'
+        RtcPort       = Get-Setting '' 'KRAKEN_RTC_PORT'
+        RtcIps        = ''
         Ref           = Get-Setting '' 'KRAKEN_REF'
         Image         = Get-Setting '' 'KRAKEN_IMAGE'
         ImageExplicit = $false
@@ -769,6 +807,7 @@ function Install-Kraken {
     $composeVars = @('KRAKEN_DOMAIN', 'KRAKEN_PUBLIC_URL', 'KRAKEN_HTTP_PORT', 'KRAKEN_HTTPS_PORT', 'KRAKEN_IMAGE',
         'POSTGRES_PASSWORD', 'KRAKEN_SMTP_URL', 'KRAKEN_SMTP_FROM', 'KRAKEN_AUTH_PER_MIN', 'KRAKEN_CONTACT',
         'KRAKEN_PROCESSORS', 'KRAKEN_SOURCE_URL', 'KRAKEN_SEED', 'RUST_LOG',
+        'KRAKEN_RTC_PORT', 'KRAKEN_RTC_IPS', 'KRAKEN_RTC_PUBLIC_PORT',
         'COMPOSE_FILE', 'COMPOSE_PROJECT_NAME', 'COMPOSE_PROFILES', 'COMPOSE_ENV_FILES')
     $savedEnv = @{}
     foreach ($name in $composeVars) { $savedEnv[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
@@ -790,7 +829,7 @@ function Install-Kraken {
         $env:KRAKEN_IMAGE = $K.Image
 
         Initialize-Docker
-        if (-not $K.Update) { Test-OldVolume }
+        if ($K.Update) { Test-RtcPort } else { Test-OldVolume }
         [void](New-Item -ItemType Directory -Force -Path $K.Dir)
         Install-Files
         # L'image d'abord : si elle manque, rien n'est écrit et la prochaine fois repose la question.

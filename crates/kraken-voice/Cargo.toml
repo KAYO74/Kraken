@@ -1,0 +1,22 @@
+[package]
+name = "kraken-voice"
+description = "Salons vocaux : SFU WebRTC (voix et partage d'écran) sur un seul port UDP"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+kraken-proto.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# DTLS et SRTP en Rust (RustCrypto), sans OpenSSL. Seuls les certificats DTLS passent par rcgen,
+# qui compile aws-lc (du C, par `cc` : le compilateur croisé du Dockerfile suffit).
+str0m = { version = "=0.24.1", default-features = false, features = ["rust-crypto"] }
+tracing = "0.1"
+# Adresses des interfaces réseau (candidats sur le réseau local).
+if-addrs = "0.15"
+
+# Windows x86_64 sans NASM : aws-lc prend ses objets assembleur précompilés.
+[target.'cfg(all(windows, target_arch = "x86_64"))'.dependencies]
+aws-lc-rs = { version = "1.18", default-features = false, features = ["prebuilt-nasm"] }

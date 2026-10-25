@@ -37,7 +37,8 @@ Options, et la variable d'environnement qui fait pareil :
   -h, --help       cette aide
 
 Autres variables : KRAKEN_REF (branche ou tag des fichiers téléchargés, défaut main),
-KRAKEN_IMAGE (image Docker, défaut ghcr.io/kayo74/kraken:latest), KRAKEN_HTTPS_PORT.
+KRAKEN_IMAGE (image Docker, défaut ghcr.io/kayo74/kraken:latest), KRAKEN_HTTPS_PORT,
+KRAKEN_RTC_PORT (port UDP des salons vocaux, défaut 3478, ou le suivant s'il est pris).
 
 Sans nom de domaine : une machine qui a une adresse IP publique (un serveur loué) reçoit
 une adresse en <ip>.sslip.io, avec un vrai HTTPS ; sinon (ordinateur derrière une box),
@@ -216,10 +217,10 @@ port_busy() {
 	fi
 }
 
-# Premier port libre à partir de $1.
+# Premier port libre à partir de $1 ($2 : tcp, par défaut, ou udp).
 free_port() {
 	free_p=$1
-	while port_busy "$free_p" tcp; do
+	while port_busy "$free_p" "${2:-tcp}"; do
 		free_p=$((free_p + 1))
 		if [ "$free_p" -ge $(($1 + 100)) ]; then die "aucun port libre trouvé à partir de $1."; fi
 	done
@@ -448,12 +449,17 @@ write_env() {
 	we_keys="KRAKEN_HTTP_PORT KRAKEN_HTTPS_PORT POSTGRES_PASSWORD"
 	if [ "$mode" = local ]; then we_keys="$we_keys KRAKEN_PUBLIC_URL"; else we_keys="$we_keys KRAKEN_DOMAIN"; fi
 	if [ -n "$image_explicit" ]; then we_keys="$we_keys KRAKEN_IMAGE"; fi
+	# Vocal : le port, et l'adresse publique si on l'a trouvée (dans un conteneur, le serveur ne
+	# voit que des adresses internes).
+	we_keys="$we_keys KRAKEN_RTC_PORT"
+	if [ -n "$rtc_ips" ]; then we_keys="$we_keys KRAKEN_RTC_IPS"; fi
 	we_tmpl="$dir/.env.example"
 	[ -f "$we_tmpl" ] || we_tmpl=/dev/null
 	(
 		umask 077
 		V_KRAKEN_DOMAIN=$domain V_KRAKEN_PUBLIC_URL=$public_url V_KRAKEN_HTTP_PORT=$http_port \
 			V_KRAKEN_HTTPS_PORT=$https_port V_POSTGRES_PASSWORD=$we_password V_KRAKEN_IMAGE=$image \
+			V_KRAKEN_RTC_PORT=$rtc_port V_KRAKEN_RTC_IPS=$rtc_ips \
 			awk -v keys="$we_keys" -v today="$(date +%F)" '
 			BEGIN {
 				print "# Réglages de cette instance KRAKEN, écrits par install.sh le " today "."
@@ -583,6 +589,19 @@ configure() {
 
 	if [ -n "$http_port" ]; then valid_port "$http_port" || die "port HTTP invalide : $http_port"; fi
 	if [ -n "$https_port" ]; then valid_port "$https_port" || die "port HTTPS invalide : $https_port"; fi
+	if [ -n "$rtc_port" ]; then
+		valid_port "$rtc_port" || die "port des salons vocaux invalide : $rtc_port"
+		if port_busy "$rtc_port" udp; then
+			die "le port UDP $rtc_port est déjà pris par un autre programme. Choisis-en un autre avec KRAKEN_RTC_PORT."
+		fi
+	elif port_busy 3478 udp; then
+		rtc_port=$(free_port 3479 udp)
+		say "Le port UDP 3478 est déjà pris sur cette machine : les salons vocaux utiliseront le port $rtc_port."
+	else
+		rtc_port=3478
+	fi
+	# Adresse publique trouvée : c'est elle que les navigateurs joignent pour le vocal.
+	rtc_ips=$pub
 	if [ "$mode" = local ]; then
 		if [ -z "$http_port" ]; then
 			if port_busy 80 tcp; then
@@ -625,6 +644,9 @@ read_settings() {
 	http_port=${http_port:-80}
 	https_port=$(env_get KRAKEN_HTTPS_PORT)
 	https_port=${https_port:-443}
+	rtc_port=$(env_get KRAKEN_RTC_PORT)
+	rtc_port=${rtc_port:-3478}
+	valid_port "$rtc_port" || die "KRAKEN_RTC_PORT invalide dans $dir/.env : $rtc_port (un port UDP, 3478 par défaut)."
 	if [ -n "$domain" ]; then
 		mode=domain
 		public_url=${public_url:-https://$domain}
@@ -650,9 +672,9 @@ open_firewall() {
 	have ufw || return 0
 	as_root env LC_ALL=C ufw status 2>/dev/null | grep -q "^Status: active" || return 0
 	if [ "$mode" = local ]; then
-		fw_ports="$http_port/tcp"
+		fw_ports="$http_port/tcp $rtc_port/udp"
 	else
-		fw_ports="$http_port/tcp $https_port/tcp $https_port/udp"
+		fw_ports="$http_port/tcp $https_port/tcp $https_port/udp $rtc_port/udp"
 	fi
 	if confirm "Le pare-feu ufw est actif. J'ouvre les ports de KRAKEN ($fw_ports) ?"; then
 		for fw_port in $fw_ports; do
@@ -660,6 +682,15 @@ open_firewall() {
 		done
 		say "Ports ouverts dans ufw : $fw_ports"
 	fi
+}
+
+# Mise à jour d'une instance d'avant le vocal : son port UDP ne doit pas être pris par un autre
+# programme, sinon docker compose ne démarrerait plus rien.
+check_rtc_port() {
+	port_busy "$rtc_port" udp || return 0
+	# Déjà le nôtre : l'instance tourne.
+	if (cd "$dir" && dk compose port --protocol udp kraken "$rtc_port") </dev/null >/dev/null 2>&1; then return 0; fi
+	die "le port UDP $rtc_port, celui des salons vocaux, est déjà pris par un autre programme. Choisis-en un autre : ajoute une ligne KRAKEN_RTC_PORT=$((rtc_port + 1)) (ou un autre port libre) dans $dir/.env, puis relance."
 }
 
 # Une base existe déjà sous ce nom de projet Docker (nom du dossier) : celle d'une autre instance,
@@ -791,7 +822,8 @@ summary() {
 	if [ -n "$https_pending" ]; then
 		say "KRAKEN tourne, mais son certificat HTTPS n'est pas encore prêt."
 		say "Vérifie que $domain pointe bien sur cette machine et que les ports 80 et 443"
-		say "sont ouverts (chez ton hébergeur aussi). Caddy réessaie tout seul ; pour suivre :"
+		say "(TCP) et $rtc_port (UDP) sont ouverts (chez ton hébergeur aussi). Caddy réessaie tout seul ;"
+		say "pour suivre :"
 		say "  $(compose_cmd) logs -f caddy"
 		say "Ensuite, KRAKEN sera ici : $public_url"
 	else
@@ -800,6 +832,12 @@ summary() {
 			say "Les personnes connectées au même réseau (Wi-Fi, box) l'ouvrent avec cette adresse."
 		fi
 		say "Ouvre-la dans ton navigateur et crée ton compte."
+	fi
+	say ""
+	say "Salons vocaux : le port UDP $rtc_port doit être joignable (pare-feu, hébergeur, box)."
+	if [ "$mode" = local ]; then
+		say "En HTTP simple, les navigateurs ne donnent le micro et le partage d'écran qu'à cette"
+		say "machine (http://localhost) : sur les autres, on écoute et on regarde."
 	fi
 	say ""
 	say "Mettre à jour : relance la même commande (réglages et données sont gardés) :"
@@ -818,6 +856,8 @@ main() {
 	dir=${KRAKEN_DIR:-}
 	http_port=${KRAKEN_HTTP_PORT:-}
 	https_port=${KRAKEN_HTTPS_PORT:-}
+	rtc_port=${KRAKEN_RTC_PORT:-}
+	rtc_ips=
 	ref=${KRAKEN_REF:-main}
 	image=${KRAKEN_IMAGE:-}
 	parse_args "$@"
@@ -835,6 +875,7 @@ main() {
 	unset KRAKEN_DOMAIN KRAKEN_PUBLIC_URL KRAKEN_HTTP_PORT KRAKEN_HTTPS_PORT KRAKEN_IMAGE \
 		POSTGRES_PASSWORD KRAKEN_SMTP_URL KRAKEN_SMTP_FROM KRAKEN_AUTH_PER_MIN KRAKEN_CONTACT \
 		KRAKEN_PROCESSORS KRAKEN_SOURCE_URL KRAKEN_SEED RUST_LOG \
+		KRAKEN_RTC_PORT KRAKEN_RTC_IPS KRAKEN_RTC_PUBLIC_PORT \
 		COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES COMPOSE_ENV_FILES
 
 	tty_ok=
@@ -875,7 +916,7 @@ main() {
 	*) die "Docker tourne ici en 32 bits : KRAKEN a besoin d'un système 64 bits." ;;
 	esac
 
-	if [ -z "$update" ]; then check_old_volume; fi
+	if [ -z "$update" ]; then check_old_volume; else check_rtc_port; fi
 	mkdir -p "$dir"
 	install_files
 	# L'image d'abord : si elle manque, rien n'est écrit et la prochaine fois repose la question.

@@ -163,7 +163,7 @@ pub async fn logout(State(state): State<AppState>, auth: Auth) -> ApiResult<impl
 /// Ferme toutes les sessions de ce compte, sur tous les appareils.
 pub async fn logout_all(State(state): State<AppState>, auth: Auth) -> ApiResult<impl IntoResponse> {
     state.db.revoke_all_sessions(auth.user.id).await?;
-    state.hub.kick(auth.user.id);
+    state.kick(auth.user.id);
     Ok((StatusCode::NO_CONTENT, clear_cookie(&state)))
 }
 
@@ -226,7 +226,7 @@ pub async fn reset_confirm(State(state): State<AppState>, Json(req): Json<ResetC
     let hash = hash_password(req.password).await.ok_or_else(|| AppError::invalid("Mot de passe refusé."))?;
     state.db.set_password(uid, &hash).await?;
     state.db.revoke_all_sessions(uid).await?;
-    state.hub.kick(uid);
+    state.kick(uid);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -242,7 +242,7 @@ pub async fn delete_account(
         return Err(AppError(StatusCode::FORBIDDEN, "bad_password", "Mot de passe incorrect.".into()));
     }
     state.db.request_deletion(auth.user.id).await?;
-    state.hub.kick(auth.user.id);
+    state.kick(auth.user.id);
     Ok((StatusCode::ACCEPTED, clear_cookie(&state)))
 }
 
