@@ -165,20 +165,26 @@ fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
     // Rester collé en bas quand un message arrive, sauf pour qui lit plus haut ; un envoi
     // de sa part y ramène toujours.
     let stick = StoredValue::new(true);
+    // Où lit celui qui est remonté : la liste est redessinée à chaque message, sa position doit
+    // rester la même.
+    let reading = StoredValue::new(0);
     let sent = StoredValue::new(0usize);
     Effect::new(move || {
         let pending = log.with(|l| l.pending.len());
         let mine = pending > sent.get_value();
         sent.set_value(pending);
-        if let Some(el) = scroller.get()
-            && (stick.get_value() || mine)
-        {
+        let Some(el) = scroller.get() else { return };
+        if stick.get_value() || mine {
             request_animation_frame(move || el.set_scroll_top(el.scroll_height()));
+        } else {
+            let top = reading.get_value();
+            request_animation_frame(move || el.set_scroll_top(top));
         }
     });
     let on_scroll = move |_| {
         if let Some(el) = scroller.get_untracked() {
             stick.set_value(el.scroll_top() + el.client_height() >= el.scroll_height() - 48);
+            reading.set_value(el.scroll_top());
         }
     };
     let retry = move |p: Pending| {
