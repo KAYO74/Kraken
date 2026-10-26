@@ -125,7 +125,7 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
   font-size: var(--text-sm-size); text-align: center; pointer-events: none; }
 .app-stage-asking { font-size: var(--text-sm-size); }
 /* Mon écran contrôlé ou demandé : visible où que je sois pendant l'appel. */
-.app-remote { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: var(--z-toast); display: grid; gap: var(--space-2);
+.app-remote { position: fixed; right: var(--space-4); top: calc(var(--size-header) + var(--space-3)); z-index: var(--z-toast); display: grid; gap: var(--space-2);
   width: min(var(--size-card), calc(100vw - 2 * var(--space-4))); padding: var(--space-3); border-radius: var(--radius-lg);
   border: 1px solid var(--border-strong); background: var(--surface-raised); box-shadow: var(--shadow-pop); }
 .app-remote-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); color: var(--text); font-size: var(--text-sm-size); }

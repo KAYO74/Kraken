@@ -1,14 +1,44 @@
+<p align="center">
+  <img src="docs/images/banniere.png" alt="KRAKEN, messagerie libre, gratuite et auto-hébergeable" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/KAYO74/Kraken/releases/latest"><img src="https://img.shields.io/badge/version-0.4.0-2b7a78" alt="Version 0.4.0"></a>
+  <a href="https://github.com/KAYO74/Kraken/actions/workflows/ci.yml"><img src="https://github.com/KAYO74/Kraken/actions/workflows/ci.yml/badge.svg" alt="Tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-AGPL--3.0-7B61FF" alt="Licence AGPL-3.0"></a>
+  <img src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-5cc2bd" alt="Windows, macOS, Linux">
+  <img src="https://img.shields.io/badge/%C3%A9crit%20en-Rust-CE422B" alt="Écrit en Rust">
+</p>
+
+<p align="center">
+  <b>KRAKEN</b> est une messagerie libre pour ta communauté : serveurs, salons, messages privés, vocal et partage d'écran.<br>
+  Tu l'héberges toi-même, sans pièce d'identité ni numéro de téléphone, et tout est gratuit, y compris ce que d'autres font payer.
+</p>
+
 # KRAKEN
-
-Messagerie libre et auto-hébergeable, écrite en Rust : serveurs, salons, MP, et à terme vocal, vidéo et partage d'écran. Tout est gratuit, y compris ce que d'autres font payer.
-
-État : tranche verticale (comptes, serveurs, invitations, messages en direct) sur PostgreSQL. Voir `replica/build-log.md` et `replica/backend.md`.
 
 ![Un salon de KRAKEN](docs/screens/salon.png)
 
 | Accueil | Réglages | Sur téléphone |
 | --- | --- | --- |
 | ![Accueil et amis](docs/screens/accueil.png) | ![Réglages, apparence](docs/screens/reglages.png) | ![Un salon sur téléphone](docs/screens/mobile-salon.png) |
+
+## Nouveautés
+
+**Salons vocaux et partage d'écran (0.3.0).** Rejoins un salon vocal en un clic, parle, coupe ton micro ou le son, et partage ton écran (avec le son) à tout le salon. Chacun choisit quel écran regarder, en grand ou en plein écran.
+
+![Regarder un écran partagé dans un salon vocal](docs/screens/appel.png)
+
+**Contrôle à distance (0.4.0).** Celui qui regarde ton écran peut demander à le piloter, comme avec un logiciel d'assistance : tu acceptes dans KRAKEN, puis ton ordinateur te redemande l'accord. Sa souris et son clavier agissent alors chez toi. Échap, « Arrêter le contrôle » ou la fin du partage rendent la main à tout moment. Disponible dans l'appli de bureau (sous Linux en session X11 ; sous macOS, autorise KRAKEN dans Accessibilité).
+
+| La demande arrive | Pendant le contrôle |
+| --- | --- |
+| ![Une demande de contrôle de l'écran](docs/screens/controle-demande.png) | ![Piloter l'écran partagé](docs/screens/controle.png) |
+
+**Une apparence à elle (0.4.0).** Nouvelles tuiles de serveurs, carte « Mon compte », panneau d'appel, textes réécrits, et un logo aux coins arrondis.
+
+> [!TIP]
+> **Fait avec l'IA.** KRAKEN est un projet personnel construit avec l'intelligence artificielle : le code, la documentation et les images de cette page ont été écrits par Claude (Anthropic) à partir des demandes de son créateur, pour offrir à tous une messagerie libre et gratuite. Rien n'est repris de logiciels propriétaires : le code, les textes et l'apparence sont originaux, les icônes viennent de [Lucide](https://lucide.dev) (licence ISC) et les polices sont Inter et JetBrains Mono (licence SIL OFL).
 
 ## Télécharger
 
