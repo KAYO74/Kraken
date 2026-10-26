@@ -78,9 +78,30 @@ pub async fn messages(channel: Id) -> ApiResult<Vec<Message>> {
     call(Method::GET, &format!("/channels/{channel}/messages?limit=50"), NO_BODY).await
 }
 
-pub async fn send_message(channel: Id, content: &str, nonce: &str) -> ApiResult<Message> {
-    let body = CreateMessage { content: content.into(), nonce: Some(nonce.into()) };
+/// La page de messages plus anciens que `before`.
+pub async fn messages_before(channel: Id, before: Id) -> ApiResult<Vec<Message>> {
+    call(Method::GET, &format!("/channels/{channel}/messages?limit=100&before={before}"), NO_BODY).await
+}
+
+pub async fn send_message(channel: Id, content: &str, nonce: &str, reply_to: Option<Id>) -> ApiResult<Message> {
+    let body = CreateMessage { content: content.into(), nonce: Some(nonce.into()), reply_to };
     call(Method::POST, &format!("/channels/{channel}/messages"), Some(body)).await
+}
+
+pub async fn edit_message(channel: Id, id: Id, content: &str) -> ApiResult<Message> {
+    let body = EditMessage { content: content.into() };
+    call(Method::PATCH, &format!("/channels/{channel}/messages/{id}"), Some(body)).await
+}
+
+pub async fn delete_message(channel: Id, id: Id) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/channels/{channel}/messages/{id}"), NO_BODY).await
+}
+
+/// Ajoute (`on`) ou retire ma réaction.
+pub async fn react(channel: Id, id: Id, emoji: &str, on: bool) -> ApiResult<()> {
+    let e = String::from(js_sys::encode_uri_component(emoji));
+    let method = if on { Method::PUT } else { Method::DELETE };
+    call(method, &format!("/channels/{channel}/messages/{id}/reactions/{e}/@me"), NO_BODY).await
 }
 
 pub async fn create_invite(channel: Id) -> ApiResult<Invite> {

@@ -197,3 +197,88 @@ async fn odd_inputs_and_races(pool: PgPool) {
     let joined = [r1.unwrap().1, r2.unwrap().1];
     assert_eq!(joined.iter().filter(|m| m.is_some()).count(), 1);
 }
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn edit_delete_reply_react_and_mention(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (a, b) = two_users(&db).await;
+    let outsider = db.create_user("noa", "noa@example.org", "h".into()).await.unwrap();
+    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
+    let inv = db.create_invite(g.guild.id, Some(general), a.id, 0, None).await.unwrap();
+    db.use_invite(&inv.code, b.id).await.unwrap();
+    let other = db
+        .create_channel(g.guild.id, &CreateChannel { name: "autre".into(), kind: ChannelKind::Text, parent_id: None })
+        .await
+        .unwrap();
+
+    // Mentions : seulement ceux qui voient le salon ; @everyone seulement avec le droit.
+    let draft = |content| Draft { content, ..Default::default() };
+    let (m, _) = db.send_message(general, a.id, draft("salut @sam et @noa, @everyone `@lou`")).await.unwrap();
+    assert_eq!(m.mentions.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(), ["sam"]);
+    assert!(!m.mention_everyone, "pas le droit de mentionner tout le monde");
+    let (all, _) = db
+        .send_message(
+            general,
+            a.id,
+            Draft { content: "@here réunion", may_mention_everyone: true, ..Default::default() },
+        )
+        .await
+        .unwrap();
+    assert!(all.mention_everyone);
+
+    // Réponse : même salon seulement ; l'aperçu suit l'original.
+    let (r, _) = db.send_message(general, b.id, Draft { reply_to: Some(m.id), ..draft("oui !") }).await.unwrap();
+    let reply = r.reply.clone().unwrap();
+    assert_eq!((reply.id, reply.author.unwrap().id), (Some(m.id), a.id));
+    assert!(reply.content.starts_with("salut @sam"));
+    assert_eq!(
+        db.send_message(other.id, b.id, Draft { reply_to: Some(m.id), ..draft("ailleurs") }).await.err(),
+        Some(DbError::Invalid("reply_to"))
+    );
+
+    // Modifier : l'auteur seulement ; les mentions sont recalculées.
+    assert_eq!(db.edit_message(general, m.id, b.id, "pirate", true).await.err(), Some(DbError::Forbidden("author")));
+    assert_eq!(db.edit_message(other.id, m.id, a.id, "mauvais salon", false).await.err(), Some(DbError::NotFound));
+    assert_eq!(db.edit_message(general, m.id, a.id, "   ", false).await.err(), Some(DbError::Invalid("content")));
+    let e = db.edit_message(general, m.id, a.id, " corrigé, sans mention ", false).await.unwrap();
+    assert_eq!(e.content, "corrigé, sans mention");
+    assert!(e.edited_at.is_some() && e.mentions.is_empty());
+    let back = db.messages(general, None, 10).await.unwrap();
+    assert_eq!(back.iter().find(|x| x.id == r.id).unwrap().reply.as_ref().unwrap().content, "corrigé, sans mention");
+
+    // Réactions : une par personne et par emoji, emojis seulement, 20 différents au plus.
+    assert!(db.add_reaction(general, m.id, b.id, "🐙").await.unwrap());
+    assert!(!db.add_reaction(general, m.id, b.id, "🐙").await.unwrap(), "déjà là");
+    assert!(db.add_reaction(general, m.id, a.id, "🐙").await.unwrap());
+    assert!(db.add_reaction(general, m.id, a.id, "👍").await.unwrap());
+    assert_eq!(db.add_reaction(general, m.id, a.id, "ok").await.err(), Some(DbError::Invalid("emoji")));
+    assert_eq!(db.add_reaction(other.id, m.id, a.id, "👍").await.err(), Some(DbError::NotFound));
+    let seen = db.message(m.id).await.unwrap().unwrap().reactions;
+    assert_eq!(
+        seen,
+        vec![
+            Reaction { emoji: "🐙".into(), users: vec![b.id, a.id] },
+            Reaction { emoji: "👍".into(), users: vec![a.id] }
+        ]
+    );
+    for (e, _) in kraken_core::emoji::EMOJIS.iter().filter(|(e, _)| !["🐙", "👍"].contains(e)).take(18) {
+        db.add_reaction(general, m.id, a.id, e).await.unwrap();
+    }
+    assert_eq!(db.add_reaction(general, m.id, b.id, "🦀").await.err(), Some(DbError::Invalid("reactions")));
+    assert!(db.add_reaction(general, m.id, b.id, "👍").await.unwrap(), "un emoji déjà présent reste possible");
+    assert!(db.remove_reaction(general, m.id, b.id, "🐙").await.unwrap());
+    assert!(!db.remove_reaction(general, m.id, b.id, "🐙").await.unwrap());
+
+    // Supprimer : l'auteur, ou qui gère les messages ; la réponse garde sa trace.
+    assert_eq!(db.delete_message(general, m.id, b.id, false).await.err(), Some(DbError::Forbidden("author")));
+    assert_eq!(db.delete_message(general, m.id, outsider.id, false).await.err(), Some(DbError::Forbidden("author")));
+    db.delete_message(general, r.id, b.id, false).await.unwrap();
+    let (r2, _) = db.send_message(general, b.id, Draft { reply_to: Some(m.id), ..draft("encore") }).await.unwrap();
+    db.delete_message(general, m.id, b.id, true).await.unwrap();
+    assert_eq!(db.delete_message(general, m.id, a.id, true).await.err(), Some(DbError::NotFound));
+    let orphan = db.message(r2.id).await.unwrap().unwrap().reply.unwrap();
+    assert_eq!((orphan.id, orphan.author), (None, None));
+    let left: i64 = sqlx::query_scalar("select count(*) from reactions").fetch_one(&db.pool).await.unwrap();
+    assert_eq!(left, 0, "les réactions partent avec le message");
+}

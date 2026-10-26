@@ -1,5 +1,5 @@
-//! Limite de débit par client sur les routes de connexion, d'inscription, d'e-mail et de
-//! suppression de compte.
+//! Limite de débit par client sur les routes de connexion, d'inscription, d'e-mail, de
+//! suppression de compte et sur les réactions.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::NonZeroU32;
@@ -23,7 +23,12 @@ pub struct Limiter {
 
 impl Limiter {
     pub fn new(cfg: &Config) -> Self {
-        let n = NonZeroU32::new(cfg.auth_per_min.max(1)).unwrap();
+        Self::per_minute(cfg, cfg.auth_per_min)
+    }
+
+    /// `per_min` essais par minute et par client.
+    pub fn per_minute(cfg: &Config, per_min: u32) -> Self {
+        let n = NonZeroU32::new(per_min.max(1)).unwrap();
         let inner = Arc::new(RateLimiter::keyed(Quota::per_minute(n)));
         // Les compteurs revenus au plein sont oubliés : la table ne grossit pas sans fin.
         let weak = Arc::downgrade(&inner);

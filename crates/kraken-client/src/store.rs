@@ -39,6 +39,8 @@ pub struct Pending {
     pub nonce: String,
     pub content: String,
     pub error: Option<String>,
+    /// En réponse à ce message.
+    pub reply_to: Option<Id>,
 }
 
 #[derive(Clone, Default, PartialEq)]
@@ -56,6 +58,45 @@ impl Log {
         let at = self.items.partition_point(|x| x.id < m.id);
         if self.items.get(at).is_none_or(|x| x.id != m.id) {
             self.items.insert(at, m);
+        }
+    }
+
+    /// Message modifié : remplacé à sa place, et l'aperçu des réponses suit.
+    pub fn update(&mut self, m: Message) {
+        let excerpt: String = m.content.chars().take(REPLY_EXCERPT).collect();
+        for r in self.items.iter_mut().filter_map(|x| x.reply.as_mut()).filter(|r| r.id == Some(m.id)) {
+            r.content = excerpt.clone();
+        }
+        if let Some(x) = self.items.iter_mut().find(|x| x.id == m.id) {
+            *x = m;
+        }
+    }
+
+    /// Message supprimé : il disparaît, ses réponses disent que l'original n'est plus là.
+    pub fn remove(&mut self, id: Id) {
+        self.items.retain(|x| x.id != id);
+        for r in self.items.iter_mut().filter_map(|x| x.reply.as_mut()).filter(|r| r.id == Some(id)) {
+            *r = Reply { id: None, author: None, content: String::new() };
+        }
+    }
+
+    /// Réaction ajoutée (`on`) ou retirée ; sans effet si c'est déjà le cas.
+    pub fn react(&mut self, mid: Id, uid: Id, emoji: &str, on: bool) {
+        let Some(m) = self.items.iter_mut().find(|x| x.id == mid) else { return };
+        match m.reactions.iter_mut().position(|r| r.emoji == emoji) {
+            Some(i) => {
+                let users = &mut m.reactions[i].users;
+                if on && !users.contains(&uid) {
+                    users.push(uid);
+                } else if !on {
+                    users.retain(|u| *u != uid);
+                    if users.is_empty() {
+                        m.reactions.remove(i);
+                    }
+                }
+            }
+            None if on => m.reactions.push(Reaction { emoji: emoji.into(), users: vec![uid] }),
+            None => {}
         }
     }
 }
@@ -137,6 +178,43 @@ impl Store {
         self.logs.update(|l| f(l.entry(channel).or_default()));
     }
 
+    /// Comme [`Self::log`], seulement pour un salon déjà ouvert.
+    pub fn log_if_open(&self, channel: Id, f: impl FnOnce(&mut Log)) {
+        if self.logs.with_untracked(|l| l.contains_key(&channel)) {
+            self.log(channel, f);
+        }
+    }
+
+    /// Mes droits dans un serveur, d'après ses rôles (les surcharges des salons n'y sont pas :
+    /// sert à montrer ou cacher des boutons, le serveur vérifie de son côté).
+    pub fn guild_perms(&self, guild: Id) -> u64 {
+        let Some(me) = self.me.with_untracked(|m| m.as_ref().map(|m| m.id)) else { return 0 };
+        self.guilds.with(|gs| {
+            let Some(g) = gs.iter().find(|g| g.guild.id == guild) else { return 0 };
+            let Some(m) = g.members.iter().find(|m| m.user.id == me) else { return 0 };
+            let role = |id: &Id| g.roles.iter().find(|r| r.id == *id).map_or(0, |r| r.permissions);
+            kraken_core::perms::base(g.guild.owner_id == me, role(&guild), m.roles.iter().map(role))
+        })
+    }
+
+    /// Le nom à montrer pour quelqu'un : surnom du serveur, nom affiché ou pseudo.
+    pub fn name_of(&self, guild: Option<Id>, uid: Id) -> Option<String> {
+        if let Some(g) = guild
+            && let Some(n) = self.guilds.with(|gs| {
+                gs.iter()
+                    .find(|x| x.guild.id == g)
+                    .and_then(|x| x.members.iter().find(|m| m.user.id == uid))
+                    .map(|m| m.nick.clone().unwrap_or_else(|| m.user.name().to_string()))
+            })
+        {
+            return Some(n);
+        }
+        if let Some(me) = self.me.with(|m| m.clone().filter(|m| m.id == uid)) {
+            return Some(me.name().to_string());
+        }
+        self.dms.with(|d| d.iter().flat_map(|c| &c.recipients).find(|u| u.id == uid).map(|u| u.name().to_string()))
+    }
+
     /// Remplace partout la fiche d'un utilisateur (nom affiché changé).
     pub fn update_user(&self, u: User) {
         if self.me.with_untracked(|m| m.as_ref().is_some_and(|m| m.id == u.id)) {
@@ -182,8 +260,16 @@ impl Store {
         match ev {
             Event::MessageCreate(m) => self.log(m.channel_id, |l| {
                 l.pending.retain(|p| Some(&p.nonce) != m.nonce.as_ref());
-                l.insert(m);
+                l.insert(*m);
             }),
+            Event::MessageUpdate(m) => self.log_if_open(m.channel_id, |l| l.update(*m)),
+            Event::MessageDelete { channel_id, id } => self.log_if_open(channel_id, |l| l.remove(id)),
+            Event::ReactionAdd { channel_id, message_id, user_id, emoji } => {
+                self.log_if_open(channel_id, |l| l.react(message_id, user_id, &emoji, true))
+            }
+            Event::ReactionRemove { channel_id, message_id, user_id, emoji } => {
+                self.log_if_open(channel_id, |l| l.react(message_id, user_id, &emoji, false))
+            }
             Event::ChannelCreate(c) => {
                 // Déjà là si l'événement a croisé le READY.
                 let Some(gid) = c.guild_id else {

@@ -34,6 +34,9 @@ impl From<DbError> for AppError {
                 Self(StatusCode::CONFLICT, "conflict", "Un compte existe déjà avec cette adresse.".into())
             }
             DbError::Conflict(f) => Self(StatusCode::CONFLICT, "conflict", format!("Déjà utilisé : {f}.")),
+            DbError::Invalid("reactions") => Self::invalid("20 emojis différents au plus sur un message."),
+            DbError::Invalid("emoji") => Self::invalid("Seuls les emojis servent de réaction."),
+            DbError::Invalid("reply_to") => Self::invalid("Le message d'origine n'est plus dans ce salon."),
             DbError::Invalid(f) => Self::invalid(format!("Valeur refusée : {f}.")),
             DbError::Forbidden("banned") => {
                 Self(StatusCode::FORBIDDEN, "banned", "Tu as été banni de ce serveur.".into())

@@ -12,6 +12,7 @@ use kraken_core::perms;
 use kraken_proto::*;
 use rand::Rng;
 use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
+use sqlx::types::Json;
 use sqlx::{Postgres, Row, Transaction};
 
 pub use jobs::Job;
@@ -126,14 +127,34 @@ fn channel_from(r: &PgRow) -> sqlx::Result<Channel> {
 
 fn message_sql(filter: &str) -> String {
     format!(
-        "select m.id, m.channel_id, m.content, m.nonce, (extract(epoch from m.created_at) * 1000)::int8 as created_ms,
-                (extract(epoch from m.edited_at) * 1000)::int8 as edited_ms, {}
-         from messages m left join users a on a.id = m.author_id {filter}",
-        user_cols("a")
+        "select m.id, m.channel_id, m.content, m.nonce, m.kind, m.reply_to_id, m.mention_everyone,
+                (extract(epoch from m.created_at) * 1000)::int8 as created_ms,
+                (extract(epoch from m.edited_at) * 1000)::int8 as edited_ms, {}, {},
+                left(r.content, {REPLY_EXCERPT}) as reply_content,
+                coalesce((select json_agg(json_build_object('emoji', x.emoji_key, 'users', x.users) order by x.first)
+                          from (select emoji_key, array_agg(user_id order by created_at, user_id) as users,
+                                       min(created_at) as first
+                                from reactions where message_id = m.id group by emoji_key) x), '[]') as reactions,
+                coalesce((select json_agg(json_build_object('id', u.id, 'username', u.username,
+                                  'display_name', u.display_name, 'avatar', u.avatar_key) order by u.username)
+                          from message_mentions mm join users u on u.id = mm.user_id
+                          where mm.message_id = m.id), '[]') as mentions
+         from messages m left join users a on a.id = m.author_id
+         left join messages r on r.id = m.reply_to_id left join users ra on ra.id = r.author_id {filter}",
+        user_cols("a"),
+        user_cols("ra"),
     )
 }
 
 fn message_from(r: &PgRow) -> sqlx::Result<Message> {
+    let reply = match r.try_get::<&str, _>("kind")? {
+        "reply" => Some(Reply {
+            id: r.try_get("reply_to_id")?,
+            author: user_from(r, "ra")?,
+            content: r.try_get::<Option<String>, _>("reply_content")?.unwrap_or_default(),
+        }),
+        _ => None,
+    };
     Ok(Message {
         id: r.try_get("id")?,
         channel_id: r.try_get("channel_id")?,
@@ -142,8 +163,25 @@ fn message_from(r: &PgRow) -> sqlx::Result<Message> {
         nonce: r.try_get("nonce")?,
         created_at: r.try_get("created_ms")?,
         edited_at: r.try_get("edited_ms")?,
+        reply,
+        reactions: r.try_get::<Json<Vec<Reaction>>, _>("reactions")?.0,
+        mentions: r.try_get::<Json<Vec<User>>, _>("mentions")?.0,
+        mention_everyone: r.try_get("mention_everyone")?,
     })
 }
+
+/// Un message à envoyer.
+#[derive(Clone, Debug, Default)]
+pub struct Draft<'a> {
+    pub content: &'a str,
+    pub nonce: Option<String>,
+    pub reply_to: Option<Id>,
+    /// L'auteur a le droit de mentionner `@everyone` et `@here` dans ce salon.
+    pub may_mention_everyone: bool,
+}
+
+/// Une réaction ajoutée ou retirée a-t-elle changé quelque chose ?
+pub type Changed = bool;
 
 #[derive(Clone)]
 pub struct Db {
@@ -682,15 +720,35 @@ impl Db {
         content: &str,
         nonce: Option<String>,
     ) -> Result<(Message, bool)> {
-        let content = content.trim();
+        self.send_message(cid, author, Draft { content, nonce, ..Default::default() }).await
+    }
+
+    /// Envoie un message, éventuellement en réponse à un autre du même salon. Les mentions
+    /// `@pseudo` ne retiennent que ceux qui voient le salon.
+    pub async fn send_message(&self, cid: Id, author: Id, d: Draft<'_>) -> Result<(Message, bool)> {
+        let content = d.content.trim();
         if content.is_empty() || content.chars().count() > MAX_MESSAGE_LEN {
             return Err(DbError::Invalid("content"));
         }
         if !self.channel(cid).await?.is_some_and(|c| c.kind.is_textual()) {
             return Err(DbError::NotFound);
         }
+        if let Some(r) = d.reply_to {
+            let here: bool =
+                sqlx::query_scalar("select exists(select 1 from messages where id = $1 and channel_id = $2)")
+                    .bind(r)
+                    .bind(cid)
+                    .fetch_one(&self.pool)
+                    .await?;
+            if !here {
+                return Err(DbError::Invalid("reply_to"));
+            }
+        }
+        let (mentioned, everyone) = self.mentioned(cid, content).await?;
+        let everyone = everyone && d.may_mention_everyone;
         let id: Option<Id> = sqlx::query_scalar(
-            "with m as (insert into messages (channel_id, author_id, content, nonce) values ($1, $2, $3, $4)
+            "with m as (insert into messages (channel_id, author_id, content, nonce, kind, reply_to_id, mention_everyone)
+                        values ($1, $2, $3, $4, case when $5::uuid is null then 'default' else 'reply' end, $5, $6)
                         on conflict (author_id, channel_id, nonce) where nonce is not null do nothing
                         returning id, channel_id)
              update channels c set last_message_id = greatest(c.last_message_id, m.id) from m
@@ -699,21 +757,184 @@ impl Db {
         .bind(cid)
         .bind(author)
         .bind(content)
-        .bind(&nonce)
+        .bind(&d.nonce)
+        .bind(d.reply_to)
+        .bind(everyone)
         .fetch_optional(&self.pool)
         .await?;
         let r = match id {
-            Some(id) => sqlx::query(&message_sql("where m.id = $1")).bind(id).fetch_one(&self.pool).await?,
+            Some(id) => {
+                self.set_mentions(id, &mentioned).await?;
+                self.message(id).await?.ok_or(DbError::NotFound)?
+            }
             None => {
-                sqlx::query(&message_sql("where m.author_id = $1 and m.nonce = $2 and m.channel_id = $3"))
+                let r = sqlx::query(&message_sql("where m.author_id = $1 and m.nonce = $2 and m.channel_id = $3"))
                     .bind(author)
-                    .bind(&nonce)
+                    .bind(&d.nonce)
                     .bind(cid)
                     .fetch_one(&self.pool)
-                    .await?
+                    .await?;
+                message_from(&r)?
             }
         };
-        Ok((message_from(&r)?, id.is_some()))
+        Ok((r, id.is_some()))
+    }
+
+    pub async fn message(&self, mid: Id) -> Result<Option<Message>> {
+        let r = sqlx::query(&message_sql("where m.id = $1")).bind(mid).fetch_optional(&self.pool).await?;
+        Ok(r.as_ref().map(message_from).transpose()?)
+    }
+
+    /// Les personnes mentionnées qui voient le salon, et si `@everyone`/`@here` est écrit.
+    async fn mentioned(&self, cid: Id, content: &str) -> Result<(Vec<Id>, bool)> {
+        let (names, everyone) = kraken_core::markdown::mentions(content);
+        if names.is_empty() {
+            return Ok((vec![], everyone));
+        }
+        let ids: Vec<Id> = sqlx::query_scalar("select id from users where username = any($1) and deleted_at is null")
+            .bind(&names)
+            .fetch_all(&self.pool)
+            .await?;
+        let audience = self.channel_audience(cid).await?;
+        Ok((ids.into_iter().filter(|u| audience.contains(u)).collect(), everyone))
+    }
+
+    async fn set_mentions(&self, mid: Id, users: &[Id]) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("delete from message_mentions where message_id = $1 and user_id <> all($2)")
+            .bind(mid)
+            .bind(users)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "insert into message_mentions (message_id, user_id) select $1, unnest($2::uuid[]) on conflict do nothing",
+        )
+        .bind(mid)
+        .bind(users)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Modifie le texte d'un message de ce salon. Seul son auteur le peut (`Forbidden` sinon).
+    pub async fn edit_message(
+        &self,
+        cid: Id,
+        mid: Id,
+        editor: Id,
+        content: &str,
+        may_mention_everyone: bool,
+    ) -> Result<Message> {
+        let content = content.trim();
+        if content.is_empty() || content.chars().count() > MAX_MESSAGE_LEN {
+            return Err(DbError::Invalid("content"));
+        }
+        let author: Option<Option<Id>> =
+            sqlx::query_scalar("select author_id from messages where id = $1 and channel_id = $2")
+                .bind(mid)
+                .bind(cid)
+                .fetch_optional(&self.pool)
+                .await?;
+        match author {
+            None => return Err(DbError::NotFound),
+            Some(a) if a != Some(editor) => return Err(DbError::Forbidden("author")),
+            Some(_) => {}
+        }
+        let (mentioned, everyone) = self.mentioned(cid, content).await?;
+        let done = sqlx::query(
+            "update messages set content = $3, edited_at = now(), mention_everyone = $4
+             where id = $1 and author_id = $2 and kind in ('default', 'reply') and content <> $3",
+        )
+        .bind(mid)
+        .bind(editor)
+        .bind(content)
+        .bind(everyone && may_mention_everyone)
+        .execute(&self.pool)
+        .await?;
+        if done.rows_affected() > 0 {
+            self.set_mentions(mid, &mentioned).await?;
+        }
+        self.message(mid).await?.ok_or(DbError::NotFound)
+    }
+
+    /// Supprime un message de ce salon : son auteur, ou quelqu'un qui gère les messages.
+    pub async fn delete_message(&self, cid: Id, mid: Id, uid: Id, can_manage: bool) -> Result<()> {
+        let author: Option<Option<Id>> =
+            sqlx::query_scalar("select author_id from messages where id = $1 and channel_id = $2")
+                .bind(mid)
+                .bind(cid)
+                .fetch_optional(&self.pool)
+                .await?;
+        match author {
+            None => return Err(DbError::NotFound),
+            Some(a) if a != Some(uid) && !can_manage => return Err(DbError::Forbidden("author")),
+            Some(_) => {}
+        }
+        sqlx::query("delete from messages where id = $1 and channel_id = $2")
+            .bind(mid)
+            .bind(cid)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Ajoute ma réaction ; `false` si elle y était déjà. Au plus
+    /// [`kraken_core::emoji::MAX_REACTIONS`] emojis différents par message.
+    pub async fn add_reaction(&self, cid: Id, mid: Id, uid: Id, emoji: &str) -> Result<Changed> {
+        if !kraken_core::emoji::valid(emoji) {
+            return Err(DbError::Invalid("emoji"));
+        }
+        let mut tx = self.pool.begin().await?;
+        // Verrou sur le message : deux nouvelles réactions simultanées ne dépassent pas la limite.
+        sqlx::query("select 1 from messages where id = $1 and channel_id = $2 for update")
+            .bind(mid)
+            .bind(cid)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(DbError::NotFound)?;
+        let (kinds, known): (i64, bool) = sqlx::query_as(
+            "select count(distinct emoji_key), coalesce(bool_or(emoji_key = $2), false) from reactions where message_id = $1",
+        )
+        .bind(mid)
+        .bind(emoji)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !known && kinds as usize >= kraken_core::emoji::MAX_REACTIONS {
+            return Err(DbError::Invalid("reactions"));
+        }
+        let added = sqlx::query(
+            "insert into reactions (message_id, user_id, emoji_key) values ($1, $2, $3) on conflict do nothing",
+        )
+        .bind(mid)
+        .bind(uid)
+        .bind(emoji)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected()
+            > 0;
+        tx.commit().await?;
+        Ok(added)
+    }
+
+    /// Retire ma réaction ; `false` s'il n'y en avait pas.
+    pub async fn remove_reaction(&self, cid: Id, mid: Id, uid: Id, emoji: &str) -> Result<Changed> {
+        let here: bool = sqlx::query_scalar("select exists(select 1 from messages where id = $1 and channel_id = $2)")
+            .bind(mid)
+            .bind(cid)
+            .fetch_one(&self.pool)
+            .await?;
+        if !here {
+            return Err(DbError::NotFound);
+        }
+        Ok(sqlx::query("delete from reactions where message_id = $1 and user_id = $2 and emoji_key = $3 and not burst")
+            .bind(mid)
+            .bind(uid)
+            .bind(emoji)
+            .execute(&self.pool)
+            .await?
+            .rows_affected()
+            > 0)
     }
 
     // ───────── invitations ─────────
