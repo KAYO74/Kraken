@@ -30,6 +30,14 @@ Vérifiée par `cargo test -p kraken-server` (HTTP + WebSocket réels) et `e2e/s
 
 Client : une session vocale globale (`voice.rs`) et ses écrans (`call.rs`). Vérifié en vrai contre `kraken-server --seed` (UDP sur 127.0.0.1) avec deux Chromium à micro et écran factices (`--use-fake-ui-for-media-stream --use-fake-device-for-media-stream`, qui suffisent aussi à `getDisplayMedia`) : chacun voit et entend l'autre (niveau mesuré par WebAudio), l'écran partagé n'arrive qu'à qui regarde (1440×810, environ 17 i/s reçues), micro et son coupés vus de l'autre côté, fin de partage par le bouton du navigateur, page sans micro (écoute et regarde), micro refusé (entre en sourdine), vocal indisponible (503), connexion reprise par un autre onglet puis « Reconnecter » ; axe sans violation avant et pendant l'appel.
 
+## Contrôle à distance (S18, 2026-10-26)
+
+Ajout propre à KRAKEN (l'original n'en a pas). Dans un appel, qui regarde un écran clique « Demander le contrôle » ; le serveur (`kraken-voice`) relaie demande, réponse, actions et fin par le canal de données, seulement entre un spectateur de cet écran et celui qui le partage, dans le même salon ; seul le spectateur accepté envoie des actions (120 par seconde, rafales de 240, le reste jeté) ; tout s'arrête avec le partage, le « ne plus regarder », un départ ou une coupure. Côté partage, seule l'appli de bureau (0.4.0) joue les actions (`apps/desktop/src/remote.rs`, enigo) : commandes réservées à l'origine de l'instance (capacité ajoutée au lancement), fenêtre native « Autoriser ? » à chaque fois, jeton par session, fin au menu « Arrêter le contrôle à distance » (Ctrl+Alt+Maj+K), au rechargement de la page ou à la fermeture. Un navigateur qui partage refuse d'office (« il faut l'appli de bureau »).
+
+Vérifié : `kraken-voice/tests/roundtrip.rs` (règles du relais, en vrai sur UDP), tests unitaires (positions dans l'image, touches, choix de l'écran), `e2e/specs/remote-control.spec.ts` (refus d'office dans un navigateur ; appli de bureau simulée par un faux `invoke` : demande, accord, actions reçues dans l'ordre, Échap, arrêt par l'appli, par l'un ou l'autre, refus, fin du partage). Pas vérifiable ici : la fenêtre native et la saisie simulée sur un vrai bureau (pas d'écran), macOS et Windows.
+
+Limites : le navigateur ne dit pas quel écran il partage (écran de même taille, sinon de même rapport, sinon principal) ; Wayland refusé ; sous Windows, les fenêtres lancées en administrateur ne reçoivent rien.
+
 ## Écarts à savoir
 
 - Données : en mémoire pendant le build, puis PostgreSQL avec `/replica-backend` (même API, aucun écran modifié). La tranche verticale a été rejouée sur Postgres.

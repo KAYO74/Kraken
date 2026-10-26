@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-input"
+description = "Enables the remote_input command without any pre-configured scope."
+commands.allow = ["remote_input"]
+
+[[permission]]
+identifier = "deny-remote-input"
+description = "Denies the remote_input command without any pre-configured scope."
+commands.deny = ["remote_input"]

@@ -1,7 +1,7 @@
 [package]
 name = "kraken-desktop"
 description = "KRAKEN pour Windows, macOS et Linux : rejoindre une instance, ou en héberger une sur cet ordinateur"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/KAYO74/Kraken"
@@ -31,6 +31,10 @@ postgresql_embedded = { version = "=0.20.2", default-features = false, features 
 postgresql_archive = { version = "0.20", default-features = false, features = ["zonky"] }
 postgresql_commands = { version = "=0.20.2", features = ["tokio"] }
 rand = "0.9"
+# Contrôle à distance : la question posée hors de la page, et la saisie simulée (X11 sous Linux,
+# sans libxdo ; SendInput sous Windows ; CGEvent sous macOS).
+tauri-plugin-dialog = "2.8"
+enigo = "0.6"
 
 # Linux : réglages de WebKitGTK pour le vocal (même version que wry).
 [target.'cfg(target_os = "linux")'.dependencies]

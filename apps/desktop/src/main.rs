@@ -3,13 +3,15 @@
 //! - héberger sur cet ordinateur : l'appli fait tourner son propre serveur (`host.rs`).
 //!
 //! Le choix est gardé dans le dossier de configuration de l'appli ; le menu KRAKEN permet d'en
-//! changer. Micro et partage d'écran (salons vocaux) : `media.rs`. `--self-test` vérifie le mode
+//! changer. Micro et partage d'écran (salons vocaux) : `media.rs` ; contrôle à distance de cet
+//! ordinateur depuis un salon vocal : `remote.rs`. `--self-test` vérifie le mode
 //! « héberger », vocal compris, sans ouvrir de fenêtre (CI).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod host;
 mod media;
+mod remote;
 mod selftest;
 
 use std::fs;
@@ -163,6 +165,7 @@ async fn reachable(url: &Url, wait: Duration) -> bool {
 async fn join(app: AppHandle, hosting: State<'_, Hosting>, address: String) -> Result<(), String> {
     let link = parse_address(&address)?;
     if let Some(own) = hosting.own_link(&link) {
+        remote::allow_origin(&app, &own);
         return main_window(&app)?.navigate(own).map_err(|e| e.to_string());
     }
     if !reachable(&link, Duration::from_secs(4)).await {
@@ -170,6 +173,7 @@ async fn join(app: AppHandle, hosting: State<'_, Hosting>, address: String) -> R
     }
     let origin = Url::parse(&link.origin().ascii_serialization()).map_err(|e| e.to_string())?;
     save(&app, "join", Some(&origin));
+    remote::allow_origin(&app, &origin);
     hosting.stop();
     share_enabled(&app, false);
     // WebView2 ne change d'origine traitée comme sécurisée (et de dossier de données) qu'à son
@@ -206,6 +210,7 @@ fn host_status(hosting: State<'_, Hosting>) -> host::Status {
 fn host_open(app: AppHandle, hosting: State<'_, Hosting>) -> Result<(), String> {
     let url = hosting.open_url().ok_or("Ton serveur n'est pas encore prêt.")?;
     let url = Url::parse(&url).map_err(|e| e.to_string())?;
+    remote::allow_origin(&app, &url);
     main_window(&app)?.navigate(url).map_err(|e| e.to_string())
 }
 
@@ -220,13 +225,31 @@ fn main() {
     }
     let app = tauri::Builder::default()
         .manage(Hosting::default())
-        .invoke_handler(tauri::generate_handler![join, host_start, host_status, host_open])
+        .manage(remote::Remote::default())
+        // Seulement pour la fenêtre native du contrôle à distance : aucune page n'a droit à ses
+        // commandes (aucune capacité ne les cite).
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            join,
+            host_start,
+            host_status,
+            host_open,
+            remote::remote_begin,
+            remote::remote_input,
+            remote::remote_end
+        ])
         .setup(|app| {
             let saved = saved(app.handle());
             let hosting = matches!(saved, Saved::Host);
             let change = MenuItemBuilder::with_id("change", "Changer de serveur…").build(app)?;
             let share = MenuItemBuilder::with_id("share", "Adresse à partager…").enabled(hosting).build(app)?;
-            let kraken = SubmenuBuilder::new(app, "KRAKEN").item(&change).item(&share).separator();
+            // Hors de la page : marche même si la page ne répond plus.
+            let stop = MenuItemBuilder::with_id("remote_stop", "Arrêter le contrôle à distance")
+                .accelerator(remote::STOP_SHORTCUT)
+                .enabled(false)
+                .build(app)?;
+            let kraken =
+                SubmenuBuilder::new(app, "KRAKEN").item(&change).item(&share).separator().item(&stop).separator();
             // L'élément « Quitter » natif n'existe pas sous Linux (GTK) : un élément à nous,
             // sauf sur macOS où le natif est attendu.
             let kraken = if cfg!(target_os = "macos") {
@@ -250,11 +273,13 @@ fn main() {
                 .build()?;
             app.set_menu(menu)?;
             app.manage(ShareItem(share));
+            app.manage(remote::StopItem(stop));
             app.on_menu_event(|app, event| {
                 let page = match event.id().as_ref() {
                     "change" => "index.html",
                     "share" => "host.html#partager",
                     "quit" => return app.exit(0),
+                    "remote_stop" => return remote::end(app, true),
                     _ => return,
                 };
                 if let Some(w) = app.get_webview_window("main") {
@@ -266,6 +291,9 @@ fn main() {
                 Saved::Join(url) => media::insecure_origin(url),
                 _ => None,
             };
+            if let Saved::Join(url) = &saved {
+                remote::allow_origin(app.handle(), url);
+            }
             let link = take_link(app.handle());
             let start = match saved {
                 Saved::Host => match host_dirs(app.handle()) {
@@ -287,7 +315,13 @@ fn main() {
                 .title("KRAKEN")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(400.0, 500.0)
-                .on_permission_request(media::permission);
+                .on_permission_request(media::permission)
+                // Nouvelle page : l'accord au contrôle à distance ne la suit pas.
+                .on_page_load(|w, p| {
+                    if p.event() == tauri::webview::PageLoadEvent::Started {
+                        remote::page_changed(w.app_handle());
+                    }
+                });
             #[cfg(windows)]
             let (builder, insecure) = match (insecure, app.path().app_local_data_dir()) {
                 (Some(origin), Ok(data)) => (media::treat_as_secure(builder, &data, &origin), Some(origin)),

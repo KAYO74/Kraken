@@ -1,9 +1,14 @@
 //! Salon vocal (S18) : avant d'entrer, qui est là et « Rejoindre » ; ensuite les tuiles des
 //! participants, l'écran regardé en grand et la barre de commandes. Plus ce que la coquille montre
 //! de l'appel : les participants sous chaque salon vocal, le panneau « En appel » (avec les
-//! boutons micro et son), et le son des micros reçus.
+//! boutons micro et son), le son des micros reçus et le contrôle à distance de mon écran.
 
-use kraken_proto::{Channel, Id, User, VoiceState};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use kraken_proto::{
+    Channel, ControlRefusal, Id, MAX_WHEEL_STEPS, MouseButton, RemoteInput, User, VoiceState, contain_point,
+};
 use leptos::html;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -12,7 +17,7 @@ use wasm_bindgen_futures::JsFuture;
 use crate::icons::{Icon, lu};
 use crate::store::{Store, store};
 use crate::ui::{Avatar, Header, initials};
-use crate::voice::{self, Status};
+use crate::voice::{self, Control, ControlNote, ShareNote, Status};
 
 /// Qui est dans ce salon vocal, dans l'ordre d'arrivée.
 fn present(s: Store, guild: Id, channel: Id) -> Vec<VoiceState> {
@@ -164,6 +169,28 @@ fn Call(guild: Id, channel: Id) -> impl IntoView {
                     </button>
                 </div>
             })}
+            {move || v.control_note.get().map(|(u, note)| {
+                let who = member(s, guild, u).1;
+                let text = match note {
+                    ControlNote::Ended => format!("Le contrôle de l'écran de {who} a pris fin."),
+                    ControlNote::Refused(ControlRefusal::Declined) => format!("{who} a refusé ta demande de contrôle."),
+                    ControlNote::Refused(ControlRefusal::Busy) => format!("Quelqu'un d'autre contrôle déjà l'écran de {who}."),
+                    ControlNote::Refused(ControlRefusal::Desktop) => format!(
+                        "{who} partage depuis un navigateur : pour être contrôlé, il faut partager depuis l'appli de bureau KRAKEN."),
+                    ControlNote::Refused(ControlRefusal::Surface) => format!(
+                        "{who} partage une fenêtre ou un onglet : le contrôle demande le partage d'un écran entier."),
+                    ControlNote::Refused(ControlRefusal::Unavailable) => format!(
+                        "Le contrôle à distance n'est pas possible sur l'ordinateur de {who} pour l'instant."),
+                };
+                view! {
+                    <div class="k-banner" role="status">
+                        <Icon icon=lu::LuMousePointer2/><span>{text}</span>
+                        <button class="k-btn k-btn--icon" aria-label="Masquer ce message" title="Masquer" on:click=move |_| v.control_note.set(None)>
+                            <Icon icon=lu::LuX/>
+                        </button>
+                    </div>
+                }
+            })}
             {move || v.watching.get().map(|u| view! { <Stage guild=guild user=u/> })}
             <ul class="app-tiles" aria-label="Participants">
                 <For each=move || who.get() key=|u| *u let:u>
@@ -235,7 +262,31 @@ fn Preview() -> impl IntoView {
     view! { <video class="k-tile-video" node_ref=el autoplay playsinline muted aria-label="Aperçu de ton écran partagé"></video> }
 }
 
-/// L'écran regardé, en grand ; son son passe, sauf si le mien est coupé.
+/// Ce que je tiens enfoncé sur l'écran que je contrôle, et de quoi espacer les mouvements.
+#[derive(Default)]
+struct Capture {
+    keys: Vec<String>,
+    buttons: Vec<MouseButton>,
+    /// Dernier mouvement envoyé (ms), mouvement en attente, minuterie lancée.
+    sent_at: f64,
+    pending: Option<(f32, f32)>,
+    timer: bool,
+    /// Molette accumulée, en crans.
+    wheel: (f64, f64),
+}
+
+/// Un mouvement toutes les 16 ms au plus (le serveur en accepte 120 par seconde).
+const MOVE_GAP_MS: f64 = 16.0;
+
+/// La position du pointeur dans l'image partagée (0 à 1), hors des bandes noires.
+fn video_point(el: &web_sys::HtmlVideoElement, x: i32, y: i32) -> Option<(f32, f32)> {
+    let r = el.get_bounding_client_rect();
+    let (vw, vh) = (f64::from(el.video_width()), f64::from(el.video_height()));
+    contain_point(f64::from(x) - r.left(), f64::from(y) - r.top(), r.width(), r.height(), vw, vh)
+}
+
+/// L'écran regardé, en grand ; son son passe, sauf si le mien est coupé. Pendant le contrôle à
+/// distance, la souris et le clavier sur l'image vont à l'ordinateur de celui qui partage.
 #[component]
 fn Stage(guild: Id, user: Id) -> impl IntoView {
     let s = store();
@@ -248,6 +299,181 @@ fn Stage(guild: Id, user: Id) -> impl IntoView {
         let Some(e) = el.get() else { return };
         v.remote.with(|r| attach(&e, r.iter().find(|x| x.user == user && x.screen).map(|x| &x.stream)));
     });
+    let controlling = Memo::new(move |_| v.control.get() == Control::On(user));
+    let asking = Memo::new(move |_| v.control.get() == Control::Asking(user));
+    let cap = Rc::new(RefCell::new(Capture::default()));
+    // Relâche ce que je tiens (touches, boutons) ; `send` : le dire à l'autre ordinateur.
+    let release = {
+        let cap = cap.clone();
+        move |send: bool| {
+            let mut c = cap.borrow_mut();
+            for code in std::mem::take(&mut c.keys) {
+                if send {
+                    v.control_input(RemoteInput::Key { code, down: false });
+                }
+            }
+            for button in std::mem::take(&mut c.buttons) {
+                if send {
+                    v.control_input(RemoteInput::Button { button, down: false });
+                }
+            }
+            c.pending = None;
+            c.wheel = (0.0, 0.0);
+        }
+    };
+    {
+        let release = release.clone();
+        Effect::new(move || {
+            if controlling.get() {
+                if let Some(e) = el.get_untracked() {
+                    let _ = e.focus();
+                }
+            } else {
+                release(false);
+            }
+        });
+    }
+    let send_move = {
+        let cap = cap.clone();
+        move |p: (f32, f32)| {
+            cap.borrow_mut().sent_at = js_sys::Date::now();
+            v.control_input(RemoteInput::Move { x: p.0, y: p.1 });
+        }
+    };
+    let on_move = {
+        let cap = cap.clone();
+        let send_move = send_move.clone();
+        move |e: web_sys::PointerEvent| {
+            let (true, Some(video)) = (controlling.get_untracked(), el.get_untracked()) else { return };
+            let Some(p) = video_point(&video, e.client_x(), e.client_y()) else { return };
+            let mut c = cap.borrow_mut();
+            if js_sys::Date::now() - c.sent_at >= MOVE_GAP_MS {
+                drop(c);
+                send_move(p);
+                return;
+            }
+            // Trop tôt : le dernier mouvement part un peu plus tard, pour finir au bon endroit.
+            c.pending = Some(p);
+            if !c.timer {
+                c.timer = true;
+                let (cap, send_move) = (cap.clone(), send_move.clone());
+                gloo_timers::callback::Timeout::new(MOVE_GAP_MS as u32, move || {
+                    let pending = {
+                        let mut c = cap.borrow_mut();
+                        c.timer = false;
+                        c.pending.take()
+                    };
+                    if let Some(p) = pending.filter(|_| controlling.get_untracked()) {
+                        send_move(p);
+                    }
+                })
+                .forget();
+            }
+        }
+    };
+    let on_button = {
+        let cap = cap.clone();
+        let send_move = send_move.clone();
+        move |e: web_sys::PointerEvent, down: bool| {
+            let (true, Some(video)) = (controlling.get_untracked(), el.get_untracked()) else { return };
+            e.prevent_default();
+            let Some(button) = MouseButton::from_dom(e.button()) else { return };
+            if down {
+                let _ = video.focus();
+                let _ = video.set_pointer_capture(e.pointer_id());
+            }
+            if let Some(p) = video_point(&video, e.client_x(), e.client_y()) {
+                cap.borrow_mut().pending = None;
+                send_move(p);
+            }
+            let mut c = cap.borrow_mut();
+            let held = c.buttons.contains(&button);
+            if down == held {
+                return;
+            }
+            c.buttons.retain(|b| *b != button);
+            if down {
+                c.buttons.push(button);
+            }
+            drop(c);
+            v.control_input(RemoteInput::Button { button, down });
+        }
+    };
+    let on_down = {
+        let on_button = on_button.clone();
+        move |e: web_sys::PointerEvent| on_button(e, true)
+    };
+    let on_up = move |e: web_sys::PointerEvent| on_button(e, false);
+    let on_wheel = {
+        let cap = cap.clone();
+        move |e: web_sys::WheelEvent| {
+            if !controlling.get_untracked() {
+                return;
+            }
+            e.prevent_default();
+            // Un cran : 100 pixels, 3 lignes ou une page.
+            let per_step = match e.delta_mode() {
+                0 => 100.0,
+                1 => 3.0,
+                _ => 1.0,
+            };
+            let mut c = cap.borrow_mut();
+            c.wheel.0 += e.delta_x() / per_step;
+            c.wheel.1 += e.delta_y() / per_step;
+            let max = f64::from(MAX_WHEEL_STEPS);
+            let (dx, dy) = (c.wheel.0.trunc().clamp(-max, max), c.wheel.1.trunc().clamp(-max, max));
+            if dx == 0.0 && dy == 0.0 {
+                return;
+            }
+            c.wheel = (c.wheel.0.fract(), c.wheel.1.fract());
+            drop(c);
+            v.control_input(RemoteInput::Wheel { dx: dx as i32, dy: dy as i32 });
+        }
+    };
+    let on_key = {
+        let cap = cap.clone();
+        let release = release.clone();
+        move |e: web_sys::KeyboardEvent, down: bool| {
+            if !controlling.get_untracked() {
+                return;
+            }
+            let code = e.code();
+            // Échap rend la main (on continue de regarder) ; Maj+Échap envoie Échap.
+            if down && code == "Escape" && !e.shift_key() {
+                e.prevent_default();
+                release(true);
+                v.stop_control();
+                return;
+            }
+            e.prevent_default();
+            e.stop_propagation();
+            if !(RemoteInput::Key { code: code.clone(), down }).valid() {
+                return;
+            }
+            let mut c = cap.borrow_mut();
+            let held = c.keys.contains(&code);
+            if down && (held || e.repeat()) {
+                return;
+            }
+            if !down && !held {
+                return;
+            }
+            c.keys.retain(|k| *k != code);
+            if down {
+                c.keys.push(code.clone());
+            }
+            drop(c);
+            v.control_input(RemoteInput::Key { code, down });
+        }
+    };
+    let on_keydown = {
+        let on_key = on_key.clone();
+        move |e: web_sys::KeyboardEvent| on_key(e, true)
+    };
+    let on_keyup = move |e: web_sys::KeyboardEvent| on_key(e, false);
+    let on_blur = move |_| release(true);
+    let hint = format!("Tu contrôles l'écran de {name}. Échap pour relâcher (Maj+Échap envoie Échap).");
+    let request_label = format!("Demander le contrôle de l'écran de {name}");
     let full = move |_| {
         let d = document();
         if d.fullscreen_element().is_some() {
@@ -257,16 +483,45 @@ fn Stage(guild: Id, user: Id) -> impl IntoView {
         }
     };
     view! {
-        <figure class="app-stage" node_ref=frame>
+        <figure class="app-stage" node_ref=frame data-control=move || controlling.get().then_some("")>
             <video node_ref=el autoplay playsinline prop:muted=move || v.deaf.get()
-                aria-label=format!("Écran partagé par {name}") on:playing=move |_| playing.set(true)></video>
+                aria-label=format!("Écran partagé par {name}") on:playing=move |_| playing.set(true)
+                tabindex=move || controlling.get().then_some("0")
+                on:pointermove=on_move on:pointerdown=on_down on:pointerup=on_up on:wheel=on_wheel
+                on:keydown=on_keydown on:keyup=on_keyup on:blur=on_blur
+                on:contextmenu=move |e| if controlling.get_untracked() { e.prevent_default() }></video>
             <Show when=move || !playing.get()>
                 <p class="app-stage-wait" role="status">"Chargement de l'écran…"</p>
+            </Show>
+            <Show when=move || controlling.get()>
+                <p class="app-stage-hint" role="status">{hint.clone()}</p>
             </Show>
             <figcaption>
                 <span class="k-badge k-badge--live">"En direct"</span>
                 <b class="app-ellipsis">{name.clone()}</b>
-                <button class="k-btn k-btn--icon app-push" aria-label="Plein écran" title="Plein écran" on:click=full>
+                {
+                    let request_label = request_label.clone();
+                    move || if controlling.get() {
+                        view! {
+                            <button class="k-btn k-btn--sm k-btn--danger app-push" on:click=move |_| v.stop_control()>
+                                <Icon icon=lu::LuMousePointerBan small=true/><span>"Arrêter le contrôle"</span>
+                            </button>
+                        }.into_any()
+                    } else if asking.get() {
+                        view! {
+                            <span class="app-push app-stage-asking" role="status">"Demande envoyée…"</span>
+                            <button class="k-btn k-btn--sm" on:click=move |_| v.stop_control()>"Annuler la demande"</button>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <button class="k-btn k-btn--sm app-push" aria-label=request_label.clone() title=request_label.clone()
+                                on:click=move |_| v.request_control(user)>
+                                <Icon icon=lu::LuMousePointer2 small=true/><span>"Demander le contrôle"</span>
+                            </button>
+                        }.into_any()
+                    }
+                }
+                <button class="k-btn k-btn--icon" aria-label="Plein écran" title="Plein écran" on:click=full>
                     <Icon icon=lu::LuMaximize/>
                 </button>
                 <button class="k-btn k-btn--icon" aria-label="Arrêter de regarder" title="Arrêter de regarder" on:click=move |_| v.watch(None)>
@@ -429,4 +684,71 @@ fn RemoteAudio(user: Id) -> impl IntoView {
         v.remote.with(|r| attach(&e, r.iter().find(|x| x.user == user && !x.screen).map(|x| &x.stream)));
     });
     view! { <audio node_ref=el autoplay prop:muted=move || v.deaf.get()></audio> }
+}
+
+/// Le contrôle à distance de mon écran, visible où que je sois pendant l'appel : qui le demande
+/// (accepter ou refuser), qui l'a (« Arrêter le contrôle »), et ce qui l'a empêché.
+#[component]
+pub fn ControlPanel() -> impl IntoView {
+    let s = store();
+    let v = s.voice;
+    let name = move |u: Id| v.room.get_untracked().map_or_else(|| "Quelqu'un".to_string(), |r| member(s, r.guild, u).1);
+    let shown = move || {
+        v.controller.get().is_some() || v.requests.with(|r| !r.is_empty()) || v.share_note.with(Option::is_some)
+    };
+    view! {
+        <Show when=shown>
+            <section class="app-remote" aria-label="Contrôle à distance de ton écran">
+                {move || v.controller.get().map(|u| view! {
+                    <div class="app-remote-row" data-on="">
+                        <Icon icon=lu::LuMousePointer2/>
+                        <p role="status">{format!("{} contrôle ton écran.", name(u))}</p>
+                        <button class="k-btn k-btn--sm k-btn--danger" on:click=move |_| v.release_control(true)>
+                            <Icon icon=lu::LuMousePointerBan small=true/><span>"Arrêter le contrôle"</span>
+                        </button>
+                    </div>
+                })}
+                <For each=move || v.requests.get() key=|u| *u let:u>
+                    {
+                        let who = name(u);
+                        let waiting = move || v.confirming.get() == Some(u);
+                        let who_accept = who.clone();
+                        view! {
+                            <div class="app-remote-row" role="alert">
+                                <Icon icon=lu::LuMousePointer2/>
+                                <p>
+                                    {format!("{who} demande à contrôler ton écran (souris et clavier).")}
+                                    <Show when=waiting>
+                                        <span class="app-remote-wait">" Réponds dans la fenêtre de KRAKEN qui vient de s'ouvrir."</span>
+                                    </Show>
+                                </p>
+                                <button class="k-btn k-btn--sm k-btn--primary" disabled=move || v.confirming.get().is_some()
+                                    on:click=move |_| v.accept_control(u, who_accept.clone())>"Accepter"</button>
+                                <button class="k-btn k-btn--sm" disabled=waiting on:click=move |_| v.decline_control(u)>"Refuser"</button>
+                            </div>
+                        }
+                    }
+                </For>
+                {move || v.share_note.get().map(|(u, note)| {
+                    let who = name(u);
+                    let text = match note {
+                        ShareNote::Desktop => format!(
+                            "{who} a demandé à contrôler ton écran. Le contrôle à distance n'est possible que depuis l'appli de bureau KRAKEN : partage ton écran depuis l'appli pour l'accepter."),
+                        ShareNote::Surface => format!(
+                            "{who} a demandé à contrôler ton écran, mais tu partages une fenêtre ou un onglet. Partage ton écran entier pour pouvoir l'accepter."),
+                        ShareNote::Message(m) => m,
+                    };
+                    view! {
+                        <div class="app-remote-row">
+                            <Icon icon=lu::LuCircleAlert/>
+                            <p role="status">{text}</p>
+                            <button class="k-btn k-btn--icon" aria-label="Masquer ce message" title="Masquer" on:click=move |_| v.share_note.set(None)>
+                                <Icon icon=lu::LuX/>
+                            </button>
+                        </div>
+                    }
+                })}
+            </section>
+        </Show>
+    }
 }
