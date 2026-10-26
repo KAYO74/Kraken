@@ -272,6 +272,41 @@ pub struct Relationship {
     pub status: Status,
 }
 
+/// `POST /users/@me/relationships` : demande d'ami par pseudo unique.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FriendRequest {
+    pub username: String,
+}
+
+/// `PUT /users/@me/relationships/{id}` : `friend` accepte sa demande (ou en envoie une),
+/// `blocked` bloque. Les autres valeurs sont refusées.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SetRelationship {
+    pub kind: RelationshipKind,
+}
+
+/// Personnes au plus dans un groupe privé, soi compris.
+pub const MAX_GROUP_MEMBERS: usize = 10;
+
+/// Longueur maximale du nom d'un groupe, en caractères.
+pub const MAX_GROUP_NAME: usize = 100;
+
+/// `POST /users/@me/channels` : une personne, le MP avec elle (rouvert s'il existe) ; de 2 à
+/// [`MAX_GROUP_MEMBERS`] − 1 amis, un nouveau groupe.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct OpenPrivate {
+    pub recipients: Vec<Id>,
+    /// Groupe seulement ; vide : les prénoms des membres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// `PATCH /channels/{id}` : renommer un groupe (vide : retour aux noms des membres).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct EditChannel {
+    pub name: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ApiError {
     pub code: String,
@@ -551,6 +586,20 @@ pub enum Event {
         emoji: String,
     },
     ChannelCreate(Channel),
+    /// Groupe renommé, membre arrivé ou parti : le salon entier, tel que tu le vois.
+    ChannelUpdate(Channel),
+    /// Tu as quitté ce groupe (ou en as été retiré).
+    ChannelDelete {
+        id: Id,
+    },
+    /// Nouvelle relation (demande reçue ou envoyée, compte bloqué).
+    RelationshipAdd(Relationship),
+    /// Relation changée (demande acceptée, ami bloqué).
+    RelationshipUpdate(Relationship),
+    /// Plus de relation avec cette personne (ami retiré, demande refusée ou annulée, débloqué).
+    RelationshipRemove {
+        user_id: Id,
+    },
     GuildCreate(Box<GuildState>),
     MemberAdd {
         guild_id: Id,

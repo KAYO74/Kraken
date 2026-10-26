@@ -147,3 +147,37 @@ pub async fn reset_password(token: &str, password: &str) -> ApiResult<()> {
 pub async fn verify_email(token: &str) -> ApiResult<()> {
     call(Method::POST, "/auth/verify-email", Some(json!({ "token": token }))).await
 }
+
+// ───────── social ─────────
+
+/// Demande d'ami par pseudo unique (ou acceptation de la sienne).
+pub async fn send_friend_request(username: &str) -> ApiResult<Relationship> {
+    call(Method::POST, "/users/@me/relationships", Some(FriendRequest { username: username.into() })).await
+}
+
+/// Accepter une demande (`Friend`) ou bloquer (`Blocked`).
+pub async fn set_relationship(user: Id, kind: RelationshipKind) -> ApiResult<Relationship> {
+    call(Method::PUT, &format!("/users/@me/relationships/{user}"), Some(SetRelationship { kind })).await
+}
+
+/// Retirer un ami, refuser ou annuler une demande, débloquer.
+pub async fn remove_relationship(user: Id) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/users/@me/relationships/{user}"), NO_BODY).await
+}
+
+/// Le MP avec une personne, ou un nouveau groupe avec plusieurs amis.
+pub async fn open_private(recipients: Vec<Id>, name: Option<String>) -> ApiResult<Channel> {
+    call(Method::POST, "/users/@me/channels", Some(OpenPrivate { recipients, name })).await
+}
+
+pub async fn rename_group(channel: Id, name: &str) -> ApiResult<Channel> {
+    call(Method::PATCH, &format!("/channels/{channel}"), Some(EditChannel { name: Some(name.into()) })).await
+}
+
+pub async fn add_recipient(channel: Id, user: Id) -> ApiResult<()> {
+    call(Method::PUT, &format!("/channels/{channel}/recipients/{user}"), NO_BODY).await
+}
+
+pub async fn leave_group(channel: Id) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/channels/{channel}/recipients/@me"), NO_BODY).await
+}

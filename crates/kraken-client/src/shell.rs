@@ -149,19 +149,33 @@ fn HomeSidebar() -> impl IntoView {
     let ids = current_ids();
     let loc = use_location();
     let on_friends = move || (loc.pathname.get() == "/channels/@me").then_some("page");
+    let picking = RwSignal::new(false);
+    let incoming = Memo::new(move |_| {
+        s.friends.with(|f| f.iter().filter(|r| r.kind == kraken_proto::RelationshipKind::PendingIncoming).count())
+    });
     view! {
         <nav class="k-sidebar app-sidebar" aria-label="Messages privés">
             <a class="k-btn k-btn--sm app-find" href="/switcher"><Icon icon=lu::LuSearch small=true/>"Aller vers une personne ou un salon"</a>
-            <a class="k-channel" href="/channels/@me" aria-current=on_friends><Icon icon=lu::LuUsers/>"Amis"</a>
-            <div class="k-category">"Messages privés"</div>
+            <a class="k-channel" href="/channels/@me" aria-current=on_friends><Icon icon=lu::LuUsers/>"Amis"
+                <Show when=move || { incoming.get() > 0 }>
+                    <span class="k-badge k-badge--count">{move || incoming.get()}</span>
+                    <span class="k-sr">{move || if incoming.get() > 1 { " (demandes en attente)" } else { " (demande en attente)" }}</span>
+                </Show>
+            </a>
+            <div class="app-dm-head">
+                <h2 class="k-category">"Messages privés"</h2>
+                <button class="k-btn k-btn--icon" aria-label="Nouvelle conversation ou groupe" title="Nouvelle conversation"
+                    on:click=move |_| picking.set(true)>
+                    <Icon icon=lu::LuPlus small=true/>
+                </button>
+            </div>
             <Show when=move || s.dms.with(|d| d.is_empty()) && s.conn.get() == Conn::Ready>
                 <p class="app-hint">"Aucune conversation pour l'instant."</p>
             </Show>
-            <For each=move || s.dms.get() key=|c| (c.id, c.recipients.iter().map(|u| u.name().to_string()).collect::<Vec<_>>()) let:c>
+            <For each=move || s.dms.get() key=|c| (c.id, c.name.clone(), c.recipients.iter().map(|u| u.name().to_string()).collect::<Vec<_>>()) let:c>
                 {
                     let id = c.id;
-                    let names: Vec<String> = c.recipients.iter().map(|u| u.name().to_string()).collect();
-                    let title = c.name.clone().unwrap_or_else(|| names.join(", "));
+                    let title = crate::social::private_title(&c);
                     let first = c.recipients.first().cloned();
                     let group = c.kind == ChannelKind::GroupDm;
                     let count = c.recipients.len() + 1;
@@ -178,6 +192,9 @@ fn HomeSidebar() -> impl IntoView {
                 }
             </For>
         </nav>
+        <Show when=move || picking.get()>
+            <crate::social::PeoplePicker purpose=crate::social::PickFor::New(vec![]) close=Callback::new(move |()| picking.set(false))/>
+        </Show>
     }
 }
 

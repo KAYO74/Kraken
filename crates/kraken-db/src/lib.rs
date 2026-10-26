@@ -7,6 +7,7 @@
 mod jobs;
 mod perm;
 mod seed;
+mod social;
 
 use kraken_core::perms;
 use kraken_proto::*;
@@ -16,6 +17,7 @@ use sqlx::types::Json;
 use sqlx::{Postgres, Row, Transaction};
 
 pub use jobs::Job;
+pub use social::Notices;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DbError {
@@ -667,33 +669,6 @@ impl Db {
         self.channel(id).await?.ok_or(DbError::NotFound)
     }
 
-    pub async fn private_channels(&self, uid: Id) -> Result<Vec<Channel>> {
-        let rows = sqlx::query(&format!(
-            "select {CHANNEL_COLS} from channels where id in
-               (select channel_id from channel_recipients where user_id = $1 and not closed)
-             order by coalesce(last_message_id, id) desc"
-        ))
-        .bind(uid)
-        .fetch_all(&self.pool)
-        .await?;
-        let mut out = Vec::with_capacity(rows.len());
-        for r in &rows {
-            let mut c = channel_from(r)?;
-            let others = sqlx::query(&format!(
-                "select {} from channel_recipients cr join users u on u.id = cr.user_id
-                 where cr.channel_id = $1 and cr.user_id <> $2 order by cr.created_at",
-                user_cols("u")
-            ))
-            .bind(c.id)
-            .bind(uid)
-            .fetch_all(&self.pool)
-            .await?;
-            c.recipients = others.iter().filter_map(|r| user_from(r, "u").ok().flatten()).collect();
-            out.push(c);
-        }
-        Ok(out)
-    }
-
     // ───────── messages ─────────
 
     /// Une page de messages, du plus ancien au plus récent, avant `before` si donné.
@@ -730,8 +705,26 @@ impl Db {
         if content.is_empty() || content.chars().count() > MAX_MESSAGE_LEN {
             return Err(DbError::Invalid("content"));
         }
-        if !self.channel(cid).await?.is_some_and(|c| c.kind.is_textual()) {
+        let Some(channel) = self.channel(cid).await?.filter(|c| c.kind.is_textual()) else {
             return Err(DbError::NotFound);
+        };
+        if channel.kind == ChannelKind::Dm {
+            // Un blocage, dans un sens ou dans l'autre, ferme le MP (l'historique reste lisible).
+            let blocked: Option<bool> = sqlx::query_scalar(
+                "select bool_or(r.user_id = $2) from channel_recipients cr join relationships r
+                   on r.kind = 'blocked' and ((r.user_id = $2 and r.target_id = cr.user_id)
+                                           or (r.user_id = cr.user_id and r.target_id = $2))
+                 where cr.channel_id = $1 and cr.user_id <> $2",
+            )
+            .bind(cid)
+            .bind(author)
+            .fetch_one(&self.pool)
+            .await?;
+            match blocked {
+                Some(true) => return Err(DbError::Forbidden("dm_blocked")),
+                Some(false) => return Err(DbError::Forbidden("dm_refused")),
+                None => {}
+            }
         }
         if let Some(r) = d.reply_to {
             let here: bool =

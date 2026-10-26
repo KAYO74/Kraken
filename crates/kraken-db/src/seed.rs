@@ -94,6 +94,8 @@ impl Db {
         let noa = user(t, "noa", None, h).await?;
         let ilan = user(t, "ilan", Some("Ilan"), h).await?;
         let long = user(t, "abyssal_navigator.42", Some("Navigatrice des fonds abyssaux"), h).await?;
+        // Bloqué par demo : ses messages sont repliés dans Abysse.
+        let zed = user(t, "zed", Some("Zed"), h).await?;
 
         // Abysse : le serveur principal.
         let g = guild(t, lou, "Abysse").await?;
@@ -105,7 +107,7 @@ impl Db {
         .bind((perms::MANAGE_MESSAGES | perms::KICK | perms::TIMEOUT | perms::VIEW_AUDIT_LOG) as i64)
         .fetch_one(&mut **t)
         .await?;
-        for u in [lou, demo, sam, noa, long] {
+        for u in [lou, demo, sam, noa, long, zed] {
             join(t, g, u).await?;
         }
         sqlx::query("insert into member_roles (guild_id, user_id, role_id) values ($1, $2, $3)")
@@ -160,6 +162,7 @@ impl Db {
         ] {
             say(t, general, a, text).await?;
         }
+        say(t, general, zed, "Qui veut des codes promo ? Écrivez-moi en privé, vite vite vite !").await?;
         say(t, shots, noa, "Ma plus belle capture de la semaine arrive bientôt.").await?;
         say(t, staff, sam, "Salon réservé à la modération.").await?;
 
@@ -185,6 +188,11 @@ impl Db {
                     .await?;
             }
         }
+        sqlx::query("insert into relationships (user_id, target_id, kind) values ($1, $2, 'blocked')")
+            .bind(demo)
+            .bind(zed)
+            .execute(&mut **t)
+            .await?;
         let one = dm(t, "dm", None, &[demo, lou]).await?;
         say(t, one, lou, "Tu as vu l'invitation pour Abysse ?").await?;
         let group = dm(t, "group_dm", Some("Équipée du soir"), &[demo, sam, noa]).await?;

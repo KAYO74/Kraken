@@ -1,5 +1,6 @@
-//! Réglages utilisateur (S06 à S15) dans la modale `k-settings`. Compte et Apparence sont
-//! branchés ; les autres sections ont leur route et leur place dans la navigation.
+//! Réglages utilisateur (S06 à S15) dans la modale `k-settings`. Compte, Apparence et la liste
+//! des comptes bloqués (S08) sont branchés ; les autres sections ont leur route et leur place
+//! dans la navigation.
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -80,6 +81,7 @@ pub fn Settings() -> impl IntoView {
                     {move || match section().as_str() {
                         "account" => view! { <Account/> }.into_any(),
                         "appearance" => view! { <Appearance/> }.into_any(),
+                        "messaging" => view! { <Messaging/> }.into_any(),
                         other => {
                             let id = SECTIONS.iter().find(|s| s.1 == other).map(|s| s.3).unwrap_or("—");
                             view! { <div class="k-empty"><b>"Bientôt ici"</b>{format!("Section {id} prévue, pas encore construite.")}</div> }.into_any()
@@ -221,5 +223,56 @@ fn Appearance() -> impl IntoView {
                 </label>
             }).collect_view()}
         </fieldset>
+    }
+}
+
+/// S08 : qui peut t'écrire. Pour l'instant, les comptes bloqués et le moyen de les débloquer.
+#[component]
+fn Messaging() -> impl IntoView {
+    let s = store();
+    let error = RwSignal::new(None::<String>);
+    let blocked = Memo::new(move |_| {
+        s.friends.with(|f| {
+            f.iter()
+                .filter(|r| r.kind == kraken_proto::RelationshipKind::Blocked)
+                .map(|r| r.user.clone())
+                .collect::<Vec<_>>()
+        })
+    });
+    let unblock = move |uid: kraken_proto::Id| {
+        spawn_local(async move {
+            match crate::api::remove_relationship(uid).await {
+                Ok(()) => s.remove_rel(uid),
+                Err(e) => error.set(Some(e.message)),
+            }
+        });
+    };
+    view! {
+        <section class="app-blocked-list" aria-labelledby="blocked-t">
+            <h3 id="blocked-t" class="k-label">"Comptes bloqués"</h3>
+            <p class="app-hint">"Un compte bloqué ne peut plus t'écrire en privé ni te demander en ami ; ses messages sont repliés dans les salons que vous partagez. Il n'est prévenu de rien."</p>
+            <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+            {move || if blocked.with(Vec::is_empty) {
+                view! { <div class="k-empty"><b>"Personne n'est bloqué"</b><span>"Bloque quelqu'un depuis ta liste d'amis ou ses demandes."</span></div> }.into_any()
+            } else {
+                view! {
+                    <ul class="app-members">
+                        <For each=move || blocked.get() key=|u| u.id let:u>
+                            {
+                                let id = u.id;
+                                let name = u.name().to_string();
+                                view! {
+                                    <li class="k-dm app-blocked-row">
+                                        <Avatar user=u.clone() size="md"/>
+                                        <div class="app-ellipsis">{name.clone()}<small>{format!("@{}", u.username)}</small></div>
+                                        <button class="k-btn k-btn--sm" aria-label=format!("Débloquer {name}") on:click=move |_| unblock(id)>"Débloquer"</button>
+                                    </li>
+                                }
+                            }
+                        </For>
+                    </ul>
+                }.into_any()
+            }}
+        </section>
     }
 }

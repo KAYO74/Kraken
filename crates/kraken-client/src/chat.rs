@@ -70,13 +70,15 @@ pub fn GuildChannel() -> impl IntoView {
     }
 }
 
+/// Un MP ou un groupe. La vue ne dépend que de l'id : un groupe renommé ou complété garde
+/// sa saisie, son défilement et le focus.
 #[component]
 pub fn DmView() -> impl IntoView {
     let s = store();
     let channel = param("channel");
-    let current = Memo::new(move |_| channel.get().and_then(|c| s.channel(c)));
+    let current = Memo::new(move |_| channel.get().and_then(|c| s.channel(c)).map(|c| c.id));
     view! {
-        {move || match current.get() {
+        {move || match current.get().and_then(|id| untrack(|| s.channel(id))) {
             None => view! { <Loading/> }.into_any(),
             Some(c) => view! { <ChannelView channel=c/> }.into_any(),
         }}
@@ -85,12 +87,18 @@ pub fn DmView() -> impl IntoView {
 
 fn title_of(c: &Channel) -> String {
     match c.kind {
-        ChannelKind::Dm | ChannelKind::GroupDm => c
-            .name
-            .clone()
-            .unwrap_or_else(|| c.recipients.iter().map(|u| u.name().to_string()).collect::<Vec<_>>().join(", ")),
+        ChannelKind::Dm | ChannelKind::GroupDm => crate::social::private_title(c),
         _ => c.name.clone().unwrap_or_default(),
     }
+}
+
+/// Fenêtres ouvertes depuis l'en-tête d'un MP ou d'un groupe.
+#[derive(Clone, Copy, PartialEq)]
+enum PrivateDialog {
+    /// Ajouter des amis au groupe, ou créer un groupe depuis un MP.
+    Add,
+    Rename,
+    Leave,
 }
 
 /// Ce que partagent le fil et la zone de saisie d'un salon ouvert.
@@ -130,8 +138,18 @@ fn my_id() -> Option<Id> {
 fn ChannelView(channel: Channel) -> impl IntoView {
     let s = store();
     let cid = channel.id;
-    let title = title_of(&channel);
+    let first_title = title_of(&channel);
+    // Suit le salon dans le store : un groupe renommé change de titre sans quitter la vue.
+    let title = Memo::new(move |_| s.channel(cid).map(|c| title_of(&c)).unwrap_or_else(|| first_title.clone()));
     let is_dm = channel.guild_id.is_none();
+    let kind = channel.kind;
+    // MP 1:1 : l'autre personne, pour le blocage et « créer un groupe ».
+    let other = (kind == ChannelKind::Dm).then(|| channel.recipients.first().cloned()).flatten();
+    let other_id = other.as_ref().map(|u| u.id);
+    let other_blocked = Memo::new(move |_| other_id.is_some_and(|o| s.is_blocked(o)));
+    let other_friend =
+        Memo::new(move |_| other_id.is_some_and(|o| s.rel_kind(o) == Some(kraken_proto::RelationshipKind::Friend)));
+    let dialog = RwSignal::new(None::<PrivateDialog>);
     // Le brouillon survit au changement de salon et au rafraîchissement de la vue.
     let draft = RwSignal::new(DRAFTS.with_borrow_mut(|d| d.remove(&cid)).unwrap_or_default());
     Effect::new(move || {
@@ -159,8 +177,23 @@ fn ChannelView(channel: Channel) -> impl IntoView {
         ChannelKind::Dm | ChannelKind::GroupDm => lu::LuMessageCircle,
         _ => lu::LuHash,
     };
-    let (title_h1, title_log, label) = (title.clone(), title.clone(), format!("Messages de {title}"));
-    let place = if is_dm { format!("Écrire à {title}") } else { format!("Écrire dans #{title}") };
+    let label = move || format!("Messages de {}", title.get());
+    let place = Signal::derive(move || {
+        if is_dm { format!("Écrire à {}", title.get()) } else { format!("Écrire dans #{}", title.get()) }
+    });
+    let other_name = other.as_ref().map(|u| u.name().to_string()).unwrap_or_default();
+    let other_name2 = other_name.clone();
+    let unblock_error = RwSignal::new(None::<String>);
+    let unblock = move |_| {
+        let Some(o) = other_id else { return };
+        spawn_local(async move {
+            match crate::api::remove_relationship(o).await {
+                Ok(()) => s.remove_rel(o),
+                Err(e) => unblock_error.set(Some(e.message)),
+            }
+        });
+    };
+    let close_dialog = Callback::new(move |()| dialog.set(None));
 
     // Charger l'historique à l'ouverture, et après une reconnexion.
     Effect::new(move || {
@@ -201,7 +234,7 @@ fn ChannelView(channel: Channel) -> impl IntoView {
     view! {
         <Header>
             <Icon icon=header_icon/>
-            <h1 class="app-title app-ellipsis">{title_h1}</h1>
+            <h1 class="app-title app-ellipsis">{move || title.get()}</h1>
             {channel.topic.clone().map(|t| { let tip = t.clone(); view! { <span class="app-topic app-ellipsis" title=tip>{t}</span> } })}
             <div class="app-header-tools">
                 {(!is_dm).then(|| view! {
@@ -211,14 +244,35 @@ fn ChannelView(channel: Channel) -> impl IntoView {
                         <Icon icon=lu::LuUsers/>
                     </button>
                 })}
+                {(kind == ChannelKind::GroupDm).then(|| view! {
+                    <button class="k-btn k-btn--icon" aria-label="Ajouter des amis au groupe" title="Ajouter des amis"
+                        on:click=move |_| dialog.set(Some(PrivateDialog::Add))><Icon icon=lu::LuUserPlus/></button>
+                    <button class="k-btn k-btn--icon" aria-label="Renommer le groupe" title="Renommer"
+                        on:click=move |_| dialog.set(Some(PrivateDialog::Rename))><Icon icon=lu::LuPencil/></button>
+                    <button class="k-btn k-btn--icon" aria-label="Quitter le groupe" title="Quitter le groupe"
+                        on:click=move |_| dialog.set(Some(PrivateDialog::Leave))><Icon icon=lu::LuLogOut/></button>
+                })}
+                {(kind == ChannelKind::Dm).then(|| { let n = other_name2.clone(); view! {
+                    <Show when=move || other_friend.get()>
+                        <button class="k-btn k-btn--icon" aria-label=format!("Créer un groupe avec {n}") title="Créer un groupe"
+                            on:click=move |_| dialog.set(Some(PrivateDialog::Add))><Icon icon=lu::LuUserPlus/></button>
+                    </Show>
+                } })}
                 <a class="k-btn k-btn--icon" href="/search" aria-label="Rechercher" title="Rechercher"><Icon icon=lu::LuSearch/></a>
                 <a class="k-btn k-btn--icon" href="/inbox" aria-label="Boîte de réception" title="Boîte de réception"><Icon icon=lu::LuInbox/></a>
             </div>
         </Header>
         <div class="app-body">
             <section class="app-chat" aria-label=label>
-                <MessageList channel=cid title=title_log is_dm=is_dm/>
-                <Composer placeholder=place/>
+                <MessageList channel=cid title=title.into() is_dm=is_dm/>
+                <Show when=move || other_blocked.get() fallback=move || view! { <Composer placeholder=place/> }>
+                    <div class="app-dm-blocked" role="status">
+                        <Icon icon=lu::LuBan/>
+                        <span>{format!("Tu as bloqué {other_name} : vous ne pouvez plus vous écrire ici. L'historique reste lisible.")}</span>
+                        <button class="k-btn k-btn--sm" on:click=unblock>"Débloquer"</button>
+                    </div>
+                    <Show when=move || unblock_error.get().is_some()><p class="k-error app-compose-note" role="alert">{move || unblock_error.get()}</p></Show>
+                </Show>
                 {move || chat.picker.get().map(|p| {
                     let title = if matches!(p, Pick::React(_)) { "Réagir avec un emoji" } else { "Insérer un emoji" };
                     view! { <EmojiPicker title=title on_pick=on_pick on_close=on_close/> }
@@ -227,6 +281,21 @@ fn ChannelView(channel: Channel) -> impl IntoView {
             {(!is_dm).then(|| view! { <Show when=move || members_open.get()><Members guild=channel.guild_id.unwrap()/></Show> })}
         </div>
         {move || chat.deleting.get().map(|m| view! { <DeleteDialog msg=m/> })}
+        {move || dialog.get().map(|d| {
+            use crate::social::{Confirm, ConfirmDialog, PeoplePicker, PickFor, RenameGroup};
+            let c = untrack(|| s.channel(cid))?;
+            Some(match d {
+                PrivateDialog::Add if kind == ChannelKind::Dm => {
+                    view! { <PeoplePicker purpose=PickFor::New(c.recipients.iter().map(|u| u.id).collect()) close=close_dialog/> }.into_any()
+                }
+                PrivateDialog::Add => {
+                    let members = c.recipients.iter().map(|u| u.id).chain(my_id()).collect();
+                    view! { <PeoplePicker purpose=PickFor::Group { channel: cid, members } close=close_dialog/> }.into_any()
+                }
+                PrivateDialog::Rename => view! { <RenameGroup channel=c close=close_dialog/> }.into_any(),
+                PrivateDialog::Leave => view! { <ConfirmDialog what=Confirm::LeaveGroup(c) close=close_dialog/> }.into_any(),
+            })
+        })}
     }
 }
 
@@ -240,7 +309,7 @@ fn row_key(m: &Message, cont: bool) -> (Id, bool, u64) {
 }
 
 #[component]
-fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
+fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView {
     let s = store();
     let log = Memo::new(move |_| s.logs.with(|l| l.get(&channel).cloned().unwrap_or_default()));
     let status = Memo::new(move |_| log.with(|l| (l.loaded, l.error.clone())));
@@ -291,10 +360,13 @@ fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
         send(channel, p.content, p.reply_to, Some(p.nonce));
     };
     let forget = move |nonce: String| s.log(channel, |l| l.pending.retain(|x| x.nonce != nonce));
-    let intro = if is_dm {
-        format!("Ici commence ta conversation avec {title}. Elle reste entre vous.")
-    } else {
-        format!("Ici commence #{title}. Tout l'historique du salon se lit à partir d'ici.")
+    let intro = move || {
+        let title = title.get();
+        if is_dm {
+            format!("Ici commence ta conversation avec {title}. Elle reste entre vous.")
+        } else {
+            format!("Ici commence #{title}. Tout l'historique du salon se lit à partir d'ici.")
+        }
     };
     view! {
         <div class="app-log" node_ref=scroller on:scroll=on_scroll role="log" tabindex="0" aria-label="Messages" aria-live="polite" aria-busy=move || (!status.get().0).to_string()>
@@ -311,7 +383,7 @@ fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
                 (true, None) => view! {
                     <div class="app-intro">
                         <span class="app-intro-mark" aria-hidden="true">{if is_dm { view! { <Icon icon=lu::LuMessageCircle/> } } else { view! { <Icon icon=lu::LuHash/> } }}</span>
-                        <div><h2>{title.clone()}</h2><p>{intro.clone()}</p></div>
+                        <div><h2>{move || title.get()}</h2><p>{intro}</p></div>
                     </div>
                     <For each=move || rows.get() key=|(m, cont)| row_key(m, *cont) children=move |(m, cont)| view! { <MessageRow msg=m cont=cont/> }/>
                     <For each=move || pending.get() key=|p| (p.nonce.clone(), p.error.clone()) children=move |p| {
@@ -416,8 +488,23 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
     let content = msg.content.clone();
     let body = StoredValue::new(msg.clone());
     let editing = move || chat.editing.get() == Some(id);
+    // Auteur bloqué : le message est replié derrière une ligne, dépliable au clic.
+    let author_id = msg.author.as_ref().map(|a| a.id);
+    let blocked = Memo::new(move |_| author_id.is_some_and(|a| s.is_blocked(a)));
+    let shown = RwSignal::new(false);
     view! {
-        <article id=format!("msg-{id}") class=class tabindex="-1" aria-label=format!("{name}, {}", when(at))>
+        <Show when=move || blocked.get()>
+            <div class="app-blocked">
+                <Icon icon=lu::LuEyeOff small=true/>
+                <span>"Message d'un compte que tu as bloqué."</span>
+                <button type="button" class="k-btn k-btn--link" aria-expanded=move || shown.get().to_string() aria-controls=format!("msg-{id}")
+                    on:click=move |_| shown.update(|v| *v = !*v)>
+                    {move || if shown.get() { "Masquer" } else { "Afficher" }}
+                </button>
+            </div>
+        </Show>
+        <article id=format!("msg-{id}") class=class tabindex="-1" aria-label=format!("{name}, {}", when(at))
+            hidden=move || blocked.get() && !shown.get()>
             {reply}
             {if cont {
                 view! { <time class="app-gutter-time" datetime=iso(at)>{when(at).rsplit(' ').next().unwrap_or_default().to_string()}</time> }.into_any()
@@ -776,7 +863,7 @@ fn suggestions(chat: Chat, sign: char, q: &str) -> Vec<Suggestion> {
 }
 
 #[component]
-fn Composer(placeholder: String) -> impl IntoView {
+fn Composer(placeholder: Signal<String>) -> impl IntoView {
     let s = store();
     let chat = chat();
     let text = chat.draft;
@@ -889,7 +976,7 @@ fn Composer(placeholder: String) -> impl IntoView {
             })}
             <form class="k-composer" on:submit=move |e| { e.prevent_default(); submit(); }>
                 <button type="button" class="k-btn k-btn--icon" aria-label="Joindre un fichier (bientôt)" disabled><Icon icon=lu::LuPlus/></button>
-                <textarea rows="1" placeholder=placeholder.clone() aria-label=placeholder bind:value=text node_ref=chat.composer
+                <textarea rows="1" placeholder=placeholder aria-label=placeholder bind:value=text node_ref=chat.composer
                     aria-autocomplete="list"
                     aria-controls=move || found.get().map(|_| list_id2.clone())
                     aria-activedescendant=move || found.get().map(|_| opt_id(active.get()))
