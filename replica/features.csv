@@ -67,6 +67,7 @@ Qualité audio 384 kbps,voix,could,yes,no,boost : gratuit
 Caméra en appel,video,must,yes,no,S10 S18
 Flou et arrière-plans vidéo perso,video,could,yes,no,S10 ; nitro : gratuit ; images originales
 Partage d'écran,video,must,yes,yes,"S18 F04 ; image (30 i/s) et son de l'écran quand le navigateur le permet ; envoyé seulement à qui clique « Regarder » ; plein écran ; impossible sur navigateur mobile ou page en HTTP (bouton désactivé, raison affichée)"
+Contrôle à distance de l'écran partagé,video,could,no,yes,"S18 F04 ; ajout KRAKEN : qui regarde un écran demande le contrôle, celui qui partage accepte à chaque fois dans l'appli puis dans une fenêtre native ; un seul à la fois ; souris, molette, clavier (touches physiques) ; Échap rend la main ; arrêt dans l'appli, au menu KRAKEN ou fin du partage ; seule l'appli de bureau peut être contrôlée (X11, macOS avec Accessibilité, Windows), écran entier seulement"
 Stream 1080p60 et plus,video,should,yes,partial,"nitro : gratuit ; résolution de l'écran sans limite payante, mais 30 i/s pour l'instant"
 Aperçu du stream,video,could,yes,no,S10
 Soundboard,voix,should,yes,no,S10 S22

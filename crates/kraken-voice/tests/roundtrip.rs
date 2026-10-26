@@ -7,7 +7,10 @@ use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use kraken_proto::{Id, VOICE_DATA_CHANNEL, VoiceClientMsg, VoiceMids, VoiceServerMsg, VoiceState};
+use kraken_proto::{
+    ControlRefusal, Id, MouseButton, RemoteInput, VOICE_DATA_CHANNEL, VoiceClientMsg, VoiceMids, VoiceServerMsg,
+    VoiceState,
+};
 use kraken_voice::{Join, JoinError, Settings, Sfu};
 use str0m::change::{SdpAnswer, SdpOffer, SdpPendingOffer};
 use str0m::channel::ChannelId;
@@ -36,6 +39,8 @@ struct Browser {
     frames: u64,
     /// Offres reçues du serveur.
     offers: Vec<String>,
+    /// Les autres messages du serveur (contrôle à distance).
+    inbox: Vec<VoiceServerMsg>,
     /// Trames reçues : flux (msid) de la piste, nature, contenu.
     received: Vec<(String, MediaKind, Vec<u8>)>,
     keyframe_requests: usize,
@@ -70,6 +75,7 @@ impl Browser {
             last_frame: now,
             frames: 0,
             offers: Vec::new(),
+            inbox: Vec::new(),
             received: Vec::new(),
             keyframe_requests: 0,
             next: now,
@@ -115,12 +121,14 @@ impl Browser {
         match e {
             Event::Connected => self.connected = true,
             Event::ChannelOpen(id, label) if label == VOICE_DATA_CHANNEL => self.channel = Some(id),
-            Event::ChannelData(d) => {
-                let VoiceServerMsg::Offer { sdp } = serde_json::from_slice(&d.data).unwrap();
-                let answer = self.rtc.sdp_api().accept_offer(SdpOffer::from_sdp_string(&sdp).unwrap()).unwrap();
-                self.offers.push(sdp);
-                self.send(&VoiceClientMsg::Answer { sdp: answer.to_sdp_string() });
-            }
+            Event::ChannelData(d) => match serde_json::from_slice(&d.data).unwrap() {
+                VoiceServerMsg::Offer { sdp } => {
+                    let answer = self.rtc.sdp_api().accept_offer(SdpOffer::from_sdp_string(&sdp).unwrap()).unwrap();
+                    self.offers.push(sdp);
+                    self.send(&VoiceClientMsg::Answer { sdp: answer.to_sdp_string() });
+                }
+                other => self.inbox.push(other),
+            },
             Event::MediaData(d) => {
                 let m = self.rtc.media(d.mid).unwrap();
                 self.received.push((m.stream_id().to_string(), m.kind(), d.data.to_vec()));
@@ -350,4 +358,164 @@ fn port_taken() {
     assert_eq!(Sfu::start(public, |_| {}).unwrap().candidates()[0].port(), 40000);
     let none = Settings { port: 0, ips: vec![], ..Settings::default() };
     assert!(Sfu::start(none, |_| {}).is_err(), "rien à annoncer");
+}
+
+/// Fait tourner les navigateurs pendant `ms` millisecondes.
+fn wait(bs: &mut [&mut Browser], ms: u64) {
+    let t = Instant::now();
+    until(bs, "attente", |_| t.elapsed() > Duration::from_millis(ms));
+}
+
+fn inputs_from(b: &Browser, from: Id) -> usize {
+    b.inbox.iter().filter(|m| matches!(m, VoiceServerMsg::ControlInput { user_id, .. } if *user_id == from)).count()
+}
+
+fn has(b: &Browser, msg: &VoiceServerMsg) -> bool {
+    b.inbox.contains(msg)
+}
+
+fn count(b: &Browser, msg: &VoiceServerMsg) -> usize {
+    b.inbox.iter().filter(|m| *m == msg).count()
+}
+
+#[test]
+fn remote_control_relay() {
+    let (sfu, _) = sfu(25);
+    let (guild, room) = (id(1), id(2));
+    let (ua, ub, uc) = (id(10), id(11), id(12));
+    let mut a = Browser::join(&sfu, guild, room, ua);
+    let mut b = Browser::join(&sfu, guild, room, ub);
+    let mut c = Browser::join(&sfu, guild, room, uc);
+    until(&mut [&mut a, &mut b, &mut c], "connexions", |bs| bs.iter().all(|x| x.ready()));
+    let mv = |x: f32| VoiceClientMsg::ControlInput { user_id: ua, input: RemoteInput::Move { x, y: 0.5 } };
+    let request = |user_id| VoiceClientMsg::ControlRequest { user_id };
+    let answer = |user_id, accept| VoiceClientMsg::ControlAnswer { user_id, accept, reason: None };
+    let end = |user_id| VoiceServerMsg::ControlEnd { user_id };
+    let start_share =
+        |a: &mut Browser| a.send(&VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: true });
+
+    // A partage. B ne le regarde pas encore : sa demande et ses actions ne vont nulle part.
+    start_share(&mut a);
+    until(&mut [&mut a, &mut b, &mut c], "partage annoncé", |_| sfu.state(ua).is_some_and(|s| s.streaming));
+    b.send(&request(ua));
+    b.send(&mv(0.5));
+    wait(&mut [&mut a, &mut b, &mut c], 300);
+    assert!(a.inbox.is_empty(), "pas de demande sans regarder : {:?}", a.inbox);
+
+    // B regarde : ses actions ne passent toujours pas, sa demande oui (une seule fois).
+    b.send(&VoiceClientMsg::Watch { user_id: ua, on: true });
+    b.send(&mv(0.5));
+    b.send(&request(ua));
+    b.send(&request(ua));
+    let asked_b = VoiceServerMsg::ControlRequest { user_id: ub };
+    until(&mut [&mut a, &mut b, &mut c], "demande de B", |bs| has(bs[0], &asked_b));
+    // Une demande pour son propre écran, ou pour quelqu'un qui ne partage pas : ignorées.
+    a.send(&request(ua));
+    c.send(&request(ub));
+    // C regarde et demande aussi.
+    c.send(&VoiceClientMsg::Watch { user_id: ua, on: true });
+    c.send(&request(ua));
+    let asked_c = VoiceServerMsg::ControlRequest { user_id: uc };
+    until(&mut [&mut a, &mut b, &mut c], "demande de C", |bs| has(bs[0], &asked_c));
+    wait(&mut [&mut a, &mut b, &mut c], 200);
+    assert_eq!(count(&a, &asked_b), 1, "demande en double ignorée");
+    assert_eq!(inputs_from(&a, ub), 0, "aucune action avant l'accord");
+    assert!(b.inbox.is_empty() && c.inbox.is_empty());
+
+    // A accepte B : B a le contrôle, la demande de C est refusée (une personne à la fois).
+    a.send(&answer(ub, true));
+    let granted = VoiceServerMsg::ControlAnswer { user_id: ua, accept: true, reason: None };
+    let busy = VoiceServerMsg::ControlAnswer { user_id: ua, accept: false, reason: Some(ControlRefusal::Busy) };
+    until(&mut [&mut a, &mut b, &mut c], "accord", |bs| has(bs[1], &granted) && has(bs[2], &busy));
+    // Répondre à une demande qui n'existe plus : A doit retirer son accord.
+    a.send(&answer(uc, true));
+    until(&mut [&mut a, &mut b, &mut c], "accord sans demande", |bs| has(bs[0], &end(uc)));
+    assert!(!has(&c, &granted), "C n'a jamais le contrôle");
+
+    // Les actions de B arrivent chez A, et seulement les siennes ; une action invalide est jetée.
+    b.send(&mv(0.25));
+    b.send(&VoiceClientMsg::ControlInput { user_id: ua, input: RemoteInput::Move { x: 2.0, y: 0.5 } });
+    b.send(&VoiceClientMsg::ControlInput {
+        user_id: ua,
+        input: RemoteInput::Button { button: MouseButton::Left, down: true },
+    });
+    c.send(&mv(0.75));
+    c.send(&request(ua));
+    until(&mut [&mut a, &mut b, &mut c], "actions", |bs| inputs_from(bs[0], ub) >= 2);
+    wait(&mut [&mut a, &mut b, &mut c], 200);
+    assert_eq!(inputs_from(&a, ub), 2);
+    assert_eq!(inputs_from(&a, uc), 0, "C n'a pas le contrôle");
+    assert!(has(&a, &VoiceServerMsg::ControlInput { user_id: ub, input: RemoteInput::Move { x: 0.25, y: 0.5 } }));
+    assert_eq!(count(&c, &busy), 2, "déjà contrôlé : refus direct, sans déranger A");
+    assert_eq!(count(&a, &asked_c), 1);
+
+    // Débit borné : une rafale de 600 mouvements, environ 240 passent.
+    let before = inputs_from(&a, ub);
+    for i in 0..600 {
+        b.send(&mv(i as f32 / 600.0));
+    }
+    wait(&mut [&mut a, &mut b, &mut c], 500);
+    let passed = inputs_from(&a, ub) - before;
+    assert!((200..=400).contains(&passed), "{passed} mouvements relayés sur 600");
+
+    // B ne regarde plus : le contrôle prend fin pour les deux, ses actions ne passent plus.
+    b.send(&VoiceClientMsg::Watch { user_id: ua, on: false });
+    until(&mut [&mut a, &mut b, &mut c], "fin (plus regardé)", |bs| has(bs[0], &end(ub)) && has(bs[1], &end(ua)));
+    wait(&mut [&mut a, &mut b, &mut c], 1000);
+    let before = inputs_from(&a, ub);
+    b.send(&VoiceClientMsg::Watch { user_id: ua, on: true });
+    b.send(&mv(0.5));
+    wait(&mut [&mut a, &mut b, &mut c], 300);
+    assert_eq!(inputs_from(&a, ub), before, "plus de contrôle : plus d'action");
+
+    // Nouvelle demande, nouvel accord ; A arrête son partage : fin pour les deux.
+    let (ends_a, ends_b) = (count(&a, &end(ub)), count(&b, &end(ua)));
+    b.send(&request(ua));
+    until(&mut [&mut a, &mut b, &mut c], "deuxième demande", |bs| count(bs[0], &asked_b) == 2);
+    a.send(&answer(ub, true));
+    until(&mut [&mut a, &mut b, &mut c], "deuxième accord", |bs| count(bs[1], &granted) == 2);
+    a.send(&VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: false });
+    until(&mut [&mut a, &mut b, &mut c], "fin (partage arrêté)", |bs| {
+        count(bs[0], &end(ub)) > ends_a && count(bs[1], &end(ua)) > ends_b
+    });
+
+    // A refuse C : C l'apprend, et ne peut pas redemander tout de suite.
+    start_share(&mut a);
+    until(&mut [&mut a, &mut b, &mut c], "partage repris", |_| sfu.state(ua).is_some_and(|s| s.streaming));
+    wait(&mut [&mut a, &mut b, &mut c], 1500);
+    c.send(&VoiceClientMsg::Watch { user_id: ua, on: true });
+    c.send(&request(ua));
+    until(&mut [&mut a, &mut b, &mut c], "demande de C", |bs| count(bs[0], &asked_c) == 2);
+    a.send(&answer(uc, false));
+    let declined = VoiceServerMsg::ControlAnswer { user_id: ua, accept: false, reason: Some(ControlRefusal::Declined) };
+    until(&mut [&mut a, &mut b, &mut c], "refus", |bs| has(bs[2], &declined));
+    c.send(&request(ua));
+    until(&mut [&mut a, &mut b, &mut c], "refus récent", |bs| count(bs[2], &declined) == 2);
+    assert_eq!(count(&a, &asked_c), 2, "pas redemandé à A pendant le délai");
+
+    // B a le contrôle ; A l'arrête : fin pour les deux.
+    b.send(&VoiceClientMsg::Watch { user_id: ua, on: true });
+    b.send(&request(ua));
+    until(&mut [&mut a, &mut b, &mut c], "troisième demande", |bs| count(bs[0], &asked_b) == 3);
+    a.send(&answer(ub, true));
+    until(&mut [&mut a, &mut b, &mut c], "troisième accord", |bs| count(bs[1], &granted) == 3);
+    let (ends_a, ends_b) = (count(&a, &end(ub)), count(&b, &end(ua)));
+    a.send(&VoiceClientMsg::ControlStop { user_id: ub });
+    until(&mut [&mut a, &mut b, &mut c], "fin (arrêté par A)", |bs| {
+        count(bs[0], &end(ub)) > ends_a && count(bs[1], &end(ua)) > ends_b
+    });
+    let before = inputs_from(&a, ub);
+    b.send(&mv(0.5));
+    wait(&mut [&mut a, &mut b, &mut c], 300);
+    assert_eq!(inputs_from(&a, ub), before);
+
+    // Encore une fois ; B part : A apprend la fin.
+    wait(&mut [&mut a, &mut b, &mut c], 1000);
+    b.send(&request(ua));
+    until(&mut [&mut a, &mut b, &mut c], "quatrième demande", |bs| count(bs[0], &asked_b) == 4);
+    a.send(&answer(ub, true));
+    until(&mut [&mut a, &mut b, &mut c], "quatrième accord", |bs| count(bs[1], &granted) == 4);
+    let ends_a = count(&a, &end(ub));
+    assert!(sfu.leave(ub));
+    until(&mut [&mut a, &mut c], "fin (départ)", |bs| count(bs[0], &end(ub)) > ends_a);
 }

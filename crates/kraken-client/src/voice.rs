@@ -6,13 +6,22 @@
 //!
 //! Les objets JavaScript (connexion, pistes) vivent dans `SESSION`, hors des signaux. Chaque
 //! connexion a son numéro (`GEN`) : un rappel d'une connexion fermée ne touche plus à rien.
+//!
+//! Contrôle à distance : celui qui regarde un écran demande à le contrôler ; le serveur relaie
+//! demande, réponse, actions et fin par le canal de données. Seule l'appli de bureau peut être
+//! contrôlée : la page lui passe les actions (`remote_input`), et c'est elle qui demande l'accord,
+//! dans une fenêtre native, avant de jouer quoi que ce soit. Dans un navigateur, la demande est
+//! refusée d'office (« il faut l'appli de bureau »).
 
 use std::cell::{Cell, RefCell};
 
 use futures::StreamExt;
 use futures::channel::mpsc;
 use gloo_timers::future::TimeoutFuture;
-use kraken_proto::{Id, User, VOICE_DATA_CHANNEL, VoiceClientMsg, VoiceJoin, VoiceMids, VoiceServerMsg, VoiceState};
+use kraken_proto::{
+    ControlRefusal, Id, RemoteInput, User, VOICE_DATA_CHANNEL, VoiceClientMsg, VoiceJoin, VoiceMids, VoiceServerMsg,
+    VoiceState,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use wasm_bindgen::JsCast;
@@ -54,6 +63,32 @@ pub enum Status {
     Lost(String),
 }
 
+/// Contrôle à distance, côté spectateur : l'écran que je demande à contrôler, ou que je contrôle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Control {
+    Off,
+    Asking(Id),
+    On(Id),
+}
+
+/// Ce que le spectateur apprend sur sa demande : refusée (et pourquoi), ou terminée.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ControlNote {
+    Refused(ControlRefusal),
+    Ended,
+}
+
+/// Ce que celui qui partage doit savoir d'une demande qu'il n'a pas pu accepter.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ShareNote {
+    /// Demande refusée d'office : on est dans un navigateur.
+    Desktop,
+    /// Une fenêtre ou un onglet est partagé, pas un écran entier.
+    Surface,
+    /// Ce que l'appli de bureau a répondu (Wayland, autorisation macOS…).
+    Message(String),
+}
+
 /// Un flux reçu : le micro de quelqu'un, ou son écran (image et son ensemble).
 #[derive(Clone)]
 pub struct Remote {
@@ -81,6 +116,15 @@ pub struct Voice {
     pub error: RwSignal<Option<(Id, String)>>,
     /// Qui parle en ce moment dans mon salon (moi compris).
     pub speaking: RwSignal<Vec<Id>>,
+    /// Contrôle à distance de l'écran regardé.
+    pub control: RwSignal<Control>,
+    pub control_note: RwSignal<Option<(Id, ControlNote)>>,
+    /// Contrôle à distance de mon écran : qui le demande, qui attend ma confirmation native,
+    /// qui l'a.
+    pub requests: RwSignal<Vec<Id>>,
+    pub confirming: RwSignal<Option<Id>>,
+    pub controller: RwSignal<Option<Id>>,
+    pub share_note: RwSignal<Option<(Id, ShareNote)>>,
     /// Mon compte (celui du `Store`).
     me: RwSignal<Option<User>>,
 }
@@ -98,6 +142,12 @@ struct Session {
     handlers: Vec<Handler>,
     /// Le bouton « Arrêter le partage » du navigateur.
     screen_end: Option<Handler>,
+}
+
+/// Contrôle de mon écran accordé : à qui, et le jeton de l'appli de bureau.
+struct Granted {
+    user: Id,
+    token: String,
 }
 
 impl Session {
@@ -127,6 +177,10 @@ thread_local! {
     static SESSION: RefCell<Option<Session>> = const { RefCell::new(None) };
     /// Numéro de la connexion en cours ; change à chaque connexion et à chaque départ.
     static GEN: Cell<u64> = const { Cell::new(0) };
+    static GRANTED: RefCell<Option<Granted>> = const { RefCell::new(None) };
+    /// Actions reçues, en attente d'être passées à l'appli de bureau (dans l'ordre).
+    static QUEUE: RefCell<Vec<RemoteInput>> = const { RefCell::new(Vec::new()) };
+    static PUMPING: Cell<bool> = const { Cell::new(false) };
 }
 
 fn bump() -> u64 {
@@ -214,6 +268,58 @@ fn send(msg: &VoiceClientMsg) {
     });
 }
 
+/// L'appli de bureau KRAKEN : sa fonction `invoke`, absente d'un navigateur.
+fn tauri() -> Option<(JsValue, js_sys::Function)> {
+    let internals = js_sys::Reflect::get(&window(), &"__TAURI_INTERNALS__".into()).ok().filter(|v| v.is_object())?;
+    let invoke = js_sys::Reflect::get(&internals, &"invoke".into()).ok()?.dyn_into().ok()?;
+    Some((internals, invoke))
+}
+
+/// Dans l'appli de bureau : mon écran peut être contrôlé à distance.
+pub fn desktop() -> bool {
+    tauri().is_some()
+}
+
+/// Ce que l'appli de bureau répond quand elle refuse.
+#[derive(serde::Deserialize)]
+struct Refusal {
+    reason: String,
+    message: String,
+}
+
+/// Appelle une commande de l'appli de bureau.
+async fn invoke(cmd: &str, args: serde_json::Value) -> Result<JsValue, Refusal> {
+    let broken = || Refusal { reason: "unavailable".into(), message: "L'appli de bureau ne répond pas.".into() };
+    let (internals, f) = tauri().ok_or_else(broken)?;
+    let args = js_sys::JSON::parse(&args.to_string()).map_err(|_| broken())?;
+    let promise = f.call2(&internals, &cmd.into(), &args).map_err(|_| broken())?;
+    let promise: js_sys::Promise = promise.dyn_into().map_err(|_| broken())?;
+    JsFuture::from(promise).await.map_err(|e| {
+        js_sys::JSON::stringify(&e)
+            .ok()
+            .and_then(|s| s.as_string())
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_else(broken)
+    })
+}
+
+fn refusal(reason: &str) -> ControlRefusal {
+    match reason {
+        "declined" => ControlRefusal::Declined,
+        "busy" => ControlRefusal::Busy,
+        "surface" => ControlRefusal::Surface,
+        _ => ControlRefusal::Unavailable,
+    }
+}
+
+/// `width`, `height` et `displaySurface` de la piste partagée.
+fn surface(t: &MediaStreamTrack) -> (u32, u32, Option<String>) {
+    let s: JsValue = t.get_settings().into();
+    let num = |k: &str| js_sys::Reflect::get(&s, &k.into()).ok().and_then(|v| v.as_f64()).unwrap_or(0.0) as u32;
+    let kind = js_sys::Reflect::get(&s, &"displaySurface".into()).ok().and_then(|v| v.as_string());
+    (num("width"), num("height"), kind)
+}
+
 /// Applique une offre du serveur et lui renvoie la réponse.
 async fn answer(pc: &RtcPeerConnection, dc: &RtcDataChannel, sdp: &str) -> Result<(), JsValue> {
     let offer = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
@@ -239,6 +345,12 @@ impl Voice {
             notice: RwSignal::new(None),
             error: RwSignal::new(None),
             speaking: RwSignal::new(Vec::new()),
+            control: RwSignal::new(Control::Off),
+            control_note: RwSignal::new(None),
+            requests: RwSignal::new(Vec::new()),
+            confirming: RwSignal::new(None),
+            controller: RwSignal::new(None),
+            share_note: RwSignal::new(None),
             me,
         }
     }
@@ -414,8 +526,13 @@ impl Voice {
             }
         });
         let on_message = Handler::new(move |e: JsValue| {
-            if let Some(text) = e.unchecked_into::<MessageEvent>().data().as_string() {
-                let _ = offers.unbounded_send(text);
+            let Some(text) = e.unchecked_into::<MessageEvent>().data().as_string() else { return };
+            match serde_json::from_str(&text) {
+                Ok(VoiceServerMsg::Offer { sdp }) => {
+                    let _ = offers.unbounded_send(sdp);
+                }
+                Ok(msg) if current(n) => self.on_control(msg),
+                _ => {}
             }
         });
         pc.set_ontrack(Some(on_track.as_ref().unchecked_ref()));
@@ -428,11 +545,10 @@ impl Voice {
 
     /// Les offres du serveur, une à la fois (il n'en envoie pas d'autre avant la réponse).
     async fn offers(self, n: u64, pc: RtcPeerConnection, dc: RtcDataChannel, mut rx: mpsc::UnboundedReceiver<String>) {
-        while let Some(text) = rx.next().await {
+        while let Some(sdp) = rx.next().await {
             if !current(n) {
                 return;
             }
-            let Ok(VoiceServerMsg::Offer { sdp }) = serde_json::from_str(&text) else { continue };
             if answer(&pc, &dc, &sdp).await.is_err() {
                 if current(n) {
                     self.lost("Le navigateur a refusé une mise à jour de l'appel.");
@@ -513,6 +629,10 @@ impl Voice {
     /// Ferme la connexion et oublie ce qu'elle recevait (sans prévenir le serveur).
     fn teardown(self) {
         bump();
+        self.release_control(false);
+        self.requests.set(Vec::new());
+        self.confirming.set(None);
+        self.control.set(Control::Off);
         if let Some(s) = SESSION.take() {
             s.close();
         }
@@ -688,6 +808,9 @@ impl Voice {
         }
         self.preview.set(None);
         self.streaming.set(false);
+        // Le serveur met fin au contrôle et aux demandes avec le partage ; l'appli de bureau aussi.
+        self.release_control(false);
+        self.requests.set(Vec::new());
     }
 
     /// Regarde l'écran de quelqu'un (un seul à la fois), ou plus aucun.
@@ -702,7 +825,204 @@ impl Voice {
         if let Some(u) = user {
             send(&VoiceClientMsg::Watch { user_id: u, on: true });
         }
+        // Ne plus regarder met fin au contrôle (le serveur le fait aussi).
+        if matches!(self.control.get_untracked(), Control::Asking(u) | Control::On(u) if Some(u) != user) {
+            self.control.set(Control::Off);
+        }
         self.watching.set(user);
+    }
+
+    // ───── contrôle à distance ─────
+
+    /// Un message de contrôle à distance relayé par le serveur.
+    fn on_control(self, msg: VoiceServerMsg) {
+        match msg {
+            VoiceServerMsg::Offer { .. } => {}
+            // On regarde mon écran et voudrait le contrôler.
+            VoiceServerMsg::ControlRequest { user_id } => {
+                if !self.streaming.get_untracked() {
+                    return;
+                }
+                if !desktop() {
+                    send(&VoiceClientMsg::ControlAnswer {
+                        user_id,
+                        accept: false,
+                        reason: Some(ControlRefusal::Desktop),
+                    });
+                    self.share_note.set(Some((user_id, ShareNote::Desktop)));
+                    return;
+                }
+                if !self.requests.with_untracked(|r| r.contains(&user_id)) {
+                    self.requests.update(|r| r.push(user_id));
+                }
+            }
+            VoiceServerMsg::ControlAnswer { user_id, accept, reason } => {
+                if self.control.get_untracked() != Control::Asking(user_id) {
+                    return;
+                }
+                if accept {
+                    self.control.set(Control::On(user_id));
+                    self.control_note.set(None);
+                } else {
+                    self.control.set(Control::Off);
+                    let why = reason.unwrap_or(ControlRefusal::Declined);
+                    self.control_note.set(Some((user_id, ControlNote::Refused(why))));
+                }
+            }
+            VoiceServerMsg::ControlInput { user_id, input } => {
+                let mine = GRANTED.with_borrow(|g| g.as_ref().is_some_and(|g| g.user == user_id));
+                if mine && input.valid() {
+                    QUEUE.with_borrow_mut(|q| q.push(input));
+                    self.pump();
+                }
+            }
+            VoiceServerMsg::ControlEnd { user_id } => {
+                // Il contrôlait mon écran, ou le demandait.
+                if GRANTED.with_borrow(|g| g.as_ref().is_some_and(|g| g.user == user_id)) {
+                    self.release_control(false);
+                }
+                if self.requests.with_untracked(|r| r.contains(&user_id)) {
+                    self.requests.update(|r| r.retain(|u| *u != user_id));
+                }
+                // Je contrôlais son écran, ou le demandais.
+                match self.control.get_untracked() {
+                    Control::On(u) if u == user_id => {
+                        self.control.set(Control::Off);
+                        self.control_note.set(Some((user_id, ControlNote::Ended)));
+                    }
+                    Control::Asking(u) if u == user_id => self.control.set(Control::Off),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    /// Passe les actions reçues à l'appli de bureau, dans l'ordre, un lot à la fois.
+    fn pump(self) {
+        if PUMPING.get() {
+            return;
+        }
+        PUMPING.set(true);
+        spawn_local(async move {
+            loop {
+                let events = QUEUE.with_borrow_mut(std::mem::take);
+                let token = GRANTED.with_borrow(|g| g.as_ref().map(|g| g.token.clone()));
+                let (false, Some(token)) = (events.is_empty(), token) else { break };
+                let args = serde_json::json!({ "token": token, "events": events });
+                if invoke("remote_input", args).await.is_err() {
+                    // Accord retiré dans l'appli (menu, page rechargée…) : fin pour tout le monde.
+                    if GRANTED.with_borrow(|g| g.as_ref().is_some_and(|g| g.token == token)) {
+                        self.release_control(true);
+                    }
+                    break;
+                }
+            }
+            QUEUE.with_borrow_mut(Vec::clear);
+            PUMPING.set(false);
+        });
+    }
+
+    /// Je regarde l'écran de `user` et demande à le contrôler.
+    pub fn request_control(self, user: Id) {
+        if self.watching.get_untracked() != Some(user) || self.control.get_untracked() != Control::Off {
+            return;
+        }
+        self.control_note.set(None);
+        self.control.set(Control::Asking(user));
+        send(&VoiceClientMsg::ControlRequest { user_id: user });
+    }
+
+    /// J'arrête de contrôler (ou de demander) ; je continue de regarder.
+    pub fn stop_control(self) {
+        if let Control::Asking(u) | Control::On(u) = self.control.get_untracked() {
+            send(&VoiceClientMsg::ControlStop { user_id: u });
+        }
+        self.control.set(Control::Off);
+    }
+
+    /// Une action sur l'écran que je contrôle.
+    pub fn control_input(self, input: RemoteInput) {
+        if let Control::On(u) = self.control.get_untracked() {
+            send(&VoiceClientMsg::ControlInput { user_id: u, input });
+        }
+    }
+
+    /// J'accepte que `user` contrôle mon écran : l'appli de bureau me redemande, hors de la page.
+    pub fn accept_control(self, user: Id, name: String) {
+        if self.confirming.get_untracked().is_some() || !self.requests.with_untracked(|r| r.contains(&user)) {
+            return;
+        }
+        let video = SESSION.with_borrow(|s| s.as_ref().and_then(|s| s.screen.as_ref()).and_then(|m| track(m, "video")));
+        let Some(video) = video else { return };
+        let (width, height, kind) = surface(&video);
+        if kind.as_deref().is_some_and(|k| k != "monitor") {
+            self.answer_control(user, false, Some(ControlRefusal::Surface));
+            self.share_note.set(Some((user, ShareNote::Surface)));
+            return;
+        }
+        let n = GEN.with(Cell::get);
+        self.confirming.set(Some(user));
+        self.share_note.set(None);
+        spawn_local(async move {
+            let args = serde_json::json!({ "name": name, "width": width, "height": height, "surface": kind });
+            let result = invoke("remote_begin", args).await;
+            if !current(n) {
+                if let Ok(token) = result
+                    && let Some(token) = token.as_string()
+                {
+                    let _ = invoke("remote_end", serde_json::json!({ "token": token })).await;
+                }
+                return;
+            }
+            self.confirming.set(None);
+            let still = self.streaming.get_untracked() && self.requests.with_untracked(|r| r.contains(&user));
+            match result.map(|t| t.as_string()) {
+                Ok(Some(token)) if still => {
+                    GRANTED.set(Some(Granted { user, token }));
+                    self.controller.set(Some(user));
+                    self.answer_control(user, true, None);
+                }
+                // Demande retirée pendant la question : l'accord est rendu aussitôt.
+                Ok(Some(token)) => {
+                    let _ = invoke("remote_end", serde_json::json!({ "token": token })).await;
+                }
+                Ok(None) => self.answer_control(user, false, Some(ControlRefusal::Unavailable)),
+                Err(r) => {
+                    let why = refusal(&r.reason);
+                    self.answer_control(user, false, Some(why));
+                    if why != ControlRefusal::Declined {
+                        self.share_note.set(Some((user, ShareNote::Message(r.message))));
+                    }
+                }
+            }
+        });
+    }
+
+    /// Je refuse que `user` contrôle mon écran.
+    pub fn decline_control(self, user: Id) {
+        self.answer_control(user, false, None);
+    }
+
+    fn answer_control(self, user: Id, accept: bool, reason: Option<ControlRefusal>) {
+        self.requests.update(|r| r.retain(|u| *u != user));
+        send(&VoiceClientMsg::ControlAnswer { user_id: user, accept, reason });
+    }
+
+    /// Reprend la main : plus personne ne contrôle mon écran. `tell_server` : le serveur ne le
+    /// sait pas encore (arrêt depuis la page ou l'appli).
+    pub fn release_control(self, tell_server: bool) {
+        QUEUE.with_borrow_mut(Vec::clear);
+        let Some(g) = GRANTED.take() else {
+            self.controller.set(None);
+            return;
+        };
+        self.controller.set(None);
+        if tell_server {
+            send(&VoiceClientMsg::ControlStop { user_id: g.user });
+        }
+        spawn_local(async move {
+            let _ = invoke("remote_end", serde_json::json!({ "token": g.token })).await;
+        });
     }
 }
 
@@ -738,4 +1058,8 @@ pub fn init(store: Store) {
             v.hang_up();
         }
     });
+    // L'appli de bureau a retiré l'accord (menu « Arrêter le contrôle à distance »).
+    let ended = Closure::<dyn FnMut()>::new(move || v.release_control(true));
+    let _ = window().add_event_listener_with_callback("kraken-remote-ended", ended.as_ref().unchecked_ref());
+    ended.forget();
 }

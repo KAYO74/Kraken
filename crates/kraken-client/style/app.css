@@ -116,6 +116,23 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
 .app-stage figcaption .k-btn--icon { color: var(--on-media); }
 .app-stage figcaption .k-btn--icon:hover { background: var(--shadow-scrim); color: var(--on-media); }
 .app-stage-wait { position: absolute; margin: 0; }
+/* Contrôle à distance : l'image prend souris et clavier ; un contour dit qu'ils partent ailleurs. */
+.app-stage[data-control] { outline: 2px solid var(--warning); outline-offset: 2px; }
+.app-stage[data-control] video { cursor: crosshair; touch-action: none; }
+.app-stage video:focus-visible { outline: none; }
+.app-stage-hint { position: absolute; top: var(--space-3); left: 50%; transform: translateX(-50%); margin: 0; max-width: calc(100% - 2 * var(--space-3));
+  padding: var(--space-2) var(--space-4); border-radius: var(--radius-pill); background: var(--shadow-scrim); color: var(--on-media);
+  font-size: var(--text-sm-size); text-align: center; pointer-events: none; }
+.app-stage-asking { font-size: var(--text-sm-size); }
+/* Mon écran contrôlé ou demandé : visible où que je sois pendant l'appel. */
+.app-remote { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: var(--z-toast); display: grid; gap: var(--space-2);
+  width: min(var(--size-card), calc(100vw - 2 * var(--space-4))); padding: var(--space-3); border-radius: var(--radius-lg);
+  border: 1px solid var(--border-strong); background: var(--surface-raised); box-shadow: var(--shadow-pop); }
+.app-remote-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); color: var(--text); font-size: var(--text-sm-size); }
+.app-remote-row > .k-icon { color: var(--info); }
+.app-remote-row[data-on] > .k-icon { color: var(--warning); }
+.app-remote-row p { flex: 1; min-width: 12ch; margin: 0; }
+.app-remote-wait { color: var(--text-muted); }
 .app-push { margin-left: auto; }
 .app-call-why { padding: 0 var(--space-4) var(--space-4); text-align: center; }
 .app-voice-users { list-style: none; margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-8); display: grid; gap: var(--space-1); }

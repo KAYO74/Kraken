@@ -8,7 +8,7 @@ use leptos_router::NavigateOptions;
 use leptos_router::components::Outlet;
 use leptos_router::hooks::{use_location, use_navigate};
 
-use crate::call::{CallAudio, VoicePanel, VoiceUsers};
+use crate::call::{CallAudio, ControlPanel, VoicePanel, VoiceUsers};
 use crate::icons::{Icon, lu};
 use crate::store::{Conn, store};
 use crate::ui::{Avatar, Logo, initials, modal};
@@ -101,6 +101,7 @@ pub fn Shell() -> impl IntoView {
                 <Outlet/>
             </main>
             <CallAudio/>
+            <ControlPanel/>
         </div>
     }
 }

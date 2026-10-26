@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-end"
+description = "Enables the remote_end command without any pre-configured scope."
+commands.allow = ["remote_end"]
+
+[[permission]]
+identifier = "deny-remote-end"
+description = "Denies the remote_end command without any pre-configured scope."
+commands.deny = ["remote_end"]

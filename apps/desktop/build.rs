@@ -38,9 +38,18 @@ fn main() {
     println!("cargo:rerun-if-env-changed=KRAKEN_VC_RUNTIME_DIR");
     embed_postgresql();
     embed_vc_runtime();
-    // Les commandes de l'appli passent par l'ACL : seule la page locale y a droit
-    // (capabilities/default.json), jamais une page distante.
-    let manifest = tauri_build::AppManifest::new().commands(&["join", "host_start", "host_status", "host_open"]);
+    // Les commandes de l'appli passent par l'ACL : seule la page locale a droit aux quatre
+    // premières (capabilities/default.json) ; celles du contrôle à distance, seulement la page de
+    // l'instance (capacité ajoutée au lancement, `remote.rs`).
+    let manifest = tauri_build::AppManifest::new().commands(&[
+        "join",
+        "host_start",
+        "host_status",
+        "host_open",
+        "remote_begin",
+        "remote_input",
+        "remote_end",
+    ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest)).expect("tauri-build");
 }
 

@@ -307,6 +307,27 @@ pub enum VoiceClientMsg {
         user_id: Id,
         on: bool,
     },
+    /// Contrôle à distance : demander à `user_id`, dont on regarde l'écran, de prendre la main.
+    ControlRequest {
+        user_id: Id,
+    },
+    /// Contrôle à distance : réponse de celui qui partage à la demande de `user_id`.
+    ControlAnswer {
+        user_id: Id,
+        accept: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<ControlRefusal>,
+    },
+    /// Contrôle à distance : une action sur l'écran de `user_id`, qui l'a accepté.
+    ControlInput {
+        user_id: Id,
+        input: RemoteInput,
+    },
+    /// Contrôle à distance : fin (ou demande retirée) entre moi et `user_id`, dans un sens ou
+    /// dans l'autre.
+    ControlStop {
+        user_id: Id,
+    },
 }
 
 /// Canal de données, serveur → client. Une seule offre à la fois : la suivante attend la réponse.
@@ -316,6 +337,118 @@ pub enum VoiceServerMsg {
     /// Pistes ajoutées ou retirées. Chaque piste reçue a pour flux `<user_id>.mic` ou
     /// `<user_id>.screen` (image et son de l'écran partagent ce flux).
     Offer { sdp: String },
+    /// `user_id`, qui regarde mon écran, demande à le contrôler.
+    ControlRequest { user_id: Id },
+    /// Réponse de `user_id` à ma demande de contrôle.
+    ControlAnswer {
+        user_id: Id,
+        accept: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<ControlRefusal>,
+    },
+    /// Une action de `user_id`, qui contrôle mon écran.
+    ControlInput { user_id: Id, input: RemoteInput },
+    /// Le contrôle (ou la demande) entre moi et `user_id` a pris fin : arrêté par l'autre, fin
+    /// du partage, plus regardé, départ ou connexion perdue.
+    ControlEnd { user_id: Id },
+}
+
+/// Pourquoi une demande de contrôle n'a pas abouti.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ControlRefusal {
+    /// Refusée par celui qui partage.
+    Declined,
+    /// Quelqu'un d'autre a déjà le contrôle.
+    Busy,
+    /// Celui qui partage est dans un navigateur : seule l'appli de bureau peut être contrôlée.
+    Desktop,
+    /// Il partage une fenêtre ou un onglet, pas un écran entier.
+    Surface,
+    /// Impossible sur son ordinateur (Wayland, autorisation macOS manquante…).
+    Unavailable,
+}
+
+/// Boutons de souris transmis au contrôle à distance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MouseButton {
+    Left,
+    Middle,
+    Right,
+    Back,
+    Forward,
+}
+
+impl MouseButton {
+    /// `MouseEvent.button` du navigateur.
+    pub fn from_dom(button: i16) -> Option<Self> {
+        Some(match button {
+            0 => Self::Left,
+            1 => Self::Middle,
+            2 => Self::Right,
+            3 => Self::Back,
+            4 => Self::Forward,
+            _ => return None,
+        })
+    }
+}
+
+/// Une action du contrôle à distance. Les positions sont relatives à l'image partagée :
+/// (0, 0) en haut à gauche, (1, 1) en bas à droite.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "k", rename_all = "snake_case")]
+pub enum RemoteInput {
+    Move {
+        x: f32,
+        y: f32,
+    },
+    Button {
+        button: MouseButton,
+        down: bool,
+    },
+    /// Crans de molette (positif : vers le bas, ou vers la droite).
+    Wheel {
+        dx: i32,
+        dy: i32,
+    },
+    /// Touche physique, nommée comme `KeyboardEvent.code` (« KeyA », « Enter »…).
+    Key {
+        code: String,
+        down: bool,
+    },
+}
+
+/// Crans de molette au plus par action.
+pub const MAX_WHEEL_STEPS: i32 = 10;
+
+impl RemoteInput {
+    /// Une action plausible : position dans l'image, molette bornée, nom de touche court.
+    pub fn valid(&self) -> bool {
+        match self {
+            Self::Move { x, y } => [x, y].iter().all(|v| v.is_finite() && (0.0..=1.0).contains(*v)),
+            Self::Button { .. } => true,
+            Self::Wheel { dx, dy } => {
+                (dx.unsigned_abs() <= MAX_WHEEL_STEPS as u32 && dy.unsigned_abs() <= MAX_WHEEL_STEPS as u32)
+                    && (*dx != 0 || *dy != 0)
+            }
+            Self::Key { code, .. } => (1..=32).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_alphanumeric()),
+        }
+    }
+}
+
+/// Où tombe un point de l'élément vidéo (`px`, `py` depuis son coin, taille `w` × `h`) dans une
+/// image `vw` × `vh` affichée en entier (`object-fit: contain`, bandes noires comprises).
+/// `None` : dans les bandes, ou rien à afficher.
+pub fn contain_point(px: f64, py: f64, w: f64, h: f64, vw: f64, vh: f64) -> Option<(f32, f32)> {
+    if !(w > 0.0 && h > 0.0 && vw > 0.0 && vh > 0.0) {
+        return None;
+    }
+    let scale = (w / vw).min(h / vh);
+    let (iw, ih) = (vw * scale, vh * scale);
+    let (x0, y0) = ((w - iw) / 2.0, (h - ih) / 2.0);
+    let (x, y) = ((px - x0) / iw, (py - y0) / ih);
+    ((0.0..=1.0).contains(&x) && (0.0..=1.0).contains(&y)).then_some((x as f32, y as f32))
 }
 
 // ───────────── gateway ─────────────
@@ -391,5 +524,71 @@ mod tests {
         // Anciennes réponses sans les champs vocaux : toujours lisibles.
         let g: Instance = serde_json::from_str(r#"{"contact":null,"processors":null,"source_url":"x"}"#).unwrap();
         assert!(g.public_url.is_empty());
+    }
+
+    /// Le contrôle à distance, tel que le client web l'écrit.
+    #[test]
+    fn remote_control_messages() {
+        let u = Id::from_bytes([7; 16]);
+        let key: VoiceClientMsg = serde_json::from_str(&format!(
+            r#"{{"t":"control_input","user_id":"{u}","input":{{"k":"key","code":"KeyA","down":true}}}}"#
+        ))
+        .unwrap();
+        assert_eq!(
+            key,
+            VoiceClientMsg::ControlInput { user_id: u, input: RemoteInput::Key { code: "KeyA".into(), down: true } }
+        );
+        let answer: VoiceClientMsg =
+            serde_json::from_str(&format!(r#"{{"t":"control_answer","user_id":"{u}","accept":true}}"#)).unwrap();
+        assert_eq!(answer, VoiceClientMsg::ControlAnswer { user_id: u, accept: true, reason: None });
+        let refused =
+            VoiceServerMsg::ControlAnswer { user_id: u, accept: false, reason: Some(ControlRefusal::Desktop) };
+        assert_eq!(
+            serde_json::to_value(refused).unwrap(),
+            serde_json::json!({"t": "control_answer", "user_id": u, "accept": false, "reason": "desktop"})
+        );
+        let click = serde_json::to_value(RemoteInput::Button { button: MouseButton::Right, down: false }).unwrap();
+        assert_eq!(click, serde_json::json!({"k": "button", "button": "right", "down": false}));
+        assert_eq!(MouseButton::from_dom(2), Some(MouseButton::Right));
+        assert_eq!(MouseButton::from_dom(7), None);
+    }
+
+    #[test]
+    fn remote_inputs_are_checked() {
+        let ok = |i: RemoteInput| i.valid();
+        assert!(ok(RemoteInput::Move { x: 0.0, y: 1.0 }));
+        assert!(ok(RemoteInput::Move { x: 0.5, y: 0.25 }));
+        assert!(!ok(RemoteInput::Move { x: -0.01, y: 0.5 }));
+        assert!(!ok(RemoteInput::Move { x: 0.5, y: 1.5 }));
+        assert!(!ok(RemoteInput::Move { x: f32::NAN, y: 0.5 }));
+        assert!(!ok(RemoteInput::Move { x: f32::INFINITY, y: 0.5 }));
+        assert!(ok(RemoteInput::Wheel { dx: 0, dy: -3 }));
+        assert!(!ok(RemoteInput::Wheel { dx: 0, dy: 0 }));
+        assert!(!ok(RemoteInput::Wheel { dx: 11, dy: 0 }));
+        assert!(!ok(RemoteInput::Wheel { dx: 0, dy: i32::MIN }));
+        assert!(ok(RemoteInput::Key { code: "ArrowLeft".into(), down: true }));
+        assert!(!ok(RemoteInput::Key { code: String::new(), down: true }));
+        assert!(!ok(RemoteInput::Key { code: "Key A".into(), down: true }));
+        assert!(!ok(RemoteInput::Key { code: "K".repeat(33), down: true }));
+        assert!(!ok(RemoteInput::Key { code: "Clé".into(), down: true }));
+    }
+
+    #[test]
+    fn points_in_a_contained_video() {
+        // Image 16:9 dans un élément 16:9 : coins et milieu.
+        assert_eq!(contain_point(0.0, 0.0, 1600.0, 900.0, 1920.0, 1080.0), Some((0.0, 0.0)));
+        assert_eq!(contain_point(800.0, 450.0, 1600.0, 900.0, 1920.0, 1080.0), Some((0.5, 0.5)));
+        assert_eq!(contain_point(1600.0, 900.0, 1600.0, 900.0, 1920.0, 1080.0), Some((1.0, 1.0)));
+        // Image 4:3 dans un élément 16:9 : bandes à gauche et à droite (1200 px d'image sur 1600).
+        assert_eq!(contain_point(100.0, 450.0, 1600.0, 900.0, 1024.0, 768.0), None);
+        assert_eq!(contain_point(200.0, 0.0, 1600.0, 900.0, 1024.0, 768.0), Some((0.0, 0.0)));
+        assert_eq!(contain_point(1400.0, 900.0, 1600.0, 900.0, 1024.0, 768.0), Some((1.0, 1.0)));
+        // Image plus large : bandes en haut et en bas.
+        let (x, y) = contain_point(800.0, 500.0, 1600.0, 1000.0, 3200.0, 900.0).unwrap();
+        assert!((x - 0.5).abs() < 1e-6 && (y - 0.5).abs() < 1e-6);
+        assert_eq!(contain_point(800.0, 10.0, 1600.0, 1000.0, 3200.0, 900.0), None);
+        // Rien à afficher.
+        assert_eq!(contain_point(1.0, 1.0, 100.0, 100.0, 0.0, 0.0), None);
+        assert_eq!(contain_point(1.0, 1.0, 0.0, 100.0, 10.0, 10.0), None);
     }
 }

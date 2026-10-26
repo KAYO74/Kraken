@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remote-begin"
+description = "Enables the remote_begin command without any pre-configured scope."
+commands.allow = ["remote_begin"]
+
+[[permission]]
+identifier = "deny-remote-begin"
+description = "Denies the remote_begin command without any pre-configured scope."
+commands.deny = ["remote_begin"]
