@@ -10,17 +10,17 @@ use crate::store::store;
 use crate::ui::{Avatar, modal};
 
 const SECTIONS: &[(&str, &str, &str, &str)] = &[
-    ("Utilisateur", "account", "Mon compte", "S06"),
-    ("Utilisateur", "profiles", "Profils", "S20"),
-    ("Utilisateur", "privacy", "Données et confidentialité", "S07"),
-    ("Utilisateur", "messaging", "Messagerie et contacts", "S08"),
-    ("Utilisateur", "apps", "Applications connectées", "S15"),
-    ("Appli", "notifications", "Notifications", "S09"),
-    ("Appli", "voice", "Voix et vidéo", "S10"),
-    ("Appli", "appearance", "Apparence", "S11"),
-    ("Appli", "accessibility", "Accessibilité", "S12"),
-    ("Appli", "keybinds", "Raccourcis clavier", "S13"),
-    ("Appli", "language", "Langue et heure", "S14"),
+    ("Toi", "account", "Compte et sécurité", "S06"),
+    ("Toi", "profiles", "Profil public", "S20"),
+    ("Toi", "privacy", "Tes données", "S07"),
+    ("Toi", "messaging", "Qui peut t'écrire", "S08"),
+    ("Toi", "apps", "Applications liées", "S15"),
+    ("Préférences", "notifications", "Notifications", "S09"),
+    ("Préférences", "voice", "Micro, son et caméra", "S10"),
+    ("Préférences", "appearance", "Apparence", "S11"),
+    ("Préférences", "accessibility", "Accessibilité", "S12"),
+    ("Préférences", "keybinds", "Raccourcis clavier", "S13"),
+    ("Préférences", "language", "Langue et heure", "S14"),
 ];
 
 const THEME_KEY: &str = "kraken.theme";

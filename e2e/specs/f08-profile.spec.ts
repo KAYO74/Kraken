@@ -22,10 +22,12 @@ test('F08-H1 changer son nom affiché : partout, en direct, @pseudo dessous', as
   await a.page.reload();
   await expect(a.page.getByLabel('Nom affiché')).toHaveValue('Pablo des grands fonds 🐙');
 
-  // Le panneau utilisateur : nom affiché, pseudo unique en dessous.
+  // La carte « Mon compte » du rail : nom affiché, pseudo unique en dessous.
   await a.page.getByRole('button', { name: 'Fermer les réglages (Échap)' }).click();
-  await expect(a.page.getByText('Pablo des grands fonds 🐙').first()).toBeVisible();
-  await expect(a.page.getByText(`@${a.name}`).first()).toBeVisible();
+  await a.page.getByRole('button', { name: 'Mon compte' }).click();
+  const card = a.page.getByRole('group', { name: 'Mon compte' });
+  await expect(card.getByText('Pablo des grands fonds 🐙')).toBeVisible();
+  await expect(card.getByText(`@${a.name}`)).toBeVisible();
 
   // Chez l'autre membre, sans recharger : liste des membres et auteur du message.
   const members = b.page.getByRole('complementary', { name: 'Membres' });

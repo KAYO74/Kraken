@@ -1,5 +1,5 @@
-//! La coquille : rail des serveurs (S02), barre latérale (S03 ou salons), panneau
-//! utilisateur (S04), zone principale. Plus la création / l'adhésion à un serveur (S21).
+//! La coquille : rail des serveurs (S02) avec mon compte en bas (S04), barre latérale
+//! (S03 ou salons), zone principale. Plus la création / l'adhésion à un serveur (S21).
 
 use kraken_proto::{Channel, ChannelKind, GuildState, Id};
 use leptos::prelude::*;
@@ -8,7 +8,7 @@ use leptos_router::NavigateOptions;
 use leptos_router::components::Outlet;
 use leptos_router::hooks::{use_location, use_navigate};
 
-use crate::call::{CallAudio, DeafToggle, MicToggle, VoicePanel, VoiceUsers};
+use crate::call::{CallAudio, VoicePanel, VoiceUsers};
 use crate::icons::{Icon, lu};
 use crate::store::{Conn, store};
 use crate::ui::{Avatar, Logo, initials, modal};
@@ -89,7 +89,6 @@ pub fn Shell() -> impl IntoView {
                     None => view! { <HomeSidebar/> }.into_any(),
                 }}
                 <VoicePanel/>
-                <UserPanel/>
             </div>
             <div class="app-scrim" on:click=move |_| s.drawer.set(false)></div>
             <main class="app-main" id="main" tabindex="-1">
@@ -112,31 +111,34 @@ fn Rail() -> impl IntoView {
     let ids = current_ids();
     let home_current = move || ids.get().0.is_none().then_some("page");
     view! {
-        <nav class="k-rail app-rail" aria-label="Serveurs">
-            <a class="k-server" href="/channels/@me" aria-label="Accueil et messages privés" aria-current=home_current>
-                <Logo/>
-            </a>
-            <hr/>
-            <For each=move || s.guilds.get() key=|g| g.guild.id let:g>
-                {
-                    let id = g.guild.id;
-                    let href = format!("/channels/{id}");
-                    let name = g.guild.name.clone();
-                    view! {
-                        <a class="k-server" href=href title=name.clone() aria-label=format!("Serveur {name}")
-                            aria-current=move || (ids.get().0 == Some(id)).then_some("page")>
-                            {initials(&name)}
-                        </a>
+        <div class="k-rail app-rail">
+            <nav class="app-rail-list" aria-label="Serveurs">
+                <a class="k-server k-server--home" href="/channels/@me" aria-label="Accueil et messages privés" aria-current=home_current>
+                    <Logo/>
+                </a>
+                <hr/>
+                <For each=move || s.guilds.get() key=|g| g.guild.id let:g>
+                    {
+                        let id = g.guild.id;
+                        let href = format!("/channels/{id}");
+                        let name = g.guild.name.clone();
+                        view! {
+                            <a class="k-server" href=href title=name.clone() aria-label=format!("Serveur {name}")
+                                aria-current=move || (ids.get().0 == Some(id)).then_some("page")>
+                                {initials(&name)}
+                            </a>
+                        }
                     }
-                }
-            </For>
-            <a class="k-server k-server--action" href="/guilds/new" aria-label="Créer ou rejoindre un serveur" title="Créer ou rejoindre">
-                <Icon icon=lu::LuPlus/>
-            </a>
-            <a class="k-server k-server--action" href="/discover" aria-label="Explorer les serveurs publics" title="Explorer">
-                <Icon icon=lu::LuCompass/>
-            </a>
-        </nav>
+                </For>
+                <a class="k-server k-server--action" href="/guilds/new" aria-label="Créer ou rejoindre un serveur" title="Créer ou rejoindre">
+                    <Icon icon=lu::LuPlus/>
+                </a>
+                <a class="k-server k-server--action" href="/discover" aria-label="Explorer les serveurs publics" title="Explorer">
+                    <Icon icon=lu::LuCompass/>
+                </a>
+            </nav>
+            <Me/>
+        </div>
     }
 }
 
@@ -148,7 +150,7 @@ fn HomeSidebar() -> impl IntoView {
     let on_friends = move || (loc.pathname.get() == "/channels/@me").then_some("page");
     view! {
         <nav class="k-sidebar app-sidebar" aria-label="Messages privés">
-            <a class="k-btn k-btn--sm app-find" href="/switcher">"Trouver ou démarrer une conversation"</a>
+            <a class="k-btn k-btn--sm app-find" href="/switcher"><Icon icon=lu::LuSearch small=true/>"Aller vers une personne ou un salon"</a>
             <a class="k-channel" href="/channels/@me" aria-current=on_friends><Icon icon=lu::LuUsers/>"Amis"</a>
             <div class="k-category">"Messages privés"</div>
             <Show when=move || s.dms.with(|d| d.is_empty()) && s.conn.get() == Conn::Ready>
@@ -330,24 +332,116 @@ fn InviteDialog(guild: Id, close: impl Fn() + Copy + Send + Sync + 'static) -> i
     }
 }
 
+/// S04 : mon compte, en bas du rail. L'avatar ouvre une carte : nom, pseudo, état de la
+/// connexion, réglages, déconnexion. Échap ou un clic ailleurs la referme.
 #[component]
-fn UserPanel() -> impl IntoView {
+fn Me() -> impl IntoView {
     let s = store();
+    let navigate = use_navigate();
+    let open = RwSignal::new(false);
+    let button = NodeRef::<leptos::html::Button>::new();
+    let wrap = NodeRef::<leptos::html::Div>::new();
+    let card = NodeRef::<leptos::html::Div>::new();
+    let close = move |refocus: bool| {
+        open.set(false);
+        if refocus && let Some(b) = button.get_untracked() {
+            let _ = b.focus();
+        }
+    };
+    // À l'ouverture, le focus va sur la première entrée.
+    Effect::new(move || {
+        if open.get()
+            && let Some(first) = card.get().and_then(|c| c.query_selector("a, button").ok().flatten())
+        {
+            use wasm_bindgen::JsCast;
+            if let Ok(h) = first.dyn_into::<web_sys::HtmlElement>() {
+                let _ = h.focus();
+            }
+        }
+    });
+    let esc = window_event_listener(leptos::ev::keydown, move |e| {
+        if e.key() == "Escape" && open.get_untracked() {
+            e.stop_propagation();
+            close(true);
+        }
+    });
+    let outside = window_event_listener(leptos::ev::pointerdown, move |e| {
+        use wasm_bindgen::JsCast;
+        if !open.get_untracked() {
+            return;
+        }
+        let inside = e
+            .target()
+            .and_then(|t| t.dyn_into::<web_sys::Node>().ok())
+            .zip(wrap.get_untracked())
+            .is_some_and(|(t, w)| w.contains(Some(&t)));
+        if !inside {
+            close(false);
+        }
+    });
+    on_cleanup(move || {
+        esc.remove();
+        outside.remove();
+    });
+    // Le focus qui quitte la carte (Tab après la dernière entrée) la referme.
+    let on_focusout = move |e: leptos::ev::FocusEvent| {
+        use wasm_bindgen::JsCast;
+        let next = e.related_target().and_then(|t| t.dyn_into::<web_sys::Node>().ok());
+        let stays = next.clone().zip(wrap.get_untracked()).is_some_and(|(n, w)| w.contains(Some(&n)));
+        if next.is_some() && !stays {
+            open.set(false);
+        }
+    };
+    // Choisir une entrée ferme la carte, et le tiroir en mobile.
+    let picked = move |_| {
+        open.set(false);
+        s.drawer.set(false);
+    };
+    let leave = move |_| {
+        let navigate = navigate.clone();
+        open.set(false);
+        spawn_local(async move {
+            let _ = crate::api::logout().await;
+            s.sign_out();
+            navigate("/login", Default::default());
+        });
+    };
+    let presence =
+        move || if s.conn.get() == Conn::Ready { kraken_proto::Status::Online } else { kraken_proto::Status::Offline };
+    let state = move || match s.conn.get() {
+        Conn::Ready => "Connecté",
+        Conn::Connecting => "Connexion…",
+        Conn::Offline => "Hors ligne",
+    };
     view! {
-        <div class="k-userpanel">
-            {move || s.me.get().map(|u| view! { <Avatar user=u size="md" status=kraken_proto::Status::Online/> })}
-            <div>
-                <b class="app-ellipsis">{move || s.me.get().map(|u| u.name().to_string()).unwrap_or_default()}</b>
-                // Le pseudo unique sous le nom affiché ; l'état de connexion s'il y a un souci.
-                <small class="app-ellipsis">{move || match s.conn.get() {
-                    Conn::Ready => s.me.get().map(|u| format!("@{}", u.username)).unwrap_or_default(),
-                    Conn::Connecting => "Connexion…".into(),
-                    Conn::Offline => "Hors ligne".into(),
-                }}</small>
-            </div>
-            <MicToggle/>
-            <DeafToggle/>
-            <a class="k-btn k-btn--icon" href="/settings/account" aria-label="Réglages utilisateur" title="Réglages"><Icon icon=lu::LuSettings/></a>
+        <div class="app-me" node_ref=wrap on:focusout=on_focusout>
+            <button class="k-me" node_ref=button aria-label="Mon compte" title="Mon compte"
+                aria-expanded=move || open.get().to_string() aria-controls=move || open.get().then_some("me-card")
+                on:click=move |_| open.update(|o| *o = !*o)>
+                {move || s.me.get().map(|u| view! { <Avatar user=u status=presence()/> })}
+            </button>
+            <Show when=move || open.get()>
+                <div class="k-mecard" id="me-card" role="group" aria-label="Mon compte" node_ref=card>
+                    <header>
+                        {move || s.me.get().map(|u| view! { <Avatar user=u size="md" status=presence()/> })}
+                        <div>
+                            <b class="app-ellipsis">{move || s.me.get().map(|u| u.name().to_string()).unwrap_or_default()}</b>
+                            <small class="app-ellipsis">{move || s.me.get().map(|u| format!("@{}", u.username)).unwrap_or_default()}</small>
+                        </div>
+                    </header>
+                    <p class="k-mecard-state" data-state=move || (s.conn.get() == Conn::Ready).then_some("on")>{state}</p>
+                    <a class="k-mecard-item" href="/settings/account" on:click=picked>
+                        <Icon icon=lu::LuUserPen/>"Réglages"<span class="k-sr">" utilisateur"</span>
+                    </a>
+                    <a class="k-mecard-item" href="/settings/appearance" on:click=picked>
+                        <Icon icon=lu::LuPalette/>"Apparence"
+                    </a>
+                    <hr/>
+                    <button class="k-mecard-item is-danger" on:click={ let leave = leave.clone(); leave }>
+                        <Icon icon=lu::LuLogOut/>"Se déconnecter"
+                    </button>
+                </div>
+            </Show>
         </div>
     }
 }

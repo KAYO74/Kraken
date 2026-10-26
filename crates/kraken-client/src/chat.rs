@@ -11,7 +11,7 @@ use crate::call::VoiceRoom;
 use crate::icons::{Icon, lu};
 use crate::shell::first_text;
 use crate::store::{Conn, Pending, store};
-use crate::ui::{Avatar, Header, Stub, initials, iso, when};
+use crate::ui::{Avatar, Header, Stub, iso, when};
 
 thread_local! {
     static DRAFTS: std::cell::RefCell<std::collections::HashMap<Id, String>> = Default::default();
@@ -165,20 +165,26 @@ fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
     // Rester collé en bas quand un message arrive, sauf pour qui lit plus haut ; un envoi
     // de sa part y ramène toujours.
     let stick = StoredValue::new(true);
+    // Où lit celui qui est remonté : la liste est redessinée à chaque message, sa position doit
+    // rester la même.
+    let reading = StoredValue::new(0);
     let sent = StoredValue::new(0usize);
     Effect::new(move || {
         let pending = log.with(|l| l.pending.len());
         let mine = pending > sent.get_value();
         sent.set_value(pending);
-        if let Some(el) = scroller.get()
-            && (stick.get_value() || mine)
-        {
+        let Some(el) = scroller.get() else { return };
+        if stick.get_value() || mine {
             request_animation_frame(move || el.set_scroll_top(el.scroll_height()));
+        } else {
+            let top = reading.get_value();
+            request_animation_frame(move || el.set_scroll_top(top));
         }
     });
     let on_scroll = move |_| {
         if let Some(el) = scroller.get_untracked() {
             stick.set_value(el.scroll_top() + el.client_height() >= el.scroll_height() - 48);
+            reading.set_value(el.scroll_top());
         }
     };
     let retry = move |p: Pending| {
@@ -204,9 +210,9 @@ fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
                     }.into_any();
                 }
                 let intro = if is_dm {
-                    format!("Le début de ta conversation avec {title}.")
+                    format!("Ici commence ta conversation avec {title}. Elle reste entre vous.")
                 } else {
-                    format!("C'est le tout début de #{title}. Lance la discussion !")
+                    format!("Ici commence #{title}. Tout l'historique du salon se lit à partir d'ici.")
                 };
                 let mut prev: Option<(Option<Id>, i64)> = None;
                 let rows = l.items.into_iter().map(|m| {
@@ -235,7 +241,10 @@ fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
                     }
                 }).collect_view();
                 view! {
-                    <div class="app-intro"><span class="k-avatar k-avatar--lg" aria-hidden="true">{initials(&title)}</span><h2>{title.clone()}</h2><p>{intro}</p></div>
+                    <div class="app-intro">
+                        <span class="app-intro-mark" aria-hidden="true">{if is_dm { view! { <Icon icon=lu::LuMessageCircle/> } } else { view! { <Icon icon=lu::LuHash/> } }}</span>
+                        <div><h2>{title.clone()}</h2><p>{intro}</p></div>
+                    </div>
                     {rows}
                     {pending}
                 }.into_any()
@@ -331,7 +340,7 @@ fn Members(guild: Id) -> impl IntoView {
     let members = move || s.guild(guild).map(|g| g.members).unwrap_or_default();
     view! {
         <aside class="app-aside app-aside--members" aria-label="Membres">
-            <h2 class="k-category">{move || format!("Membres — {}", members().len())}</h2>
+            <h2 class="k-category">"Membres "<span class="k-badge k-badge--neutral">{move || members().len()}</span></h2>
             <ul class="app-members">
                 <For each=members key=|m| (m.user.id, m.user.display_name.clone(), m.nick.clone()) let:m>
                     <li class="k-dm">

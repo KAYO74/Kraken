@@ -7,7 +7,7 @@ Une ligne par écran. Statut : **fait**, **partiel** (manque listé), **route** 
 | coquille | 2026-10-17 | fait | coque Tauri | pas de `trunk` (téléchargements GitHub bloqués ici) : `scripts/build-client.sh` appelle `wasm-bindgen` directement |
 | S02 rail | 2026-10-17 | partiel | non-lus, mentions, dossiers, glisser-déposer | le tiroir mobile : choisir un serveur garde le tiroir ouvert, choisir un salon le ferme |
 | S03 barre MP | 2026-10-17 | partiel | nouveau MP, fermer une conversation, présence dans la liste | |
-| S04 panneau utilisateur | 2026-10-17 | partiel | menu de statut (micro et son branchés sur le vocal le 2026-10-20) | |
+| S04 mon compte (bas du rail) | 2026-10-17 | partiel | menu de statut ; le 2026-10-26 le panneau utilisateur devient une carte « Mon compte » au bas du rail, micro et son passent dans le panneau « En appel » | |
 | S28 connexion / inscription | 2026-10-17 | partiel | MFA, QR, mot de passe oublié, vérif e-mail | |
 | F06 page d'invitation | 2026-10-17 | fait | | |
 | S21 créer / rejoindre | 2026-10-17 | partiel | modèles, icône | |

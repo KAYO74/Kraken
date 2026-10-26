@@ -74,7 +74,7 @@ pub fn Login() -> impl IntoView {
         });
     };
     view! {
-        <AuthCard title="Content de te revoir" sub="Connecte-toi pour retrouver tes serveurs.">
+        <AuthCard title="Bon retour sous la surface" sub="Connecte-toi pour retrouver tes serveurs.">
             <form on:submit=submit>
                 <div class="app-form">
                     <label class="k-field"><span class="k-label">"Pseudo ou e-mail"</span>
@@ -191,7 +191,7 @@ pub fn InvitePage() -> impl IntoView {
                     Some(Ok(i)) => { let join = join.clone(); view! {
                         <header class="app-invite-head">
                             <span class="k-avatar k-avatar--lg" aria-hidden="true">{crate::ui::initials(&i.guild.name)}</span>
-                            <p class="app-hint">"Tu es invité à rejoindre"</p>
+                            <p class="app-hint">"Une place t'attend dans"</p>
                             <h1>{i.guild.name.clone()}</h1>
                             <p class="app-hint">{format!("{} membre{}", i.member_count, if i.member_count > 1 { "s" } else { "" })}</p>
                         </header>

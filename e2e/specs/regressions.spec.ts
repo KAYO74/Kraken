@@ -54,6 +54,7 @@ test('MOB-1 sous 1024 px la liste des membres s’ouvre et son bouton dit vrai',
 
 test('A11Y-1 les modales prennent le focus ; Échap ferme la plus haute seulement', async ({ user }) => {
   const { page } = await user('ali');
+  await page.getByRole('button', { name: 'Mon compte' }).click();
   await page.getByRole('link', { name: 'Réglages utilisateur' }).click();
   const settings = page.getByRole('dialog', { name: 'Réglages' });
   await expect(page.getByRole('button', { name: 'Fermer les réglages (Échap)' })).toBeFocused();

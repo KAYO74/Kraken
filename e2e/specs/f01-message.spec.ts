@@ -6,7 +6,7 @@ const MAX = 4000;
 test('F01-H1 Entrée envoie, le message reste après rechargement', async ({ user }) => {
   const { page } = await user('max');
   await createGuild(page, 'Banc de sardines');
-  await expect(page.getByText("C'est le tout début de #général")).toBeVisible();
+  await expect(page.getByText("Ici commence #général.")).toBeVisible();
   await a11y(page);
   await say(page, 'général', 'Premier message au fond.');
   await expect(messages(page).filter({ hasText: 'Premier message au fond.' })).toHaveCount(1);
