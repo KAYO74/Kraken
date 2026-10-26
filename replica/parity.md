@@ -38,7 +38,7 @@ La structure (rail, colonne de navigation, en-tête, contenu, panneau latéral) 
 | F12 inscription | date de naissance, captcha | e-mail, pseudo, mot de passe | garder ; prévoir un captcha libre si l'instance est publique |
 | F12 e-mails | vérification et alertes de connexion | vérification et mot de passe oublié, si l'instance a un SMTP | garder ; ajouter l'alerte de nouvelle connexion |
 | Réglages | synchronisés entre appareils | thème gardé dans le navigateur seulement | corriger avec la table `user_settings` existante |
-| Présence | 4 statuts au choix | en ligne ou hors ligne réels | corriger (sélecteur de statut dans le panneau utilisateur) |
+| Présence | 4 statuts au choix | en ligne ou hors ligne réels | corriger (sélecteur de statut dans la carte « Mon compte ») |
 
 ## À construire ensuite (dans l'ordre)
 

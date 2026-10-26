@@ -35,7 +35,6 @@ python3 replica/design/tokens.py        # régénère tokens.css + rapport de co
 | en-tête de salon | 48 | 08.28.07 |
 | panneau latéral (activité) | ≈ 400 → 360 | 08.23.58 |
 | saisie | min 56, marge 16, rayon 8 | 08.28.07 |
-| panneau utilisateur | 56, flottant, marge 8, rayon 8 | 08.28.07 |
 | modale réglages | nav 252, contenu 700 max, rayon 12, voile noir 72 % | 08.25.05 |
 | écart entre groupes de messages | 16 (réglable 0–24) | 08.26.27 |
 | zoom | 50–200 %, défaut 100 | 08.26.27 |
@@ -61,12 +60,23 @@ Bouton                          .k-btn
   used on   partout (S01, S05, S06–S15, S21, S22)
 
 Icône de serveur                .k-server dans .k-rail
-  variants  serveur (initiales ou image), accueil, action (+, explorer : success)
-  sizes     40, rayon lg
-  states    défaut, survol (accent), sélectionné (aria-current, barre 40), non-lu (data-unread, barre 8), mentions (badge count)
-  tokens    control, accent, text-strong (barre), bg (contour du badge)
-  a11y      <button> dans <nav aria-label="Serveurs"> ; aria-label annonce non-lu et mentions ; flèches haut/bas entre serveurs
-  used on   S02 ; dossier de serveurs (could) = même pastille, 2×2 miniatures
+  variants  serveur (initiales ou image), accueil (--home : le logo), action (--action : bordure tiretée, accent-text)
+  sizes     40, rayon md, filet 1 px border-strong
+  states    défaut (surface-raised), survol (bordure accent-text), sélectionné (aria-current : fond accent-soft,
+            anneau accent-text détaché de 2 px), non-lu (data-unread : point accent en haut à droite), mentions (badge count)
+  tokens    surface-raised, surface-hover, accent-soft, accent-text, border-strong, bg (détache l'anneau et le point)
+  a11y      <a> dans <nav aria-label="Serveurs"> ; aria-label annonce non-lu et mentions ; focus-visible décalé hors de l'anneau
+  used on   S02 ; dossier de serveurs (could) = même tuile, 2×2 miniatures
+  pourquoi  pas de barre blanche à gauche ni de pastille ronde qui s'arrondit au survol : la sélection est un anneau
+
+Mon compte                      .k-me, .k-mecard
+  variants  bouton avatar en bas du rail ; carte ouverte à droite du rail
+  contenu   avatar + nom affiché + @pseudo, état de la connexion (point success / status-offline),
+            « Réglages » (→ Compte et sécurité), « Apparence », séparateur, « Se déconnecter » (danger)
+  tokens    surface-overlay, border-strong, shadow-pop, radius lg ; entrées surface-hover, danger-solid au survol
+  a11y      <button aria-expanded aria-controls> « Mon compte » ; carte role="group" étiquetée ; le focus va à la
+            première entrée ; Échap ou un clic ailleurs ferme, Échap rend le focus au bouton ; Tab hors de la carte ferme
+  used on   S04 (remplace le panneau utilisateur flottant sous la barre latérale) ; en mobile, dans le tiroir
 
 Élément de salon / catégorie    .k-channel, .k-category
   variants  texte (#), vocal, annonces, forum, privé (cadenas) ; catégorie repliable
@@ -84,6 +94,7 @@ Icône de serveur                .k-server dans .k-rail
 
 Avatar + présence               .k-avatar, .k-presence
   sizes     xs 16, sm 24, md 32, base 40, lg 80, xl 120 ; groupe empilé (could)
+  forme     carré à coins doux (rayon xs → xl selon la taille), pas un disque ; la pastille de présence reste ronde
   states    en ligne (success), inactif (warning), ne pas déranger (danger), hors ligne (status-offline), en stream (status-stream), mobile (glyphe)
   tokens    control, anneau = --presence-ring (fond du parent)
   a11y      role="img" + aria-label « nom, statut » ; le statut n'est jamais porté par la couleur seule (forme différente par statut au build : plein, croissant, barre, creux)
@@ -159,8 +170,8 @@ Dialogue de confirmation        .k-dialog
 
 Message                         .k-msg
   variants  normal (avatar + en-tête), suite (--cont), compact (--compact), réponse (.k-reply), système (--system)
-  states    survol (fond surface-raised + barre d'actions), en édition (.k-msg-edit), mentionné (--mention, barre warning), épinglé, envoi en attente (opacité .5), échec (texte danger + Réessayer)
-  tokens    text, text-strong (auteur, couleur de rôle si présente), text-faint (heure), mention-soft
+  states    survol (fond surface-raised + barre d'actions), en édition (.k-msg-edit), mentionné (--mention : fond accent-soft arrondi, sans barre latérale), épinglé, envoi en attente (opacité .5), échec (texte danger + Réessayer)
+  tokens    text, text-strong (auteur, couleur de rôle si présente), text-faint (heure), accent-soft (mention)
   a11y      <article> avec aria-labelledby auteur ; barre d'actions role="toolbar", visible au focus ; raccourcis E/R/P du S13 ; heure dans <time datetime>
   used on   S05, S19, S24, S12 (aperçu)
 
@@ -206,11 +217,6 @@ Carte d'application autorisée   .k-card (header + <details>)
   a11y      <details>/<summary> natif
   used on   S15
 
-Panneau utilisateur             .k-userpanel
-  states    en ligne, micro coupé, casque coupé (aria-pressed, icône danger), en appel (barre de connexion au-dessus)
-  a11y      boutons étiquetés ; l'état coupé est annoncé par aria-pressed
-  used on   S04
-
 Menu contextuel                 .k-menu
   variants  éléments, séparateur, danger, raccourci, sous-menu (flèche)
   states    survol / focus (accent), danger survol (danger-solid)
@@ -242,10 +248,13 @@ Barre de commandes d'appel      .k-callbar, .k-callbtn
             partage désactivé relié à son explication par aria-describedby
   used on   S18
 
-Panneau « Vocal connecté »      .k-voicebar
-  states    connecté (success), connexion / instable (warning), perdue (danger + « Reconnecter »)
+Panneau « En appel »            .k-voicebar
+  states    en appel (success), connexion / instable (warning), perdue (danger + « Reconnecter »)
+  contenu   état, salon / serveur (lien), micro et son (bascules aria-pressed), quitter
+  tokens    surface-raised, bordure border-strong, radius lg
   a11y      section étiquetée « Connexion vocale » ; l'état en role="status" ; « Quitter le salon vocal »
-  used on   coquille, au-dessus du panneau utilisateur, pendant un appel
+  used on   coquille, en bas de la barre latérale, seulement pendant un appel (les bascules micro et son n'existent qu'ici
+            et dans la barre de l'appel)
 
 États vides et chargement       .k-empty, .k-skeleton
   a11y      skeleton aria-hidden + aria-busy sur la zone ; animation coupée en mouvement réduit
@@ -254,6 +263,6 @@ Panneau « Vocal connecté »      .k-voicebar
 
 ## Écrans non capturés
 
-S18 à S30 réutilisent ces primitives. Faits au build : tuile de participant vocal, barre de commandes d'appel, panneau « Vocal connecté » (ci-dessus). Prévus, avec les mêmes jetons : popout de profil (bannière + avatar lg), liste de membres (groupes par rôle), Quick Switcher (combobox plein écran).
+S18 à S30 réutilisent ces primitives. Faits au build : tuile de participant vocal, barre de commandes d'appel, panneau « En appel » (ci-dessus). Prévus, avec les mêmes jetons : popout de profil (bannière + avatar lg), liste de membres (groupes par rôle), Quick Switcher (combobox plein écran).
 
 Étape suivante : `/replica-build`.

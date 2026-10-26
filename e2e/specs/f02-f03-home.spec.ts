@@ -6,12 +6,12 @@ test('F02-H1 onglets d’amis : en ligne, tous, en attente', async ({ demo }) =>
   const { page } = await demo('demo');
   const tab = (name: string) => page.getByRole('tab', { name });
   await expect(tab('En ligne')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('heading', { name: /^En ligne — \d+$/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^En ligne \d+$/ })).toBeVisible();
   await a11y(page);
   await tab('Tous').click();
-  await expect(page.getByRole('heading', { name: 'Tous — 4' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tous 4' })).toBeVisible();
   await tab('En attente').click();
-  await expect(page.getByRole('heading', { name: 'En attente — 1' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'En attente 1' })).toBeVisible();
   await expect(page.getByText('Demande reçue')).toBeVisible();
 });
 
@@ -20,9 +20,9 @@ test('F02-E1 filtre par nom, insensible à la casse, état vide clair', async ({
   await page.getByRole('tab', { name: 'Tous' }).click();
   const search = page.getByLabel('Chercher parmi tes amis');
   await search.fill('LOU');
-  await expect(page.getByRole('heading', { name: 'Tous — 1' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tous 1' })).toBeVisible();
   await search.fill('personne-de-ce-nom');
-  await expect(page.getByRole('heading', { name: 'Tous — 0' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tous 0' })).toBeVisible();
 });
 
 test('F02-E2 nouveau compte : listes vides expliquées', async ({ user }) => {

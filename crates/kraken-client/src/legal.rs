@@ -48,7 +48,7 @@ pub fn Privacy() -> impl IntoView {
             <p>{move || i.with(|i| i.processors.clone()).unwrap_or_else(|| "L'hébergeur du serveur et, si les e-mails sont activés, \
                 le service d'envoi choisis par l'exploitant.".into())}</p>
             <h2>"Durée et suppression"</h2>
-            <p>"Tes données restent tant que ton compte existe. Depuis Réglages, Mon compte, tu peux le supprimer : il est fermé \
+            <p>"Tes données restent tant que ton compte existe. Depuis Réglages, Compte et sécurité, tu peux le supprimer : il est fermé \
                 tout de suite et effacé au bout de 14 jours. Tes messages restent dans les salons, signés « compte supprimé »."</p>
             <h2>"Tes droits"</h2>
             <p>"Accès, rectification, effacement, portabilité, opposition : écris au contact ci-dessus. \

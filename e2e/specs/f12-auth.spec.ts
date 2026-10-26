@@ -16,9 +16,14 @@ test('F12-H1 inscription puis arrivée sur l’accueil', async ({ page }) => {
   await a11y(page);
   await page.getByRole('button', { name: 'Créer mon compte' }).click();
   await page.waitForURL('**/channels/@me');
+  await page.getByRole('button', { name: 'Mon compte' }).click();
   await expect(page.getByRole('link', { name: 'Réglages utilisateur' })).toBeVisible();
   await expect(page.getByText(name).first()).toBeVisible();
   await a11y(page);
+  // La carte « Mon compte » se referme avec Échap et rend le focus à son bouton.
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('group', { name: 'Mon compte' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Mon compte' })).toBeFocused();
 });
 
 test('F12-H2 déconnexion puis connexion par pseudo et par e-mail', async ({ user }) => {

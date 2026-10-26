@@ -34,10 +34,12 @@ pub fn Friends() -> impl IntoView {
             .filter(|r| q.is_empty() || r.user.name().to_lowercase().contains(&q) || r.user.username.contains(&q))
             .collect::<Vec<_>>()
     });
-    let tab_btn = move |t: Tab, label: &'static str, accent: bool| {
+    let tab_btn = move |t: Tab, label: &'static str| {
         view! {
-            <button class=if accent { "k-tab k-tab--accent" } else { "k-tab" } role="tab"
-                aria-selected=move || (tab.get() == t).to_string() on:click=move |_| tab.set(t)>{label}</button>
+            <button class="k-tab" role="tab"
+                aria-selected=move || (tab.get() == t).to_string() on:click=move |_| tab.set(t)>
+                {(t == Tab::Add).then(|| view! { <Icon icon=lu::LuUserPlus small=true/> })}{label}
+            </button>
         }
     };
     let dm_with = move |uid| {
@@ -51,10 +53,10 @@ pub fn Friends() -> impl IntoView {
             <Icon icon=lu::LuUsers/>
             <h1 class="app-title">"Amis"</h1>
             <div class="k-tabs" role="tablist" aria-label="Filtrer les amis">
-                {tab_btn(Tab::Online, "En ligne", false)}
-                {tab_btn(Tab::All, "Tous", false)}
-                {tab_btn(Tab::Pending, "En attente", false)}
-                {tab_btn(Tab::Add, "Ajouter un ami", true)}
+                {tab_btn(Tab::Online, "En ligne")}
+                {tab_btn(Tab::All, "Tous")}
+                {tab_btn(Tab::Pending, "En attente")}
+                {tab_btn(Tab::Add, "Ajouter un ami")}
             </div>
         </Header>
         <div class="app-body">
@@ -77,10 +79,10 @@ pub fn Friends() -> impl IntoView {
                             <Icon icon=lu::LuSearch/>
                             <input class="k-input" type="search" placeholder="Chercher" aria-label="Chercher parmi tes amis" bind:value=query/>
                         </div>
-                        <h2 class="k-category">{move || {
-                            let n = rows.get().len();
-                            match tab.get() { Tab::Online => format!("En ligne — {n}"), Tab::Pending => format!("En attente — {n}"), _ => format!("Tous — {n}") }
-                        }}</h2>
+                        <h2 class="k-category">
+                            {move || match tab.get() { Tab::Online => "En ligne ", Tab::Pending => "En attente ", _ => "Tous " }}
+                            <span class="k-badge k-badge--neutral">{move || rows.get().len()}</span>
+                        </h2>
                         {move || if s.conn.get() != Conn::Ready && s.friends.with(|f| f.is_empty()) {
                             view! { <div aria-busy="true">{(0..4).map(|_| view! { <div class="k-skeleton app-skel-row"></div> }).collect_view()}</div> }.into_any()
                         } else if rows.get().is_empty() {
@@ -122,8 +124,8 @@ pub fn Friends() -> impl IntoView {
                 }}
             </section>
             <aside class="app-aside app-activity" aria-label="Activité">
-                <h2>"En ce moment"</h2>
-                <div class="k-empty"><b>"Calme plat"</b>"Quand un ami lance une activité ou un vocal, ça s'affiche ici."</div>
+                <h2>"Où sont tes amis"</h2>
+                <div class="k-empty"><b>"Aucun salon vocal occupé"</b>"Les salons vocaux où tes amis discutent s'afficheront ici, pour les rejoindre en un clic."</div>
             </aside>
         </div>
     }

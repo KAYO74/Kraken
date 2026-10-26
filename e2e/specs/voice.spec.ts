@@ -40,7 +40,7 @@ const loudness = (page: Page) =>
 /** Entre dans le salon vocal affiché et attend que la connexion soit établie. */
 async function join(u: User) {
   await u.page.getByRole('button', { name: 'Rejoindre', exact: true }).click();
-  await expect(u.page.getByRole('region', { name: 'Connexion vocale' }).getByRole('status')).toHaveText('Vocal connecté', {
+  await expect(u.page.getByRole('region', { name: 'Connexion vocale' }).getByRole('status')).toHaveText('En appel', {
     timeout: 20_000,
   });
 }
@@ -148,7 +148,7 @@ test('F04-H1 rejoindre, s’entendre, partager l’écran, regarder, couper le m
   const states = (await (await owner.get(`${API}/guilds/${gid}`)).json()).voice_states;
   expect(states.map((s: { user_id: string }) => s.user_id)).toEqual([a.id]);
 
-  // A quitte depuis le panneau « Vocal connecté » : le salon est vide pour les deux.
+  // A quitte depuis le panneau « En appel » : le salon est vide pour les deux.
   await a.page.getByRole('button', { name: 'Quitter le salon vocal' }).click();
   for (const u of [a, b]) await expect(u.page.getByText('Personne pour l\'instant.')).toBeVisible();
   expect((await (await owner.get(`${API}/guilds/${gid}`)).json()).voice_states).toEqual([]);

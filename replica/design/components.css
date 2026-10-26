@@ -100,14 +100,14 @@ a:hover { text-decoration: underline; }
 .k-badge--count { min-width: 18px; justify-content: center; padding: 0 5px; background: var(--danger-solid); color: var(--on-danger); text-transform: none; }
 
 /* Avatar + présence */
-.k-avatar { position: relative; display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%;
+.k-avatar { position: relative; display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: var(--radius-md);
   background: var(--control); color: var(--text-strong); font-weight: var(--weight-semibold); font-size: var(--text-sm-size); }
-.k-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
-.k-avatar--xs { width: 16px; height: 16px; font-size: 8px; }
-.k-avatar--sm { width: 24px; height: 24px; font-size: 10px; }
-.k-avatar--md { width: 32px; height: 32px; font-size: 12px; }
-.k-avatar--lg { width: 80px; height: 80px; font-size: var(--text-xl-size); }
-.k-avatar--xl { width: 120px; height: 120px; font-size: var(--text-2xl-size); }
+.k-avatar img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+.k-avatar--xs { width: 16px; height: 16px; font-size: 8px; border-radius: var(--radius-xs); }
+.k-avatar--sm { width: 24px; height: 24px; font-size: 10px; border-radius: var(--radius-sm); }
+.k-avatar--md { width: 32px; height: 32px; font-size: 12px; border-radius: var(--radius-sm); }
+.k-avatar--lg { width: 80px; height: 80px; font-size: var(--text-xl-size); border-radius: var(--radius-xl); }
+.k-avatar--xl { width: 120px; height: 120px; font-size: var(--text-2xl-size); border-radius: var(--radius-xl); }
 .k-presence { position: absolute; right: -2px; bottom: -2px; width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--presence-ring, var(--bg)); }
 .k-presence--online { background: var(--success); }
 .k-presence--idle { background: var(--warning); }
@@ -115,21 +115,45 @@ a:hover { text-decoration: underline; }
 .k-presence--offline { background: var(--status-offline); }
 .k-presence--stream { background: var(--status-stream); }
 
-/* Rail des serveurs */
-.k-rail { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); width: var(--size-rail); padding: var(--space-3) 0; background: var(--bg); }
-.k-rail hr { width: 32px; border: 0; border-top: 2px solid var(--border); margin: 0; }
-.k-server { position: relative; display: grid; place-items: center; width: var(--size-server-icon); height: var(--size-server-icon);
-  border-radius: var(--radius-lg); background: var(--control); color: var(--text-strong); border: 0; cursor: pointer; font-weight: var(--weight-semibold);
-  transition: background var(--motion-fast), color var(--motion-fast); }
-.k-server:hover { background: var(--accent); color: var(--on-accent); }
-.k-server--action { color: var(--success); }
-.k-server::before { content: ""; position: absolute; left: -16px; width: 4px; height: 0; border-radius: 0 4px 4px 0; background: var(--text-strong);
-  transition: height var(--motion-base) var(--motion-ease); }
-.k-server[data-unread]::before { height: 8px; }
-.k-server:hover::before { height: 20px; }
-.k-server[aria-current="page"]::before { height: 40px; }
-.k-server[aria-current="page"] { background: var(--accent); color: var(--on-accent); }
-.k-server .k-badge--count { position: absolute; right: -4px; bottom: -4px; box-shadow: 0 0 0 3px var(--bg); }
+/* Rail des serveurs : tuiles carrées à coins doux, bordées d'un filet. Le serveur affiché porte un
+   anneau d'accent détaché de la tuile ; un point d'accent en haut à droite signale du non-lu. */
+.k-rail { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); width: var(--size-rail); background: var(--bg); }
+.k-rail hr { width: var(--space-7); border: 0; border-top: 1px solid var(--border-strong); margin: var(--space-1) 0; }
+.k-server { position: relative; display: grid; place-items: center; flex: none; width: var(--size-server-icon); height: var(--size-server-icon);
+  border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--surface-raised); color: var(--text-secondary);
+  font-size: var(--text-sm-size); font-weight: var(--weight-semibold); cursor: pointer; text-decoration: none;
+  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-base) var(--motion-ease); }
+.k-server:hover { background: var(--surface-hover); color: var(--text-strong); border-color: var(--accent-text); text-decoration: none; }
+.k-server[aria-current="page"] { background: var(--accent-soft); color: var(--accent-text); border-color: var(--accent-text);
+  box-shadow: 0 0 0 var(--space-1) var(--bg), 0 0 0 var(--space-2) var(--accent-text); }
+.k-server:focus-visible { outline-offset: calc(var(--space-2) + var(--space-1)); }
+.k-server--home { overflow: hidden; background: var(--bg); }
+.k-server--action { background: transparent; border-style: dashed; color: var(--accent-text); }
+.k-server--action:hover { background: var(--accent-soft); }
+.k-server[data-unread]::after { content: ""; position: absolute; top: calc(-1 * var(--space-1)); right: calc(-1 * var(--space-1));
+  width: var(--space-3); height: var(--space-3); border-radius: var(--radius-pill); background: var(--accent-text); box-shadow: 0 0 0 var(--space-1) var(--bg); }
+.k-server .k-badge--count { position: absolute; right: calc(-1 * var(--space-2)); bottom: calc(-1 * var(--space-2)); box-shadow: 0 0 0 var(--space-1) var(--bg); }
+
+/* Mon compte, en bas du rail : l'avatar ouvre une carte (nom, état, réglages, déconnexion). */
+.k-me { display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--radius-md); background: none; cursor: pointer; --presence-ring: var(--bg); }
+.k-me:hover .k-avatar, .k-me[aria-expanded="true"] .k-avatar { box-shadow: 0 0 0 var(--space-1) var(--bg), 0 0 0 var(--space-2) var(--border-input); }
+.k-mecard { position: absolute; left: calc(100% + var(--space-2)); bottom: var(--space-4); z-index: var(--z-popover); display: grid; gap: var(--space-1);
+  width: min(calc(var(--size-sidebar) - var(--space-8)), calc(100vw - var(--size-rail) - var(--space-5))); padding: var(--space-3);
+  border-radius: var(--radius-lg); border: 1px solid var(--border-strong); background: var(--surface-overlay); box-shadow: var(--shadow-pop);
+  --presence-ring: var(--surface-overlay); }
+.k-mecard > header { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3); }
+.k-mecard > header > div { display: grid; min-width: 0; line-height: var(--text-sm-line); }
+.k-mecard > header b { color: var(--text-strong); font-size: var(--text-base-size); }
+.k-mecard > header small { color: var(--text-muted); font-size: var(--text-sm-size); }
+.k-mecard-state { display: flex; align-items: center; gap: var(--space-3); margin: 0 var(--space-3) var(--space-2); color: var(--text-muted); font-size: var(--text-xs-size); }
+.k-mecard-state::before { content: ""; width: var(--space-3); height: var(--space-3); border-radius: var(--radius-pill); background: var(--status-offline); }
+.k-mecard-state[data-state="on"]::before { background: var(--success); }
+.k-mecard-item { display: flex; align-items: center; gap: var(--space-4); width: 100%; padding: var(--space-3); border: 0; border-radius: var(--radius-md);
+  background: none; color: var(--text-secondary); font-size: var(--text-sm-size); font-weight: var(--weight-medium); text-align: left; cursor: pointer; text-decoration: none; }
+.k-mecard-item:hover { background: var(--surface-hover); color: var(--text-strong); text-decoration: none; }
+.k-mecard-item.is-danger { color: var(--danger); }
+.k-mecard-item.is-danger:hover { background: var(--danger-solid); color: var(--on-danger); }
+.k-mecard hr { width: 100%; border: 0; border-top: 1px solid var(--border); margin: var(--space-1) 0; }
 
 /* Barre latérale : salons, catégories, MP */
 .k-sidebar { width: var(--size-sidebar); background: var(--bg); padding: var(--space-3); display: grid; gap: 2px; align-content: start; }
@@ -162,8 +186,8 @@ a:hover { text-decoration: underline; }
 .k-msg header b { font-weight: var(--weight-semibold); color: var(--text-strong); }
 .k-msg time { font-size: var(--text-xs-size); color: var(--text-faint); }
 .k-msg p { margin: 0; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
-.k-msg--mention { background: var(--mention-soft); box-shadow: inset 2px 0 0 var(--warning); }
-.k-msg--mention:hover { background: var(--mention-soft); }
+.k-msg--mention { background: var(--accent-soft); border-radius: var(--radius-md); }
+.k-msg--mention:hover { background: var(--accent-soft); }
 .k-msg--compact { grid-template-columns: auto 1fr; margin-top: 2px; }
 .k-msg--system p { color: var(--text-muted); font-style: italic; }
 .k-reply { grid-column: 2; display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm-size); color: var(--text-muted); }
@@ -253,7 +277,7 @@ a:hover { text-decoration: underline; }
   color: var(--text-strong); box-shadow: var(--shadow-pop); border-left: 4px solid var(--success); z-index: var(--z-toast); }
 .k-toast--danger { border-left-color: var(--danger); }
 
-/* Raccourci, pastilles, carte d'appli, panneau utilisateur, états */
+/* Raccourci, pastilles, carte d'appli, états */
 .k-kbd { display: inline-flex; gap: var(--space-2); }
 .k-kbd kbd { min-width: 24px; height: 24px; padding: 0 var(--space-3); display: inline-grid; place-items: center; border-radius: var(--radius-xs); background: var(--control);
   border-bottom: 2px solid var(--border-strong); font: var(--weight-semibold) var(--text-xs-size) var(--font-sans); color: var(--text-strong); }
@@ -266,11 +290,6 @@ a:hover { text-decoration: underline; }
 .k-card > header { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-5); }
 .k-card details { border-top: 1px solid var(--border); padding: var(--space-4) var(--space-5); color: var(--text-secondary); }
 .k-card summary { cursor: pointer; color: var(--text-strong); font-weight: var(--weight-medium); }
-.k-userpanel { display: flex; align-items: center; gap: var(--space-3); height: var(--size-user-panel); margin: var(--space-3); padding: 0 var(--space-3);
-  border-radius: var(--radius-md); background: var(--surface-raised); --presence-ring: var(--surface-raised); }
-.k-userpanel > div { flex: 1; min-width: 0; line-height: 1.1; }
-.k-userpanel b { display: block; color: var(--text-strong); font-size: var(--text-sm-size); }
-.k-userpanel small { color: var(--text-secondary); font-size: var(--text-xs-size); }
 /* Appel vocal : badge « En direct », tuile de participant, barre de commandes, panneau « Vocal connecté » */
 .k-badge--live { background: var(--danger-solid); color: var(--on-danger); }
 .k-tile { position: relative; display: grid; place-items: center; min-width: 0; aspect-ratio: 16 / 9; overflow: hidden;
@@ -293,8 +312,8 @@ a:hover { text-decoration: underline; }
 .k-callbtn[data-on] { background: var(--accent); color: var(--on-accent); }
 .k-callbtn[aria-pressed="true"]:hover, .k-callbtn--danger:hover, .k-callbtn[data-on]:hover { filter: brightness(.92); }
 .k-callbtn:disabled { opacity: .5; cursor: not-allowed; }
-.k-voicebar { display: flex; align-items: center; gap: var(--space-1); margin: var(--space-3) var(--space-3) 0; padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-  border-radius: var(--radius-md); background: var(--surface-raised); }
+.k-voicebar { display: flex; align-items: center; gap: var(--space-1); margin: var(--space-3); padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg); border: 1px solid var(--border-strong); background: var(--surface-raised); }
 .k-voicebar > div { flex: 1; min-width: 0; }
 .k-voicebar b { display: block; font-size: var(--text-sm-size); color: var(--warning); }
 .k-voicebar b[data-state="on"] { color: var(--success); }

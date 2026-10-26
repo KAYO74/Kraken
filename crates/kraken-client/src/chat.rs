@@ -11,7 +11,7 @@ use crate::call::VoiceRoom;
 use crate::icons::{Icon, lu};
 use crate::shell::first_text;
 use crate::store::{Conn, Pending, store};
-use crate::ui::{Avatar, Header, Stub, initials, iso, when};
+use crate::ui::{Avatar, Header, Stub, iso, when};
 
 thread_local! {
     static DRAFTS: std::cell::RefCell<std::collections::HashMap<Id, String>> = Default::default();
@@ -204,9 +204,9 @@ fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
                     }.into_any();
                 }
                 let intro = if is_dm {
-                    format!("Le début de ta conversation avec {title}.")
+                    format!("Ici commence ta conversation avec {title}. Elle reste entre vous.")
                 } else {
-                    format!("C'est le tout début de #{title}. Lance la discussion !")
+                    format!("Ici commence #{title}. Tout l'historique du salon se lit à partir d'ici.")
                 };
                 let mut prev: Option<(Option<Id>, i64)> = None;
                 let rows = l.items.into_iter().map(|m| {
@@ -235,7 +235,10 @@ fn MessageList(channel: Id, title: String, is_dm: bool) -> impl IntoView {
                     }
                 }).collect_view();
                 view! {
-                    <div class="app-intro"><span class="k-avatar k-avatar--lg" aria-hidden="true">{initials(&title)}</span><h2>{title.clone()}</h2><p>{intro}</p></div>
+                    <div class="app-intro">
+                        <span class="app-intro-mark" aria-hidden="true">{if is_dm { view! { <Icon icon=lu::LuMessageCircle/> } } else { view! { <Icon icon=lu::LuHash/> } }}</span>
+                        <div><h2>{title.clone()}</h2><p>{intro}</p></div>
+                    </div>
                     {rows}
                     {pending}
                 }.into_any()
@@ -331,7 +334,7 @@ fn Members(guild: Id) -> impl IntoView {
     let members = move || s.guild(guild).map(|g| g.members).unwrap_or_default();
     view! {
         <aside class="app-aside app-aside--members" aria-label="Membres">
-            <h2 class="k-category">{move || format!("Membres — {}", members().len())}</h2>
+            <h2 class="k-category">"Membres "<span class="k-badge k-badge--neutral">{move || members().len()}</span></h2>
             <ul class="app-members">
                 <For each=members key=|m| (m.user.id, m.user.display_name.clone(), m.nick.clone()) let:m>
                     <li class="k-dm">

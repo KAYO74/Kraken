@@ -1,7 +1,7 @@
 //! Salon vocal (S18) : avant d'entrer, qui est là et « Rejoindre » ; ensuite les tuiles des
 //! participants, l'écran regardé en grand et la barre de commandes. Plus ce que la coquille montre
-//! de l'appel : les participants sous chaque salon vocal, le panneau « Vocal connecté », les
-//! boutons micro et son, et le son des micros reçus.
+//! de l'appel : les participants sous chaque salon vocal, le panneau « En appel » (avec les
+//! boutons micro et son), et le son des micros reçus.
 
 use kraken_proto::{Channel, Id, User, VoiceState};
 use leptos::html;
@@ -277,7 +277,7 @@ fn Stage(guild: Id, user: Id) -> impl IntoView {
     }
 }
 
-/// Micro : pressé = coupé. Dans la barre de l'appel (`big`) ou le panneau utilisateur.
+/// Micro : pressé = coupé. Dans la barre de l'appel (`big`) ou le panneau « En appel ».
 #[component]
 pub fn MicToggle(#[prop(optional)] big: bool) -> impl IntoView {
     let v = store().voice;
@@ -366,7 +366,7 @@ pub fn VoiceUsers(guild: Id, channel: Id, name: String, hidden: Signal<bool>) ->
     }
 }
 
-/// Au-dessus du panneau utilisateur pendant un appel : où, l'état, et quitter.
+/// En bas de la barre latérale pendant un appel : l'état, où, micro, son et quitter.
 #[component]
 pub fn VoicePanel() -> impl IntoView {
     let s = store();
@@ -378,7 +378,7 @@ pub fn VoicePanel() -> impl IntoView {
         Some((r, format!("{c} / {}", g.guild.name)))
     });
     let state = move || match v.status.get() {
-        Status::Connected => ("on", "Vocal connecté"),
+        Status::Connected => ("on", "En appel"),
         Status::Connecting => ("wait", "Connexion…"),
         Status::Unstable => ("wait", "Connexion instable"),
         Status::Lost(_) | Status::Off => ("lost", "Connexion perdue"),
@@ -390,6 +390,8 @@ pub fn VoicePanel() -> impl IntoView {
                     <b data-state=move || state().0 role="status">{move || state().1}</b>
                     <a class="app-ellipsis" href=format!("/channels/{}/{}", r.guild, r.channel) title=where_.clone()>{where_.clone()}</a>
                 </div>
+                <MicToggle/>
+                <DeafToggle/>
                 <Show when=move || matches!(v.status.get(), Status::Lost(_))>
                     <button class="k-btn k-btn--icon" aria-label="Reconnecter" title="Reconnecter" on:click=move |_| v.join(r.guild, r.channel)>
                         <Icon icon=lu::LuRefreshCw/>

@@ -124,16 +124,26 @@
   </div>
 </section>
 
-<section><h2>Navigation : rail, salons, MP, panneau utilisateur</h2>
+<section><h2>Navigation : rail, mon compte, salons, MP, panneau « En appel »</h2>
+  <div style="position:relative;height:250px;margin-bottom:var(--space-5)">
+    <div class="k-mecard" role="group" aria-label="Mon compte (carte ouverte)" style="left:0;bottom:0">
+      <header><span class="k-avatar k-avatar--md">K<i class="k-presence k-presence--online"></i></span><div><b>Kayo</b><small>@kayo</small></div></header>
+      <p class="k-mecard-state" data-state="on">Connecté</p>
+      <a class="k-mecard-item" href="#"><svg class="k-icon"><use href="#i-gear"/></svg>Réglages</a>
+      <a class="k-mecard-item" href="#"><svg class="k-icon"><use href="#i-msg"/></svg>Apparence</a>
+      <hr><button class="k-mecard-item is-danger"><svg class="k-icon"><use href="#i-x"/></svg>Se déconnecter</button>
+    </div>
+  </div>
   <div style="display:flex;border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border);width:max-content">
-    <nav class="k-rail" aria-label="Serveurs">
+    <div class="k-rail" style="padding:var(--space-3) 0 var(--space-4);position:relative">
       <button class="k-server" aria-label="Accueil"><svg class="k-icon"><use href="#i-msg"/></svg></button><hr>
       <button class="k-server" aria-current="page" aria-label="Serveur Abysse">Ab</button>
       <button class="k-server" data-unread aria-label="Serveur Récif, non lu">Ré</button>
       <button class="k-server" aria-label="Serveur Marée, 4 mentions">Ma<span class="k-badge k-badge--count">4</span></button>
       <button class="k-server k-server--action" aria-label="Ajouter un serveur"><svg class="k-icon"><use href="#i-plus"/></svg></button>
       <button class="k-server k-server--action" aria-label="Explorer"><svg class="k-icon"><use href="#i-compass"/></svg></button>
-    </nav>
+      <button class="k-me" style="margin-top:auto" aria-label="Mon compte" aria-expanded="false"><span class="k-avatar">K<i class="k-presence k-presence--online"></i></span></button>
+    </div>
     <div style="display:flex;flex-direction:column;background:var(--bg)">
       <div class="k-sidebar">
         <button class="k-category" aria-expanded="true"><svg class="k-icon k-icon--sm"><use href="#i-chev"/></svg>Salons ouverts</button>
@@ -148,10 +158,9 @@
         <div class="k-dm" aria-current="page"><span class="k-avatar k-avatar--md">Lu<i class="k-presence k-presence--online"></i></span><div>Lou</div><button class="k-btn k-btn--icon" aria-label="Fermer la conversation"><svg class="k-icon k-icon--sm"><use href="#i-x"/></svg></button></div>
         <div class="k-dm"><span class="k-avatar k-avatar--md">G</span><div>Lou, Sam, Noa<small>4 membres</small></div><button class="k-btn k-btn--icon" aria-label="Fermer la conversation"><svg class="k-icon k-icon--sm"><use href="#i-x"/></svg></button></div>
       </div>
-      <div class="k-userpanel"><span class="k-avatar k-avatar--md">K<i class="k-presence k-presence--online"></i></span><div><b>kayo</b><small>En ligne</small></div>
-        <button class="k-btn k-btn--icon" aria-label="Couper le micro"><svg class="k-icon"><use href="#i-mic"/></svg></button>
-        <button class="k-btn k-btn--icon" aria-label="Couper le son" aria-pressed="true"><svg class="k-icon"><use href="#i-head"/></svg></button>
-        <button class="k-btn k-btn--icon" aria-label="Réglages"><svg class="k-icon"><use href="#i-gear"/></svg></button></div>
+      <section class="k-voicebar" aria-label="Connexion vocale"><div><b data-state="on">En appel</b><a href="#">Salle vocale / Abysse</a></div>
+        <button class="k-btn k-btn--icon" aria-label="Couper le micro" aria-pressed="false"><svg class="k-icon"><use href="#i-mic"/></svg></button>
+        <button class="k-btn k-btn--icon" aria-label="Couper le son" aria-pressed="true"><svg class="k-icon"><use href="#i-head"/></svg></button></section>
     </div>
   </div>
 </section>
