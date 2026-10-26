@@ -412,3 +412,124 @@ async fn display_name_changes_live(pool: PgPool) {
     assert_eq!(u.display_name, None);
     assert_eq!(u.name(), "lou");
 }
+
+/// Modifier, supprimer, répondre, réagir : droits vérifiés par le serveur pour un second
+/// compte et un inconnu, événements reçus en direct.
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn edit_delete_reply_and_react(pool: PgPool) {
+    let base = spawn(pool).await;
+    let c = reqwest::Client::new();
+    let lou = register(&c, &base, "lou").await;
+    let sam = register(&c, &base, "sam").await;
+    let noa = register(&c, &base, "noa").await;
+    let auth = |t: &str| format!("Session {t}");
+    let api = |p: String| format!("http://{base}/api/v1{p}");
+    let g: GuildState = c
+        .post(api("/guilds".into()))
+        .header("authorization", auth(&lou.token))
+        .json(&json!({"name": "Abysse"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let cid = g.channels.iter().find(|c| c.kind.is_textual()).unwrap().id;
+    let inv: Invite = c
+        .post(api(format!("/channels/{cid}/invites")))
+        .header("authorization", auth(&lou.token))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let joined = c.post(api(format!("/invites/{}", inv.code))).header("authorization", auth(&sam.token)).send().await;
+    assert_eq!(joined.unwrap().status(), 200);
+
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{base}/gateway")).await.unwrap();
+    read(&mut ws).await;
+    let op = ClientOp::Identify { token: Some(sam.token.clone()) };
+    ws.send(Ws::Text(serde_json::to_string(&op).unwrap().into())).await.unwrap();
+    assert!(matches!(read(&mut ws).await, ServerOp::Ready(_)));
+    let mut next = async || match read(&mut ws).await {
+        ServerOp::Dispatch { event, .. } => event,
+        other => panic!("DISPATCH attendu : {other:?}"),
+    };
+
+    // Lou (propriétaire) mentionne sam et tout le monde : il en a le droit.
+    let m: Message = c
+        .post(api(format!("/channels/{cid}/messages")))
+        .header("authorization", auth(&lou.token))
+        .json(&json!({"content": "**Bienvenue** @sam et @everyone"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(m.mention_everyone && m.mentions.len() == 1);
+    assert!(matches!(next().await, Event::MessageCreate(x) if x.id == m.id));
+    let msg = format!("/channels/{cid}/messages/{}", m.id);
+
+    // Sam ne peut ni modifier ni supprimer le message de lou ; noa ne voit rien.
+    let r = c.patch(api(msg.clone())).header("authorization", auth(&sam.token)).json(&json!({"content": "x"})).send();
+    assert_eq!(r.await.unwrap().status(), 403);
+    assert_eq!(
+        c.delete(api(msg.clone())).header("authorization", auth(&sam.token)).send().await.unwrap().status(),
+        403
+    );
+    let r = c.patch(api(msg.clone())).header("authorization", auth(&noa.token)).json(&json!({"content": "x"})).send();
+    assert_eq!(r.await.unwrap().status(), 404);
+    assert_eq!(
+        c.delete(api(msg.clone())).header("authorization", auth(&noa.token)).send().await.unwrap().status(),
+        404
+    );
+    let octo = "%F0%9F%90%99"; // 🐙
+    let react = |who: &str, emoji: &str| {
+        c.put(api(format!("{msg}/reactions/{emoji}/@me"))).header("authorization", auth(who)).send()
+    };
+    assert_eq!(react(&noa.token, octo).await.unwrap().status(), 404);
+    assert_eq!(react(&sam.token, "ok").await.unwrap().status(), 400);
+
+    // Sam réagit (deux fois : un seul événement), puis répond ; sam, lui, ne mentionne pas tout le monde.
+    for _ in 0..2 {
+        assert_eq!(react(&sam.token, octo).await.unwrap().status(), 204);
+    }
+    let ev = next().await;
+    assert_eq!(ev, Event::ReactionAdd { channel_id: cid, message_id: m.id, user_id: sam.user.id, emoji: "🐙".into() });
+    let reply: Message = c
+        .post(api(format!("/channels/{cid}/messages")))
+        .header("authorization", auth(&sam.token))
+        .json(&json!({"content": "Merci @lou ! @everyone", "reply_to": m.id}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(reply.reply.as_ref().and_then(|r| r.id), Some(m.id));
+    assert!(!reply.mention_everyone, "@everyone réservé à qui en a le droit");
+    assert!(matches!(next().await, Event::MessageCreate(_)));
+
+    // Lou modifie son message : MESSAGE_UPDATE.
+    let r = c.patch(api(msg.clone())).header("authorization", auth(&lou.token)).json(&json!({"content": "Bienvenue"}));
+    let edited: Message = r.send().await.unwrap().json().await.unwrap();
+    assert!(edited.edited_at.is_some() && edited.mentions.is_empty() && !edited.mention_everyone);
+    assert_eq!(edited.reactions.len(), 1);
+    assert!(matches!(next().await, Event::MessageUpdate(x) if x.content == "Bienvenue"));
+
+    // Sam retire sa réaction ; lou, propriétaire, supprime la réponse de sam.
+    let r = c.delete(api(format!("{msg}/reactions/{octo}/@me"))).header("authorization", auth(&sam.token));
+    assert_eq!(r.send().await.unwrap().status(), 204);
+    assert!(matches!(next().await, Event::ReactionRemove { .. }));
+    let theirs = format!("/channels/{cid}/messages/{}", reply.id);
+    assert_eq!(
+        c.delete(api(theirs.clone())).header("authorization", auth(&lou.token)).send().await.unwrap().status(),
+        204
+    );
+    assert_eq!(next().await, Event::MessageDelete { channel_id: cid, id: reply.id });
+    assert_eq!(c.delete(api(theirs)).header("authorization", auth(&lou.token)).send().await.unwrap().status(), 404);
+    assert_eq!(c.delete(api(msg)).header("authorization", auth(&lou.token)).send().await.unwrap().status(), 204);
+}

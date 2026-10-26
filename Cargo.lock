@@ -1738,6 +1738,7 @@ dependencies = [
  "icondata_core",
  "icondata_lu",
  "js-sys",
+ "kraken-core",
  "kraken-proto",
  "leptos",
  "leptos_router",

@@ -33,10 +33,10 @@ Expulser bannir exclure temporairement,moderation,must,yes,no,S22
 Journal d'audit,moderation,should,yes,no,S22
 AutoMod (mots interdits spam),moderation,could,yes,no,S22
 Filtre de contenu média sensible (flou bloquer),moderation,could,yes,no,S08 ; nécessite un classifieur
-Envoyer modifier supprimer un message,messages,must,yes,partial,"S05 ; envoi seulement (optimiste, nonce, réessai)"
-Markdown mentions et spoilers,messages,must,yes,no,S05 S11
-Répondre à un message,messages,must,yes,no,S05
-Réactions emoji,messages,must,yes,no,S05
+Envoyer modifier supprimer un message,messages,must,yes,yes,"S05 F10 ; envoi optimiste (nonce, réessai ou abandon), modifier le sien, supprimer le sien ou tout message avec MANAGE_MESSAGES"
+Markdown mentions et spoilers,messages,must,yes,yes,"S05 S11 ; gras, italique, souligné, barré, code, blocs, citations, liens, spoilers ; @pseudo, @everyone/@here selon MENTION_EVERYONE, #salon ; autocomplétion"
+Répondre à un message,messages,must,yes,yes,"S05 ; citation au-dessus, clic pour y aller (charge l'historique plus ancien)"
+Réactions emoji,messages,must,yes,yes,"S05 ; emojis Unicode, sélecteur de 86 emojis, 20 différents au plus par message ; emojis perso pas encore"
 Épingler un message,messages,should,yes,no,S05
 Transférer un message,messages,could,yes,no,S13
 Aperçus de liens (embeds),messages,must,yes,no,S05

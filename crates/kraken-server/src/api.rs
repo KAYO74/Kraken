@@ -13,6 +13,12 @@ use crate::auth::Auth;
 use crate::error::{ApiResult, AppError};
 
 async fn require_channel(state: &AppState, uid: Id, cid: Id, need: u64) -> ApiResult<Channel> {
+    channel_perms(state, uid, cid, need).await?;
+    state.db.channel(cid).await?.ok_or_else(AppError::not_found)
+}
+
+/// Mes droits dans ce salon, s'ils contiennent `need`.
+async fn channel_perms(state: &AppState, uid: Id, cid: Id, need: u64) -> ApiResult<u64> {
     let p = state.db.channel_perms(uid, cid).await?;
     if p & perms::VIEW_CHANNEL == 0 {
         return Err(AppError::not_found()); // ne pas révéler l'existence du salon
@@ -20,8 +26,11 @@ async fn require_channel(state: &AppState, uid: Id, cid: Id, need: u64) -> ApiRe
     if p & need != need {
         return Err(AppError::forbidden());
     }
-    state.db.channel(cid).await?.ok_or_else(AppError::not_found)
+    Ok(p)
 }
+
+/// Réactions ajoutées ou retirées par minute et par client.
+pub const REACTIONS_PER_MIN: u32 = 300;
 
 async fn require_guild(state: &AppState, uid: Id, gid: Id, need: u64) -> ApiResult<()> {
     let p = state.db.guild_perms(uid, gid).await?;
@@ -105,16 +114,80 @@ pub async fn create_message(
     Path(cid): Path<Id>,
     Json(req): Json<CreateMessage>,
 ) -> ApiResult<(StatusCode, Json<Message>)> {
-    require_channel(&state, auth.user.id, cid, perms::SEND_MESSAGES).await?;
+    let p = channel_perms(&state, auth.user.id, cid, perms::SEND_MESSAGES).await?;
     if req.nonce.as_ref().is_some_and(|n| n.len() > 64) {
         return Err(AppError::invalid("nonce trop long"));
     }
-    let (m, created) = state.db.create_message(cid, auth.user.id, &req.content, req.nonce).await?;
+    let draft = kraken_db::Draft {
+        content: &req.content,
+        nonce: req.nonce,
+        reply_to: req.reply_to,
+        may_mention_everyone: p & perms::MENTION_EVERYONE != 0,
+    };
+    let (m, created) = state.db.send_message(cid, auth.user.id, draft).await?;
     // Même pour un renvoi (même nonce) : si la diffusion avait échoué, elle a lieu cette fois ;
     // les clients ignorent un message qu'ils ont déjà.
     let audience = state.db.channel_audience(cid).await?;
-    state.hub.send(&audience, Event::MessageCreate(m.clone()));
+    state.hub.send(&audience, Event::MessageCreate(Box::new(m.clone())));
     Ok((if created { StatusCode::CREATED } else { StatusCode::OK }, Json(m)))
+}
+
+/// Modifier son propre message.
+pub async fn edit_message(
+    State(state): State<AppState>,
+    auth: Auth,
+    Path((cid, mid)): Path<(Id, Id)>,
+    Json(req): Json<EditMessage>,
+) -> ApiResult<Json<Message>> {
+    let p = channel_perms(&state, auth.user.id, cid, perms::READ_HISTORY).await?;
+    let before = state.db.message(mid).await?;
+    let m = state.db.edit_message(cid, mid, auth.user.id, &req.content, p & perms::MENTION_EVERYONE != 0).await?;
+    if before.as_ref() != Some(&m) {
+        let audience = state.db.channel_audience(cid).await?;
+        state.hub.send(&audience, Event::MessageUpdate(Box::new(m.clone())));
+    }
+    Ok(Json(m))
+}
+
+/// Supprimer son message, ou celui d'un autre avec `MANAGE_MESSAGES`.
+pub async fn delete_message(
+    State(state): State<AppState>,
+    auth: Auth,
+    Path((cid, mid)): Path<(Id, Id)>,
+) -> ApiResult<StatusCode> {
+    let p = channel_perms(&state, auth.user.id, cid, perms::READ_HISTORY).await?;
+    state.db.delete_message(cid, mid, auth.user.id, p & perms::MANAGE_MESSAGES != 0).await?;
+    let audience = state.db.channel_audience(cid).await?;
+    state.hub.send(&audience, Event::MessageDelete { channel_id: cid, id: mid });
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn add_reaction(
+    State(state): State<AppState>,
+    auth: Auth,
+    Path((cid, mid, emoji)): Path<(Id, Id, String)>,
+) -> ApiResult<StatusCode> {
+    channel_perms(&state, auth.user.id, cid, perms::READ_HISTORY | perms::ADD_REACTIONS).await?;
+    if state.db.add_reaction(cid, mid, auth.user.id, &emoji).await? {
+        let audience = state.db.channel_audience(cid).await?;
+        let ev = Event::ReactionAdd { channel_id: cid, message_id: mid, user_id: auth.user.id, emoji };
+        state.hub.send(&audience, ev);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn remove_reaction(
+    State(state): State<AppState>,
+    auth: Auth,
+    Path((cid, mid, emoji)): Path<(Id, Id, String)>,
+) -> ApiResult<StatusCode> {
+    channel_perms(&state, auth.user.id, cid, perms::READ_HISTORY).await?;
+    if state.db.remove_reaction(cid, mid, auth.user.id, &emoji).await? {
+        let audience = state.db.channel_audience(cid).await?;
+        let ev = Event::ReactionRemove { channel_id: cid, message_id: mid, user_id: auth.user.id, emoji };
+        state.hub.send(&audience, ev);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn create_invite(

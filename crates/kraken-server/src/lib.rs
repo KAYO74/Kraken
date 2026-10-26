@@ -169,9 +169,20 @@ pub fn app(state: AppState) -> Router {
     let voice_join = Router::new()
         .route("/channels/{id}/voice", post(voice::join))
         .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
+    // Réactions : un clic chacune, diffusées à tout le salon ; compteur à part, plus large.
+    let reactions = Router::new()
+        .route(
+            "/channels/{id}/messages/{mid}/reactions/{emoji}/@me",
+            axum::routing::put(api::add_reaction).delete(api::remove_reaction),
+        )
+        .route_layer(axum::middleware::from_fn_with_state(
+            limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(api::REACTIONS_PER_MIN)),
+            limit::check,
+        ));
     let api = Router::new()
         .merge(limited)
         .merge(voice_join)
+        .merge(reactions)
         .route("/voice", delete(voice::leave))
         .route("/health", get(api::health))
         .route("/instance", get(api::instance))
@@ -184,6 +195,7 @@ pub fn app(state: AppState) -> Router {
         .route("/guilds/{id}", get(api::guild))
         .route("/guilds/{id}/channels", get(api::guild_channels).post(api::create_channel))
         .route("/channels/{id}/messages", get(api::messages).post(api::create_message))
+        .route("/channels/{id}/messages/{mid}", axum::routing::patch(api::edit_message).delete(api::delete_message))
         .route("/channels/{id}/invites", post(api::create_invite))
         .route("/invites/{code}", get(api::invite).post(api::join))
         .fallback(|| async { error::AppError::not_found() });

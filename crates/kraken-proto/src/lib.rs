@@ -179,12 +179,53 @@ pub struct Message {
     pub nonce: Option<String>,
     pub created_at: i64,
     pub edited_at: Option<i64>,
+    /// Le message auquel celui-ci répond.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply: Option<Reply>,
+    /// Dans l'ordre de la première réaction de chaque emoji.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<Reaction>,
+    /// Personnes mentionnées par `@pseudo` qui voient le salon.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mentions: Vec<User>,
+    /// `@everyone` ou `@here` écrit par quelqu'un qui en a le droit.
+    #[serde(default)]
+    pub mention_everyone: bool,
+}
+
+/// Longueur, en caractères, de l'extrait du message d'origine montré au-dessus d'une réponse.
+pub const REPLY_EXCERPT: usize = 200;
+
+/// Aperçu du message d'origine d'une réponse.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Reply {
+    /// `None` : le message d'origine a été supprimé.
+    pub id: Option<Id>,
+    pub author: Option<User>,
+    /// Ses [`REPLY_EXCERPT`] premiers caractères.
+    pub content: String,
+}
+
+/// Un emoji et ceux qui ont réagi avec, du premier au dernier.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Reaction {
+    pub emoji: String,
+    pub users: Vec<Id>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateMessage {
     pub content: String,
     pub nonce: Option<String>,
+    /// Répondre à ce message du même salon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply_to: Option<Id>,
+}
+
+/// `PATCH /channels/{id}/messages/{mid}` : nouveau texte (auteur seulement).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EditMessage {
+    pub content: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -490,7 +531,25 @@ pub enum ServerOp {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "t", content = "d", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Event {
-    MessageCreate(Message),
+    MessageCreate(Box<Message>),
+    /// Texte modifié (ou mentions recalculées) : le message entier, à remplacer.
+    MessageUpdate(Box<Message>),
+    MessageDelete {
+        channel_id: Id,
+        id: Id,
+    },
+    ReactionAdd {
+        channel_id: Id,
+        message_id: Id,
+        user_id: Id,
+        emoji: String,
+    },
+    ReactionRemove {
+        channel_id: Id,
+        message_id: Id,
+        user_id: Id,
+        emoji: String,
+    },
     ChannelCreate(Channel),
     GuildCreate(Box<GuildState>),
     MemberAdd {

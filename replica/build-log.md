@@ -38,6 +38,14 @@ Vérifié : `kraken-voice/tests/roundtrip.rs` (règles du relais, en vrai sur UD
 
 Limites : le navigateur ne dit pas quel écran il partage (écran de même taille, sinon de même rapport, sinon principal) ; Wayland refusé ; sous Windows, les fenêtres lancées en administrateur ne reçoivent rien.
 
+## Messages complets (S05, F10, 2026-10-26)
+
+Modifier son message (crayon, ou flèche haut dans une saisie vide ; Entrée enregistre, Échap annule, « (édité) »), le supprimer après confirmation (son auteur, ou qui a `MANAGE_MESSAGES` : propriétaire, rôle Modération), répondre (citation au-dessus, clic qui y mène en chargeant l'historique plus ancien au besoin, « message d'origine supprimé » ensuite), réactions Unicode (sélecteur de 86 emojis du système avec recherche en français, compteur, qui a réagi au survol, 20 emojis différents au plus, 300 par minute et par client), markdown (gras, italique, souligné, barré, code, blocs, citations, liens `http(s)` détectés, spoilers dévoilés au clic ou au clavier) et mentions (`@pseudo` surligné pour qui est visé, `@everyone`/`@here` seulement avec `MENTION_EVERYONE`, `#salon` en lien, autocomplétion `@` et `#`). Un envoi raté se réessaie ou se supprime. Le markdown est analysé dans `kraken-core` (le serveur y lit les mentions, le client le dessine en nœuds DOM, jamais en HTML) ; événements `MESSAGE_UPDATE`, `MESSAGE_DELETE`, `REACTION_ADD`, `REACTION_REMOVE`. Le schéma avait déjà les colonnes et tables : pas de migration.
+
+Vérifié : tests `kraken-core` (markdown, emojis), `kraken-db` (`edit_delete_reply_react_and_mention`), `kraken-server/tests/slice.rs` (`edit_delete_reply_and_react` : second compte refusé en 403, inconnu en 404, événements reçus en direct), `e2e/specs/f10-messages.spec.ts` (11 parcours, dont modération par le rôle de démo et axe).
+
+Limites : les boutons du client tiennent compte des rôles, pas des surcharges de salon (le serveur, lui, les applique) ; `@here` vaut `@everyone` tant que la présence ne compte pas dans les notifications ; pas encore d'emojis perso, de super réactions ni de notifications de mention.
+
 ## Écarts à savoir
 
 - Données : en mémoire pendant le build, puis PostgreSQL avec `/replica-backend` (même API, aucun écran modifié). La tranche verticale a été rejouée sur Postgres.
