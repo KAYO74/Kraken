@@ -36,6 +36,27 @@ pub async fn instance() -> ApiResult<Instance> {
     call(Method::GET, "/instance", NO_BODY).await
 }
 
+thread_local! {
+    static PUBLIC_URL: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Adresse publique de l'instance (liens d'invitation) ; à défaut, celle de la page.
+pub async fn public_url() -> String {
+    if let Some(u) = PUBLIC_URL.with_borrow(Clone::clone) {
+        return u;
+    }
+    let origin = || web_sys::window().and_then(|w| w.location().origin().ok()).unwrap_or_default();
+    match instance().await {
+        Ok(i) => {
+            let u = i.public_url.trim_end_matches('/');
+            let u = if u.is_empty() { origin() } else { u.to_string() };
+            PUBLIC_URL.set(Some(u.clone()));
+            u
+        }
+        Err(_) => origin(),
+    }
+}
+
 pub async fn register(username: &str, email: &str, password: &str) -> ApiResult<AuthResp> {
     call(Method::POST, "/auth/register", Some(json!({ "username": username, "email": email, "password": password })))
         .await
@@ -72,6 +93,14 @@ pub async fn invite(code: &str) -> ApiResult<Invite> {
 
 pub async fn join(code: &str) -> ApiResult<GuildState> {
     call(Method::POST, &format!("/invites/{code}"), NO_BODY).await
+}
+
+pub async fn voice_join(channel: Id, body: &VoiceJoin) -> ApiResult<VoiceAnswer> {
+    call(Method::POST, &format!("/channels/{channel}/voice"), Some(body)).await
+}
+
+pub async fn voice_leave() -> ApiResult<()> {
+    call(Method::DELETE, "/voice", NO_BODY).await
 }
 
 pub async fn update_me(display_name: &str) -> ApiResult<User> {

@@ -4,6 +4,7 @@
 mod api;
 mod app;
 mod auth;
+mod call;
 mod chat;
 mod home;
 mod icons;
@@ -12,6 +13,7 @@ mod settings;
 mod shell;
 mod store;
 mod ui;
+mod voice;
 
 fn main() {
     console_error_panic_hook::set_once();

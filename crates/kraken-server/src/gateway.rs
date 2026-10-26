@@ -166,7 +166,7 @@ async fn session(state: AppState, mut ws: WebSocket, cookie: Option<String>) {
     let loaded = async {
         Ok::<_, kraken_db::DbError>(Ready {
             user,
-            guilds: state.db.user_guilds(uid).await?,
+            guilds: state.db.user_guilds(uid).await?.into_iter().map(|g| state.with_voice(g)).collect(),
             private_channels: state.db.private_channels(uid).await?,
             relationships: state.hub.with_presence(state.db.relationships(uid).await?),
             session_id: format!("{conn:x}"),

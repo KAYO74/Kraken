@@ -168,7 +168,7 @@ jobs:
           Get-Content -Raw .\install.ps1 | Invoke-Expression
 
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # Playwright 1.56 ne sait pas installer Chromium sur 26.04
     services:
       postgres:
         image: postgres:18

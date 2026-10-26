@@ -512,7 +512,8 @@ impl Db {
             })
         })
         .collect::<sqlx::Result<Vec<_>>>()?;
-        Ok(Some(GuildState { guild, channels, roles, members: self.members(gid).await? }))
+        // États vocaux : en mémoire dans le serveur, ajoutés par lui.
+        Ok(Some(GuildState { guild, channels, roles, members: self.members(gid).await?, voice_states: vec![] }))
     }
 
     async fn members(&self, gid: Id) -> Result<Vec<Member>> {

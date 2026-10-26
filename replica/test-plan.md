@@ -30,7 +30,10 @@ Résultat : 40 cas automatisés, 40 passés (et 120/120 sur trois passes d'affil
 | F03-E1 | | MP de groupe | ouvrir « Équipée du soir » | historique affiché | e2e | ok |
 | F03-N1 | | MP d'autrui | URL et API du MP Démo↔Lou par un tiers | 404, rien affiché | e2e | ok |
 | F03-H2 | | appel | | | non construit | bloqué |
-| F04 | F04 vocal et partage d'écran | tous | | | non construit | bloqué |
+| F04-H1 | F04 vocal et partage d'écran | nominal | deux comptes dans un serveur neuf : Rejoindre, partager, Regarder, micro et son, arrêter, Quitter | chacun voit l'autre (tuiles, barre latérale, « Vocal connecté ») et entend son micro ; l'écran partagé joue chez qui regarde ; icônes micro et son coupés chez l'autre ; écran puis participant retirés ; axe ok | e2e (micro et écran factices de Chromium) | ok |
+| F04-N1 | | sans accès | non-membre (API et adresse du salon), salon caché, salon textuel, sans session | 404, 404, 400, 401 ; personne en vocal | e2e | ok |
+| F04-N2 | | sans la permission CONNECT, salon plein (25) | | 403, 409 | cargo test | ok |
+| F04-M1 | | Firefox, Safari, appli de bureau, vrai partage d'écran avec son | | | manuel | non fait |
 | F05-H1 | F05 créer et inviter | nominal | créer, Inviter des amis, copier le lien | lien `/invite/xxxxxxxx`, axe ok | e2e | ok |
 | F05-N1 | | nom vide, court, espaces | formulaire et API | refusé par le navigateur et par le serveur (400) | e2e | ok |
 | F05-E1 | | nom de 60 caractères | | coupé proprement, pas de débordement | e2e | ok |

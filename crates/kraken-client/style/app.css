@@ -75,6 +75,41 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
 .app-add-row { display: flex; gap: var(--space-3); margin: var(--space-4) 0; }
 .app-add-row .k-input { flex: 1; min-width: 0; }
 
+/* Salon vocal (S18) */
+.app-call { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.app-call-lobby { flex: 1; display: grid; place-content: center; justify-items: center; gap: var(--space-4); overflow-y: auto;
+  padding: var(--space-7) var(--space-5); text-align: center; }
+.app-call-lobby h2 { margin: 0; font-size: var(--text-xl-size); line-height: var(--text-xl-line); color: var(--text-strong); }
+.app-call-lobby p { margin: 0; max-width: var(--size-card); }
+.app-call-icon { display: grid; place-items: center; width: var(--space-11); height: var(--space-11); border-radius: var(--radius-pill);
+  background: var(--surface-raised); color: var(--text-muted); }
+.app-call-who { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); max-width: var(--size-card); }
+.app-call-who li { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-2) var(--space-4) var(--space-2) var(--space-2);
+  border-radius: var(--radius-pill); background: var(--surface-raised); color: var(--text-secondary); font-size: var(--text-sm-size); }
+.app-call-main { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-content: center; gap: var(--space-4); padding: var(--space-4); }
+.app-call-main:has(.app-stage) { align-content: start; }
+/* Peu de monde : de grandes tuiles, centrées ; sous un écran regardé : une rangée de petites. */
+.app-tiles { list-style: none; width: 100%; max-width: calc(2 * var(--size-card) + var(--space-4)); margin: 0 auto; padding: 0;
+  display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(min(var(--size-tile), 100%), 1fr)); }
+.app-stage ~ .app-tiles { max-width: none; justify-content: center; grid-template-columns: repeat(auto-fill, var(--size-tile)); }
+.app-stage { position: relative; display: grid; place-items: center; margin: 0; aspect-ratio: 16 / 9; max-height: 70dvh; overflow: hidden;
+  border-radius: var(--radius-lg); background: var(--media); color: var(--on-media); }
+.app-stage video { width: 100%; height: 100%; object-fit: contain; }
+.app-stage:fullscreen { max-height: none; aspect-ratio: auto; border-radius: 0; }
+.app-stage figcaption { position: absolute; left: var(--space-3); right: var(--space-3); bottom: var(--space-3); display: flex; align-items: center;
+  gap: var(--space-3); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--shadow-scrim); }
+.app-stage figcaption .k-btn--icon { color: var(--on-media); }
+.app-stage figcaption .k-btn--icon:hover { background: var(--shadow-scrim); color: var(--on-media); }
+.app-stage-wait { position: absolute; margin: 0; }
+.app-push { margin-left: auto; }
+.app-call-why { padding: 0 var(--space-4) var(--space-4); text-align: center; }
+.app-voice-users { list-style: none; margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-8); display: grid; gap: var(--space-1); }
+.app-voice-users li { display: flex; align-items: center; gap: var(--space-3); min-width: 0; min-height: var(--space-8); padding: 0 var(--space-3);
+  border-radius: var(--radius-md); color: var(--text-muted); font-size: var(--text-sm-size); font-weight: var(--weight-medium); }
+.app-voice-users li > [role="img"] { display: inline-flex; }
+.app-voice-users .k-badge { margin-left: auto; }
+.app-voice-users li[data-speaking] .k-avatar { box-shadow: 0 0 0 2px var(--success); }
+
 /* Utilitaires */
 .app-ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-fill { flex: 1; display: grid; place-content: center; }
@@ -130,6 +165,14 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
   .app-header .k-tab { flex: none; white-space: nowrap; }
   .app-friends { padding: var(--space-4); }
   .app-dialog-alt { flex-direction: column; align-items: stretch; }
+  /* Appel : deux tuiles par ligne, commandes en icônes seules (leur nom reste dans aria-label). */
+  .app-tiles, .app-stage ~ .app-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .app-call-main { padding: var(--space-3); }
+  .k-tile { aspect-ratio: 4 / 3; }
+  .k-tile .k-avatar--lg { width: var(--space-10); height: var(--space-10); font-size: var(--text-base-size); }
+  .k-tile > .k-btn { top: var(--space-2); right: var(--space-2); padding: 0 var(--space-3); }
+  .k-tile > .k-btn > span { display: none; }
+  .k-callbtn > span { display: none; }
   .k-settings { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; width: 100vw; height: 100dvh; border-radius: 0; border: 0; }
   .k-settings nav { display: flex; overflow-x: auto; padding: var(--space-3); }
   .k-settings nav h3 { display: none; }

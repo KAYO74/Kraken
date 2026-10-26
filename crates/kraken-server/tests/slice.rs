@@ -21,6 +21,10 @@ fn config(auth_per_min: u32) -> Config {
         trust_proxy: false,
         auth_per_min,
         instance: Default::default(),
+        rtc_port: 0,
+        rtc_fallback: false,
+        rtc_ips: vec![std::net::Ipv4Addr::LOCALHOST.into()],
+        rtc_public_port: None,
     }
 }
 

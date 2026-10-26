@@ -1,9 +1,14 @@
 //! Mode « héberger » : un serveur KRAKEN complet dans l'appli, avec son propre PostgreSQL.
 //!
 //! PostgreSQL (binaires embarqués par `build.rs`) n'écoute que sur 127.0.0.1 ; KRAKEN écoute
-//! sur toutes les interfaces, pour que les personnes du même réseau puissent le rejoindre. Le
-//! serveur a son propre runtime tokio : l'arrêter coupe aussi ses tâches de fond et les
-//! WebSockets ouvertes. Les données (`<dossier>/pgdata`) restent d'un lancement à l'autre.
+//! sur toutes les interfaces, pour que les personnes du même réseau puissent le rejoindre, et
+//! ses salons vocaux sur un port UDP (3478 s'il est libre, sinon un autre). Le serveur a son
+//! propre runtime tokio : l'arrêter coupe aussi ses tâches de fond et les WebSockets ouvertes.
+//! Les données (`<dossier>/pgdata`) restent d'un lancement à l'autre.
+//!
+//! La fenêtre de l'hôte ouvre KRAKEN par localhost : un « contexte sécurisé », où le navigateur
+//! intégré donne le micro et le partage d'écran. Les liens d'invitation, eux, prennent l'adresse
+//! de l'instance sur le réseau local (`public_url`).
 
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -171,6 +176,16 @@ impl Server {
         self.pg.settings().port
     }
 
+    /// Port UDP des salons vocaux ; `None` si aucun n'a pu être ouvert.
+    pub fn voice_port(&self) -> Option<u16> {
+        self.state.voice.as_ref().map(|v| v.port())
+    }
+
+    /// L'adresse de KRAKEN pour la fenêtre de cet ordinateur.
+    pub fn local_url(&self) -> String {
+        format!("http://localhost:{}", self.port)
+    }
+
     pub fn block_on<F: Future>(&self, f: F) -> F::Output {
         self.rt.block_on(f)
     }
@@ -212,11 +227,13 @@ async fn prepare(data: &Path, web: &Path, port: u16, progress: &dyn Fn(&'static 
     let listener = listen(port).or_fail("Aucun port réseau n'est libre pour KRAKEN.")?;
     let port = listener.local_addr().or_fail("Aucun port réseau n'est libre pour KRAKEN.")?.port();
     let listener = tokio::net::TcpListener::from_std(listener).or_fail("Aucun port réseau n'est libre pour KRAKEN.")?;
-    // Les liens d'invitation reprennent l'adresse de la fenêtre : celle du réseau local.
+    // L'adresse publique (liens d'invitation, et celle qu'annonce le vocal) : celle du réseau local.
     let ip = lan_ip().unwrap_or(Ipv4Addr::LOCALHOST);
     let mut cfg = Config::from_env();
     cfg.addr = format!("0.0.0.0:{port}");
     cfg.public_url = format!("http://{ip}:{port}");
+    // Port UDP du vocal pris par un autre programme : un autre, plutôt que pas de vocal.
+    cfg.rtc_fallback = true;
     cfg.web_dir = web.to_string_lossy().into_owned();
     cfg.database_url = pg.settings().url(DB_NAME);
     cfg.seed = false;
@@ -559,23 +576,29 @@ impl Hosting {
     pub fn open_url(&self) -> Option<String> {
         let inner = self.lock();
         let server = inner.server.as_ref()?;
-        Some(format!("{}{}", server.url, if server.first() { "/register" } else { "/" }))
+        Some(format!("{}{}", server.local_url(), if server.first() { "/register" } else { "/" }))
     }
 
-    /// Si `link` mène au serveur hébergé ici (par son adresse réseau ou par 127.0.0.1), le même
-    /// lien sur son adresse réseau, celle que reprennent les liens d'invitation.
+    /// L'adresse du serveur hébergé pour la fenêtre (localhost), s'il tourne.
+    pub fn local_url(&self) -> Option<String> {
+        self.lock().server.as_ref().map(Server::local_url)
+    }
+
+    /// Si `link` mène au serveur hébergé ici (par son adresse réseau ou par cet ordinateur), le
+    /// même lien par localhost, où micro et partage d'écran sont permis.
     pub fn own_link(&self, link: &Url) -> Option<Url> {
         let inner = self.lock();
         let server = inner.server.as_ref()?;
-        let mut own = Url::parse(&server.url).ok()?;
+        let network = Url::parse(&server.url).ok()?;
         let here = match link.host()? {
-            Host::Ipv4(ip) => ip.is_loopback() || own.host() == Some(Host::Ipv4(ip)),
+            Host::Ipv4(ip) => ip.is_loopback() || network.host() == Some(Host::Ipv4(ip)),
             Host::Ipv6(ip) => ip.is_loopback(),
             Host::Domain(d) => d == "localhost",
         };
         if !here || link.port_or_known_default() != Some(server.port) {
             return None;
         }
+        let mut own = Url::parse(&server.local_url()).ok()?;
         own.set_path(link.path());
         own.set_query(link.query());
         own.set_fragment(link.fragment());

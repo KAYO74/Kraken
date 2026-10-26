@@ -8,6 +8,7 @@ use leptos_router::NavigateOptions;
 use leptos_router::components::Outlet;
 use leptos_router::hooks::{use_location, use_navigate};
 
+use crate::call::{CallAudio, DeafToggle, MicToggle, VoicePanel, VoiceUsers};
 use crate::icons::{Icon, lu};
 use crate::store::{Conn, store};
 use crate::ui::{Avatar, Logo, initials, modal};
@@ -87,6 +88,7 @@ pub fn Shell() -> impl IntoView {
                     Some(g) => view! { <GuildSidebar guild=g/> }.into_any(),
                     None => view! { <HomeSidebar/> }.into_any(),
                 }}
+                <VoicePanel/>
                 <UserPanel/>
             </div>
             <div class="app-scrim" on:click=move |_| s.drawer.set(false)></div>
@@ -99,6 +101,7 @@ pub fn Shell() -> impl IntoView {
                 </Show>
                 <Outlet/>
             </main>
+            <CallAudio/>
         </div>
     }
 }
@@ -181,10 +184,16 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
     let ids = current_ids();
     let collapsed = RwSignal::new(Vec::<Id>::new());
     let invite_open = RwSignal::new(false);
-    let g = move || s.guild(guild);
+    // Sans les états vocaux : un micro coupé ne redessine pas toute la liste (ni ne vole le focus).
+    let g = Memo::new(move |_| {
+        s.guild(guild).map(|mut g| {
+            g.voice_states.clear();
+            g
+        })
+    });
     view! {
         <nav class="k-sidebar app-sidebar" aria-label="Salons">
-            {move || match g() {
+            {move || match g.get() {
                 None => view! {
                     <div aria-busy="true">
                         <div class="k-skeleton app-skel-line"></div>
@@ -223,8 +232,9 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                 let parent = c.parent_id;
                                 let hidden = move || parent.is_some_and(|p| collapsed.with(|v| v.contains(&p)))
                                     && ids.get().1 != Some(cid);
+                                let voice = matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage);
                                 let (icon, kind) = match c.kind {
-                                    ChannelKind::Voice | ChannelKind::Stage => (lu::LuVolume2, "salon vocal "),
+                                    _ if voice => (lu::LuVolume2, "salon vocal "),
                                     ChannelKind::Announcement => (lu::LuMegaphone, "annonces "),
                                     ChannelKind::Forum => (lu::LuMessagesSquare, "forum "),
                                     _ => (lu::LuHash, ""),
@@ -232,8 +242,9 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                 view! {
                                     <a class="k-channel" href=format!("/channels/{gid}/{cid}") hidden=hidden
                                         aria-current=move || (ids.get().1 == Some(cid)).then_some("page")>
-                                        <Icon icon=icon/><span class="k-sr">{kind}</span><span class="app-ellipsis">{name}</span>
+                                        <Icon icon=icon/><span class="k-sr">{kind}</span><span class="app-ellipsis">{name.clone()}</span>
                                     </a>
+                                    {voice.then(|| view! { <VoiceUsers guild=gid channel=cid name=name hidden=Signal::derive(hidden)/> })}
                                 }.into_any()
                             }
                         }).collect_view()}
@@ -263,9 +274,9 @@ fn InviteDialog(guild: Id, close: impl Fn() + Copy + Send + Sync + 'static) -> i
             link.set(Some(Err("Aucun salon où inviter.".into())));
             return;
         };
-        let origin = web_sys::window().unwrap().location().origin().unwrap_or_default();
+        let base = crate::api::public_url().await;
         link.set(Some(
-            crate::api::create_invite(c).await.map(|i| format!("{origin}/invite/{}", i.code)).map_err(|e| e.message),
+            crate::api::create_invite(c).await.map(|i| format!("{base}/invite/{}", i.code)).map_err(|e| e.message),
         ));
     });
     let input = NodeRef::<leptos::html::Input>::new();
@@ -322,8 +333,6 @@ fn InviteDialog(guild: Id, close: impl Fn() + Copy + Send + Sync + 'static) -> i
 #[component]
 fn UserPanel() -> impl IntoView {
     let s = store();
-    let mic_off = RwSignal::new(false);
-    let deaf = RwSignal::new(false);
     view! {
         <div class="k-userpanel">
             {move || s.me.get().map(|u| view! { <Avatar user=u size="md" status=kraken_proto::Status::Online/> })}
@@ -336,12 +345,8 @@ fn UserPanel() -> impl IntoView {
                     Conn::Offline => "Hors ligne".into(),
                 }}</small>
             </div>
-            <button class="k-btn k-btn--icon" aria-label="Micro" aria-pressed=move || mic_off.get().to_string() on:click=move |_| mic_off.update(|v| *v = !*v)>
-                {move || if mic_off.get() { view! { <Icon icon=lu::LuMicOff/> } } else { view! { <Icon icon=lu::LuMic/> } }}
-            </button>
-            <button class="k-btn k-btn--icon" aria-label="Son" aria-pressed=move || deaf.get().to_string() on:click=move |_| deaf.update(|v| *v = !*v)>
-                {move || if deaf.get() { view! { <Icon icon=lu::LuHeadphoneOff/> } } else { view! { <Icon icon=lu::LuHeadphones/> } }}
-            </button>
+            <MicToggle/>
+            <DeafToggle/>
             <a class="k-btn k-btn--icon" href="/settings/account" aria-label="Réglages utilisateur" title="Réglages"><Icon icon=lu::LuSettings/></a>
         </div>
     }

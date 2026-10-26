@@ -73,6 +73,10 @@ pub struct Instance {
     pub processors: Option<String>,
     /// Code source de la version en service (AGPL : offert à chaque utilisateur).
     pub source_url: String,
+    /// Adresse publique de l'instance, sans `/` final : celle des liens d'invitation, quelle que
+    /// soit l'adresse par laquelle la page a été ouverte. Vide si le serveur ne la donne pas.
+    #[serde(default)]
+    pub public_url: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -148,6 +152,9 @@ pub struct GuildState {
     pub channels: Vec<Channel>,
     pub roles: Vec<Role>,
     pub members: Vec<Member>,
+    /// Qui est dans les salons vocaux (ceux que ce membre voit).
+    #[serde(default)]
+    pub voice_states: Vec<VoiceState>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -230,6 +237,87 @@ pub struct ApiError {
     pub message: String,
 }
 
+// ───────────── salons vocaux ─────────────
+
+/// Participants au plus dans un salon vocal.
+pub const MAX_VOICE_MEMBERS: usize = 25;
+
+/// Libellé du canal de données WebRTC ouvert par le client.
+pub const VOICE_DATA_CHANNEL: &str = "kraken";
+
+/// Où en est quelqu'un dans les salons vocaux d'un serveur. Une connexion vocale par
+/// utilisateur : rejoindre un autre salon quitte le précédent.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VoiceState {
+    pub guild_id: Id,
+    /// `None` : a quitté le vocal (ou se trouve dans un salon que tu ne vois pas).
+    pub channel_id: Option<Id>,
+    pub user_id: Id,
+    /// Micro coupé par l'utilisateur lui-même.
+    pub self_mute: bool,
+    /// Son coupé : n'entend plus personne (et ne parle plus).
+    pub self_deaf: bool,
+    /// Partage son écran.
+    pub streaming: bool,
+}
+
+/// `POST /channels/{id}/voice` : l'offre WebRTC du navigateur. Elle contient, dans cet ordre,
+/// trois transceivers `sendonly` (micro, image de l'écran, son de l'écran) et le canal de
+/// données [`VOICE_DATA_CHANNEL`]. Le client ne renégocie jamais : il démarre et arrête micro et
+/// partage avec `RTCRtpSender.replaceTrack` ; ensuite, seul le serveur fait des offres.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VoiceJoin {
+    pub sdp: String,
+    pub mids: VoiceMids,
+    /// État de départ (micro refusé, par exemple) ; ensuite, message `state`.
+    #[serde(default)]
+    pub self_mute: bool,
+    #[serde(default)]
+    pub self_deaf: bool,
+}
+
+/// Les `mid` des trois transceivers de l'offre.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VoiceMids {
+    pub mic: String,
+    pub screen: String,
+    pub screen_audio: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VoiceAnswer {
+    pub sdp: String,
+}
+
+/// Canal de données, client → serveur (JSON). Message invalide ou trop long : ignoré.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "t", rename_all = "snake_case")]
+pub enum VoiceClientMsg {
+    /// Réponse à la dernière offre du serveur.
+    Answer {
+        sdp: String,
+    },
+    State {
+        self_mute: bool,
+        self_deaf: bool,
+        streaming: bool,
+    },
+    /// Regarder (ou ne plus regarder) l'écran partagé de quelqu'un du même salon.
+    Watch {
+        user_id: Id,
+        on: bool,
+    },
+}
+
+/// Canal de données, serveur → client. Une seule offre à la fois : la suivante attend la réponse.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "t", rename_all = "snake_case")]
+pub enum VoiceServerMsg {
+    /// Pistes ajoutées ou retirées. Chaque piste reçue a pour flux `<user_id>.mic` ou
+    /// `<user_id>.screen` (image et son de l'écran partagent ce flux).
+    Offer { sdp: String },
+}
+
 // ───────────── gateway ─────────────
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -278,4 +366,30 @@ pub enum Event {
     },
     /// Nom affiché ou avatar changé : envoyé à l'intéressé et à ceux qui le voient.
     UserUpdate(User),
+    /// Arrivée, départ ou changement d'état dans un salon vocal ; envoyé à tout le serveur.
+    VoiceStateUpdate(VoiceState),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Le format du canal de données vocal, tel que le client web l'écrit.
+    #[test]
+    fn voice_data_channel_messages() {
+        let u = Id::from_bytes([7; 16]);
+        let watch: VoiceClientMsg =
+            serde_json::from_str(&format!(r#"{{"t":"watch","user_id":"{u}","on":true}}"#)).unwrap();
+        assert_eq!(watch, VoiceClientMsg::Watch { user_id: u, on: true });
+        let state: VoiceClientMsg =
+            serde_json::from_str(r#"{"t":"state","self_mute":true,"self_deaf":false,"streaming":false}"#).unwrap();
+        assert_eq!(state, VoiceClientMsg::State { self_mute: true, self_deaf: false, streaming: false });
+        let offer = serde_json::to_value(VoiceServerMsg::Offer { sdp: "v=0".into() }).unwrap();
+        assert_eq!(offer, serde_json::json!({"t": "offer", "sdp": "v=0"}));
+        // Les identifiants s'écrivent avec tirets : c'est le début des flux `<id>.mic`.
+        assert_eq!(serde_json::to_value(u).unwrap(), "07070707-0707-0707-0707-070707070707");
+        // Anciennes réponses sans les champs vocaux : toujours lisibles.
+        let g: Instance = serde_json::from_str(r#"{"contact":null,"processors":null,"source_url":"x"}"#).unwrap();
+        assert!(g.public_url.is_empty());
+    }
 }

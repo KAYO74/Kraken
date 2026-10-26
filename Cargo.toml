@@ -12,6 +12,7 @@ repository = "https://github.com/KAYO74/Kraken"
 kraken-proto = { path = "crates/kraken-proto" }
 kraken-core = { path = "crates/kraken-core" }
 kraken-db = { path = "crates/kraken-db" }
+kraken-voice = { path = "crates/kraken-voice" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["serde"] }

@@ -12,6 +12,8 @@ use kraken_proto::*;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
+use crate::voice::Voice;
+
 /// Simple indicateur « connecté » : la session elle-même est dans un cookie `HttpOnly`
 /// que le code du client ne peut pas lire.
 const SIGNED_IN_KEY: &str = "kraken.signed_in";
@@ -69,6 +71,8 @@ pub struct Store {
     pub conn: RwSignal<Conn>,
     /// Tiroir de navigation sous 640 px.
     pub drawer: RwSignal<bool>,
+    /// La session vocale, gardée d'un écran à l'autre.
+    pub voice: Voice,
 }
 
 pub fn store() -> Store {
@@ -77,15 +81,17 @@ pub fn store() -> Store {
 
 impl Store {
     pub fn new() -> Self {
+        let me = RwSignal::new(None);
         Self {
             signed_in: RwSignal::new(saved_signed_in()),
-            me: RwSignal::new(None),
+            me,
             guilds: RwSignal::new(vec![]),
             dms: RwSignal::new(vec![]),
             friends: RwSignal::new(vec![]),
             logs: RwSignal::new(HashMap::new()),
             conn: RwSignal::new(Conn::Offline),
             drawer: RwSignal::new(false),
+            voice: Voice::new(me),
         }
     }
 
@@ -101,6 +107,7 @@ impl Store {
         if let Some(s) = storage() {
             let _ = s.remove_item(SIGNED_IN_KEY);
         }
+        self.voice.hang_up();
         self.signed_in.set(false);
         self.me.set(None);
         self.guilds.set(vec![]);
@@ -151,6 +158,26 @@ impl Store {
         });
     }
 
+    /// Arrivée, départ ou changement d'état dans un salon vocal : la liste du serveur suit, à la
+    /// même place pour qui change seulement d'état.
+    fn voice_state(&self, v: VoiceState) {
+        if self.me.with_untracked(|m| m.as_ref().is_some_and(|m| m.id == v.user_id)) {
+            self.voice.check(&v);
+        }
+        self.guilds.update(|gs| {
+            let Some(g) = gs.iter_mut().find(|g| g.guild.id == v.guild_id) else { return };
+            let at = g.voice_states.iter().position(|x| x.user_id == v.user_id);
+            match (at, v.channel_id.is_some()) {
+                (Some(i), true) => g.voice_states[i] = v,
+                (Some(i), false) => {
+                    g.voice_states.remove(i);
+                }
+                (None, true) => g.voice_states.push(v),
+                (None, false) => {}
+            }
+        });
+    }
+
     fn apply(&self, ev: Event) {
         match ev {
             Event::MessageCreate(m) => self.log(m.channel_id, |l| {
@@ -184,6 +211,7 @@ impl Store {
                     g.members.push(member);
                 }
             }),
+            Event::VoiceStateUpdate(v) => self.voice_state(v),
         }
     }
 }

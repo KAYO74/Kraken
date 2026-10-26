@@ -1,7 +1,8 @@
 # Instance KRAKEN auto-hébergée. Le plus simple : `sh install.sh` (pose les questions, écrit .env,
 # démarre tout). À la main : `cp .env.example .env`, remplir, puis `docker compose up -d`.
 # Avec un domaine, Caddy sert l'instance en HTTPS (certificat Let's Encrypt automatique) ; sans
-# domaine, en HTTP simple sur le réseau local. Seul Caddy est exposé.
+# domaine, en HTTP simple sur le réseau local. Seuls Caddy et le port UDP des salons vocaux
+# (KRAKEN_RTC_PORT, 3478 par défaut) sont exposés.
 services:
   db:
     image: postgres:18
@@ -40,9 +41,15 @@ services:
       KRAKEN_PROCESSORS: ${KRAKEN_PROCESSORS:-}
       KRAKEN_SOURCE_URL: ${KRAKEN_SOURCE_URL:-}
       KRAKEN_SEED: ${KRAKEN_SEED:-}
+      # Salons vocaux : le son et l'image passent en UDP, directement (pas par Caddy).
+      KRAKEN_RTC_PORT: ${KRAKEN_RTC_PORT:-3478}
+      KRAKEN_RTC_IPS: ${KRAKEN_RTC_IPS:-}
+      KRAKEN_RTC_PUBLIC_PORT: ${KRAKEN_RTC_PUBLIC_PORT:-}
       RUST_LOG: ${RUST_LOG:-info}
     expose:
       - "8080"
+    ports:
+      - "${KRAKEN_RTC_PORT:-3478}:${KRAKEN_RTC_PORT:-3478}/udp"
 
   caddy:
     image: caddy:2
