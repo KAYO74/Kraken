@@ -48,10 +48,10 @@
 | macOS (Intel et Apple Silicon) | [KRAKEN-macOS.dmg](https://github.com/KAYO74/Kraken/releases/latest/download/KRAKEN-macOS.dmg), puis la commande ci-dessous |
 | Linux | [AppImage](https://github.com/KAYO74/Kraken/releases/latest/download/KRAKEN-Linux.AppImage), [.deb](https://github.com/KAYO74/Kraken/releases/latest/download/KRAKEN-Linux.deb) ou [.rpm](https://github.com/KAYO74/Kraken/releases/latest/download/KRAKEN-Linux.rpm) |
 
-**macOS** : l'appli n'est pas signée par Apple, donc macOS refuse de l'ouvrir. Une fois le `.dmg` téléchargé, ouvre Terminal et colle cette commande : elle installe KRAKEN dans Applications, lève le blocage et le lance.
+**macOS** : l'appli n'est pas signée par Apple, donc macOS refuse de l'ouvrir. Une fois le `.dmg` téléchargé (dans Téléchargements), ouvre Terminal et colle cette commande : elle prend le dernier `.dmg` de KRAKEN téléchargé, installe KRAKEN dans Applications, lève le blocage et le lance.
 
 ```sh
-hdiutil attach -nobrowse -quiet ~/Downloads/KRAKEN-macOS.dmg -mountpoint /tmp/kraken && rm -rf /Applications/KRAKEN.app && ditto /tmp/kraken/KRAKEN.app /Applications/KRAKEN.app && hdiutil detach -quiet /tmp/kraken && xattr -cr /Applications/KRAKEN.app && open /Applications/KRAKEN.app
+hdiutil detach -quiet /tmp/kraken 2>/dev/null; f="$(ls -t ~/Downloads/KRAKEN*.dmg | head -1)" && m="$(mktemp -d)" && hdiutil attach -nobrowse -quiet "$f" -mountpoint "$m" && rm -rf /Applications/KRAKEN.app && ditto "$m"/*.app /Applications/KRAKEN.app && hdiutil detach -quiet "$m" && xattr -cr /Applications/KRAKEN.app && open /Applications/KRAKEN.app
 ```
 
 Déjà glissé dans Applications ? `xattr -cr /Applications/KRAKEN.app && open /Applications/KRAKEN.app` suffit. **Windows** : si SmartScreen avertit, « Informations complémentaires », puis « Exécuter quand même ». Toutes les versions : [Releases](https://github.com/KAYO74/Kraken/releases).
