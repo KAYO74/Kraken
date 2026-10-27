@@ -202,9 +202,9 @@ a:hover { text-decoration: underline; }
 .k-msg-edit { grid-column: 2; }
 .k-msg-edit .k-input { height: auto; min-height: 44px; padding: var(--space-4); }
 /* Ligne « Nouveaux messages » : filet danger sur toute la largeur, libellé à droite. */
-.k-newline { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-5) var(--space-5) 0; color: var(--danger);
+.k-newline { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-5) var(--space-5) 0; color: var(--accent-text);
   font-size: var(--text-xs-size); font-weight: var(--weight-semibold); }
-.k-newline::before { content: ""; flex: 1; border-top: 1px solid var(--danger); }
+.k-newline::before { content: ""; flex: 1; border-top: 1px solid var(--accent-text); }
 .k-newline + .k-msg { margin-top: var(--space-2); }
 
 /* Embed, pièce jointe, réaction */
