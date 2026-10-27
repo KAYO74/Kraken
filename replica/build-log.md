@@ -6,17 +6,18 @@ Une ligne par écran. Statut : **fait**, **partiel** (manque listé), **route** 
 | --- | --- | --- | --- | --- |
 | coquille | 2026-10-17 | fait | coque Tauri | pas de `trunk` (téléchargements GitHub bloqués ici) : `scripts/build-client.sh` appelle `wasm-bindgen` directement |
 | S02 rail | 2026-10-17 | partiel | non-lus, mentions, dossiers, glisser-déposer | le tiroir mobile : choisir un serveur garde le tiroir ouvert, choisir un salon le ferme |
-| S03 barre MP | 2026-10-17 | partiel | nouveau MP, fermer une conversation, présence dans la liste | |
+| S03 barre MP | 2026-10-17 | partiel | fermer une conversation, présence dans la liste ; le 2026-10-26 « + » ouvre un MP ou crée un groupe | |
 | S04 mon compte (bas du rail) | 2026-10-17 | partiel | menu de statut ; le 2026-10-26 le panneau utilisateur devient une carte « Mon compte » au bas du rail, micro et son passent dans le panneau « En appel » | |
 | S28 connexion / inscription | 2026-10-17 | partiel | MFA, QR, mot de passe oublié, vérif e-mail | |
 | F06 page d'invitation | 2026-10-17 | fait | | |
 | S21 créer / rejoindre | 2026-10-17 | partiel | modèles, icône | |
 | S05 salon textuel | 2026-10-17 | partiel | modifier, supprimer, répondre, réactions, pièces jointes, markdown, mentions, non-lus, épingles, pagination vers le haut | l'envoi optimiste (nonce, grisé, échec + Réessayer) et le rechargement après reconnexion |
-| S19 MP / groupe | 2026-10-17 | partiel | appel, ajout de membres, profil latéral | |
-| S01 Amis | 2026-10-17 | partiel | ajouter, accepter, refuser, bloquer ; panneau d'activité réel | |
+| S19 MP / groupe | 2026-10-17 | partiel | appel, profil latéral ; le 2026-10-26 ajout de membres, renommer, quitter, MP fermé par un blocage | |
+| S01 Amis | 2026-10-17 | partiel | panneau d'activité réel ; le 2026-10-26 ajouter, accepter, refuser, annuler, retirer, bloquer, onglet Bloqués | |
 | S06 Compte | 2026-10-17 | partiel | modifier pseudo, e-mail, mot de passe ; MFA ; appareils ; suppression | |
 | S11 Apparence | 2026-10-17 | partiel | thèmes perso, icônes d'appli, synchro entre appareils | les pastilles de thème demandaient des couleurs hors jetons : remplacées par une liste de radios |
-| S07 S08 S09 S10 S12 S13 S14 S15 | 2026-10-17 | route | tout le contenu | |
+| S08 qui peut t'écrire | 2026-10-26 | partiel | filtres de MP et de demandes d'ami ; comptes bloqués et Débloquer faits | |
+| S07 S09 S10 S12 S13 S14 S15 | 2026-10-17 | route | tout le contenu | |
 | S18 salon vocal | 2026-10-20 | fait | caméra, choix des périphériques, push-to-talk, aperçu du stream avant de regarder, salons Stage (traités en vocal) | `MediaStream.clone()` de web-sys est la méthode JavaScript (nouvelles pistes), pas `Clone` : le partage ne s'arrêtait pas et le contour « parle » restait muet ; `Clone::clone(&x)` partout |
 | S20 S22 S23 S24 S25 S26 S27 S29 S30 | 2026-10-17 | route | tout le contenu | |
 
@@ -45,6 +46,14 @@ Modifier son message (crayon, ou flèche haut dans une saisie vide ; Entrée enr
 Vérifié : tests `kraken-core` (markdown, emojis), `kraken-db` (`edit_delete_reply_react_and_mention`), `kraken-server/tests/slice.rs` (`edit_delete_reply_and_react` : second compte refusé en 403, inconnu en 404, événements reçus en direct), `e2e/specs/f10-messages.spec.ts` (11 parcours, dont modération par le rôle de démo et axe).
 
 Limites : les boutons du client tiennent compte des rôles, pas des surcharges de salon (le serveur, lui, les applique) ; `@here` vaut `@everyone` tant que la présence ne compte pas dans les notifications ; pas encore d'emojis perso, de super réactions ni de notifications de mention.
+
+## Social (S01, S03, S08, S19 ; F02, F03, F11 ; 2026-10-26)
+
+Amis : demande par pseudo unique (avec ou sans `@`, casse ignorée) depuis l'onglet « Ajouter un ami », avec une réponse claire dans chaque cas (pseudo inconnu, le sien, déjà amis, déjà demandé, compte qu'on a bloqué, compte qui refuse) ; demandes reçues en tête de « En attente », annoncées sur l'onglet et sur le lien Amis ; accepter, refuser, annuler, retirer un ami (après confirmation). Deux demandes croisées font une amitié (verrou de transaction sur la paire). Bloquer (après confirmation) défait l'amitié ou les demandes des deux côtés sans prévenir l'autre ; le compte bloqué ne peut plus écrire dans le MP, en ouvrir un, ni redemander ; ses messages sont repliés derrière « Afficher » dans les salons et groupes partagés ; débloquer depuis l'onglet « Bloqués », le MP ou Réglages › Qui peut t'écrire. MP et groupes : « + » dans la barre des MP ouvre un choix d'amis (recherche, compteur) : un ami ouvre le MP, plusieurs créent un groupe (10 personnes au plus, nom facultatif) ; un MP s'ouvre entre amis ou membres d'un même serveur ; dans un groupe, tout membre renomme et ajoute ses amis, chacun le quitte, le propriétaire retire (API) et passe la main en partant. Onglets d'amis au clavier (flèches, Début, Fin). Événements `RELATIONSHIP_ADD/UPDATE/REMOVE`, `CHANNEL_CREATE/UPDATE/DELETE` (le salon tel que chacun le voit) ; la présence n'est plus donnée qu'aux amis. Demandes, blocages, nouveaux MP et ajouts à un groupe : limite de `KRAKEN_AUTH_PER_MIN` par minute et par client, compteur à part. Démo : `zed`, bloqué par `demo`, a un message replié dans #général. Pas de migration : `relationships`, `channels.dm_key` et `channel_recipients` existaient.
+
+Vérifié : `kraken-db` (`friends_requests_and_blocks`, `direct_and_group_messages` : demandes croisées simultanées, blocage dans les deux sens, groupe de 11 refusé, propriétaire remplacé, groupe vide supprimé), `kraken-server/tests/social.rs` (trois et cinq comptes : erreurs et codes, événements reçus en direct, compte bloqué refusé en MP et en demande pendant qu'un tiers écrit normalement, intrus en 404, non-propriétaire en 403, limite en 429), `e2e/specs/f02-f11-social.spec.ts` (10 parcours, axe sur les onglets, les dialogues et le fil replié) et `f02-f03-home.spec.ts` mis à jour.
+
+Limites : « ignorer » et les réglages de qui peut écrire ou demander (S08) pas encore ; pas de fermeture d'un MP ; retirer quelqu'un d'un groupe passe par l'API seulement ; pas de message système « X a rejoint le groupe ».
 
 ## Écarts à savoir
 

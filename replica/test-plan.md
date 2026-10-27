@@ -24,12 +24,17 @@ Résultat : 40 cas automatisés, 40 passés (et 120/120 sur trois passes d'affil
 | F02-H1 | F02 amis | nominal (liste) | onglets En ligne, Tous, En attente | compteurs justes, demande reçue visible | e2e | ok |
 | F02-E1 | | filtre | « LOU », puis un nom inconnu | insensible à la casse, 0 sans erreur | e2e | ok |
 | F02-E2 | | vide | nouveau compte | états vides expliqués | e2e | ok |
-| F02-N1 | | envoi de demande | onglet Ajouter un ami | désactivé et annoncé, pas cassé | e2e | ok |
-| F02-H2 | | envoyer, accepter, pseudo inconnu, bloqué | | | non construit | bloqué |
+| F02-H3 | | onglets au clavier | flèches, Début, Fin | choix et focus suivent | e2e | ok |
+| F02-H2 | | envoyer, accepter | pseudo de l'autre, en majuscules avec @ | reçue en direct, amis des deux côtés | e2e | ok |
+| F02-E3 | | erreurs | inconnu, le sien, en double, déjà amis | message clair, champ marqué invalide | e2e | ok |
+| F02-E4 | | refuser, annuler, retirer | | l'autre côté suit en direct ; retrait confirmé | e2e | ok |
 | F03-H1 | F03 MP | nominal | Tous → Écrire à Lou → message | MP ouvert, message envoyé | e2e | ok |
 | F03-E1 | | MP de groupe | ouvrir « Équipée du soir » | historique affiché | e2e | ok |
 | F03-N1 | | MP d'autrui | URL et API du MP Démo↔Lou par un tiers | 404, rien affiché | e2e | ok |
-| F03-H2 | | appel | | | non construit | bloqué |
+| F03-H2 | | groupe | 2 amis, nom, renommer, ajouter, quitter | tout le groupe suit en direct | e2e | ok |
+| F03-H3 | | nouveau MP | choix d'un ami, puis groupe depuis le MP | MP créé, l'autre le reçoit | e2e | ok |
+| F03-N2 | | refus | groupe de 11, MP avec un inconnu | 400, 403 | e2e | ok |
+| F03-H4 | | appel | | | non construit | bloqué |
 | F04-H1 | F04 vocal et partage d'écran | nominal | deux comptes dans un serveur neuf : Rejoindre, partager, Regarder, micro et son, arrêter, Quitter | chacun voit l'autre (tuiles, barre latérale, « En appel ») et entend son micro ; l'écran partagé joue chez qui regarde ; icônes micro et son coupés chez l'autre ; écran puis participant retirés ; axe ok | e2e (micro et écran factices de Chromium) | ok |
 | F04-N1 | | sans accès | non-membre (API et adresse du salon), salon caché, salon textuel, sans session | 404, 404, 400, 401 ; personne en vocal | e2e | ok |
 | F04-N2 | | sans la permission CONNECT, salon plein (25) | | 403, 409 | cargo test | ok |
@@ -49,7 +54,9 @@ Résultat : 40 cas automatisés, 40 passés (et 120/120 sur trois passes d'affil
 | F08 | F08 profil | tous | | | non construit | bloqué |
 | F09 | F09 micro | tous | | | non construit | bloqué |
 | F10 | F10 réagir, répondre, épingler, fil | tous | | | non construit | bloqué |
-| F11 | F11 bloquer | tous | | | non construit | bloqué |
+| F11-H1 | F11 bloquer | bloquer un ami | confirmer | l'autre ne peut plus écrire ni demander ; MP fermé ; débloquer | e2e | ok |
+| F11-H2 | | liste des bloqués | Réglages › Qui peut t'écrire | Débloquer | e2e | ok |
+| F11-E1 | | salon partagé | message de zed dans #général | replié, Afficher / Masquer | e2e | ok |
 | F12-H1 | F12 inscription | nominal | formulaire → Créer mon compte | accueil, axe ok | e2e | ok |
 | F12-H2 | | déconnexion puis connexion | par pseudo, puis par e-mail en majuscules | accueil les deux fois | e2e | ok (BUG-001) |
 | F12-N1 | | pseudo pris | | message clair | e2e | ok |

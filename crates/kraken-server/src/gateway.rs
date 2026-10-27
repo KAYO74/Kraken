@@ -89,8 +89,9 @@ impl Hub {
     }
 
     pub fn with_presence(&self, mut rels: Vec<Relationship>) -> Vec<Relationship> {
+        // Seuls les amis voient ta présence : pas une demande en attente, pas un compte bloqué.
         for r in &mut rels {
-            r.status = self.status(r.user.id);
+            r.status = if r.kind == RelationshipKind::Friend { self.status(r.user.id) } else { Status::Offline };
         }
         rels
     }

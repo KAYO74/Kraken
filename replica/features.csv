@@ -7,13 +7,13 @@ Demande d'export de ses données,comptes,should,yes,no,S07 ; RGPD
 Suppression et désactivation du compte,comptes,must,yes,partial,"S07 ; suppression faite (fermeture immédiate, anonymisation à 14 jours), désactivation pas encore"
 Présence (en ligne inactif ne pas déranger invisible),social,must,yes,partial,"S01 S04 ; en ligne/hors ligne réels, autres statuts pas encore réglables"
 Statut personnalisé et activité en cours,social,should,yes,no,S01
-Ajouter un ami par pseudo,social,must,yes,no,F02
-Demandes d'ami en attente (accepter refuser),social,must,yes,partial,"S01 ; affichées, pas encore d'action"
-Bloquer ignorer et débloquer,social,must,yes,no,S08 F11
+Ajouter un ami par pseudo,social,must,yes,yes,"F02 ; pseudo unique, erreurs claires (inconnu, soi-même, déjà amis, déjà demandé, bloqué), limite par minute"
+Demandes d'ami en attente (accepter refuser),social,must,yes,yes,"S01 ; accepter, refuser, annuler, retirer un ami, en direct par le gateway"
+Bloquer ignorer et débloquer,social,must,yes,partial,"S08 F11 ; bloquer et débloquer faits (plus de MP ni de demande, messages repliés, liste dans les réglages) ; ignorer pas encore"
 Qui peut m'envoyer une demande d'ami,social,should,yes,no,S08
 Panneau d'activité des amis,social,could,yes,no,S01
-MP 1:1,mp,must,yes,partial,"S19 ; lire et écrire, ouvrir un nouveau MP pas encore"
-MP de groupe,mp,must,yes,partial,"S03 ; lire et écrire, créer un groupe pas encore"
+MP 1:1,mp,must,yes,yes,"S19 ; ouvrir depuis un ami ou le sélecteur, entre amis ou membres d'un même serveur, fermé par un blocage"
+MP de groupe,mp,must,yes,yes,"S03 ; créer entre amis (10 personnes au plus), nommer, renommer, ajouter, quitter"
 Permissions de MP par serveur et demandes de message,mp,should,yes,no,S08
 Filtre anti-spam des MP,mp,should,yes,no,S08
 Créer un serveur (avec modèles),serveurs,must,yes,partial,S21 F05 ; sans modèles ni icône

@@ -13,6 +13,7 @@ mod legal;
 mod markdown;
 mod settings;
 mod shell;
+mod social;
 mod store;
 mod ui;
 mod voice;

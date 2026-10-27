@@ -7,6 +7,7 @@ mod error;
 mod gateway;
 mod jobs;
 mod limit;
+mod social;
 mod voice;
 
 use std::net::IpAddr;
@@ -14,7 +15,7 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::http::{HeaderValue, header};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post, put};
 use kraken_db::Db;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::{SetResponseHeader, SetResponseHeaderLayer};
@@ -173,14 +174,35 @@ pub fn app(state: AppState) -> Router {
     let reactions = Router::new()
         .route(
             "/channels/{id}/messages/{mid}/reactions/{emoji}/@me",
-            axum::routing::put(api::add_reaction).delete(api::remove_reaction),
+            put(api::add_reaction).delete(api::remove_reaction),
         )
         .route_layer(axum::middleware::from_fn_with_state(
             limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(api::REACTIONS_PER_MIN)),
             limit::check,
         ));
+    // Demandes d'ami, blocages, nouveaux MP et groupes : même limite, un compteur pour tous.
+    let social_limit = axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check);
+    let social = Router::new()
+        .route(
+            "/users/@me/relationships",
+            get(social::relationships).merge(post(social::send_request).route_layer(social_limit.clone())),
+        )
+        .route(
+            "/users/@me/relationships/{id}",
+            put(social::set_relationship).route_layer(social_limit.clone()).delete(social::remove_relationship),
+        )
+        .route(
+            "/users/@me/channels",
+            get(social::private_channels).merge(post(social::open_private).route_layer(social_limit.clone())),
+        )
+        .route("/channels/{id}", patch(social::edit_channel))
+        .route(
+            "/channels/{id}/recipients/{uid}",
+            put(social::add_recipient).route_layer(social_limit).delete(social::remove_recipient),
+        );
     let api = Router::new()
         .merge(limited)
+        .merge(social)
         .merge(voice_join)
         .merge(reactions)
         .route("/voice", delete(voice::leave))
@@ -189,13 +211,11 @@ pub fn app(state: AppState) -> Router {
         .route("/auth/logout", post(auth::logout))
         .route("/auth/logout-all", post(auth::logout_all))
         .route("/users/@me", get(auth::me).patch(auth::update_me))
-        .route("/users/@me/relationships", get(api::relationships))
-        .route("/users/@me/channels", get(api::private_channels))
         .route("/guilds", post(api::create_guild))
         .route("/guilds/{id}", get(api::guild))
         .route("/guilds/{id}/channels", get(api::guild_channels).post(api::create_channel))
         .route("/channels/{id}/messages", get(api::messages).post(api::create_message))
-        .route("/channels/{id}/messages/{mid}", axum::routing::patch(api::edit_message).delete(api::delete_message))
+        .route("/channels/{id}/messages/{mid}", patch(api::edit_message).delete(api::delete_message))
         .route("/channels/{id}/invites", post(api::create_invite))
         .route("/invites/{code}", get(api::invite).post(api::join))
         .fallback(|| async { error::AppError::not_found() });

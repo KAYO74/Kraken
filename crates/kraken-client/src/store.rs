@@ -212,7 +212,9 @@ impl Store {
         if let Some(me) = self.me.with(|m| m.clone().filter(|m| m.id == uid)) {
             return Some(me.name().to_string());
         }
-        self.dms.with(|d| d.iter().flat_map(|c| &c.recipients).find(|u| u.id == uid).map(|u| u.name().to_string()))
+        self.dms
+            .with(|d| d.iter().flat_map(|c| &c.recipients).find(|u| u.id == uid).map(|u| u.name().to_string()))
+            .or_else(|| self.friends.with(|f| f.iter().find(|r| r.user.id == uid).map(|r| r.user.name().to_string())))
     }
 
     /// Remplace partout la fiche d'un utilisateur (nom affiché changé).
@@ -233,6 +235,35 @@ impl Store {
                 .filter_map(|m| m.author.as_mut())
                 .filter(|a| a.id == u.id)
                 .for_each(|a| *a = u.clone())
+        });
+    }
+
+    /// Relation ajoutée ou changée : à sa place, ou à la fin si elle est nouvelle.
+    pub fn upsert_rel(&self, r: Relationship) {
+        self.friends.update(|fs| match fs.iter_mut().find(|x| x.user.id == r.user.id) {
+            Some(x) => *x = r,
+            None => fs.push(r),
+        });
+    }
+
+    pub fn remove_rel(&self, uid: Id) {
+        self.friends.update(|fs| fs.retain(|r| r.user.id != uid));
+    }
+
+    /// Ma relation avec cette personne (suivie).
+    pub fn rel_kind(&self, uid: Id) -> Option<RelationshipKind> {
+        self.friends.with(|fs| fs.iter().find(|r| r.user.id == uid).map(|r| r.kind))
+    }
+
+    pub fn is_blocked(&self, uid: Id) -> bool {
+        self.rel_kind(uid) == Some(RelationshipKind::Blocked)
+    }
+
+    /// MP ou groupe ouvert ou changé : remplacé à sa place, sinon en tête de liste.
+    pub fn upsert_dm(&self, c: Channel) {
+        self.dms.update(|d| match d.iter_mut().find(|x| x.id == c.id) {
+            Some(x) => *x = c,
+            None => d.insert(0, c),
         });
     }
 
@@ -275,7 +306,7 @@ impl Store {
                 let Some(gid) = c.guild_id else {
                     self.dms.update(|d| {
                         if !d.iter().any(|x| x.id == c.id) {
-                            d.push(c)
+                            d.insert(0, c)
                         }
                     });
                     return;
@@ -288,6 +319,19 @@ impl Store {
                     }
                 });
             }
+            Event::ChannelUpdate(c) => {
+                if c.guild_id.is_none() {
+                    self.upsert_dm(c);
+                }
+            }
+            Event::ChannelDelete { id } => {
+                self.dms.update(|d| d.retain(|c| c.id != id));
+                self.logs.update(|l| {
+                    l.remove(&id);
+                });
+            }
+            Event::RelationshipAdd(r) | Event::RelationshipUpdate(r) => self.upsert_rel(r),
+            Event::RelationshipRemove { user_id } => self.remove_rel(user_id),
             Event::GuildCreate(g) => self.upsert_guild(*g),
             Event::UserUpdate(u) => self.update_user(u),
             Event::MemberAdd { guild_id, member } => self.guilds.update(|gs| {

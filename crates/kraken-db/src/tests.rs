@@ -172,7 +172,7 @@ async fn seed_is_idempotent(pool: PgPool) {
     assert_eq!(guilds.len(), 2);
     assert!(!guilds[0].channels.iter().any(|c| c.name.as_deref() == Some("staff")), "staff caché à demo");
     assert_eq!(db.private_channels(demo.id).await.unwrap().len(), 2);
-    assert_eq!(db.relationships(demo.id).await.unwrap().len(), 5);
+    assert_eq!(db.relationships(demo.id).await.unwrap().len(), 6, "4 amis, 1 demande, 1 bloqué");
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -281,4 +281,137 @@ async fn edit_delete_reply_react_and_mention(pool: PgPool) {
     assert_eq!((orphan.id, orphan.author), (None, None));
     let left: i64 = sqlx::query_scalar("select count(*) from reactions").fetch_one(&db.pool).await.unwrap();
     assert_eq!(left, 0, "les réactions partent avec le message");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn friends_requests_and_blocks(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (a, b) = two_users(&db).await;
+    let c = db.create_user("noa", "noa@example.org", "h".into()).await.unwrap();
+    let kind = |r: &Relationship| r.kind;
+
+    // Par pseudo, avec ou sans @, casse ignorée ; inconnu et soi-même refusés.
+    assert_eq!(db.user_by_username(" @SAM ").await.unwrap().map(|u| u.id), Some(b.id));
+    assert!(db.user_by_username("personne").await.unwrap().is_none());
+    assert_eq!(db.befriend(a.id, a.id).await.err(), Some(DbError::Invalid("self")));
+    assert_eq!(db.befriend(a.id, Id::nil()).await.err(), Some(DbError::NotFound));
+
+    // Demande, doublon, puis acceptation par l'autre : chacun est prévenu.
+    let (r, ev) = db.befriend(a.id, b.id).await.unwrap();
+    assert_eq!((r.user.id, kind(&r)), (b.id, RelationshipKind::PendingOutgoing));
+    assert_eq!(ev.iter().map(|(u, _)| *u).collect::<Vec<_>>(), [a.id, b.id]);
+    assert_eq!(db.relationship(b.id, a.id).await.unwrap(), Some(RelationshipKind::PendingIncoming));
+    assert_eq!(db.befriend(a.id, b.id).await.err(), Some(DbError::Conflict("already_sent")));
+    let (r, _) = db.befriend(b.id, a.id).await.unwrap();
+    assert_eq!(kind(&r), RelationshipKind::Friend);
+    assert_eq!(db.relationship(a.id, b.id).await.unwrap(), Some(RelationshipKind::Friend));
+    assert_eq!(db.befriend(a.id, b.id).await.err(), Some(DbError::Conflict("already_friends")));
+
+    // Deux demandes croisées en même temps : une amitié, pas deux demandes.
+    let (x, y) = tokio::join!(db.befriend(a.id, c.id), db.befriend(c.id, a.id));
+    assert!(x.is_ok() && y.is_ok());
+    assert_eq!(db.relationship(a.id, c.id).await.unwrap(), Some(RelationshipKind::Friend));
+    assert_eq!(db.relationship(c.id, a.id).await.unwrap(), Some(RelationshipKind::Friend));
+
+    // Retirer : les deux côtés ; recommencer : rien à retirer.
+    let ev = db.remove_relationship(a.id, c.id).await.unwrap();
+    assert_eq!(ev.len(), 2);
+    assert_eq!(db.relationship(c.id, a.id).await.unwrap(), None);
+    assert_eq!(db.remove_relationship(a.id, c.id).await.err(), Some(DbError::NotFound));
+
+    // Bloquer un ami : l'amitié disparaît chez lui aussi ; il ne peut plus rien demander.
+    let (r, ev) = db.block(a.id, b.id).await.unwrap();
+    assert_eq!(kind(&r), RelationshipKind::Blocked);
+    assert!(ev.contains(&(b.id, Event::RelationshipRemove { user_id: a.id })));
+    assert_eq!(db.relationship(b.id, a.id).await.unwrap(), None);
+    assert_eq!(db.blocks(a.id, b.id).await.unwrap(), (true, false));
+    assert_eq!(db.befriend(b.id, a.id).await.err(), Some(DbError::Forbidden("request_refused")));
+    assert_eq!(db.befriend(a.id, b.id).await.err(), Some(DbError::Forbidden("blocked")));
+    assert_eq!(db.block(a.id, b.id).await.unwrap().1, vec![], "bloquer deux fois ne change rien");
+    // Lui peut me bloquer aussi ; me débloquer ne touche pas son blocage.
+    db.block(b.id, a.id).await.unwrap();
+    assert_eq!(
+        db.remove_relationship(a.id, b.id).await.unwrap(),
+        vec![(a.id, Event::RelationshipRemove { user_id: b.id })]
+    );
+    assert_eq!(db.blocks(a.id, b.id).await.unwrap(), (false, true));
+    db.remove_relationship(b.id, a.id).await.unwrap();
+    assert!(db.relationships(a.id).await.unwrap().is_empty());
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn direct_and_group_messages(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (a, b) = two_users(&db).await;
+    let mut friends = vec![b.clone()];
+    for i in 0..9 {
+        friends.push(db.create_user(&format!("ami{i}"), &format!("ami{i}@example.org"), "h".into()).await.unwrap());
+    }
+    let stranger = db.create_user("inconnu", "inconnu@example.org", "h".into()).await.unwrap();
+    for f in &friends {
+        db.befriend(a.id, f.id).await.unwrap();
+        db.befriend(f.id, a.id).await.unwrap();
+    }
+
+    // MP : un seul par paire, rouvert ; pas avec un inconnu sans serveur commun.
+    let (dm, created) = db.open_dm(a.id, b.id).await.unwrap();
+    assert!(created);
+    assert_eq!(db.open_dm(b.id, a.id).await.unwrap(), (dm, false));
+    assert_eq!(db.open_dm(a.id, stranger.id).await.err(), Some(DbError::Forbidden("dm_stranger")));
+    assert_eq!(db.open_dm(a.id, a.id).await.err(), Some(DbError::Invalid("self")));
+    let seen = db.private_channel(dm, a.id).await.unwrap().unwrap();
+    assert_eq!(seen.recipients.iter().map(|u| u.id).collect::<Vec<_>>(), [b.id]);
+    assert!(db.private_channel(dm, stranger.id).await.unwrap().is_none());
+    db.create_message(dm, b.id, "coucou", None).await.unwrap();
+
+    // Bloqué : plus de message dans le MP, dans aucun sens, ni de nouveau MP.
+    db.block(a.id, b.id).await.unwrap();
+    assert_eq!(db.create_message(dm, b.id, "encore", None).await.err(), Some(DbError::Forbidden("dm_refused")));
+    assert_eq!(db.create_message(dm, a.id, "non", None).await.err(), Some(DbError::Forbidden("dm_blocked")));
+    assert_eq!(db.open_dm(b.id, a.id).await.err(), Some(DbError::Forbidden("dm_refused")));
+    assert_eq!(db.messages(dm, None, 10).await.unwrap().len(), 1, "l'historique reste");
+    db.remove_relationship(a.id, b.id).await.unwrap();
+    db.create_message(dm, b.id, "de retour", None).await.unwrap();
+    assert_eq!(db.relationship(a.id, b.id).await.unwrap(), None, "le blocage a défait l'amitié");
+    db.befriend(a.id, b.id).await.unwrap();
+    db.befriend(b.id, a.id).await.unwrap();
+
+    // Groupe : entre amis seulement, 10 personnes au plus.
+    let ids: Vec<Id> = friends.iter().skip(1).map(|u| u.id).collect();
+    assert_eq!(db.create_group(a.id, &ids[..1], None).await.err(), Some(DbError::Invalid("recipients")));
+    assert_eq!(db.create_group(a.id, &[ids[0], stranger.id], None).await.err(), Some(DbError::Forbidden("not_friend")));
+    let mut all = ids.clone();
+    all.push(stranger.id);
+    assert_eq!(db.create_group(a.id, &all, None).await.err(), Some(DbError::Invalid("recipients")), "11 personnes");
+    let g = db.create_group(a.id, &ids[..8], Some("  La bande  ")).await.unwrap();
+    let seen = db.private_channel(g, ids[0]).await.unwrap().unwrap();
+    assert_eq!((seen.kind, seen.name.as_deref(), seen.recipients.len()), (ChannelKind::GroupDm, Some("La bande"), 8));
+    assert_ne!(db.channel_perms(ids[0], g).await.unwrap() & perms::SEND_MESSAGES, 0);
+
+    // Renommer : tout membre ; trop long refusé ; vide efface le nom ; un intrus ne voit rien.
+    db.rename_group(g, ids[1], Some("Les abysses")).await.unwrap();
+    assert_eq!(db.rename_group(g, ids[1], Some(&"x".repeat(101))).await.err(), Some(DbError::Invalid("name")));
+    assert_eq!(db.rename_group(g, stranger.id, Some("pirate")).await.err(), Some(DbError::NotFound));
+    assert_eq!(db.rename_group(dm, a.id, Some("pas un groupe")).await.err(), Some(DbError::Invalid("kind")));
+    db.rename_group(g, a.id, Some("   ")).await.unwrap();
+    assert_eq!(db.channel(g).await.unwrap().unwrap().name, None);
+
+    // Ajouter : un ami de qui ajoute, jusqu'à 10 ; déjà là, rien ne change.
+    assert_eq!(db.add_recipient(g, ids[0], ids[8]).await.err(), Some(DbError::Forbidden("not_friend")));
+    assert!(db.add_recipient(g, a.id, ids[8]).await.unwrap());
+    assert!(!db.add_recipient(g, a.id, ids[8]).await.unwrap());
+    assert_eq!(db.add_recipient(g, a.id, b.id).await.err(), Some(DbError::Invalid("group_full")));
+    assert_eq!(db.add_recipient(g, stranger.id, b.id).await.err(), Some(DbError::NotFound));
+
+    // Retirer : le propriétaire seulement ; quitter : chacun ; le propriétaire parti, un autre le devient.
+    assert_eq!(db.remove_recipient(g, ids[0], ids[1]).await.err(), Some(DbError::Forbidden("owner")));
+    assert_eq!(db.remove_recipient(g, a.id, ids[1]).await.unwrap().len(), 9);
+    assert_eq!(db.channel_perms(ids[1], g).await.unwrap(), 0);
+    let left = db.remove_recipient(g, a.id, a.id).await.unwrap();
+    assert_eq!(left[0], ids[0]);
+    assert_eq!(db.remove_recipient(g, ids[0], ids[2]).await.unwrap().len(), 7, "nouveau propriétaire");
+    for u in db.channel_audience(g).await.unwrap() {
+        db.remove_recipient(g, u, u).await.unwrap();
+    }
+    assert!(db.channel(g).await.unwrap().is_none(), "le dernier parti, le groupe disparaît");
 }

@@ -1,5 +1,6 @@
 //! Limite de débit par client sur les routes de connexion, d'inscription, d'e-mail, de
-//! suppression de compte et sur les réactions.
+//! suppression de compte, sur les réactions et sur le social (demandes d'ami, blocages,
+//! nouveaux MP et groupes).
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::NonZeroU32;

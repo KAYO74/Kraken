@@ -1,5 +1,6 @@
-//! Serveurs, salons, messages, invitations, social. Chaque handler vérifie les droits
-//! (moteur de `kraken-core`) avant de toucher aux données, puis prévient le gateway.
+//! Serveurs, salons, messages, invitations (amis, MP et groupes : `social`). Chaque handler
+//! vérifie les droits (moteur de `kraken-core`) avant de toucher aux données, puis prévient le
+//! gateway.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -222,12 +223,4 @@ pub async fn join(State(state): State<AppState>, auth: Auth, Path(code): Path<St
         state.hub.send(&[auth.user.id], Event::GuildCreate(Box::new(g.clone())));
     }
     Ok(Json(g))
-}
-
-pub async fn relationships(State(state): State<AppState>, auth: Auth) -> ApiResult<Json<Vec<Relationship>>> {
-    Ok(Json(state.hub.with_presence(state.db.relationships(auth.user.id).await?)))
-}
-
-pub async fn private_channels(State(state): State<AppState>, auth: Auth) -> ApiResult<Json<Vec<Channel>>> {
-    Ok(Json(state.db.private_channels(auth.user.id).await?))
 }
