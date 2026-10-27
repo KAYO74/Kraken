@@ -1,0 +1,58 @@
+name: mac-install
+# Installe la dernière Release sur un Mac comme quelqu'un qui la télécharge : .dmg en quarantaine
+# dans Téléchargements, la commande du README collée dans zsh, sans Homebrew, puis l'appli doit
+# rester ouverte.
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/**']
+    paths: ['.github/workflows/mac-install.yml']
+  release:
+    types: [published]
+
+jobs:
+  install:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Télécharger le .dmg en quarantaine, comme un navigateur
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sw_vers
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern 'KRAKEN-macOS.dmg' --dir ~/Downloads
+          xattr -w com.apple.quarantine "0083;$(printf %x "$(date +%s)");Safari;" ~/Downloads/KRAKEN-macOS.dmg
+      - name: La commande du README, dans zsh
+        run: |
+          awk '/^\*\*macOS\*\*/{f=1} f&&/^```sh/{g=1;next} g&&/^```/{exit} g' README.md > "$RUNNER_TEMP/cmd.sh"
+          cat "$RUNNER_TEMP/cmd.sh"
+          test -s "$RUNNER_TEMP/cmd.sh"
+          zsh -c "$(cat "$RUNNER_TEMP/cmd.sh")"
+          sleep 2
+          pkill -f /Applications/KRAKEN.app || true
+      - name: Diagnostic de l'appli installée
+        run: |
+          app=/Applications/KRAKEN.app
+          xattr -lr "$app" | grep -c quarantine && exit 1 || true
+          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$app/Contents/Info.plist" || true
+          for bin in "$app"/Contents/MacOS/*; do
+            echo "== $bin"; lipo -archs "$bin"
+            otool -L "$bin"
+            for a in $(lipo -archs "$bin"); do otool -arch "$a" -l "$bin" | grep -A3 -E 'LC_BUILD_VERSION|LC_VERSION_MIN' | grep -E 'minos|version' | head -2; done
+          done
+          codesign -dvv "$app" 2>&1 | head -20
+          codesign --verify --deep --strict -vv "$app" 2>&1 | tail -5
+          spctl -a -vv "$app" 2>&1 || true
+      - name: Lancer sans Homebrew (comme un Mac neuf)
+        run: |
+          sudo mv /opt/homebrew /opt/homebrew.off 2>/dev/null || true
+          sudo mv /usr/local/opt /usr/local/opt.off 2>/dev/null || true
+          app=/Applications/KRAKEN.app
+          open "$app"
+          sleep 15
+          pgrep -fl "$app" || { echo "KRAKEN ne tourne plus"; ls -t ~/Library/Logs/DiagnosticReports/ | head -5;
+            f=$(ls -t ~/Library/Logs/DiagnosticReports/*KRAKEN* ~/Library/Logs/DiagnosticReports/*kraken* 2>/dev/null | head -1);
+            [ -n "$f" ] && head -80 "$f"; log show --last 2m --predicate 'process == "kernel" OR process == "amfid" OR eventMessage CONTAINS "KRAKEN"' | tail -40; exit 1; }
+          for bin in "$app"/Contents/MacOS/*; do "$bin" --self-test; done
