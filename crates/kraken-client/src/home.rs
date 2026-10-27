@@ -9,7 +9,7 @@ use wasm_bindgen::JsCast;
 use crate::icons::{Icon, lu};
 use crate::social::{Confirm, ConfirmDialog, call_user, open_dm};
 use crate::store::{Conn, store};
-use crate::ui::{Avatar, Header, status_label};
+use crate::ui::{Avatar, Header, MoreMenu, status_label};
 
 #[derive(Clone, Copy, PartialEq)]
 enum Tab {
@@ -210,14 +210,16 @@ fn FriendRow(r: Relationship, error: RwSignal<Option<String>>, confirm: RwSignal
                     disabled=!crate::voice::supported() on:click=move |_| ring()>
                     <Icon icon=lu::LuPhone/>
                 </button>
-                <button class="k-btn k-btn--icon" aria-label=format!("Retirer {name} de tes amis") title="Retirer"
-                    on:click=move |_| confirm.set(Some(Confirm::RemoveFriend(u1.clone())))>
-                    <Icon icon=lu::LuUserMinus/>
-                </button>
-                <button class="k-btn k-btn--icon app-link-danger" aria-label=format!("Bloquer {name}") title="Bloquer"
-                    on:click=move |_| confirm.set(Some(Confirm::Block(u2.clone())))>
-                    <Icon icon=lu::LuBan/>
-                </button>
+                // Retirer et bloquer : rangés sous ⋯, pas au rang d'écrire et d'appeler.
+                <MoreMenu label=format!("Plus d'actions pour {name}")>
+                    <button class="k-menuitem" on:click=move |_| confirm.set(Some(Confirm::RemoveFriend(u1.clone())))>
+                        <Icon icon=lu::LuUserMinus/>"Retirer de tes amis"
+                    </button>
+                    <button class="k-menuitem is-danger" aria-label=format!("Bloquer {name}")
+                        on:click=move |_| confirm.set(Some(Confirm::Block(u2.clone())))>
+                        <Icon icon=lu::LuBan/>"Bloquer"
+                    </button>
+                </MoreMenu>
             }
             .into_any()
         }

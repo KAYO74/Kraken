@@ -108,6 +108,15 @@ a:hover { text-decoration: underline; }
 .k-avatar--md { width: 32px; height: 32px; font-size: 12px; border-radius: var(--radius-sm); }
 .k-avatar--lg { width: 80px; height: 80px; font-size: var(--text-xl-size); border-radius: var(--radius-xl); }
 .k-avatar--xl { width: 120px; height: 120px; font-size: var(--text-2xl-size); border-radius: var(--radius-xl); }
+/* Sans image : une des 8 teintes douces (data-tint, tirée de l'id du compte). Groupes et serveurs restent neutres. */
+.k-avatar[data-tint="1"] { background: var(--avatar-1); color: var(--avatar-1-text); }
+.k-avatar[data-tint="2"] { background: var(--avatar-2); color: var(--avatar-2-text); }
+.k-avatar[data-tint="3"] { background: var(--avatar-3); color: var(--avatar-3-text); }
+.k-avatar[data-tint="4"] { background: var(--avatar-4); color: var(--avatar-4-text); }
+.k-avatar[data-tint="5"] { background: var(--avatar-5); color: var(--avatar-5-text); }
+.k-avatar[data-tint="6"] { background: var(--avatar-6); color: var(--avatar-6-text); }
+.k-avatar[data-tint="7"] { background: var(--avatar-7); color: var(--avatar-7-text); }
+.k-avatar[data-tint="8"] { background: var(--avatar-8); color: var(--avatar-8-text); }
 .k-presence { position: absolute; right: -2px; bottom: -2px; width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--presence-ring, var(--bg)); }
 .k-presence--online { background: var(--success); }
 .k-presence--idle { background: var(--warning); }
@@ -148,11 +157,12 @@ a:hover { text-decoration: underline; }
 .k-mecard-state { display: flex; align-items: center; gap: var(--space-3); margin: 0 var(--space-3) var(--space-2); color: var(--text-muted); font-size: var(--text-xs-size); }
 .k-mecard-state::before { content: ""; width: var(--space-3); height: var(--space-3); border-radius: var(--radius-pill); background: var(--status-offline); }
 .k-mecard-state[data-state="on"]::before { background: var(--success); }
-.k-mecard-item { display: flex; align-items: center; gap: var(--space-4); width: 100%; padding: var(--space-3); border: 0; border-radius: var(--radius-md);
+/* Entrées de menu : carte « Mon compte » et menus ⋯ (MoreMenu). */
+:is(.k-mecard-item, .k-menuitem) { display: flex; align-items: center; gap: var(--space-4); width: 100%; padding: var(--space-3); border: 0; border-radius: var(--radius-md);
   background: none; color: var(--text-secondary); font-size: var(--text-sm-size); font-weight: var(--weight-medium); text-align: left; cursor: pointer; text-decoration: none; }
-.k-mecard-item:hover { background: var(--surface-hover); color: var(--text-strong); text-decoration: none; }
-.k-mecard-item.is-danger { color: var(--danger); }
-.k-mecard-item.is-danger:hover { background: var(--danger-solid); color: var(--on-danger); }
+:is(.k-mecard-item, .k-menuitem):hover { background: var(--surface-hover); color: var(--text-strong); text-decoration: none; }
+:is(.k-mecard-item, .k-menuitem).is-danger { color: var(--danger); }
+:is(.k-mecard-item, .k-menuitem).is-danger:hover { background: var(--danger-solid); color: var(--on-danger); }
 .k-mecard hr { width: 100%; border: 0; border-top: 1px solid var(--border); margin: var(--space-1) 0; }
 
 /* Barre latérale : salons, catégories, MP */

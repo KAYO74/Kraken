@@ -149,6 +149,9 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-add-ok { margin: 0; color: var(--text-secondary); font-size: var(--text-sm-size); }
 .app-row > .app-row-actions { flex: none; display: flex; align-items: center; gap: var(--space-1); }
 .app-friends-error { margin: 0 0 var(--space-3); }
+/* Menu ⋯ (MoreMenu) : sous son bouton, aligné à droite. */
+.app-more { position: relative; }
+.app-more-menu { position: absolute; top: calc(100% + var(--space-1)); right: 0; width: max-content; border: 1px solid var(--border-strong); }
 
 /* Social : nouvelle conversation, choix d'amis, MP bloqué, messages repliés, comptes bloqués */
 .app-dm-head { display: flex; align-items: center; gap: var(--space-2); }
@@ -264,6 +267,12 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-legend { margin-bottom: var(--space-3); }
 
 /* Connexion, invitation, dialogues */
+/* Connexion : le logo au-dessus de la carte, le tout centré ; les liens légaux en bas de l'écran. */
+.app-auth { grid-template-rows: 1fr auto; }
+.app-auth-stack { display: grid; justify-items: center; gap: var(--space-6); width: min(var(--size-card), 100%); }
+.app-auth-brand { display: flex; align-items: center; gap: var(--space-4); color: var(--text-strong); font-size: var(--text-xl-size);
+  font-weight: var(--weight-bold); letter-spacing: .12em; }
+.app-auth-logo { width: var(--space-10); height: var(--space-10); border-radius: var(--radius-lg); overflow: hidden; }
 .app-auth-card { width: min(var(--size-card), 100%); }
 .app-auth-card h1 { margin: 0 0 var(--space-2); font-size: var(--text-2xl-size); line-height: var(--text-2xl-line); color: var(--text-strong); }
 .app-form { display: grid; gap: var(--space-5); padding: var(--space-5) var(--space-7); }
@@ -305,6 +314,8 @@ button.app-reply:hover span { color: var(--text-strong); }
   .app-menu { display: inline-flex; }
   .app-main { border: 0; border-radius: 0; }
   .app-topic { display: none; }
+  /* Amis : le titre reste pour les lecteurs d'écran, la place va aux onglets. */
+  .app-header:has(.k-tabs) .app-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .app-header { padding: 0 var(--space-3); }
   .app-header .k-tabs { margin-left: 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   .app-header .k-tab { flex: none; white-space: nowrap; }
@@ -325,8 +336,11 @@ button.app-reply:hover span { color: var(--text-strong); }
   .k-settings main { padding: var(--space-5); }
 }
 
-/* Réglages › Mon compte : le champ du nom affiché prend toute la largeur sous son libellé. */
-.app-name-form > :is(input, [role]) { grid-column: 1 / -1; }
+/* Réglages › Mon compte : le nom affiché et « Enregistrer » sur une même ligne, sous l'explication. */
+.app-name-form { column-gap: var(--space-3); }
+.app-name-form > p:not([role]), .app-name-form > [role] { grid-column: 1 / -1; }
+.app-name-form > input { grid-row: 3; grid-column: 1; }
+.app-name-form > .k-btn { grid-row: 3; grid-column: 2; }
 .app-name-form > [role="status"] { margin: 0; color: var(--text-muted); font-size: var(--text-sm-size); }
 /* Confidentialité et Conditions : un texte à lire, pas un formulaire. */
 .app-legal { width: min(var(--size-dialog-wide), 100%); max-height: 100%; overflow-y: auto; }

@@ -38,6 +38,22 @@
   --status-stream: #9a7fe0;
   --media: #000000;
   --on-media: #ffffff;
+  --avatar-1: #234341;
+  --avatar-1-text: #9ce8e3;
+  --avatar-2: #233343;
+  --avatar-2-text: #9cc2e8;
+  --avatar-3: #282343;
+  --avatar-3-text: #a99ce8;
+  --avatar-4: #3b2343;
+  --avatar-4-text: #d59ce8;
+  --avatar-5: #432333;
+  --avatar-5-text: #e89cc2;
+  --avatar-6: #432723;
+  --avatar-6-text: #e8a69c;
+  --avatar-7: #433323;
+  --avatar-7-text: #e8c29c;
+  --avatar-8: #433d23;
+  --avatar-8-text: #e8d99c;
   --font-sans: "Inter", "Noto Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --text-xs-size: 0.75rem;
@@ -140,6 +156,22 @@
   --mention-soft: #fbf3df;
   --status-offline: #74757d;
   --status-stream: #6c4fc4;
+  --avatar-1: #d6f5f3;
+  --avatar-1-text: #1a706a;
+  --avatar-2: #d6e5f5;
+  --avatar-2-text: #1a4570;
+  --avatar-3: #dbd6f5;
+  --avatar-3-text: #281a70;
+  --avatar-4: #edd6f5;
+  --avatar-4-text: #5a1a70;
+  --avatar-5: #f5d6e6;
+  --avatar-5-text: #701a45;
+  --avatar-6: #f5dad6;
+  --avatar-6-text: #70261a;
+  --avatar-7: #f5e6d6;
+  --avatar-7-text: #70451a;
+  --avatar-8: #f5efd6;
+  --avatar-8-text: #705e1a;
 }
 
 :root[data-theme="black"] {
@@ -189,6 +221,22 @@
     --mention-soft: #fbf3df;
     --status-offline: #74757d;
     --status-stream: #6c4fc4;
+    --avatar-1: #d6f5f3;
+    --avatar-1-text: #1a706a;
+    --avatar-2: #d6e5f5;
+    --avatar-2-text: #1a4570;
+    --avatar-3: #dbd6f5;
+    --avatar-3-text: #281a70;
+    --avatar-4: #edd6f5;
+    --avatar-4-text: #5a1a70;
+    --avatar-5: #f5d6e6;
+    --avatar-5-text: #701a45;
+    --avatar-6: #f5dad6;
+    --avatar-6-text: #70261a;
+    --avatar-7: #f5e6d6;
+    --avatar-7-text: #70451a;
+    --avatar-8: #f5efd6;
+    --avatar-8-text: #705e1a;
   }
 }
 
@@ -265,6 +313,38 @@
 .text-media { color: var(--media); }
 .bg-on-media { background-color: var(--on-media); }
 .text-on-media { color: var(--on-media); }
+.bg-avatar-1 { background-color: var(--avatar-1); }
+.text-avatar-1 { color: var(--avatar-1); }
+.bg-avatar-1-text { background-color: var(--avatar-1-text); }
+.text-avatar-1-text { color: var(--avatar-1-text); }
+.bg-avatar-2 { background-color: var(--avatar-2); }
+.text-avatar-2 { color: var(--avatar-2); }
+.bg-avatar-2-text { background-color: var(--avatar-2-text); }
+.text-avatar-2-text { color: var(--avatar-2-text); }
+.bg-avatar-3 { background-color: var(--avatar-3); }
+.text-avatar-3 { color: var(--avatar-3); }
+.bg-avatar-3-text { background-color: var(--avatar-3-text); }
+.text-avatar-3-text { color: var(--avatar-3-text); }
+.bg-avatar-4 { background-color: var(--avatar-4); }
+.text-avatar-4 { color: var(--avatar-4); }
+.bg-avatar-4-text { background-color: var(--avatar-4-text); }
+.text-avatar-4-text { color: var(--avatar-4-text); }
+.bg-avatar-5 { background-color: var(--avatar-5); }
+.text-avatar-5 { color: var(--avatar-5); }
+.bg-avatar-5-text { background-color: var(--avatar-5-text); }
+.text-avatar-5-text { color: var(--avatar-5-text); }
+.bg-avatar-6 { background-color: var(--avatar-6); }
+.text-avatar-6 { color: var(--avatar-6); }
+.bg-avatar-6-text { background-color: var(--avatar-6-text); }
+.text-avatar-6-text { color: var(--avatar-6-text); }
+.bg-avatar-7 { background-color: var(--avatar-7); }
+.text-avatar-7 { color: var(--avatar-7); }
+.bg-avatar-7-text { background-color: var(--avatar-7-text); }
+.text-avatar-7-text { color: var(--avatar-7-text); }
+.bg-avatar-8 { background-color: var(--avatar-8); }
+.text-avatar-8 { color: var(--avatar-8); }
+.bg-avatar-8-text { background-color: var(--avatar-8-text); }
+.text-avatar-8-text { color: var(--avatar-8-text); }
 .type-xs { font-size: var(--text-xs-size); line-height: var(--text-xs-line); font-weight: var(--text-xs-weight); }
 .type-sm { font-size: var(--text-sm-size); line-height: var(--text-sm-line); font-weight: var(--text-sm-weight); }
 .type-base { font-size: var(--text-base-size); line-height: var(--text-base-line); font-weight: var(--text-base-weight); }
