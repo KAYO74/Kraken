@@ -103,28 +103,38 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      # Notes de la version (docs/releases/<tag>.md, si le fichier existe), puis l'installation.
+      # Un nom fixe par système : les liens .../releases/latest/download/<nom> du README restent bons.
+      - if: steps.version.outputs.exists != '1'
+        run: |
+          mkdir out
+          find dist -type f | while read -r f; do
+            case "$f" in
+              *.dmg) n=KRAKEN-macOS.dmg ;;
+              *-setup.exe) n=KRAKEN-Windows.exe ;;
+              *.msi) n=KRAKEN-Windows.msi ;;
+              *.AppImage) n=KRAKEN-Linux.AppImage ;;
+              *.deb) n=KRAKEN-Linux.deb ;;
+              *.rpm) n=KRAKEN-Linux.rpm ;;
+              *) continue ;;
+            esac
+            mv "$f" "out/$n"
+          done
+          ls out
+          test "$(ls out | wc -l)" -eq 6
+      # Notes de la version (docs/releases/<tag>.md, si le fichier existe), puis comment installer.
       - if: steps.version.outputs.exists != '1'
         env:
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           notes="$RUNNER_TEMP/notes.md"
-          if [ -f "docs/releases/$TAG.md" ]; then cat "docs/releases/$TAG.md"; echo; echo '## Installer'; echo; fi > "$notes"
-          cat >> "$notes" <<'EOF'
-          KRAKEN de bureau : au premier lancement, rejoins un serveur (son adresse ou un lien d'invitation) ou héberge le tien sur cet ordinateur en un clic.
-
-          - Windows : `.msi` ou `-setup.exe`
-          - macOS (Intel et Apple Silicon) : `.dmg`
-          - Linux : `.AppImage`, `.deb` (Debian, Ubuntu) ou `.rpm` (Fedora)
-
-          Les installateurs ne sont pas encore signés : Windows affiche un avertissement SmartScreen (« Informations complémentaires », puis « Exécuter quand même ») et macOS bloque le premier lancement : Réglages Système, Confidentialité et sécurité, « Ouvrir quand même ».
-          EOF
+          if [ -f "docs/releases/$TAG.md" ]; then cat "docs/releases/$TAG.md"; echo; fi > "$notes"
+          sed "s/@TAG@/$TAG/g" docs/releases/installer.md >> "$notes"
       - if: steps.version.outputs.exists != '1'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
           name: KRAKEN ${{ steps.version.outputs.tag }}
-          files: dist/**/*
+          files: out/*
           generate_release_notes: true
           body_path: ${{ runner.temp }}/notes.md
