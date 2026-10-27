@@ -140,7 +140,7 @@ button.app-reply:hover span { color: var(--text-strong); }
   border-radius: var(--radius-lg); background: var(--surface-raised); --presence-ring: var(--surface-raised); }
 .app-row:hover { border-color: var(--border-strong); background: var(--surface-hover); --presence-ring: var(--surface-hover); }
 .app-row > div { flex: 1; }
-.app-row b { display: block; color: var(--text-strong); }
+.app-row b { display: block; overflow: hidden; text-overflow: ellipsis; color: var(--text-strong); }
 .app-row small { color: var(--text-muted); font-size: var(--text-sm-size); }
 .app-activity h2 { margin: var(--space-3) var(--space-3) var(--space-5); font-size: var(--text-lg-size); color: var(--text-strong); }
 .app-add h2 { margin: 0 0 var(--space-2); font-size: var(--text-lg-size); color: var(--text-strong); }

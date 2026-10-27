@@ -87,8 +87,8 @@ pub fn Avatar(
         };
         view! { <i class=format!("k-presence k-presence--{k}")></i> }
     });
-    // Une teinte stable par compte (bits aléatoires de l'uuidv7), pour reconnaître les gens d'un coup d'œil.
-    let tint = (user.id.as_u128() % 8 + 1).to_string();
+    // Une teinte stable par compte (somme des octets de l'id), pour reconnaître les gens d'un coup d'œil.
+    let tint = (user.id.as_bytes().iter().map(|&b| u32::from(b)).sum::<u32>() % 8 + 1).to_string();
     view! { <span class=class data-tint=tint role="img" aria-label=label>{initials(user.name())}{presence}</span> }
 }
 
