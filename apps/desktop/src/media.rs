@@ -19,11 +19,15 @@ use url::Host;
 /// L'origine d'une instance en http hors de cet ordinateur : sans réglage, le navigateur
 /// intégré n'y donne ni micro ni partage d'écran.
 pub fn insecure_origin(url: &Url) -> Option<String> {
-    // Seulement le réseau local : adresse privée, `.local` ou nom sans point. Une instance
-    // publique en http reste sans micro ni partage (le trafic y est lisible en chemin).
+    // Seulement le réseau local : adresse privée, `.local` ou nom sans point, ou une adresse
+    // Tailscale (100.64.0.0/10, trafic chiffré par WireGuard). Une instance publique en http
+    // reste sans micro ni partage (le trafic y est lisible en chemin).
     let lan = match url.host() {
         Some(Host::Domain(d)) => (!d.contains('.') && d != "localhost") || d.ends_with(".local"),
-        Some(Host::Ipv4(ip)) => ip.is_private() || ip.is_link_local(),
+        Some(Host::Ipv4(ip)) => {
+            let [a, b, ..] = ip.octets();
+            ip.is_private() || ip.is_link_local() || (a == 100 && b & 0xc0 == 64)
+        }
         Some(Host::Ipv6(ip)) => {
             let first = ip.segments()[0];
             first & 0xfe00 == 0xfc00 || first & 0xffc0 == 0xfe80
@@ -157,6 +161,8 @@ mod tests {
         let o = |s: &str| insecure_origin(&Url::parse(s).unwrap());
         assert_eq!(o("http://192.168.1.20:8080/invite/x").as_deref(), Some("http://192.168.1.20:8080"));
         assert_eq!(o("http://kraken.local/").as_deref(), Some("http://kraken.local"));
+        assert_eq!(o("http://100.101.102.103:8080/").as_deref(), Some("http://100.101.102.103:8080"));
+        assert_eq!(o("http://100.128.0.1:8080/"), None);
         assert_eq!(o("https://chat.exemple.org/"), None);
         assert_eq!(o("http://chat.exemple.org:8080/"), None);
         assert_eq!(o("http://203.0.113.7:8080/"), None);
