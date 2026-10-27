@@ -2,6 +2,10 @@
 //! participants, l'écran regardé en grand et la barre de commandes. Plus ce que la coquille montre
 //! de l'appel : les participants sous chaque salon vocal, le panneau « En appel » (avec les
 //! boutons micro et son), le son des micros reçus et le contrôle à distance de mon écran.
+//!
+//! Appels des MP et des groupes (S19) : la même session vocale, la conversation servant de salon
+//! (`guild` à `None`). L'appel s'affiche en haut de la conversation ; un appel qui sonne chez moi
+//! s'affiche partout, avec « Rejoindre » et « Refuser » (et une sonnerie synthétisée).
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -19,18 +23,27 @@ use crate::store::{Store, store};
 use crate::ui::{Avatar, Header, initials};
 use crate::voice::{self, Control, ControlNote, ShareNote, Status};
 
-/// Qui est dans ce salon vocal, dans l'ordre d'arrivée.
-fn present(s: Store, guild: Id, channel: Id) -> Vec<VoiceState> {
-    s.guilds.with(|gs| {
-        gs.iter()
-            .find(|g| g.guild.id == guild)
-            .map(|g| g.voice_states.iter().filter(|v| v.channel_id == Some(channel)).cloned().collect())
-            .unwrap_or_default()
-    })
+/// Qui est dans ce salon vocal (ou cet appel), dans l'ordre d'arrivée.
+fn present(s: Store, guild: Option<Id>, channel: Id) -> Vec<VoiceState> {
+    s.present(guild, channel)
 }
 
-/// Le compte d'un membre et son nom sur ce serveur (surnom, sinon nom affiché).
-fn member(s: Store, guild: Id, user: Id) -> (Option<User>, String) {
+/// Le compte d'un membre et son nom sur ce serveur (surnom, sinon nom affiché) ; hors serveur,
+/// son nom affiché.
+fn member(s: Store, guild: Option<Id>, user: Id) -> (Option<User>, String) {
+    let Some(guild) = guild else {
+        let account = s
+            .me
+            .with_untracked(|m| m.clone().filter(|m| m.id == user))
+            .or_else(|| s.dms.with_untracked(|d| d.iter().flat_map(|c| &c.recipients).find(|u| u.id == user).cloned()));
+        return match account {
+            Some(u) => {
+                let n = u.name().to_string();
+                (Some(u), n)
+            }
+            None => (None, "Quelqu'un".into()),
+        };
+    };
     s.guilds
         .with_untracked(|gs| {
             let m = gs.iter().find(|g| g.guild.id == guild)?.members.iter().find(|m| m.user.id == user)?;
@@ -70,7 +83,7 @@ fn attach(el: &web_sys::HtmlMediaElement, stream: Option<&web_sys::MediaStream>)
 pub fn VoiceRoom(channel: Channel) -> impl IntoView {
     let s = store();
     let v = s.voice;
-    let (guild, cid) = (channel.guild_id.unwrap_or_default(), channel.id);
+    let (guild, cid) = (channel.guild_id, channel.id);
     let name = channel.name.clone().unwrap_or_default();
     let here = Memo::new(move |_| v.room.get().is_some_and(|r| r.channel == cid));
     // Quitter l'écran du salon arrête de regarder (les micros, eux, continuent).
@@ -97,7 +110,7 @@ pub fn VoiceRoom(channel: Channel) -> impl IntoView {
 
 /// Avant d'entrer : qui est là, « Rejoindre », et ce qui empêcherait de parler.
 #[component]
-fn Lobby(guild: Id, channel: Id, name: String) -> impl IntoView {
+fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
     let s = store();
     let v = s.voice;
     let who = Memo::new(move |_| present(s, guild, channel));
@@ -140,7 +153,7 @@ fn Lobby(guild: Id, channel: Id, name: String) -> impl IntoView {
 
 /// Dans l'appel : état de la connexion, écran regardé, tuiles, commandes.
 #[component]
-fn Call(guild: Id, channel: Id) -> impl IntoView {
+fn Call(guild: Option<Id>, channel: Id) -> impl IntoView {
     let s = store();
     let v = s.voice;
     let who = Memo::new(move |_| present(s, guild, channel).into_iter().map(|x| x.user_id).collect::<Vec<_>>());
@@ -148,7 +161,8 @@ fn Call(guild: Id, channel: Id) -> impl IntoView {
         <div class="app-call-main">
             {move || match v.status.get() {
                 Status::Connecting => Some(view! {
-                    <div class="k-banner" role="status"><Icon icon=lu::LuLoaderCircle/><span>"Connexion au salon vocal…"</span></div>
+                    <div class="k-banner" role="status"><Icon icon=lu::LuLoaderCircle/>
+                        <span>{if guild.is_some() { "Connexion au salon vocal…" } else { "Connexion à l'appel…" }}</span></div>
                 }.into_any()),
                 Status::Unstable => Some(view! {
                     <div class="k-banner k-banner--warning" role="status"><Icon icon=lu::LuWifiOff/><span>"Connexion instable : on attend le retour du réseau…"</span></div>
@@ -198,13 +212,13 @@ fn Call(guild: Id, channel: Id) -> impl IntoView {
                 </For>
             </ul>
         </div>
-        <CallBar/>
+        <CallBar private=guild.is_none()/>
     }
 }
 
 /// Un participant : avatar (ou l'aperçu de mon écran), nom, micro et son coupés, « En direct ».
 #[component]
-fn Tile(guild: Id, channel: Id, user: Id) -> impl IntoView {
+fn Tile(guild: Option<Id>, channel: Id, user: Id) -> impl IntoView {
     let s = store();
     let v = s.voice;
     let state = Memo::new(move |_| present(s, guild, channel).into_iter().find(|x| x.user_id == user));
@@ -288,7 +302,7 @@ fn video_point(el: &web_sys::HtmlVideoElement, x: i32, y: i32) -> Option<(f32, f
 /// L'écran regardé, en grand ; son son passe, sauf si le mien est coupé. Pendant le contrôle à
 /// distance, la souris et le clavier sur l'image vont à l'ordinateur de celui qui partage.
 #[component]
-fn Stage(guild: Id, user: Id) -> impl IntoView {
+fn Stage(guild: Option<Id>, user: Id) -> impl IntoView {
     let s = store();
     let v = s.voice;
     let (_, name) = member(s, guild, user);
@@ -560,8 +574,9 @@ pub fn DeafToggle(#[prop(optional)] big: bool) -> impl IntoView {
     }
 }
 
+/// `private` : appel de MP ou de groupe (« Raccrocher » plutôt que « Quitter »).
 #[component]
-fn CallBar() -> impl IntoView {
+fn CallBar(private: bool) -> impl IntoView {
     let v = store().voice;
     let share_ok = voice::can_share();
     let why = if voice::devices().is_none() {
@@ -581,9 +596,19 @@ fn CallBar() -> impl IntoView {
                 {move || if v.streaming.get() { view! { <Icon icon=lu::LuScreenShareOff/> } } else { view! { <Icon icon=lu::LuScreenShare/> } }}
                 <span>{share_label}</span>
             </button>
-            <button class="k-callbtn k-callbtn--danger" aria-label="Quitter" title="Quitter le salon vocal" on:click=move |_| v.leave()>
-                <Icon icon=lu::LuPhoneOff/><span>"Quitter"</span>
-            </button>
+            {if private {
+                view! {
+                    <button class="k-callbtn k-callbtn--danger" aria-label="Raccrocher" title="Raccrocher" on:click=move |_| v.leave()>
+                        <Icon icon=lu::LuPhoneOff/><span>"Raccrocher"</span>
+                    </button>
+                }.into_any()
+            } else {
+                view! {
+                    <button class="k-callbtn k-callbtn--danger" aria-label="Quitter" title="Quitter le salon vocal" on:click=move |_| v.leave()>
+                        <Icon icon=lu::LuPhoneOff/><span>"Quitter"</span>
+                    </button>
+                }.into_any()
+            }}
         </div>
         {(!share_ok).then(|| view! { <p class="app-hint app-call-why" id="call-share-why">{why}</p> })}
     }
@@ -591,7 +616,7 @@ fn CallBar() -> impl IntoView {
 
 /// Sous un salon vocal de la barre latérale : qui y est.
 #[component]
-pub fn VoiceUsers(guild: Id, channel: Id, name: String, hidden: Signal<bool>) -> impl IntoView {
+pub fn VoiceUsers(guild: Option<Id>, channel: Id, name: String, hidden: Signal<bool>) -> impl IntoView {
     let s = store();
     let who = Memo::new(move |_| present(s, guild, channel));
     view! {
@@ -628,9 +653,18 @@ pub fn VoicePanel() -> impl IntoView {
     let v = s.voice;
     let place = Memo::new(move |_| {
         let r = v.room.get()?;
-        let g = s.guild(r.guild)?;
-        let c = g.channels.iter().find(|c| c.id == r.channel).and_then(|c| c.name.clone()).unwrap_or_default();
-        Some((r, format!("{c} / {}", g.guild.name)))
+        let (href, where_) = match r.guild {
+            Some(gid) => {
+                let g = s.guild(gid)?;
+                let c = g.channels.iter().find(|c| c.id == r.channel).and_then(|c| c.name.clone()).unwrap_or_default();
+                (format!("/channels/{gid}/{}", r.channel), format!("{c} / {}", g.guild.name))
+            }
+            None => {
+                let title = s.channel(r.channel).map(|c| crate::social::private_title(&c)).unwrap_or_default();
+                (format!("/channels/@me/{}", r.channel), format!("Appel avec {title}"))
+            }
+        };
+        Some((r, href, where_))
     });
     let state = move || match v.status.get() {
         Status::Connected => ("on", "En appel"),
@@ -639,23 +673,26 @@ pub fn VoicePanel() -> impl IntoView {
         Status::Lost(_) | Status::Off => ("lost", "Connexion perdue"),
     };
     view! {
-        {move || place.get().map(|(r, where_)| view! {
-            <section class="k-voicebar" aria-label="Connexion vocale">
-                <div>
-                    <b data-state=move || state().0 role="status">{move || state().1}</b>
-                    <a class="app-ellipsis" href=format!("/channels/{}/{}", r.guild, r.channel) title=where_.clone()>{where_.clone()}</a>
-                </div>
-                <MicToggle/>
-                <DeafToggle/>
-                <Show when=move || matches!(v.status.get(), Status::Lost(_))>
-                    <button class="k-btn k-btn--icon" aria-label="Reconnecter" title="Reconnecter" on:click=move |_| v.join(r.guild, r.channel)>
-                        <Icon icon=lu::LuRefreshCw/>
+        {move || place.get().map(|(r, href, where_)| {
+            let leave = if r.guild.is_some() { "Quitter le salon vocal" } else { "Raccrocher" };
+            view! {
+                <section class="k-voicebar" aria-label="Connexion vocale">
+                    <div>
+                        <b data-state=move || state().0 role="status">{move || state().1}</b>
+                        <a class="app-ellipsis" href=href title=where_.clone()>{where_.clone()}</a>
+                    </div>
+                    <MicToggle/>
+                    <DeafToggle/>
+                    <Show when=move || matches!(v.status.get(), Status::Lost(_))>
+                        <button class="k-btn k-btn--icon" aria-label="Reconnecter" title="Reconnecter" on:click=move |_| v.join(r.guild, r.channel)>
+                            <Icon icon=lu::LuRefreshCw/>
+                        </button>
+                    </Show>
+                    <button class="k-btn k-btn--icon" aria-label=leave title=leave on:click=move |_| v.leave()>
+                        <Icon icon=lu::LuPhoneOff/>
                     </button>
-                </Show>
-                <button class="k-btn k-btn--icon" aria-label="Quitter le salon vocal" title="Quitter" on:click=move |_| v.leave()>
-                    <Icon icon=lu::LuPhoneOff/>
-                </button>
-            </section>
+                </section>
+            }
         })}
     }
 }
@@ -750,5 +787,191 @@ pub fn ControlPanel() -> impl IntoView {
                 })}
             </section>
         </Show>
+    }
+}
+
+// ───── appels des MP et des groupes ─────
+
+/// « Lou », « Lou et Sam », « Lou, Sam et Noa ».
+fn names(list: &[String]) -> String {
+    match list {
+        [] => String::new(),
+        [a] => a.clone(),
+        [rest @ .., last] => format!("{} et {last}", rest.join(", ")),
+    }
+}
+
+/// En haut d'un MP ou d'un groupe : l'appel en cours (ou le mien), qui y est, chez qui ça sonne.
+#[component]
+pub fn DmCall(channel: Id) -> impl IntoView {
+    let s = store();
+    let v = s.voice;
+    let here = Memo::new(move |_| v.room.get().is_some_and(|r| r.channel == channel));
+    let who = Memo::new(move |_| present(s, None, channel));
+    let ringing = Memo::new(move |_| {
+        let me = s.my_id();
+        let list = s.call(channel).map(|c| c.ringing).unwrap_or_default();
+        list.into_iter().filter(|u| Some(*u) != me).map(|u| member(s, None, u).1).collect::<Vec<_>>()
+    });
+    let error = move || v.error.get().filter(|(c, _)| *c == channel).map(|(_, e)| e);
+    let shown = move || here.get() || who.with(|w| !w.is_empty()) || error().is_some();
+    view! {
+        <Show when=shown>
+            <section class="app-dmcall" aria-label="Appel">
+                {move || if here.get() {
+                    view! { <Call guild=None channel=channel/> }.into_any()
+                } else if who.with(|w| !w.is_empty()) {
+                    view! {
+                        <div class="app-dmcall-lobby">
+                            <span class="app-call-icon" aria-hidden="true"><Icon icon=lu::LuPhoneCall/></span>
+                            <p class="app-hint" role="status">"Appel en cours"</p>
+                            <ul class="app-call-who" aria-label="Dans l'appel">
+                                <For each=move || who.get() key=|x| x.user_id let:x>
+                                    {
+                                        let (u, n) = member(s, None, x.user_id);
+                                        view! { <li>{face(u, &n, "sm")}<span class="app-ellipsis">{n.clone()}</span></li> }
+                                    }
+                                </For>
+                            </ul>
+                            <button class="k-btn k-btn--primary" disabled=!voice::supported() on:click=move |_| v.join(None, channel)>
+                                <Icon icon=lu::LuPhone/>"Rejoindre l'appel"
+                            </button>
+                        </div>
+                    }.into_any()
+                } else {
+                    ().into_any()
+                }}
+                <Show when=move || here.get() && ringing.with(|r| !r.is_empty())>
+                    <p class="app-hint app-dmcall-ringing" role="status">
+                        <Icon icon=lu::LuBellRing small=true/>{move || format!("Ça sonne chez {}…", names(&ringing.get()))}
+                    </p>
+                </Show>
+                {move || error().map(|e| view! { <p class="k-error app-dmcall-error" role="alert">{e}</p> })}
+            </section>
+        </Show>
+    }
+}
+
+/// Dans l'en-tête d'un MP ou d'un groupe sans appel en cours : lancer l'appel.
+#[component]
+pub fn StartCall(channel: Id, #[prop(into)] blocked: Signal<bool>) -> impl IntoView {
+    let s = store();
+    let v = s.voice;
+    let idle =
+        Memo::new(move |_| v.room.get().is_none_or(|r| r.channel != channel) && present(s, None, channel).is_empty());
+    let supported = voice::supported();
+    view! {
+        <Show when=move || idle.get()>
+            <button class="k-btn k-btn--icon" aria-label="Démarrer un appel" title="Démarrer un appel"
+                disabled=move || blocked.get() || !supported on:click=move |_| v.join(None, channel)>
+                <Icon icon=lu::LuPhoneCall/>
+            </button>
+        </Show>
+    }
+}
+
+thread_local! {
+    /// La sonnerie en cours : son contexte audio et le minuteur qui la répète.
+    static RINGER: RefCell<Option<(web_sys::AudioContext, gloo_timers::callback::Interval)>> = const { RefCell::new(None) };
+}
+
+/// Deux notes brèves, synthétisées (aucun fichier son).
+fn chime(ctx: &web_sys::AudioContext) {
+    let t = ctx.current_time();
+    for (i, freq) in [659.25_f32, 880.0].into_iter().enumerate() {
+        let (Ok(osc), Ok(gain)) = (ctx.create_oscillator(), ctx.create_gain()) else { return };
+        osc.set_type(web_sys::OscillatorType::Sine);
+        osc.frequency().set_value(freq);
+        let start = t + i as f64 * 0.2;
+        let g = gain.gain();
+        let _ = g.set_value_at_time(0.0, start);
+        let _ = g.linear_ramp_to_value_at_time(0.12, start + 0.02);
+        let _ = g.linear_ramp_to_value_at_time(0.0, start + 0.18);
+        let _ = osc.connect_with_audio_node(&gain);
+        let _ = gain.connect_with_audio_node(&ctx.destination());
+        let _ = osc.start_with_when(start);
+        let _ = osc.stop_with_when(start + 0.2);
+    }
+}
+
+/// Sonne (toutes les 2,5 s) ou se tait.
+fn ring(on: bool) {
+    let running = RINGER.with_borrow(Option::is_some);
+    if on && !running {
+        let Ok(ctx) = web_sys::AudioContext::new() else { return };
+        chime(&ctx);
+        let again = ctx.clone();
+        let timer = gloo_timers::callback::Interval::new(2_500, move || chime(&again));
+        RINGER.set(Some((ctx, timer)));
+    } else if !on && let Some((ctx, timer)) = RINGER.take() {
+        timer.cancel();
+        let _ = ctx.close();
+    }
+}
+
+/// Les appels qui sonnent chez moi, où que je sois : qui appelle, « Rejoindre », « Refuser ».
+#[component]
+pub fn IncomingCalls() -> impl IntoView {
+    let s = store();
+    let v = s.voice;
+    let incoming = Memo::new(move |_| {
+        let Some(me) = s.me.with(|m| m.as_ref().map(|m| m.id)) else { return vec![] };
+        let room = v.room.get().map(|r| r.channel);
+        s.calls.with(|cs| {
+            cs.iter().filter(|c| c.ringing.contains(&me) && Some(c.channel_id) != room).cloned().collect::<Vec<_>>()
+        })
+    });
+    Effect::new(move || ring(!incoming.with(Vec::is_empty) && !v.deaf.get()));
+    on_cleanup(|| ring(false));
+    view! {
+        <Show when=move || incoming.with(|c| !c.is_empty())>
+            <section class="app-ring" aria-label="Appels entrants">
+                <For each=move || incoming.get() key=|c| (c.channel_id, c.message_id) let:c>
+                    <RingCard call=c/>
+                </For>
+            </section>
+        </Show>
+    }
+}
+
+#[component]
+fn RingCard(call: kraken_proto::Call) -> impl IntoView {
+    let s = store();
+    let v = s.voice;
+    let navigate = leptos_router::hooks::use_navigate();
+    let cid = call.channel_id;
+    let (account, who) = member(s, None, call.started_by);
+    let group = s
+        .channel(cid)
+        .filter(|ch| ch.kind == kraken_proto::ChannelKind::GroupDm)
+        .map(|ch| crate::social::private_title(&ch));
+    let line = match &group {
+        Some(g) => format!("t'appelle dans {g}"),
+        None => "t'appelle".to_string(),
+    };
+    let answer = move |_| {
+        v.join(None, cid);
+        navigate(&format!("/channels/@me/{cid}"), Default::default());
+    };
+    let decline = move |_| {
+        let me = s.my_id();
+        s.calls.update(|cs| {
+            cs.iter_mut().filter(|c| c.channel_id == cid).for_each(|c| c.ringing.retain(|u| Some(*u) != me))
+        });
+        spawn_local(async move {
+            let _ = crate::api::call_decline(cid).await;
+        });
+    };
+    view! {
+        <div class="app-ring-card" role="alertdialog" aria-label=format!("Appel de {who}") aria-describedby=format!("ring-{cid}")>
+            {face(account, &who, "md")}
+            <p id=format!("ring-{cid}")><b class="app-ellipsis">{who.clone()}</b><span>{line}</span></p>
+            <button class="k-btn k-btn--sm k-btn--primary" disabled=!voice::supported() on:click=answer>
+                <Icon icon=lu::LuPhone small=true/><span>"Rejoindre"</span>
+            </button>
+            <button class="k-btn k-btn--sm k-btn--danger" on:click=decline>
+                <Icon icon=lu::LuPhoneOff small=true/><span>"Refuser"</span>
+            </button>
+        </div>
     }
 }

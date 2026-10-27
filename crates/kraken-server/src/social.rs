@@ -166,6 +166,7 @@ pub async fn remove_recipient(
 ) -> ApiResult<StatusCode> {
     let target = if who == "@me" { auth.user.id } else { who.parse().map_err(|_| AppError::not_found())? };
     let left = state.db.remove_recipient(cid, auth.user.id, target).await?;
+    crate::call::removed(&state, cid, target).await;
     state.hub.send(&[target], Event::ChannelDelete { id: cid });
     announce(&state, cid, &left, Event::ChannelUpdate).await?;
     Ok(StatusCode::NO_CONTENT)

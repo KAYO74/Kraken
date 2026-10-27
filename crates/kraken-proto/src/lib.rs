@@ -191,6 +191,19 @@ pub struct Message {
     /// `@everyone` ou `@here` écrit par quelqu'un qui en a le droit.
     #[serde(default)]
     pub mention_everyone: bool,
+    /// Message d'appel d'un MP ou d'un groupe (son auteur a lancé l'appel) ; le texte est vide.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call: Option<CallInfo>,
+}
+
+/// Ce qu'un message d'appel retient de l'appel.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct CallInfo {
+    /// Ceux qui y sont entrés (l'auteur compris), connus à la fin de l'appel.
+    #[serde(default)]
+    pub participants: Vec<Id>,
+    /// `None` : l'appel est en cours.
+    pub ended_at: Option<i64>,
 }
 
 /// Longueur, en caractères, de l'extrait du message d'origine montré au-dessus d'une réponse.
@@ -321,11 +334,13 @@ pub const MAX_VOICE_MEMBERS: usize = 25;
 /// Libellé du canal de données WebRTC ouvert par le client.
 pub const VOICE_DATA_CHANNEL: &str = "kraken";
 
-/// Où en est quelqu'un dans les salons vocaux d'un serveur. Une connexion vocale par
-/// utilisateur : rejoindre un autre salon quitte le précédent.
+/// Où en est quelqu'un dans les salons vocaux d'un serveur, ou dans l'appel d'un MP ou d'un
+/// groupe. Une connexion vocale par utilisateur : rejoindre un autre salon quitte le précédent.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VoiceState {
-    pub guild_id: Id,
+    /// `None` : appel d'un MP ou d'un groupe (`channel_id` est alors la conversation).
+    #[serde(default)]
+    pub guild_id: Option<Id>,
     /// `None` : a quitté le vocal (ou se trouve dans un salon que tu ne vois pas).
     pub channel_id: Option<Id>,
     pub user_id: Id,
@@ -335,6 +350,23 @@ pub struct VoiceState {
     pub self_deaf: bool,
     /// Partage son écran.
     pub streaming: bool,
+}
+
+/// Secondes pendant lesquelles un appel sonne chez ceux qui n'ont pas encore répondu.
+pub const CALL_RING_SECONDS: u64 = 30;
+
+/// Un appel en cours dans un MP ou un groupe : on y entre comme dans un salon vocal
+/// (`POST /channels/{id}/voice`), le premier qui entre le lance et fait sonner les autres.
+/// Qui y est : les états vocaux (`guild_id` à `None`). L'appel prend fin quand le dernier part.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Call {
+    pub channel_id: Id,
+    /// Le message d'appel posté dans la conversation.
+    pub message_id: Id,
+    /// Qui l'a lancé.
+    pub started_by: Id,
+    /// Chez qui ça sonne encore (ni entré, ni refusé, ni plus de [`CALL_RING_SECONDS`]).
+    pub ringing: Vec<Id>,
 }
 
 /// `POST /channels/{id}/voice` : l'offre WebRTC du navigateur. Elle contient, dans cet ordre,
@@ -536,6 +568,12 @@ pub struct Ready {
     pub private_channels: Vec<Channel>,
     pub relationships: Vec<Relationship>,
     pub session_id: String,
+    /// Appels en cours dans mes MP et groupes.
+    #[serde(default)]
+    pub calls: Vec<Call>,
+    /// Qui est dans ces appels.
+    #[serde(default)]
+    pub call_voice_states: Vec<VoiceState>,
 }
 
 /// Client → serveur.
@@ -607,8 +645,15 @@ pub enum Event {
     },
     /// Nom affiché ou avatar changé : envoyé à l'intéressé et à ceux qui le voient.
     UserUpdate(User),
-    /// Arrivée, départ ou changement d'état dans un salon vocal ; envoyé à tout le serveur.
+    /// Arrivée, départ ou changement d'état dans un salon vocal (à ceux qui le voient) ou dans
+    /// l'appel d'un MP ou d'un groupe (à ses participants).
     VoiceStateUpdate(VoiceState),
+    /// Appel lancé, ou changement de qui il fait sonner ; aux participants de la conversation.
+    CallUpdate(Call),
+    /// Appel terminé : le dernier est parti.
+    CallDelete {
+        channel_id: Id,
+    },
 }
 
 #[cfg(test)]

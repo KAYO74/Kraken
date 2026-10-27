@@ -3,6 +3,7 @@
 
 mod api;
 mod auth;
+mod call;
 mod error;
 mod gateway;
 mod jobs;
@@ -55,6 +56,8 @@ pub struct Config {
     pub rtc_ips: Vec<IpAddr>,
     /// Port UDP annoncé s'il diffère de `rtc_port` (redirection de port).
     pub rtc_public_port: Option<u16>,
+    /// Secondes pendant lesquelles un appel de MP sonne chez ceux qui n'ont pas répondu.
+    pub ring_secs: u64,
 }
 
 impl Config {
@@ -88,6 +91,10 @@ impl Config {
             rtc_fallback: false,
             rtc_ips: var("KRAKEN_RTC_IPS").map(|v| voice::parse_ips(&v)).unwrap_or_default(),
             rtc_public_port: var("KRAKEN_RTC_PUBLIC_PORT").and_then(|v| v.trim().parse().ok()).filter(|p| *p != 0),
+            ring_secs: var("KRAKEN_RING_SECONDS")
+                .and_then(|v| v.trim().parse().ok())
+                .filter(|s| (1..=600).contains(s))
+                .unwrap_or(kraken_proto::CALL_RING_SECONDS),
         }
     }
 
@@ -111,6 +118,8 @@ pub struct AppState {
     pub mailer: Option<Arc<Mailer>>,
     /// Salons vocaux ; `None` si le port UDP n'a pas pu être ouvert.
     pub voice: Option<Arc<Sfu>>,
+    /// Appels en cours des MP et des groupes.
+    pub calls: Arc<call::Calls>,
 }
 
 impl AppState {
@@ -135,8 +144,14 @@ impl AppState {
             hub.seed_presence(&db).await;
         }
         let hub = Arc::new(hub);
+        // Un appel ne survit pas à un redémarrage : ceux restés ouverts sont terminés.
+        match db.end_open_calls().await {
+            Ok(0) => {}
+            Ok(n) => tracing::info!("{n} appel(s) interrompu(s) par l'arrêt du serveur, marqués terminés"),
+            Err(e) => tracing::warn!("appels restés ouverts : {e:?}"),
+        }
         let voice = voice::start(&cfg, &db, &hub).await;
-        Ok(Self { db, hub, cfg: Arc::new(cfg), mailer, voice })
+        Ok(Self { db, hub, cfg: Arc::new(cfg), mailer, voice, calls: Arc::default() })
     }
 
     /// Ajoute à ce serveur ses états vocaux, pour les salons que le membre voit.
@@ -166,9 +181,13 @@ pub fn app(state: AppState) -> Router {
         .route("/auth/reset/confirm", post(auth::reset_confirm))
         .route("/users/@me/delete", post(auth::delete_account))
         .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
-    // Rejoindre un salon vocal coûte une clé DTLS : même limite, compteur à part.
+    // Rejoindre un salon vocal (ou lancer un appel) coûte une clé DTLS : même limite, compteur à
+    // part. Refuser un appel : même limite, un compteur de plus.
     let voice_join = Router::new()
         .route("/channels/{id}/voice", post(voice::join))
+        .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
+    let call_decline = Router::new()
+        .route("/channels/{id}/call/decline", post(call::decline))
         .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
     // Réactions : un clic chacune, diffusées à tout le salon ; compteur à part, plus large.
     let reactions = Router::new()
@@ -204,6 +223,7 @@ pub fn app(state: AppState) -> Router {
         .merge(limited)
         .merge(social)
         .merge(voice_join)
+        .merge(call_decline)
         .merge(reactions)
         .route("/voice", delete(voice::leave))
         .route("/health", get(api::health))

@@ -26,6 +26,7 @@ fn config(auth_per_min: u32) -> Config {
         rtc_fallback: false,
         rtc_ips: vec![std::net::Ipv4Addr::LOCALHOST.into()],
         rtc_public_port: None,
+        ring_secs: 30,
     }
 }
 

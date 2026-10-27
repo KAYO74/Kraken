@@ -30,6 +30,8 @@ web-sys = { version = "0.3", features = [
     "AudioContext", "BaseAudioContext", "AudioNode", "AnalyserNode", "MediaStreamAudioSourceNode",
     # Contrôle à distance : souris, molette, clavier sur l'écran regardé ; réglages de la piste.
     "PointerEvent", "MouseEvent", "WheelEvent", "FocusEvent", "DomRect", "MediaTrackSettings",
+    # Appels de MP : la sonnerie, synthétisée.
+    "OscillatorNode", "OscillatorType", "GainNode", "AudioParam", "AudioScheduledSourceNode", "AudioDestinationNode",
 ] }
 futures = "0.3"
 console_error_panic_hook = "0.1"

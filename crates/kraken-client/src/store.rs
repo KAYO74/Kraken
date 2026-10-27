@@ -114,6 +114,9 @@ pub struct Store {
     pub drawer: RwSignal<bool>,
     /// La session vocale, gardée d'un écran à l'autre.
     pub voice: Voice,
+    /// Appels en cours dans mes MP et groupes, et qui y est.
+    pub calls: RwSignal<Vec<Call>>,
+    pub call_states: RwSignal<Vec<VoiceState>>,
 }
 
 pub fn store() -> Store {
@@ -133,6 +136,8 @@ impl Store {
             conn: RwSignal::new(Conn::Offline),
             drawer: RwSignal::new(false),
             voice: Voice::new(me),
+            calls: RwSignal::new(vec![]),
+            call_states: RwSignal::new(vec![]),
         }
     }
 
@@ -155,6 +160,32 @@ impl Store {
         self.dms.set(vec![]);
         self.friends.set(vec![]);
         self.logs.set(HashMap::new());
+        self.calls.set(vec![]);
+        self.call_states.set(vec![]);
+    }
+
+    pub fn my_id(&self) -> Option<Id> {
+        self.me.with_untracked(|m| m.as_ref().map(|m| m.id))
+    }
+
+    /// Qui est dans ce salon vocal (`guild`) ou dans l'appel de ce MP ou groupe (`None`), dans
+    /// l'ordre d'arrivée (suivi).
+    pub fn present(&self, guild: Option<Id>, channel: Id) -> Vec<VoiceState> {
+        let here = |v: &&VoiceState| v.channel_id == Some(channel);
+        match guild {
+            Some(g) => self.guilds.with(|gs| {
+                gs.iter()
+                    .find(|x| x.guild.id == g)
+                    .map(|x| x.voice_states.iter().filter(here).cloned().collect())
+                    .unwrap_or_default()
+            }),
+            None => self.call_states.with(|c| c.iter().filter(here).cloned().collect()),
+        }
+    }
+
+    /// L'appel en cours de ce MP ou groupe (suivi).
+    pub fn call(&self, channel: Id) -> Option<Call> {
+        self.calls.with(|c| c.iter().find(|x| x.channel_id == channel).cloned())
     }
 
     pub fn guild(&self, id: Id) -> Option<GuildState> {
@@ -267,24 +298,40 @@ impl Store {
         });
     }
 
-    /// Arrivée, départ ou changement d'état dans un salon vocal : la liste du serveur suit, à la
-    /// même place pour qui change seulement d'état.
+    /// Arrivée, départ ou changement d'état dans un salon vocal ou un appel : la liste du serveur
+    /// (ou des appels) suit, à la même place pour qui change seulement d'état. Une seule
+    /// connexion vocale par personne : la voir ailleurs la retire d'ici.
     fn voice_state(&self, v: VoiceState) {
         if self.me.with_untracked(|m| m.as_ref().is_some_and(|m| m.id == v.user_id)) {
             self.voice.check(&v);
         }
-        self.guilds.update(|gs| {
-            let Some(g) = gs.iter_mut().find(|g| g.guild.id == v.guild_id) else { return };
-            let at = g.voice_states.iter().position(|x| x.user_id == v.user_id);
-            match (at, v.channel_id.is_some()) {
-                (Some(i), true) => g.voice_states[i] = v,
-                (Some(i), false) => {
-                    g.voice_states.remove(i);
+        let present = v.channel_id.is_some();
+        // Une liste est concernée si l'état est le sien, ou si la personne est maintenant ailleurs.
+        let place = |list: &mut Vec<VoiceState>, mine: bool| {
+            let at = list.iter().position(|x| x.user_id == v.user_id);
+            match (at, mine && present) {
+                (Some(i), true) => list[i] = v.clone(),
+                (None, true) => list.push(v.clone()),
+                (Some(i), false) if mine || present => {
+                    list.remove(i);
                 }
-                (None, true) => g.voice_states.push(v),
-                (None, false) => {}
+                _ => {}
             }
-        });
+        };
+        let touches_guilds = v.guild_id.is_some()
+            || (present
+                && self
+                    .guilds
+                    .with_untracked(|gs| gs.iter().any(|g| g.voice_states.iter().any(|x| x.user_id == v.user_id))));
+        if touches_guilds {
+            self.guilds
+                .update(|gs| gs.iter_mut().for_each(|g| place(&mut g.voice_states, v.guild_id == Some(g.guild.id))));
+        }
+        let touches_calls = v.guild_id.is_none()
+            || (present && self.call_states.with_untracked(|c| c.iter().any(|x| x.user_id == v.user_id)));
+        if touches_calls {
+            self.call_states.update(|c| place(c, v.guild_id.is_none()));
+        }
     }
 
     fn apply(&self, ev: Event) {
@@ -326,6 +373,8 @@ impl Store {
             }
             Event::ChannelDelete { id } => {
                 self.dms.update(|d| d.retain(|c| c.id != id));
+                self.calls.update(|cs| cs.retain(|x| x.channel_id != id));
+                self.call_states.update(|c| c.retain(|x| x.channel_id != Some(id)));
                 self.logs.update(|l| {
                     l.remove(&id);
                 });
@@ -342,6 +391,16 @@ impl Store {
                 }
             }),
             Event::VoiceStateUpdate(v) => self.voice_state(v),
+            Event::CallUpdate(c) => {
+                self.calls.update(|cs| match cs.iter_mut().find(|x| x.channel_id == c.channel_id) {
+                    Some(x) => *x = c,
+                    None => cs.push(c),
+                })
+            }
+            Event::CallDelete { channel_id } => {
+                self.calls.update(|cs| cs.retain(|x| x.channel_id != channel_id));
+                self.call_states.update(|c| c.retain(|x| x.channel_id != Some(channel_id)));
+            }
         }
     }
 }
@@ -416,6 +475,8 @@ async fn run(store: Store) {
                 store.guilds.set(r.guilds);
                 store.dms.set(r.private_channels);
                 store.friends.set(r.relationships);
+                store.calls.set(r.calls);
+                store.call_states.set(r.call_voice_states);
                 // Des messages ont pu passer pendant la coupure : on recharge à l'affichage.
                 store.logs.update(|l| l.values_mut().for_each(|x| x.loaded = false));
                 store.conn.set(Conn::Ready);

@@ -27,7 +27,8 @@ fn unavailable() -> AppError {
     )
 }
 
-/// `POST /channels/{id}/voice` : rejoindre ce salon vocal (et quitter celui où l'on était).
+/// `POST /channels/{id}/voice` : rejoindre ce salon vocal, ou l'appel de ce MP ou de ce groupe
+/// (et quitter celui où l'on était). Entrer dans une conversation sans appel en cours le lance.
 pub async fn join(
     State(state): State<AppState>,
     auth: Auth,
@@ -40,8 +41,12 @@ pub async fn join(
         return Err(AppError::not_found()); // ne pas révéler l'existence du salon
     }
     let c = state.db.channel(cid).await?.ok_or_else(AppError::not_found)?;
-    let gid = c.guild_id.filter(|_| matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage));
-    let Some(gid) = gid else { return Err(AppError::invalid("Ce salon n'est pas un salon vocal.")) };
+    let (guild_id, targets) = match c.guild_id {
+        Some(g) if matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage) => (Some(g), vec![]),
+        Some(_) => return Err(AppError::invalid("Ce salon n'est pas un salon vocal.")),
+        // MP ou groupe : en faire partie, sans blocage (MP) ; ça sonnera chez `targets`.
+        None => (None, state.db.call_access(cid, uid).await?.1),
+    };
     if p & perms::CONNECT == 0 {
         return Err(AppError::forbidden());
     }
@@ -50,7 +55,7 @@ pub async fn join(
         return Err(AppError::invalid("Offre WebRTC trop longue."));
     }
     let j = kraken_voice::Join {
-        guild_id: gid,
+        guild_id,
         channel_id: cid,
         user_id: uid,
         offer: req.sdp,
@@ -60,21 +65,38 @@ pub async fn join(
         can_speak: p & perms::SPEAK != 0,
         can_stream: p & perms::STREAM != 0,
     };
+    let call = match guild_id {
+        None => crate::call::prepare(&state, cid, uid).await?,
+        Some(_) => None,
+    };
     // Une clé DTLS par connexion : hors des fils du runtime.
-    let joined = tokio::task::spawn_blocking(move || sfu.join(j)).await.map_err(|_| unavailable())?;
-    match joined {
-        Ok(sdp) => Ok(Json(VoiceAnswer { sdp })),
-        Err(JoinError::Full) => Err(AppError(
-            StatusCode::CONFLICT,
-            "voice_full",
-            format!("Ce salon vocal est complet ({MAX_VOICE_MEMBERS} personnes au plus)."),
-        )),
-        Err(JoinError::BadOffer(e)) => {
-            tracing::debug!("vocal {uid} : {e}");
-            Err(AppError::invalid("Connexion vocale refusée : offre WebRTC inattendue."))
+    let joined = tokio::task::spawn_blocking(move || sfu.join(j)).await.map_err(|_| unavailable());
+    let joined = match joined {
+        Ok(Ok(sdp)) => sdp,
+        Ok(Err(e)) => {
+            crate::call::cancel(&state, cid, call).await;
+            return Err(match e {
+                JoinError::Full => AppError(
+                    StatusCode::CONFLICT,
+                    "voice_full",
+                    format!("Ce salon vocal est complet ({MAX_VOICE_MEMBERS} personnes au plus)."),
+                ),
+                JoinError::BadOffer(e) => {
+                    tracing::debug!("vocal {uid} : {e}");
+                    AppError::invalid("Connexion vocale refusée : offre WebRTC inattendue.")
+                }
+                JoinError::Stopped => unavailable(),
+            });
         }
-        Err(JoinError::Stopped) => Err(unavailable()),
+        Err(e) => {
+            crate::call::cancel(&state, cid, call).await;
+            return Err(e);
+        }
+    };
+    if guild_id.is_none() {
+        crate::call::entered(&state, cid, uid, call, targets).await;
     }
+    Ok(Json(VoiceAnswer { sdp: joined }))
 }
 
 /// `DELETE /voice` : quitter le vocal. Sans effet si l'on n'y était pas.

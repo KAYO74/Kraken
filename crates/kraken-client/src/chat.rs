@@ -11,7 +11,7 @@ use leptos_router::hooks::{use_navigate, use_params_map};
 
 use wasm_bindgen::JsCast;
 
-use crate::call::VoiceRoom;
+use crate::call::{DmCall, StartCall, VoiceRoom};
 use crate::emoji::EmojiPicker;
 use crate::icons::{Icon, lu};
 use crate::markdown::Body;
@@ -244,6 +244,7 @@ fn ChannelView(channel: Channel) -> impl IntoView {
                         <Icon icon=lu::LuUsers/>
                     </button>
                 })}
+                {is_dm.then(|| view! { <StartCall channel=cid blocked=other_blocked/> })}
                 {(kind == ChannelKind::GroupDm).then(|| view! {
                     <button class="k-btn k-btn--icon" aria-label="Ajouter des amis au groupe" title="Ajouter des amis"
                         on:click=move |_| dialog.set(Some(PrivateDialog::Add))><Icon icon=lu::LuUserPlus/></button>
@@ -264,6 +265,7 @@ fn ChannelView(channel: Channel) -> impl IntoView {
         </Header>
         <div class="app-body">
             <section class="app-chat" aria-label=label>
+                {is_dm.then(|| view! { <DmCall channel=cid/> })}
                 <MessageList channel=cid title=title.into() is_dm=is_dm/>
                 <Show when=move || other_blocked.get() fallback=move || view! { <Composer placeholder=place/> }>
                     <div class="app-dm-blocked" role="status">
@@ -321,8 +323,10 @@ fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView
                 .map(|m| {
                     let author = m.author.as_ref().map(|a| a.id);
                     let cont = m.reply.is_none()
+                        && m.call.is_none()
                         && prev.is_some_and(|(a, t)| a == author && author.is_some() && m.created_at - t < 7 * 60_000);
-                    prev = Some((author, m.created_at));
+                    // Après un message d'appel, le suivant reprend son en-tête.
+                    prev = if m.call.is_some() { None } else { Some((author, m.created_at)) };
                     (m.clone(), cont)
                 })
                 .collect::<Vec<_>>()
@@ -424,8 +428,58 @@ fn people(names: Vec<String>) -> String {
     }
 }
 
+/// « moins d'une minute », « 5 minutes », « 1 h 05 ».
+fn duration(ms: i64) -> String {
+    let minutes = ms.max(0) / 60_000;
+    match minutes {
+        0 => "moins d'une minute".into(),
+        1 => "1 minute".into(),
+        m if m < 60 => format!("{m} minutes"),
+        m => format!("{} h {:02}", m / 60, m % 60),
+    }
+}
+
+/// Un message d'appel : lancé (en cours), terminé (et sa durée), ou manqué.
+#[component]
+fn CallNote(msg: Message) -> impl IntoView {
+    let me = my_id();
+    let info = msg.call.clone().unwrap_or_default();
+    let author = msg.author.as_ref().map(|a| a.id);
+    let name = msg.author.as_ref().map(|u| u.name().to_string()).unwrap_or_else(|| "Compte supprimé".into());
+    let mine = me.is_some() && author == me;
+    let at = msg.created_at;
+    let (icon, missed, text): (_, bool, String) = match info.ended_at {
+        None if mine => (lu::LuPhoneOutgoing, false, "Tu as lancé un appel.".to_string()),
+        None => (lu::LuPhoneIncoming, false, format!("{name} a lancé un appel.")),
+        Some(end) => {
+            let took = duration(end - at);
+            let alone = info.participants.iter().all(|u| Some(*u) == author);
+            if mine && alone {
+                (lu::LuPhoneMissed, true, "Personne n'a répondu à ton appel.".to_string())
+            } else if mine {
+                (lu::LuPhoneOutgoing, false, format!("Tu as lancé un appel qui a duré {took}."))
+            } else if me.is_some_and(|m| !info.participants.contains(&m)) {
+                (lu::LuPhoneMissed, true, format!("Appel manqué de {name}."))
+            } else {
+                (lu::LuPhoneIncoming, false, format!("{name} a lancé un appel qui a duré {took}."))
+            }
+        }
+    };
+    let label = format!("{text} {}", when(at));
+    view! {
+        <article id=format!("msg-{}", msg.id) class="k-msg app-callnote" tabindex="-1" data-missed=missed.then_some("")
+            aria-label=label>
+            <span class="app-callnote-icon" aria-hidden="true"><Icon icon=icon/></span>
+            <p>{text}" "<time datetime=iso(at)>{when(at)}</time></p>
+        </article>
+    }
+}
+
 #[component]
 fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
+    if msg.call.is_some() {
+        return view! { <CallNote msg=msg/> }.into_any();
+    }
     let s = store();
     let chat = chat();
     let me = my_id();
@@ -543,6 +597,7 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
             </Show>
         </article>
     }
+    .into_any()
 }
 
 fn start_reply(chat: Chat, m: Message) {

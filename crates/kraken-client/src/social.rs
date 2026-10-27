@@ -37,6 +37,35 @@ pub fn open_dm(uid: Id, error: RwSignal<Option<String>>) -> impl Fn() + Clone + 
     }
 }
 
+/// Appelle cette personne : ouvre (ou crée) le MP avec elle, y lance l'appel, puis y va.
+pub fn call_user(uid: Id, error: RwSignal<Option<String>>) -> impl Fn() + Clone + 'static {
+    let navigate = use_navigate();
+    move || {
+        let s = store();
+        let navigate = navigate.clone();
+        let known = s.dms.with_untracked(|d| {
+            d.iter().find(|c| c.kind == ChannelKind::Dm && c.recipients.iter().any(|u| u.id == uid)).map(|c| c.id)
+        });
+        let go = move |cid: Id| {
+            s.voice.join(None, cid);
+            navigate(&format!("/channels/@me/{cid}"), Default::default());
+        };
+        match known {
+            Some(c) => go(c),
+            None => spawn_local(async move {
+                match crate::api::open_private(vec![uid], None).await {
+                    Ok(c) => {
+                        let id = c.id;
+                        s.upsert_dm(c);
+                        go(id);
+                    }
+                    Err(e) => error.set(Some(e.message)),
+                }
+            }),
+        }
+    }
+}
+
 /// Le titre d'un MP ou d'un groupe : son nom, sinon les noms des autres.
 pub fn private_title(c: &Channel) -> String {
     c.name.clone().unwrap_or_else(|| {

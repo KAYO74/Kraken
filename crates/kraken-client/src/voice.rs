@@ -44,10 +44,11 @@ const MIC_DENIED: &str =
 const NO_WEBRTC: &str = "Ton navigateur ne permet pas les appels vocaux. Essaie avec un navigateur récent.";
 const LOST: &str = "Connexion vocale perdue.";
 
-/// Le salon vocal de la session.
+/// Le salon vocal de la session : un salon de serveur, ou l'appel d'un MP ou d'un groupe
+/// (`guild` à `None`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Room {
-    pub guild: Id,
+    pub guild: Option<Id>,
     pub channel: Id,
 }
 
@@ -364,8 +365,9 @@ impl Voice {
         matches!(self.status.get_untracked(), Status::Connecting | Status::Connected | Status::Unstable)
     }
 
-    /// Rejoint ce salon vocal ; quitte d'abord celui où l'on était.
-    pub fn join(self, guild: Id, channel: Id) {
+    /// Rejoint ce salon vocal (ou l'appel de ce MP ou groupe, `guild` à `None`) ; quitte
+    /// d'abord celui où l'on était.
+    pub fn join(self, guild: Option<Id>, channel: Id) {
         self.teardown();
         let n = GEN.with(Cell::get);
         self.room.set(Some(Room { guild, channel }));
@@ -1043,11 +1045,7 @@ pub fn init(store: Store) {
     });
     Effect::new(move || {
         let (Some(user), Some(room)) = (v.watching.get(), v.room.get()) else { return };
-        let streams = store.guilds.with(|gs| {
-            gs.iter().find(|g| g.guild.id == room.guild).is_some_and(|g| {
-                g.voice_states.iter().any(|s| s.user_id == user && s.channel_id == Some(room.channel) && s.streaming)
-            })
-        });
+        let streams = store.present(room.guild, room.channel).iter().any(|s| s.user_id == user && s.streaming);
         // Le serveur a déjà arrêté de l'envoyer : pas de « watch off » à faire.
         if !streams {
             v.watching.set(None);

@@ -33,6 +33,7 @@ fn config(rtc_port: u16) -> Config {
         rtc_fallback: false,
         rtc_ips: vec![std::net::Ipv4Addr::LOCALHOST.into()],
         rtc_public_port: None,
+        ring_secs: 30,
     }
 }
 
@@ -182,7 +183,7 @@ async fn join_rights_and_voice_states(pool: PgPool) {
     assert!(answer.sdp.contains(" 127.0.0.1 "), "candidat local annoncé :\n{}", answer.sdp);
     let s = next_voice(&mut ws).await;
     let here = VoiceState {
-        guild_id: gid,
+        guild_id: Some(gid),
         channel_id: Some(voice),
         user_id: lou,
         self_mute: false,
