@@ -165,10 +165,20 @@ async fn session(state: AppState, mut ws: WebSocket, cookie: Option<String>) {
     let (conn, mut rx) = state.hub.register(uid, session);
 
     let loaded = async {
+        let private_channels = state.db.private_channels(uid).await?;
+        let mine: Vec<Id> = private_channels.iter().map(|c| c.id).collect();
+        let call_voice_states = match &state.voice {
+            Some(v) => {
+                v.private_states().into_iter().filter(|s| s.channel_id.is_some_and(|c| mine.contains(&c))).collect()
+            }
+            None => vec![],
+        };
         Ok::<_, kraken_db::DbError>(Ready {
             user,
             guilds: state.db.user_guilds(uid).await?.into_iter().map(|g| state.with_voice(g)).collect(),
-            private_channels: state.db.private_channels(uid).await?,
+            calls: state.calls.of(&mine),
+            call_voice_states,
+            private_channels,
             relationships: state.hub.with_presence(state.db.relationships(uid).await?),
             session_id: format!("{conn:x}"),
         })

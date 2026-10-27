@@ -57,7 +57,8 @@ Notifications par e-mail,notifications,could,yes,no,S09
 Recherche dans les messages,recherche,should,yes,no,S26
 Quick Switcher Ctrl+K,recherche,should,yes,no,S29
 Salon vocal,voix,must,yes,yes,"S18 F04 ; SFU kraken-voice sur un port UDP (pas de TURN : le port doit être joignable), 25 personnes par salon, qui est là dans la barre latérale, panneau « Vocal connecté », contour de qui parle, Reconnecter après une coupure"
-Appel en MP,voix,must,yes,no,F03
+Appel en MP,voix,must,yes,yes,"F03 S19 ; même SFU que les salons (la conversation sert de salon) : sonnerie partout avec Rejoindre/Refuser (30 s), « Appeler » depuis Amis, qui est dans l'appel en haut du MP et dans la barre latérale, micro, son, partage d'écran, contrôle à distance ; message d'appel (durée, Appel manqué) ; pas entre comptes bloqués"
+Appel de groupe,voix,must,yes,yes,"F03 S19 ; dans un groupe privé (10 personnes au plus) : sonne chez chacun sauf blocage avec l'appelant, chacun décroche, refuse ou rejoint plus tard ; fin au départ du dernier"
 Muet et sourdine,voix,must,yes,yes,"S04 S18 ; visibles de tous ; le son coupé coupe aussi le micro ; le serveur ne relaie rien d'un micro coupé"
 Choix des périphériques et test micro,voix,must,yes,no,S10
 Détection de voix et push-to-talk,voix,must,yes,no,S10

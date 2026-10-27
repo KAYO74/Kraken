@@ -7,7 +7,7 @@ use leptos::task::spawn_local;
 use wasm_bindgen::JsCast;
 
 use crate::icons::{Icon, lu};
-use crate::social::{Confirm, ConfirmDialog, open_dm};
+use crate::social::{Confirm, ConfirmDialog, call_user, open_dm};
 use crate::store::{Conn, store};
 use crate::ui::{Avatar, Header, status_label};
 
@@ -200,10 +200,15 @@ fn FriendRow(r: Relationship, error: RwSignal<Option<String>>, confirm: RwSignal
     let actions = match r.kind {
         RelationshipKind::Friend => {
             let write = open_dm(uid, error);
+            let ring = call_user(uid, error);
             let (u1, u2) = (user.clone(), user.clone());
             view! {
                 <button class="k-btn k-btn--icon" aria-label=format!("Écrire à {name}") title="Message" on:click=move |_| write()>
                     <Icon icon=lu::LuMessageCircle/>
+                </button>
+                <button class="k-btn k-btn--icon" aria-label=format!("Appeler {name}") title="Appeler"
+                    disabled=!crate::voice::supported() on:click=move |_| ring()>
+                    <Icon icon=lu::LuPhone/>
                 </button>
                 <button class="k-btn k-btn--icon" aria-label=format!("Retirer {name} de tes amis") title="Retirer"
                     on:click=move |_| confirm.set(Some(Confirm::RemoveFriend(u1.clone())))>

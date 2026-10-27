@@ -185,7 +185,7 @@ impl Browser {
 
 fn join(guild: Id, room: Id, user: Id, offer: String, mids: VoiceMids) -> Join {
     Join {
-        guild_id: guild,
+        guild_id: Some(guild),
         channel_id: room,
         user_id: user,
         offer,
@@ -320,10 +320,10 @@ fn full_room_moves_and_bad_offers() {
     assert_eq!(sfu.states(g1).len(), 2);
 
     // Changer de serveur : l'ancien apprend le départ, le nouveau l'arrivée.
-    sfu.join(Join { guild_id: g2, channel_id: other, ..offer(id(11)) }).unwrap();
-    let tail: Vec<(Id, Option<Id>)> =
+    sfu.join(Join { guild_id: Some(g2), channel_id: other, ..offer(id(11)) }).unwrap();
+    let tail: Vec<(Option<Id>, Option<Id>)> =
         log.lock().unwrap().iter().rev().take(2).map(|s| (s.guild_id, s.channel_id)).collect();
-    assert_eq!(tail, [(g2, Some(other)), (g1, None)]);
+    assert_eq!(tail, [(Some(g2), Some(other)), (Some(g1), None)]);
     assert_eq!(sfu.states(g1).len(), 1);
     sfu.join(offer(id(12))).unwrap();
 
@@ -343,6 +343,37 @@ fn full_room_moves_and_bad_offers() {
     // Sans connexion établie en 15 s, la place se libère (ici : départ demandé).
     assert!(sfu.leave(id(10)));
     assert!(sfu.state(id(10)).is_none());
+}
+
+/// Appels de MP : sans serveur, chacun dans sa conversation ; passer de l'une à l'autre
+/// signale le départ de la première.
+#[test]
+fn private_calls() {
+    let (sfu, log) = sfu(25);
+    let (guild, dm, group, voice) = (id(1), id(30), id(31), id(32));
+    let offer = |user, guild_id, channel_id| {
+        let (_, sdp, mids, _) = Browser::new();
+        Join { guild_id, ..join(guild, channel_id, user, sdp, mids) }
+    };
+    sfu.join(offer(id(40), None, dm)).unwrap();
+    sfu.join(offer(id(41), None, dm)).unwrap();
+    sfu.join(offer(id(42), Some(guild), voice)).unwrap();
+    assert_eq!(sfu.room_states(dm).iter().map(|s| s.user_id).collect::<Vec<_>>(), [id(40), id(41)]);
+    assert_eq!(sfu.private_states().len(), 2);
+    assert_eq!(sfu.states(guild).len(), 1);
+    // D'un appel à un autre : le premier apprend le départ.
+    sfu.join(offer(id(41), None, group)).unwrap();
+    let tail: Vec<(Option<Id>, Option<Id>)> =
+        log.lock().unwrap().iter().rev().take(2).map(|s| (s.guild_id, s.channel_id)).collect();
+    assert_eq!(tail, [(None, Some(group)), (None, None)]);
+    assert_eq!(sfu.room_states(dm).len(), 1);
+    // D'un appel à un salon de serveur, et retour.
+    sfu.join(offer(id(40), Some(guild), voice)).unwrap();
+    assert!(sfu.room_states(dm).is_empty());
+    assert_eq!(sfu.states(guild).len(), 2);
+    sfu.join(offer(id(42), None, group)).unwrap();
+    assert_eq!(sfu.room_states(group).len(), 2);
+    assert_eq!(sfu.states(guild).len(), 1);
 }
 
 #[test]

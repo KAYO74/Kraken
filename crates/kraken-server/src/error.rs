@@ -92,6 +92,16 @@ impl From<DbError> for AppError {
                 "forbidden",
                 "Seul le propriétaire du groupe peut en retirer quelqu'un.".into(),
             ),
+            DbError::Forbidden("call_blocked") => Self(
+                StatusCode::FORBIDDEN,
+                "call_blocked",
+                "Tu as bloqué cette personne : débloque-la pour l'appeler.".into(),
+            ),
+            DbError::Forbidden("call_refused") => Self(
+                StatusCode::FORBIDDEN,
+                "call_refused",
+                "Impossible d'appeler cette personne : elle ne reçoit pas d'appel de ta part.".into(),
+            ),
             DbError::Forbidden(_) => Self::forbidden(),
             DbError::Internal(e) => {
                 tracing::error!("base : {e}");

@@ -8,7 +8,7 @@ use leptos_router::NavigateOptions;
 use leptos_router::components::Outlet;
 use leptos_router::hooks::{use_location, use_navigate};
 
-use crate::call::{CallAudio, ControlPanel, VoicePanel, VoiceUsers};
+use crate::call::{CallAudio, ControlPanel, IncomingCalls, VoicePanel, VoiceUsers};
 use crate::icons::{Icon, lu};
 use crate::store::{Conn, store};
 use crate::ui::{Avatar, Logo, initials, modal};
@@ -102,6 +102,7 @@ pub fn Shell() -> impl IntoView {
             </main>
             <CallAudio/>
             <ControlPanel/>
+            <IncomingCalls/>
         </div>
     }
 }
@@ -179,6 +180,7 @@ fn HomeSidebar() -> impl IntoView {
                     let first = c.recipients.first().cloned();
                     let group = c.kind == ChannelKind::GroupDm;
                     let count = c.recipients.len() + 1;
+                    let calling = Memo::new(move |_| !s.present(None, id).is_empty());
                     view! {
                         <a class="k-dm" href=format!("/channels/@me/{id}")
                             aria-current=move || (ids.get().1 == Some(id) || loc.pathname.get().ends_with(&id.to_string())).then_some("page")>
@@ -187,7 +189,11 @@ fn HomeSidebar() -> impl IntoView {
                                 _ => view! { <span class="k-avatar k-avatar--md" aria-hidden="true">{initials(&title)}</span> }.into_any(),
                             }}
                             <div>{title.clone()}{group.then(|| view! { <small>{format!("{count} membres")}</small> })}</div>
+                            <Show when=move || calling.get()>
+                                <span class="app-dm-call" role="img" aria-label="Appel en cours" title="Appel en cours"><Icon icon=lu::LuPhoneCall small=true/></span>
+                            </Show>
                         </a>
+                        <VoiceUsers guild=None channel=id name=title.clone() hidden=Signal::derive(|| false)/>
                     }
                 }
             </For>
@@ -264,7 +270,7 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                         aria-current=move || (ids.get().1 == Some(cid)).then_some("page")>
                                         <Icon icon=icon/><span class="k-sr">{kind}</span><span class="app-ellipsis">{name.clone()}</span>
                                     </a>
-                                    {voice.then(|| view! { <VoiceUsers guild=gid channel=cid name=name hidden=Signal::derive(hidden)/> })}
+                                    {voice.then(|| view! { <VoiceUsers guild=Some(gid) channel=cid name=name hidden=Signal::derive(hidden)/> })}
                                 }.into_any()
                             }
                         }).collect_view()}

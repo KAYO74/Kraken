@@ -225,6 +225,35 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-voice-users .k-badge { margin-left: auto; }
 .app-voice-users li[data-speaking] .k-avatar { box-shadow: 0 0 0 2px var(--success); }
 
+/* Appels des MP et des groupes (S19) : l'appel en haut de la conversation, ceux qui sonnent
+   chez moi (en bas à droite, où que je sois), et leurs traces dans le fil. */
+.app-dmcall { flex: none; display: flex; flex-direction: column; max-height: 50dvh; min-height: 0; border-bottom: 1px solid var(--border);
+  background: var(--surface-raised); }
+.app-dmcall:has(.app-stage) { flex: 3 1 0; max-height: none; }
+.app-dmcall .app-call-main { align-content: start; padding: var(--space-3) var(--space-4); }
+.app-dmcall .app-tiles { max-width: none; justify-content: center; grid-template-columns: repeat(auto-fit, var(--size-tile)); }
+.app-dmcall .k-callbar { padding: var(--space-3); }
+.app-dmcall-lobby { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-3); padding: var(--space-4); }
+.app-dmcall-lobby .app-call-icon { width: var(--space-9); height: var(--space-9); color: var(--success); }
+.app-dmcall-lobby p { margin: 0; }
+.app-dmcall-ringing { display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin: 0; padding: 0 var(--space-4) var(--space-3); }
+.app-dmcall-error { margin: 0; padding: var(--space-3) var(--space-4); text-align: center; }
+.app-dm-call { display: inline-flex; margin-left: auto; color: var(--success); }
+.app-ring { position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: var(--z-toast); display: grid; gap: var(--space-2);
+  width: min(var(--size-card), calc(100vw - 2 * var(--space-4))); }
+.app-ring-card { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-lg);
+  border: 1px solid var(--border-strong); background: var(--surface-overlay); box-shadow: var(--shadow-pop); }
+.app-ring-card > .k-avatar { animation: app-ring-pulse 1.2s var(--motion-ease) infinite; }
+.app-ring-card p { flex: 1; min-width: 10ch; margin: 0; display: grid; color: var(--text-secondary); font-size: var(--text-sm-size); }
+.app-ring-card p b { color: var(--text-strong); font-size: var(--text-base-size); }
+@keyframes app-ring-pulse { 50% { box-shadow: 0 0 0 4px var(--success); } }
+@media (prefers-reduced-motion: reduce) { .app-ring-card > .k-avatar { animation: none; box-shadow: 0 0 0 2px var(--success); } }
+.k-msg.app-callnote { align-items: center; margin-top: var(--space-3); }
+.app-callnote-icon { display: grid; place-items: center; color: var(--success); }
+.app-callnote[data-missed] .app-callnote-icon { color: var(--danger); }
+.app-callnote p { color: var(--text-secondary); }
+.app-callnote time { margin-left: var(--space-2); }
+
 /* Utilitaires */
 .app-ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-fill { flex: 1; display: grid; place-content: center; }

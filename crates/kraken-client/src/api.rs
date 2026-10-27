@@ -124,6 +124,11 @@ pub async fn voice_leave() -> ApiResult<()> {
     call(Method::DELETE, "/voice", NO_BODY).await
 }
 
+/// Ne plus faire sonner cet appel chez moi.
+pub async fn call_decline(channel: Id) -> ApiResult<()> {
+    call(Method::POST, &format!("/channels/{channel}/call/decline"), NO_BODY).await
+}
+
 pub async fn update_me(display_name: &str) -> ApiResult<User> {
     call(Method::PATCH, "/users/@me", Some(UpdateMe { display_name: Some(display_name.into()) })).await
 }

@@ -57,7 +57,8 @@ impl Default for Settings {
 /// Une demande de connexion, droits déjà vérifiés par l'appelant.
 #[derive(Clone, Debug)]
 pub struct Join {
-    pub guild_id: Id,
+    /// `None` : l'appel d'un MP ou d'un groupe (`channel_id`).
+    pub guild_id: Option<Id>,
     pub channel_id: Id,
     pub user_id: Id,
     /// Offre SDP du navigateur.
@@ -294,8 +295,10 @@ impl Sfu {
         // Sous le verrou : la boucle reçoit les ordres dans l'ordre des états.
         tx.send(Cmd::Join(Box::new(client))).map_err(|_| JoinError::Stopped)?;
         let previous = users.insert(j.user_id, Entry { session, state: state.clone() });
-        // Passé d'un serveur à un autre : l'ancien doit apprendre le départ.
-        if let Some(p) = previous.filter(|p| p.state.guild_id != j.guild_id) {
+        // Passé d'un serveur (ou d'un appel) à un autre : l'ancien doit apprendre le départ.
+        if let Some(p) = previous.filter(|p| {
+            p.state.guild_id != j.guild_id || (j.guild_id.is_none() && p.state.channel_id != Some(j.channel_id))
+        }) {
             (self.shared.notify)(left(&p.state));
         }
         (self.shared.notify)(state);
@@ -318,8 +321,22 @@ impl Sfu {
 
     /// Les états vocaux d'un serveur.
     pub fn states(&self, guild: Id) -> Vec<VoiceState> {
+        self.select(|s| s.guild_id == Some(guild))
+    }
+
+    /// Les états vocaux des appels de MP et de groupes.
+    pub fn private_states(&self) -> Vec<VoiceState> {
+        self.select(|s| s.guild_id.is_none())
+    }
+
+    /// Qui est dans ce salon (ou cet appel).
+    pub fn room_states(&self, channel: Id) -> Vec<VoiceState> {
+        self.select(|s| s.channel_id == Some(channel))
+    }
+
+    fn select(&self, keep: impl Fn(&VoiceState) -> bool) -> Vec<VoiceState> {
         let mut out: Vec<VoiceState> =
-            self.shared.lock().values().filter(|e| e.state.guild_id == guild).map(|e| e.state.clone()).collect();
+            self.shared.lock().values().filter(|e| keep(&e.state)).map(|e| e.state.clone()).collect();
         out.sort_by_key(|s| s.user_id);
         out
     }

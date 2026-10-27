@@ -4,6 +4,7 @@
 //! `kraken-core` à partir de ce que renvoie la base (pas de RLS : le serveur est le seul
 //! client de la base). Les dates sortent en millisecondes Unix.
 
+mod calls;
 mod jobs;
 mod perm;
 mod seed;
@@ -130,6 +131,7 @@ fn channel_from(r: &PgRow) -> sqlx::Result<Channel> {
 fn message_sql(filter: &str) -> String {
     format!(
         "select m.id, m.channel_id, m.content, m.nonce, m.kind, m.reply_to_id, m.mention_everyone,
+                m.call_participants, (extract(epoch from m.call_ended_at) * 1000)::int8 as call_ended_ms,
                 (extract(epoch from m.created_at) * 1000)::int8 as created_ms,
                 (extract(epoch from m.edited_at) * 1000)::int8 as edited_ms, {}, {},
                 left(r.content, {REPLY_EXCERPT}) as reply_content,
@@ -149,7 +151,14 @@ fn message_sql(filter: &str) -> String {
 }
 
 fn message_from(r: &PgRow) -> sqlx::Result<Message> {
-    let reply = match r.try_get::<&str, _>("kind")? {
+    let kind: &str = r.try_get("kind")?;
+    let call = match kind {
+        "call" => {
+            Some(CallInfo { participants: r.try_get("call_participants")?, ended_at: r.try_get("call_ended_ms")? })
+        }
+        _ => None,
+    };
+    let reply = match kind {
         "reply" => Some(Reply {
             id: r.try_get("reply_to_id")?,
             author: user_from(r, "ra")?,
@@ -169,6 +178,7 @@ fn message_from(r: &PgRow) -> sqlx::Result<Message> {
         reactions: r.try_get::<Json<Vec<Reaction>>, _>("reactions")?.0,
         mentions: r.try_get::<Json<Vec<User>>, _>("mentions")?.0,
         mention_everyone: r.try_get("mention_everyone")?,
+        call,
     })
 }
 
