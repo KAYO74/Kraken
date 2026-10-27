@@ -23,7 +23,14 @@ test('CHAT-2 un message reçu ne ramène pas en bas qui lit l’historique', asy
   await page.reload();
   await expect(messages(page).filter({ hasText: 'ancien 29' })).toBeVisible();
   const log = page.getByRole('log');
-  await log.evaluate((el) => (el.scrollTop = 0));
+  // Attendre que la liste soit descendue en bas (image suivante après l'affichage), puis remonter
+  // et laisser passer une image pour que la remontée soit prise en compte avant le message.
+  await expect.poll(() => log.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  await log.evaluate(async (el) => {
+    el.scrollTop = 0;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  });
+  expect(await log.evaluate((el) => el.scrollTop)).toBe(0);
   await as.post(`${API}/channels/${cid}/messages`, { data: { content: 'tout nouveau' } });
   await expect(messages(page).filter({ hasText: 'tout nouveau' })).toHaveCount(1);
   await page.waitForTimeout(300);
