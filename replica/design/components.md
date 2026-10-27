@@ -219,7 +219,7 @@ Carte d'application autorisée   .k-card (header + <details>)
 
 Menu contextuel                 .k-menu
   variants  éléments, séparateur, danger, raccourci, sous-menu (flèche)
-  states    survol / focus (accent), danger survol (danger-solid)
+  states    survol / focus (surface-hover, comme la carte « Mon compte » et le menu ⋯), danger survol (danger-solid)
   a11y      role="menu"/"menuitem" ; flèches, Entrée, Échap ; ouvert au clic droit et par Maj+F10
   used on   partout
 

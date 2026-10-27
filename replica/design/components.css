@@ -277,7 +277,7 @@ a:hover { text-decoration: underline; }
   display: grid; gap: 2px; z-index: var(--z-popover); }
 .k-menu [role="menuitem"] { display: flex; justify-content: space-between; align-items: center; gap: var(--space-5); padding: var(--space-3) var(--space-3);
   border-radius: var(--radius-xs); color: var(--text-secondary); font-size: var(--text-sm-size); font-weight: var(--weight-medium); cursor: pointer; }
-.k-menu [role="menuitem"]:is(:hover, :focus) { background: var(--accent); color: var(--on-accent); outline: none; }
+.k-menu [role="menuitem"]:is(:hover, :focus) { background: var(--surface-hover); color: var(--text-strong); outline: none; }
 .k-menu [role="menuitem"].is-danger { color: var(--danger); }
 .k-menu [role="menuitem"].is-danger:is(:hover, :focus) { background: var(--danger-solid); color: var(--on-danger); }
 .k-menu hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-2) var(--space-3); }
