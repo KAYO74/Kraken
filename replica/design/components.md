@@ -80,14 +80,16 @@ Mon compte                      .k-me, .k-mecard
 
 Élément de salon / catégorie    .k-channel, .k-category
   variants  texte (#), vocal, annonces, forum, privé (cadenas) ; catégorie repliable
-  states    défaut (text-faint), survol, sélectionné (aria-current), non-lu (data-unread, gras + text-strong), muet (data-muted, .5), badge mentions
+  states    défaut (text-faint), survol, sélectionné (aria-current), non-lu (data-unread, gras + text-strong), muet (data-muted : couleur text-faint sans gras, cloche barrée
+            .k-muted-icon ; plus d'opacité .5, qui faisait échouer le contraste), badge mentions
   tokens    surface-hover, text-faint → text-strong, radius md, hauteur 36
   a11y      <a> ; catégorie = <button aria-expanded> ; le type de salon est dans le nom accessible (« vocal », « privé »)
   used on   S05, S22, S23
 
 Élément MP                      .k-dm
   variants  1:1 (présence), groupe (« n membres »)
-  states    défaut, survol, sélectionné, non-lu, bouton fermer visible au survol et au focus
+  states    défaut, survol, sélectionné, non-lu (data-unread, gras + text-strong), muet (data-muted, comme un salon), badge mentions,
+            bouton fermer visible au survol et au focus
   tokens    surface-hover, text-faint, text-muted (sous-ligne)
   a11y      lien + bouton fermer séparé ; fermer est atteignable au clavier
   used on   S03
@@ -174,6 +176,13 @@ Message                         .k-msg
   tokens    text, text-strong (auteur, couleur de rôle si présente), text-faint (heure), accent-soft (mention)
   a11y      <article> avec aria-labelledby auteur ; barre d'actions role="toolbar", visible au focus ; raccourcis E/R/P du S13 ; heure dans <time datetime>
   used on   S05, S19, S24, S12 (aperçu)
+
+Nouveaux messages               .k-newline
+  variants  une seule : filet sur toute la largeur, libellé « Nouveaux messages » à droite
+  states    placée avant le premier message non lu des autres ; reste tant que le salon est ouvert, disparaît quand on écrit
+  tokens    danger (filet et texte, 4.5:1 sur surface), type xs/600
+  a11y      role="separator" avec aria-label ; le libellé visible est aria-hidden pour ne pas être lu deux fois
+  used on   S05, S19
 
 Embed                           .k-embed
   variants  lien simple, vidéo (vignette 16:9), couleur de bord (--embed-color)

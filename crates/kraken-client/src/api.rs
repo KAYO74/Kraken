@@ -186,3 +186,19 @@ pub async fn add_recipient(channel: Id, user: Id) -> ApiResult<()> {
 pub async fn leave_group(channel: Id) -> ApiResult<()> {
     call(Method::DELETE, &format!("/channels/{channel}/recipients/@me"), NO_BODY).await
 }
+
+// ───────── non-lus et notifications ─────────
+
+/// J'ai lu ce salon jusqu'à ce message.
+pub async fn ack(channel: Id, message: Id) -> ApiResult<ReadState> {
+    call(Method::POST, &format!("/channels/{channel}/ack/{message}"), NO_BODY).await
+}
+
+/// Tout le serveur lu.
+pub async fn ack_guild(guild: Id) -> ApiResult<Vec<ReadState>> {
+    call(Method::POST, &format!("/guilds/{guild}/ack"), NO_BODY).await
+}
+
+pub async fn set_notify(req: &SetNotify) -> ApiResult<NotifySetting> {
+    call(Method::PUT, "/users/@me/notifications", Some(req)).await
+}

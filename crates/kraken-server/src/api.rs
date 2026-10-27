@@ -129,6 +129,9 @@ pub async fn create_message(
     // Même pour un renvoi (même nonce) : si la diffusion avait échoué, elle a lieu cette fois ;
     // les clients ignorent un message qu'ils ont déjà.
     let audience = state.db.channel_audience(cid).await?;
+    if created {
+        crate::reads::record(&state, &m, &audience).await;
+    }
     state.hub.send(&audience, Event::MessageCreate(Box::new(m.clone())));
     Ok((if created { StatusCode::CREATED } else { StatusCode::OK }, Json(m)))
 }
@@ -160,6 +163,7 @@ pub async fn delete_message(
     state.db.delete_message(cid, mid, auth.user.id, p & perms::MANAGE_MESSAGES != 0).await?;
     let audience = state.db.channel_audience(cid).await?;
     state.hub.send(&audience, Event::MessageDelete { channel_id: cid, id: mid });
+    crate::reads::deleted(&state, cid, mid).await;
     Ok(StatusCode::NO_CONTENT)
 }
 

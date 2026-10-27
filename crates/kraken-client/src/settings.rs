@@ -1,6 +1,6 @@
-//! Réglages utilisateur (S06 à S15) dans la modale `k-settings`. Compte, Apparence et la liste
-//! des comptes bloqués (S08) sont branchés ; les autres sections ont leur route et leur place
-//! dans la navigation.
+//! Réglages utilisateur (S06 à S15) dans la modale `k-settings`. Compte, Apparence, la liste
+//! des comptes bloqués (S08) et les notifications (S09) sont branchés ; les autres sections ont
+//! leur route et leur place dans la navigation.
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -82,6 +82,7 @@ pub fn Settings() -> impl IntoView {
                         "account" => view! { <Account/> }.into_any(),
                         "appearance" => view! { <Appearance/> }.into_any(),
                         "messaging" => view! { <Messaging/> }.into_any(),
+                        "notifications" => view! { <Notifications/> }.into_any(),
                         other => {
                             let id = SECTIONS.iter().find(|s| s.1 == other).map(|s| s.3).unwrap_or("—");
                             view! { <div class="k-empty"><b>"Bientôt ici"</b>{format!("Section {id} prévue, pas encore construite.")}</div> }.into_any()
@@ -273,6 +274,58 @@ fn Messaging() -> impl IntoView {
                     </ul>
                 }.into_any()
             }}
+        </section>
+    }
+}
+
+/// S09 : notifications sur le bureau (par appareil : la permission est celle du navigateur), et
+/// où régler chaque serveur ou salon.
+#[component]
+fn Notifications() -> impl IntoView {
+    use crate::unread::{ask_permission, desktop_enabled, desktop_permission, desktop_supported, set_desktop_enabled};
+    use web_sys::NotificationPermission as P;
+    let on = RwSignal::new(desktop_enabled());
+    let note = RwSignal::new(None::<&'static str>);
+    let blocked = move || desktop_supported() && desktop_permission() == P::Denied;
+    let toggle = move |e: leptos::ev::Event| {
+        let want = event_target_checked(&e);
+        note.set(None);
+        if !want {
+            set_desktop_enabled(false);
+            on.set(false);
+            return;
+        }
+        spawn_local(async move {
+            // La question du navigateur ne vient qu'ici, après ce clic, jamais au chargement.
+            let p = if desktop_permission() == P::Granted { P::Granted } else { ask_permission().await };
+            let granted = p == P::Granted;
+            set_desktop_enabled(granted);
+            on.set(granted);
+            if !granted {
+                note.set(Some(
+                    "Ton navigateur a refusé. Autorise les notifications pour ce site dans ses réglages, puis réessaie.",
+                ));
+            }
+        });
+    };
+    view! {
+        <div class="k-setting">
+            <label for="desktop-notifs">"Notifications sur le bureau"</label>
+            <input id="desktop-notifs" type="checkbox" role="switch" class="k-switch" aria-describedby="desktop-notifs-h"
+                prop:checked=move || on.get() disabled=!desktop_supported() on:change=toggle/>
+            <p id="desktop-notifs-h">{if desktop_supported() {
+                "Quand KRAKEN n'est pas au premier plan : tes mentions, tes messages privés, et tout salon réglé sur « Tous les messages ». Un clic ouvre la conversation. Réglage propre à cet appareil."
+            } else {
+                "Ce navigateur (ou cette appli) ne sait pas afficher de notifications système. Les badges et le compteur de l'onglet restent là."
+            }}</p>
+        </div>
+        <Show when=move || note.get().is_some() || (blocked() && !on.get())>
+            <p class="k-error" role="alert">{move || note.get().unwrap_or("Les notifications sont bloquées pour ce site dans ton navigateur.")}</p>
+        </Show>
+        <section class="app-notify-help" aria-labelledby="notify-help-t">
+            <h3 id="notify-help-t" class="k-label">"Par serveur et par salon"</h3>
+            <p class="app-hint">"Clic droit sur un serveur, un salon ou une conversation (ou Maj+F10 au clavier) : « Marquer comme lu », sourdine de 15 minutes à sans fin, et ce qui te prévient : tous les messages, les mentions seulement, ou rien. La cloche en haut d'un salon ou de la liste des salons ouvre les mêmes réglages. Ils te suivent sur tous tes appareils."</p>
+            <p class="app-hint">"Le nombre de mentions en attente s'affiche aussi dans le titre de l'onglet. Alt+Maj+↑ et Alt+Maj+↓ mènent au salon non lu précédent ou suivant."</p>
         </section>
     }
 }

@@ -32,6 +32,8 @@ web-sys = { version = "0.3", features = [
     "PointerEvent", "MouseEvent", "WheelEvent", "FocusEvent", "DomRect", "MediaTrackSettings",
     # Appels de MP : la sonnerie, synthétisée.
     "OscillatorNode", "OscillatorType", "GainNode", "AudioParam", "AudioScheduledSourceNode", "AudioDestinationNode",
+    # Non-lus et notifications : focus de la fenêtre, notifications sur le bureau.
+    "VisibilityState", "Notification", "NotificationOptions", "NotificationPermission", "NodeList",
 ] }
 futures = "0.3"
 console_error_panic_hook = "0.1"

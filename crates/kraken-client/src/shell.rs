@@ -12,6 +12,7 @@ use crate::call::{CallAudio, ControlPanel, IncomingCalls, VoicePanel, VoiceUsers
 use crate::icons::{Icon, lu};
 use crate::store::{Conn, store};
 use crate::ui::{Avatar, Logo, initials, modal};
+use crate::unread::{MentionBadge, MutedMark, NotifyDialog, Target, TargetMenu, UnreadText};
 
 /// Serveur affiché d'après l'URL `/channels/{guild}/…`, `None` sur l'accueil.
 pub fn current_ids() -> Memo<(Option<Id>, Option<Id>)> {
@@ -73,6 +74,43 @@ pub fn Shell() -> impl IntoView {
         }
     };
     let ids = current_ids();
+    let notify_ui = crate::unread::provide_ui();
+    // Clic sur une notification du bureau : on va au salon.
+    let go = use_navigate();
+    Effect::new(move || {
+        if let Some(to) = s.goto.get() {
+            s.goto.set(None);
+            go(&to, Default::default());
+        }
+    });
+    // Alt+Maj+↑ ou ↓ : salon (ou conversation) non lu précédent ou suivant.
+    let jump = window_event_listener(leptos::ev::keydown, move |e| {
+        let down = match e.key().as_str() {
+            "ArrowDown" => true,
+            "ArrowUp" => false,
+            _ => return,
+        };
+        if !(e.alt_key() && e.shift_key()) {
+            return;
+        }
+        let (guild, current) = ids.get_untracked();
+        let list: Vec<kraken_proto::Channel> = match guild {
+            Some(g) => s.guild(g).map(|g| ordered(&g.channels)).unwrap_or_default(),
+            None => s.dms.get_untracked(),
+        };
+        let wanted = |c: &kraken_proto::Channel| untrack(|| s.shows_unread(c) || s.mentions(c) > 0);
+        let at = list.iter().position(|c| Some(c.id) == current);
+        let found = if down {
+            list.iter().skip(at.map_or(0, |i| i + 1)).find(|c| wanted(c))
+        } else {
+            list.iter().take(at.unwrap_or(list.len())).rev().find(|c| wanted(c))
+        };
+        if let Some(c) = found {
+            e.prevent_default();
+            s.goto.set(Some(crate::unread::href(c)));
+        }
+    });
+    on_cleanup(move || jump.remove());
 
     view! {
         <div class="app" data-drawer=move || s.drawer.get().then_some("open")>
@@ -103,6 +141,8 @@ pub fn Shell() -> impl IntoView {
             <CallAudio/>
             <ControlPanel/>
             <IncomingCalls/>
+            <TargetMenu/>
+            {move || notify_ui.dialog.get().map(|t| view! { <NotifyDialog target=t/> })}
         </div>
     }
 }
@@ -112,11 +152,21 @@ fn Rail() -> impl IntoView {
     let s = store();
     let ids = current_ids();
     let home_current = move || ids.get().0.is_none().then_some("page");
+    let u = crate::unread::ui();
+    let private = Memo::new(move |_| s.private_mentions());
+    let home_label = move || match private.get() {
+        0 => "Accueil et messages privés".to_string(),
+        1 => "Accueil et messages privés, 1 mention".to_string(),
+        n => format!("Accueil et messages privés, {n} mentions"),
+    };
     view! {
         <div class="k-rail app-rail">
             <nav class="app-rail-list" aria-label="Serveurs">
-                <a class="k-server k-server--home" href="/channels/@me" aria-label="Accueil et messages privés" aria-current=home_current>
+                <a class="k-server k-server--home" href="/channels/@me" aria-label=home_label aria-current=home_current>
                     <Logo/>
+                    <Show when=move || { private.get() > 0 }>
+                        <span class="k-badge k-badge--count" aria-hidden="true">{move || crate::unread::count_text(private.get())}</span>
+                    </Show>
                 </a>
                 <hr/>
                 <For each=move || s.guilds.get() key=|g| g.guild.id let:g>
@@ -124,10 +174,26 @@ fn Rail() -> impl IntoView {
                         let id = g.guild.id;
                         let href = format!("/channels/{id}");
                         let name = g.guild.name.clone();
+                        let badge = Memo::new(move |_| s.guild_badge(id));
+                        let label = {
+                            let name = name.clone();
+                            move || {
+                                let (unread, n) = badge.get();
+                                let mut l = format!("Serveur {name}");
+                                if unread { l.push_str(", non lu"); }
+                                match n { 0 => {}, 1 => l.push_str(", 1 mention"), n => l.push_str(&format!(", {n} mentions")) }
+                                l
+                            }
+                        };
                         view! {
-                            <a class="k-server" href=href title=name.clone() aria-label=format!("Serveur {name}")
-                                aria-current=move || (ids.get().0 == Some(id)).then_some("page")>
+                            <a class="k-server" href=href title=name.clone() aria-label=label
+                                data-unread=move || badge.get().0.then_some("")
+                                aria-current=move || (ids.get().0 == Some(id)).then_some("page")
+                                on:contextmenu=u.on_context(Target::Guild(id)) on:keydown=u.on_key(Target::Guild(id))>
                                 {initials(&name)}
+                                <Show when=move || { badge.get().1 > 0 }>
+                                    <span class="k-badge k-badge--count" aria-hidden="true">{move || crate::unread::count_text(badge.get().1)}</span>
+                                </Show>
                             </a>
                         }
                     }
@@ -181,17 +247,24 @@ fn HomeSidebar() -> impl IntoView {
                     let group = c.kind == ChannelKind::GroupDm;
                     let count = c.recipients.len() + 1;
                     let calling = Memo::new(move |_| !s.present(None, id).is_empty());
+                    let u = crate::unread::ui();
+                    let unread = Memo::new(move |_| s.channel(id).is_some_and(|c| s.shows_unread(&c)));
+                    let muted = Memo::new(move |_| s.channel(id).is_some_and(|c| s.channel_muted(&c)));
+                    let mentions = Memo::new(move |_| s.channel(id).map_or(0, |c| s.mentions(&c)));
                     view! {
                         <a class="k-dm" href=format!("/channels/@me/{id}")
+                            data-unread=move || unread.get().then_some("") data-muted=move || muted.get().then_some("")
+                            on:contextmenu=u.on_context(Target::Channel(id)) on:keydown=u.on_key(Target::Channel(id))
                             aria-current=move || (ids.get().1 == Some(id) || loc.pathname.get().ends_with(&id.to_string())).then_some("page")>
                             {match (group, first) {
                                 (false, Some(u)) => view! { <Avatar user=u size="md"/> }.into_any(),
                                 _ => view! { <span class="k-avatar k-avatar--md" aria-hidden="true">{initials(&title)}</span> }.into_any(),
                             }}
-                            <div>{title.clone()}{group.then(|| view! { <small>{format!("{count} membres")}</small> })}</div>
+                            <div>{title.clone()}<UnreadText on=unread/>{group.then(|| view! { <small>{format!("{count} membres")}</small> })}</div>
                             <Show when=move || calling.get()>
                                 <span class="app-dm-call" role="img" aria-label="Appel en cours" title="Appel en cours"><Icon icon=lu::LuPhoneCall small=true/></span>
                             </Show>
+                            <MutedMark on=muted/><MentionBadge count=mentions/>
                         </a>
                         <VoiceUsers guild=None channel=id name=title.clone() hidden=Signal::derive(|| false)/>
                     }
@@ -210,10 +283,13 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
     let ids = current_ids();
     let collapsed = RwSignal::new(Vec::<Id>::new());
     let invite_open = RwSignal::new(false);
-    // Sans les états vocaux : un micro coupé ne redessine pas toute la liste (ni ne vole le focus).
+    let u = crate::unread::ui();
+    // Sans les états vocaux ni les derniers messages : un micro coupé ou un message reçu ne
+    // redessine pas toute la liste (ni ne vole le focus).
     let g = Memo::new(move |_| {
         s.guild(guild).map(|mut g| {
             g.voice_states.clear();
+            g.channels.iter_mut().for_each(|c| c.last_message_id = None);
             g
         })
     });
@@ -237,6 +313,10 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                             <h2 title=tip>{name}</h2>
                             <button class="k-btn k-btn--icon" aria-label="Inviter des amis" title="Inviter" on:click=move |_| invite_open.set(true)>
                                 <Icon icon=lu::LuUserPlus/>
+                            </button>
+                            <button class="k-btn k-btn--icon" aria-label="Notifications du serveur" title="Notifications"
+                                on:click=move |_| u.dialog.set(Some(Target::Guild(gid)))>
+                                {move || if s.guild_muted(gid) { view! { <Icon icon=lu::LuBellOff/> } } else { view! { <Icon icon=lu::LuBell/> } }}
                             </button>
                             <a class="k-btn k-btn--icon" href=format!("/guilds/{gid}/settings") aria-label="Paramètres du serveur" title="Paramètres">
                                 <Icon icon=lu::LuSettings/>
@@ -265,10 +345,18 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                     ChannelKind::Forum => (lu::LuMessagesSquare, "forum "),
                                     _ => (lu::LuHash, ""),
                                 };
+                                let unread = Memo::new(move |_| s.channel(cid).is_some_and(|c| s.shows_unread(&c)));
+                                let muted = Memo::new(move |_| s.channel(cid).is_some_and(|c| s.channel_muted(&c)));
+                                let mentions = Memo::new(move |_| s.channel(cid).map_or(0, |c| s.mentions(&c)));
+                                let textual = c.kind.is_textual();
                                 view! {
                                     <a class="k-channel" href=format!("/channels/{gid}/{cid}") hidden=hidden
+                                        data-unread=move || unread.get().then_some("") data-muted=move || muted.get().then_some("")
+                                        on:contextmenu=move |e| if textual { u.on_context(Target::Channel(cid))(e) }
+                                        on:keydown=move |e| if textual { u.on_key(Target::Channel(cid))(e) }
                                         aria-current=move || (ids.get().1 == Some(cid)).then_some("page")>
                                         <Icon icon=icon/><span class="k-sr">{kind}</span><span class="app-ellipsis">{name.clone()}</span>
+                                        <UnreadText on=unread/><MutedMark on=muted/><MentionBadge count=mentions/>
                                     </a>
                                     {voice.then(|| view! { <VoiceUsers guild=Some(gid) channel=cid name=name hidden=Signal::derive(hidden)/> })}
                                 }.into_any()

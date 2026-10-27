@@ -180,6 +180,8 @@ async fn session(state: AppState, mut ws: WebSocket, cookie: Option<String>) {
             call_voice_states,
             private_channels,
             relationships: state.hub.with_presence(state.db.relationships(uid).await?),
+            read_states: state.db.read_states(uid).await?,
+            notify_settings: state.db.notify_settings(uid).await?,
             session_id: format!("{conn:x}"),
         })
     };

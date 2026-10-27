@@ -8,6 +8,7 @@ mod error;
 mod gateway;
 mod jobs;
 mod limit;
+mod reads;
 mod social;
 mod voice;
 
@@ -199,6 +200,18 @@ pub fn app(state: AppState) -> Router {
             limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(api::REACTIONS_PER_MIN)),
             limit::check,
         ));
+    // Messages lus : fréquents (le client les regroupe), compteur à part ; réglages de
+    // notification : même limite que le social, compteur à part.
+    let reads = Router::new()
+        .route("/channels/{id}/ack/{mid}", post(reads::ack))
+        .route("/guilds/{id}/ack", post(reads::ack_guild))
+        .route_layer(axum::middleware::from_fn_with_state(
+            limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(kraken_proto::ACKS_PER_MIN)),
+            limit::check,
+        ));
+    let notify = Router::new()
+        .route("/users/@me/notifications", put(reads::set_notify))
+        .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
     // Demandes d'ami, blocages, nouveaux MP et groupes : même limite, un compteur pour tous.
     let social_limit = axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check);
     let social = Router::new()
@@ -225,6 +238,8 @@ pub fn app(state: AppState) -> Router {
         .merge(voice_join)
         .merge(call_decline)
         .merge(reactions)
+        .merge(reads)
+        .merge(notify)
         .route("/voice", delete(voice::leave))
         .route("/health", get(api::health))
         .route("/instance", get(api::instance))

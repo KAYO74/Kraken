@@ -15,6 +15,7 @@ pub fn App() -> impl IntoView {
     provide_context(store);
     keep_connected(store);
     crate::voice::init(store);
+    crate::unread::init(store);
     settings::apply_saved_theme();
 
     view! {

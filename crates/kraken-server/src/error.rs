@@ -53,6 +53,8 @@ impl From<DbError> for AppError {
                 Self::invalid(format!("Ce groupe est complet : {MAX_GROUP_MEMBERS} personnes au plus."))
             }
             DbError::Invalid("name") => Self::invalid(format!("Le nom tient en {MAX_GROUP_NAME} caractères au plus.")),
+            DbError::Invalid("mute") => Self::invalid("Une sourdine dure de 1 minute à 30 jours, ou sans fin."),
+            DbError::Invalid("target") => Self::invalid("Un serveur ou un salon, l'un des deux."),
             DbError::Invalid(f) => Self::invalid(format!("Valeur refusée : {f}.")),
             DbError::Forbidden("banned") => {
                 Self(StatusCode::FORBIDDEN, "banned", "Tu as été banni de ce serveur.".into())

@@ -118,6 +118,9 @@ pub struct Channel {
     /// MP et groupes : les autres participants.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recipients: Vec<User>,
+    /// Le message le plus récent (non-lus : comparé à [`ReadState::last_read`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_message_id: Option<Id>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -318,6 +321,77 @@ pub struct OpenPrivate {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EditChannel {
     pub name: Option<String>,
+}
+
+// ───────── non-lus et notifications ─────────
+
+/// Où j'en suis dans un salon : le dernier message lu, et mes mentions plus récentes.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReadState {
+    pub channel_id: Id,
+    /// `None` : rien lu (tout message du salon est nouveau).
+    pub last_read: Option<Id>,
+    /// Mentions (`@moi`, `@everyone`, réponses à mes messages, tout message d'un MP) arrivées
+    /// après `last_read`.
+    pub mention_count: u32,
+}
+
+/// Messages acquittés par minute et par client (le client les regroupe).
+pub const ACKS_PER_MIN: u32 = 120;
+
+/// Ce qui prévient dans un serveur ou un salon.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NotifyLevel {
+    /// Salon : comme son serveur ; serveur : le niveau par défaut (les mentions).
+    Default,
+    All,
+    Mentions,
+    #[serde(rename = "none")]
+    Nothing,
+}
+
+/// Fin d'une sourdine sans fin (« jusqu'à ce que je la retire »).
+pub const MUTED_FOREVER: i64 = i64::MAX;
+
+/// Mon réglage de notification pour un serveur (`channel_id` absent) ou un salon.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NotifySetting {
+    pub guild_id: Option<Id>,
+    pub channel_id: Option<Id>,
+    pub level: NotifyLevel,
+    /// Serveur seulement : `@everyone` et `@here` ne comptent pas comme des mentions.
+    #[serde(default)]
+    pub suppress_everyone: bool,
+    /// Fin de la sourdine (ms) ; [`MUTED_FOREVER`] : jusqu'à ce que je la retire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub muted_until: Option<i64>,
+}
+
+/// Mettre en sourdine, ou l'enlever.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Mute {
+    Off,
+    /// Pendant ce nombre de minutes (au plus 30 jours).
+    Minutes(u32),
+    Forever,
+}
+
+/// `PUT /users/@me/notifications` : un serveur ou un salon (l'un des deux) ; les champs absents
+/// ne changent pas.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SetNotify {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<Id>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_id: Option<Id>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<NotifyLevel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suppress_everyone: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mute: Option<Mute>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -574,6 +648,12 @@ pub struct Ready {
     /// Qui est dans ces appels.
     #[serde(default)]
     pub call_voice_states: Vec<VoiceState>,
+    /// Où j'en suis dans chaque salon déjà ouvert ou qui m'a mentionné.
+    #[serde(default)]
+    pub read_states: Vec<ReadState>,
+    /// Mes réglages de notification par serveur et par salon.
+    #[serde(default)]
+    pub notify_settings: Vec<NotifySetting>,
 }
 
 /// Client → serveur.
@@ -654,6 +734,11 @@ pub enum Event {
     CallDelete {
         channel_id: Id,
     },
+    /// Salons lus (ici ou sur un autre appareil), ou compteur de mentions recalculé ; à moi
+    /// seulement.
+    ReadStateUpdate(Vec<ReadState>),
+    /// Réglage de notification changé (ici ou sur un autre appareil) ; à moi seulement.
+    NotifySettingsUpdate(NotifySetting),
 }
 
 #[cfg(test)]
@@ -704,6 +789,27 @@ mod tests {
         assert_eq!(click, serde_json::json!({"k": "button", "button": "right", "down": false}));
         assert_eq!(MouseButton::from_dom(2), Some(MouseButton::Right));
         assert_eq!(MouseButton::from_dom(7), None);
+    }
+
+    /// Réglages de notification, tels que le client les écrit.
+    #[test]
+    fn notify_settings_format() {
+        let req: SetNotify = serde_json::from_str(r#"{"guild_id":null,"channel_id":"07070707-0707-0707-0707-070707070707","level":"none","mute":{"minutes":15}}"#).unwrap();
+        assert_eq!(req.level, Some(NotifyLevel::Nothing));
+        assert_eq!(req.mute, Some(Mute::Minutes(15)));
+        assert_eq!(req.suppress_everyone, None);
+        let forever: SetNotify =
+            serde_json::from_str(r#"{"guild_id":"07070707-0707-0707-0707-070707070707","mute":"forever"}"#).unwrap();
+        assert_eq!(forever.mute, Some(Mute::Forever));
+        assert_eq!(serde_json::to_value(Mute::Off).unwrap(), "off");
+        assert_eq!(serde_json::to_value(NotifyLevel::Default).unwrap(), "default");
+        // Un salon sans dernier message l'omet ; un ancien client sans le champ reste lisible.
+        let c: Channel = serde_json::from_str(
+            r#"{"id":"07070707-0707-0707-0707-070707070707","guild_id":null,"parent_id":null,"kind":"dm","name":null,"topic":null,"position":0}"#,
+        )
+        .unwrap();
+        assert_eq!(c.last_message_id, None);
+        assert!(!serde_json::to_string(&c).unwrap().contains("last_message_id"));
     }
 
     #[test]
