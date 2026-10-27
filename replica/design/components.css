@@ -166,7 +166,8 @@ a:hover { text-decoration: underline; }
 .k-channel:hover { background: var(--surface-hover); color: var(--text-secondary); text-decoration: none; }
 .k-channel[aria-current="page"] { background: var(--surface-hover); color: var(--text-strong); }
 .k-channel[data-unread] { color: var(--text-strong); font-weight: var(--weight-semibold); }
-.k-channel[data-muted] { opacity: .5; }
+.k-channel[data-muted] { color: var(--text-faint); font-weight: var(--weight-medium); }
+.k-channel .k-muted-icon, .k-dm .k-muted-icon { flex: none; color: var(--text-faint); }
 .k-channel .k-badge--count { margin-left: auto; }
 .k-dm { display: flex; align-items: center; gap: var(--space-4); min-height: 44px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-md);
   color: var(--text-faint); cursor: pointer; --presence-ring: var(--bg); }
@@ -175,6 +176,9 @@ a:hover { text-decoration: underline; }
 .k-dm small { display: block; font-size: var(--text-xs-size); color: var(--text-muted); }
 .k-dm .k-btn--icon { margin-left: auto; visibility: hidden; }
 .k-dm:hover .k-btn--icon, .k-dm:focus-within .k-btn--icon { visibility: visible; }
+.k-dm[data-unread] { color: var(--text-strong); font-weight: var(--weight-semibold); }
+.k-dm[data-muted] { color: var(--text-faint); font-weight: var(--weight-regular); }
+.k-dm .k-badge--count { margin-left: auto; flex: none; }
 
 /* Message */
 .k-msg { position: relative; display: grid; grid-template-columns: 40px 1fr; column-gap: var(--space-5); padding: 2px var(--space-5) 2px var(--space-5);
@@ -197,6 +201,11 @@ a:hover { text-decoration: underline; }
 .k-msg:hover .k-msg-actions, .k-msg:focus-within .k-msg-actions { display: flex; }
 .k-msg-edit { grid-column: 2; }
 .k-msg-edit .k-input { height: auto; min-height: 44px; padding: var(--space-4); }
+/* Ligne « Nouveaux messages » : filet danger sur toute la largeur, libellé à droite. */
+.k-newline { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-5) var(--space-5) 0; color: var(--danger);
+  font-size: var(--text-xs-size); font-weight: var(--weight-semibold); }
+.k-newline::before { content: ""; flex: 1; border-top: 1px solid var(--danger); }
+.k-newline + .k-msg { margin-top: var(--space-2); }
 
 /* Embed, pièce jointe, réaction */
 .k-embed { max-width: 432px; margin-top: var(--space-2); padding: var(--space-4) var(--space-5); border-radius: var(--radius-sm);

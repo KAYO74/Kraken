@@ -7,6 +7,7 @@
 mod calls;
 mod jobs;
 mod perm;
+mod reads;
 mod seed;
 mod social;
 
@@ -113,7 +114,7 @@ pub(crate) fn kind_str(k: ChannelKind) -> &'static str {
     }
 }
 
-const CHANNEL_COLS: &str = "id, guild_id, parent_id, kind, name, topic, position";
+const CHANNEL_COLS: &str = "id, guild_id, parent_id, kind, name, topic, position, last_message_id";
 
 fn channel_from(r: &PgRow) -> sqlx::Result<Channel> {
     Ok(Channel {
@@ -125,6 +126,7 @@ fn channel_from(r: &PgRow) -> sqlx::Result<Channel> {
         topic: r.try_get("topic")?,
         position: r.try_get("position")?,
         recipients: vec![],
+        last_message_id: r.try_get("last_message_id")?,
     })
 }
 
@@ -874,11 +876,18 @@ impl Db {
             Some(a) if a != Some(uid) && !can_manage => return Err(DbError::Forbidden("author")),
             Some(_) => {}
         }
-        sqlx::query("delete from messages where id = $1 and channel_id = $2")
-            .bind(mid)
-            .bind(cid)
-            .execute(&self.pool)
-            .await?;
+        // Le salon garde son dernier message (la clé étrangère l'aurait effacé) : les non-lus en
+        // dépendent.
+        sqlx::query(
+            "with d as (delete from messages where id = $1 and channel_id = $2 returning channel_id)
+             update channels c set last_message_id =
+               (select id from messages where channel_id = $2 and id <> $1 order by id desc limit 1)
+             from d where c.id = d.channel_id",
+        )
+        .bind(mid)
+        .bind(cid)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 

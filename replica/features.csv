@@ -18,7 +18,7 @@ Permissions de MP par serveur et demandes de message,mp,should,yes,no,S08
 Filtre anti-spam des MP,mp,should,yes,no,S08
 Créer un serveur (avec modèles),serveurs,must,yes,partial,S21 F05 ; sans modèles ni icône
 Rejoindre via invitation (expiration et usages max),serveurs,must,yes,partial,"F06 ; expiration et usages max côté API, pas encore dans l'UI"
-Rail des serveurs avec non-lus et mentions,serveurs,must,yes,partial,S02 ; sans non-lus ni mentions
+Rail des serveurs avec non-lus et mentions,serveurs,must,yes,partial,"S02 ; point de non-lu, badge de mentions (serveurs et accueil), Marquer comme lu ; sans dossiers ni MP non lus en tuiles"
 Dossiers de serveurs,serveurs,could,yes,no,S02
 Serveurs favoris,serveurs,could,yes,no,S11 ; nitro : gratuit
 Plus de serveurs par compte (200),serveurs,could,yes,no,nitro : gratuit ; plafond réglable par l'instance
@@ -49,9 +49,9 @@ Emojis perso utilisables partout et animés,emojis,must,yes,no,nitro : gratuit
 Autocollants perso partout,emojis,should,yes,no,nitro : gratuit
 Super réactions,emojis,could,yes,no,nitro : gratuit
 GIF dans la zone de saisie,emojis,could,yes,no,S05 ; fournisseur GIF libre ou clé de l'instance
-Non-lus et accusés de lecture,notifications,must,yes,no,S13 raccourcis non-lus
-Notifications bureau et push,notifications,must,yes,no,S09
-Réglages de notif par serveur et salon,notifications,must,yes,no,S09
+Non-lus et accusés de lecture,notifications,must,yes,yes,"S02 S05 S13 ; gras, badges de mentions, ligne Nouveaux messages, lecture auto fenêtre active, synchro entre onglets et appareils, Alt+Maj+↑↓"
+Notifications bureau et push,notifications,must,yes,partial,"S09 ; bureau (API Notification du navigateur, compteur dans le titre) fait ; push mobile pas encore"
+Réglages de notif par serveur et salon,notifications,must,yes,yes,"S09 ; tous, mentions, rien ; sourdine 15 min à sans fin ; @everyone ignoré ; synchronisés"
 Boîte de réception mentions,notifications,should,yes,no,S25
 Notifications par e-mail,notifications,could,yes,no,S09
 Recherche dans les messages,recherche,should,yes,no,S26

@@ -415,3 +415,150 @@ async fn direct_and_group_messages(pool: PgPool) {
     }
     assert!(db.channel(g).await.unwrap().is_none(), "le dernier parti, le groupe disparaît");
 }
+
+/// Envoie un message comme le serveur : enregistré, puis compté chez ceux qu'il mentionne.
+async fn post(db: &Db, cid: Id, author: Id, d: Draft<'_>) -> Message {
+    let (m, _) = db.send_message(cid, author, d).await.unwrap();
+    let guild = db.channel(cid).await.unwrap().unwrap().guild_id;
+    let audience = db.channel_audience(cid).await.unwrap();
+    db.record_message(&m, guild, &audience).await.unwrap();
+    m
+}
+
+async fn state(db: &Db, uid: Id, cid: Id) -> (Option<Id>, u32) {
+    let s = db.read_state(uid, cid).await.unwrap();
+    (s.last_read, s.mention_count)
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn unread_and_mention_counts(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (a, b) = two_users(&db).await;
+    let c = db.create_user("noa", "noa@example.org", "h".into()).await.unwrap();
+    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
+    let inv = db.create_invite(g.guild.id, Some(general), a.id, 0, None).await.unwrap();
+    db.use_invite(&inv.code, b.id).await.unwrap();
+    db.use_invite(&inv.code, c.id).await.unwrap();
+    let text = |content| Draft { content, ..Default::default() };
+
+    // Un message ordinaire : non lu chez les autres, sans mention ; lu chez son auteur.
+    let m1 = post(&db, general, a.id, text("bonjour")).await;
+    assert_eq!(state(&db, a.id, general).await, (Some(m1.id), 0));
+    assert_eq!(state(&db, b.id, general).await, (None, 0));
+    let ch = db.channel(general).await.unwrap().unwrap();
+    assert_eq!(ch.last_message_id, Some(m1.id));
+
+    // @pseudo, réponse à mon message, @everyone (avec le droit) : chacun compte.
+    post(&db, general, a.id, text("@sam tu es là ?")).await;
+    let mine = post(&db, general, b.id, text("oui")).await;
+    assert_eq!(state(&db, b.id, general).await, (Some(mine.id), 0), "écrire vaut lecture");
+    post(&db, general, a.id, Draft { reply_to: Some(mine.id), ..text("parfait") }).await;
+    post(&db, general, a.id, Draft { may_mention_everyone: true, ..text("@everyone réunion") }).await;
+    post(&db, general, a.id, text("@everyone sans le droit")).await;
+    assert_eq!(state(&db, b.id, general).await.1, 2, "réponse + @everyone");
+    assert_eq!(state(&db, c.id, general).await.1, 1, "seul @everyone compte pour noa");
+
+    // Lire jusqu'au bout remet à zéro ; lire une partie garde les mentions plus récentes.
+    let last = db.channel(general).await.unwrap().unwrap().last_message_id.unwrap();
+    let r = db.ack(c.id, general, mine.id).await.unwrap();
+    assert_eq!((r.last_read, r.mention_count), (Some(mine.id), 1));
+    let r = db.ack(c.id, general, last).await.unwrap();
+    assert_eq!((r.last_read, r.mention_count), (Some(last), 0));
+    let r = db.ack(c.id, general, m1.id).await.unwrap();
+    assert_eq!(r.last_read, Some(last), "jamais en arrière");
+    assert_eq!(db.ack(c.id, general, Id::nil()).await.err(), Some(DbError::NotFound));
+
+    // Ignorer @everyone dans ce serveur : il ne compte plus.
+    let set = |guild_id, channel_id, level, suppress, mute| SetNotify {
+        guild_id,
+        channel_id,
+        level,
+        suppress_everyone: suppress,
+        mute,
+    };
+    db.set_notify(c.id, &set(Some(g.guild.id), None, None, Some(true), None)).await.unwrap();
+    post(&db, general, a.id, Draft { may_mention_everyone: true, ..text("@here encore") }).await;
+    assert_eq!(state(&db, c.id, general).await.1, 0, "@everyone ignoré");
+    post(&db, general, a.id, Draft { may_mention_everyone: true, ..text("@noa toi oui") }).await;
+    assert_eq!(state(&db, c.id, general).await.1, 1);
+    // La sourdine n'arrête pas le compteur.
+    db.set_notify(c.id, &set(None, Some(general), None, None, Some(Mute::Forever))).await.unwrap();
+    let m = post(&db, general, a.id, text("@noa en sourdine")).await;
+    assert_eq!(state(&db, c.id, general).await.1, 2);
+    // Supprimer un message pas encore lu le retire du compteur.
+    db.delete_message(general, m.id, a.id, false).await.unwrap();
+    assert_eq!(
+        db.recount_after_delete(general, m.id).await.unwrap(),
+        vec![(c.id, ReadState { channel_id: general, last_read: Some(last), mention_count: 1 })]
+    );
+    assert_ne!(db.channel(general).await.unwrap().unwrap().last_message_id, Some(m.id));
+    // Niveau « rien » sur le salon : plus de compteur.
+    let s = db.set_notify(c.id, &set(None, Some(general), Some(NotifyLevel::Nothing), None, None)).await.unwrap();
+    assert_eq!((s.guild_id, s.level), (Some(g.guild.id), NotifyLevel::Nothing));
+    post(&db, general, a.id, text("@noa et maintenant ?")).await;
+    assert_eq!(state(&db, c.id, general).await.1, 1, "niveau « rien »");
+
+    // Un compte qui a bloqué l'auteur n'est pas compté.
+    db.block(b.id, a.id).await.unwrap();
+    let before = state(&db, b.id, general).await.1;
+    post(&db, general, a.id, text("@sam bloqué")).await;
+    assert_eq!(state(&db, b.id, general).await.1, before);
+
+    // Tout le serveur lu d'un coup.
+    let states = db.ack_guild(c.id, g.guild.id).await.unwrap().unwrap();
+    assert!(states.iter().all(|s| s.mention_count == 0));
+    assert_eq!(state(&db, c.id, general).await.1, 0);
+    assert_eq!(db.ack_guild(Id::nil(), g.guild.id).await.unwrap(), None, "pas membre");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn private_messages_all_count_and_settings_persist(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (a, b) = two_users(&db).await;
+    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
+    let inv = db.create_invite(g.guild.id, Some(general), a.id, 0, None).await.unwrap();
+    db.use_invite(&inv.code, b.id).await.unwrap();
+    let (dm, _) = db.open_dm(a.id, b.id).await.unwrap();
+    let text = |content| Draft { content, ..Default::default() };
+    post(&db, dm, a.id, text("coucou")).await;
+    post(&db, dm, a.id, text("tu dors ?")).await;
+    assert_eq!(state(&db, b.id, dm).await.1, 2, "tout message d'un MP compte");
+    assert_eq!(state(&db, a.id, dm).await.1, 0);
+
+    // Réglages : un par serveur, un par salon, mis à jour en place, gardés entre appareils.
+    let mute = |m| SetNotify { guild_id: Some(g.guild.id), mute: Some(m), ..Default::default() };
+    let s = db.set_notify(b.id, &mute(Mute::Minutes(60))).await.unwrap();
+    assert_eq!(s.level, NotifyLevel::Default);
+    assert!(s.muted_until.is_some_and(|u| u > 0 && u < MUTED_FOREVER));
+    let s = db.set_notify(b.id, &mute(Mute::Forever)).await.unwrap();
+    assert_eq!(s.muted_until, Some(MUTED_FOREVER));
+    let s = db
+        .set_notify(
+            b.id,
+            &SetNotify { guild_id: Some(g.guild.id), level: Some(NotifyLevel::All), ..Default::default() },
+        )
+        .await
+        .unwrap();
+    assert_eq!((s.level, s.muted_until), (NotifyLevel::All, Some(MUTED_FOREVER)), "la sourdine reste");
+    let s = db.set_notify(b.id, &mute(Mute::Off)).await.unwrap();
+    assert_eq!(s.muted_until, None);
+    assert_eq!(db.set_notify(b.id, &mute(Mute::Minutes(0))).await.err(), Some(DbError::Invalid("mute")));
+    assert_eq!(db.set_notify(b.id, &SetNotify::default()).await.err(), Some(DbError::Invalid("target")));
+    let both = SetNotify { guild_id: Some(g.guild.id), channel_id: Some(general), ..Default::default() };
+    assert_eq!(db.set_notify(b.id, &both).await.err(), Some(DbError::Invalid("target")));
+    db.set_notify(b.id, &SetNotify { channel_id: Some(dm), mute: Some(Mute::Minutes(15)), ..Default::default() })
+        .await
+        .unwrap();
+    let all = db.notify_settings(b.id).await.unwrap();
+    assert_eq!(all.len(), 2);
+    assert_eq!(all[1].channel_id, Some(dm));
+    assert_eq!(all[1].guild_id, None);
+    // Un salon revenu au réglage de son serveur, sans sourdine, n'a plus de ligne.
+    db.set_notify(b.id, &SetNotify { channel_id: Some(dm), mute: Some(Mute::Off), ..Default::default() })
+        .await
+        .unwrap();
+    assert_eq!(db.notify_settings(b.id).await.unwrap().len(), 1);
+    assert!(db.notify_settings(a.id).await.unwrap().is_empty());
+}

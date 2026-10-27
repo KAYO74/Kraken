@@ -116,6 +116,10 @@ struct Chat {
     deleting: RwSignal<Option<Message>>,
     /// Échec d'une action (réaction, modification…), affiché au-dessus de la saisie.
     notice: RwSignal<Option<String>>,
+    /// Les messages plus récents que celui-ci (des autres) sont nouveaux : la ligne « Nouveaux
+    /// messages » se place avant le premier. Fixé à l'ouverture, ou quand un message arrive
+    /// fenêtre inactive ; effacé quand j'écris.
+    since: RwSignal<Option<Id>>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -167,8 +171,35 @@ fn ChannelView(channel: Channel) -> impl IntoView {
         picker: RwSignal::new(None),
         deleting: RwSignal::new(None),
         notice: RwSignal::new(None),
+        since: RwSignal::new(None),
     };
     provide_context(chat);
+    // Non-lus : la ligne des nouveaux messages part d'où j'en étais en ouvrant le salon.
+    let read_at = move || s.reads.with_untracked(|r| r.get(&cid).and_then(|x| x.last_read));
+    if s.unread(cid) {
+        chat.since.set(read_at());
+    }
+    s.viewing.set(Some(cid));
+    on_cleanup(move || {
+        if s.viewing.get_untracked() == Some(cid) {
+            s.viewing.set(None);
+        }
+    });
+    // Salon affiché dans une fenêtre active : il se lit tout seul (regroupé avant d'aller au
+    // serveur). Fenêtre inactive : ce qui arrive est marqué comme nouveau.
+    Effect::new(move || {
+        let focused = s.focused.get();
+        let unread = s.unread(cid) || s.reads.with(|r| r.get(&cid).is_some_and(|x| x.mention_count > 0));
+        let ready = s.logs.with(|l| l.get(&cid).is_some_and(|x| x.loaded && x.error.is_none()));
+        if !unread || !ready {
+            return;
+        }
+        if focused {
+            crate::unread::mark_channel_read(s, cid);
+        } else if chat.since.get_untracked().is_none() {
+            chat.since.set(read_at());
+        }
+    });
     // Ouverte d'office seulement là où elle tient à côté du fil.
     let members_open =
         RwSignal::new(window().match_media("(min-width: 1024px)").ok().flatten().is_some_and(|m| m.matches()));
@@ -259,6 +290,17 @@ fn ChannelView(channel: Channel) -> impl IntoView {
                             on:click=move |_| dialog.set(Some(PrivateDialog::Add))><Icon icon=lu::LuUserPlus/></button>
                     </Show>
                 } })}
+                {
+                    let u = crate::unread::ui();
+                    let label = if is_dm { "Notifications de la conversation" } else { "Notifications du salon" };
+                    let muted = Memo::new(move |_| s.channel(cid).is_some_and(|c| s.channel_muted(&c)));
+                    view! {
+                        <button class="k-btn k-btn--icon" aria-label=label title="Notifications"
+                            on:click=move |_| u.dialog.set(Some(crate::unread::Target::Channel(cid)))>
+                            {move || if muted.get() { view! { <Icon icon=lu::LuBellOff/> } } else { view! { <Icon icon=lu::LuBell/> } }}
+                        </button>
+                    }
+                }
                 <a class="k-btn k-btn--icon" href="/search" aria-label="Rechercher" title="Rechercher"><Icon icon=lu::LuSearch/></a>
                 <a class="k-btn k-btn--icon" href="/inbox" aria-label="Boîte de réception" title="Boîte de réception"><Icon icon=lu::LuInbox/></a>
             </div>
@@ -303,11 +345,11 @@ fn ChannelView(channel: Channel) -> impl IntoView {
 
 /// Clé d'une ligne du fil : elle change (et la ligne est redessinée) seulement si le message
 /// change.
-fn row_key(m: &Message, cont: bool) -> (Id, bool, u64) {
+fn row_key(m: &Message, cont: bool, first_new: bool) -> (Id, bool, bool, u64) {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     serde_json::to_string(m).unwrap_or_default().hash(&mut h);
-    (m.id, cont, h.finish())
+    (m.id, cont, first_new, h.finish())
 }
 
 #[component]
@@ -315,19 +357,27 @@ fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView
     let s = store();
     let log = Memo::new(move |_| s.logs.with(|l| l.get(&channel).cloned().unwrap_or_default()));
     let status = Memo::new(move |_| log.with(|l| (l.loaded, l.error.clone())));
+    let since = chat().since;
     let rows = Memo::new(move |_| {
+        let me = my_id();
+        let since = since.get();
+        let mut divider = false;
         log.with(|l| {
             let mut prev: Option<(Option<Id>, i64)> = None;
             l.items
                 .iter()
                 .map(|m| {
                     let author = m.author.as_ref().map(|a| a.id);
-                    let cont = m.reply.is_none()
+                    // Le premier message des autres plus récent que ma lecture ouvre les nouveaux.
+                    let first_new = !divider && since.is_some_and(|s| m.id > s) && (author.is_none() || author != me);
+                    divider |= first_new;
+                    let cont = !first_new
+                        && m.reply.is_none()
                         && m.call.is_none()
                         && prev.is_some_and(|(a, t)| a == author && author.is_some() && m.created_at - t < 7 * 60_000);
                     // Après un message d'appel, le suivant reprend son en-tête.
                     prev = if m.call.is_some() { None } else { Some((author, m.created_at)) };
-                    (m.clone(), cont)
+                    (m.clone(), cont, first_new)
                 })
                 .collect::<Vec<_>>()
         })
@@ -389,7 +439,10 @@ fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView
                         <span class="app-intro-mark" aria-hidden="true">{if is_dm { view! { <Icon icon=lu::LuMessageCircle/> } } else { view! { <Icon icon=lu::LuHash/> } }}</span>
                         <div><h2>{move || title.get()}</h2><p>{intro}</p></div>
                     </div>
-                    <For each=move || rows.get() key=|(m, cont)| row_key(m, *cont) children=move |(m, cont)| view! { <MessageRow msg=m cont=cont/> }/>
+                    <For each=move || rows.get() key=|(m, cont, new)| row_key(m, *cont, *new) children=move |(m, cont, new)| view! {
+                        {new.then(|| view! { <div class="k-newline" role="separator" aria-label="Nouveaux messages"><span aria-hidden="true">"Nouveaux messages"</span></div> })}
+                        <MessageRow msg=m cont=cont/>
+                    }/>
                     <For each=move || pending.get() key=|p| (p.nonce.clone(), p.error.clone()) children=move |p| {
                         let me = s.me.get_untracked();
                         let failed = p.error.clone();
@@ -956,6 +1009,7 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
         text.set(String::new());
         let reply = chat.replying.get_untracked().map(|m| m.id);
         chat.replying.set(None);
+        chat.since.set(None);
         send(chat.channel, t.trim().to_string(), reply, None);
     };
     let keydown = move |e: leptos::ev::KeyboardEvent| {

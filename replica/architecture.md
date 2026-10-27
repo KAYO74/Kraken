@@ -107,9 +107,10 @@ REST sous `/api/v1`, JSON, jeton `Authorization: Session <t>` (ou `Bot <t>`). Qu
 | POST /channels/{id}/messages/{mid}/threads, POST /channels/{id}/threads | fil depuis un message, post de forum | CREATE_THREADS | name, tags | channel | F10, S24 |
 | POST /channels/{id}/attachments | réserver un envoi | ATTACH_FILES | filename, size, mime | id + URL d'upload | F01 |
 | PUT /uploads/{id} | flux du fichier (disque local) ou URL S3 présignée | porteur du jeton d'upload | octets | 204 | F01 |
-| POST /channels/{id}/ack/{mid} | marquer lu | VIEW_CHANNEL | — | 204 | S02 |
+| POST /channels/{id}/ack/{mid} | marquer lu (jamais en arrière) | VIEW_CHANNEL | — | read state | S02 |
+| POST /guilds/{id}/ack | tout le serveur lu | membre | — | read states | S02 |
 | GET /users/@me/mentions | boîte de réception | user | before | messages | S25 |
-| PUT /users/@me/notifications | réglage par serveur ou salon | user | guild/channel, level, muted_until | override | S09 |
+| PUT /users/@me/notifications | réglage par serveur ou salon | membre / VIEW_CHANNEL | guild/channel, level, mute, suppress_everyone | override | S09 |
 | POST /users/@me/push | enregistrer un abonnement push | user | kind, endpoint, keys | 204 | S09 |
 | GET /guilds/{id}/messages/search | recherche from: in: has: dates | membre (salons visibles seulement) | q, filtres | résultats | S26 |
 | GET/POST/PATCH/DELETE /guilds/{id}/emojis, /stickers, /soundboard | médias perso | MANAGE_EMOJIS | nom, image | objet | S22 |
@@ -124,7 +125,7 @@ REST sous `/api/v1`, JSON, jeton `Authorization: Session <t>` (ou `Bot <t>`). Qu
 | GET /media/{key} | sert fichiers (origine séparée, `Content-Disposition`) | selon l'objet | — | octets | — |
 | GET/PATCH /admin/instance | limites, inscriptions, SMTP | admin | config | config | — |
 
-**Gateway** `GET /gateway` (WebSocket, JSON, zstd en option). Opcodes : `HELLO` (intervalle), `IDENTIFY` (jeton), `READY` (moi, serveurs, MP, réglages, read states), `HEARTBEAT/ACK`, `RESUME` (session + dernier `seq`, rejoue un tampon de 2 min), `DISPATCH` (événements numérotés), `PRESENCE_UPDATE`, `VOICE_STATE_UPDATE`, `REQUEST_MEMBERS` (liste paresseuse des gros serveurs). Événements : `MESSAGE_CREATE/UPDATE/DELETE`, `REACTION_ADD/REMOVE`, `TYPING_START`, `CHANNEL_*`, `GUILD_*`, `ROLE_*`, `MEMBER_*`, `RELATIONSHIP_*`, `PRESENCE_UPDATE`, `VOICE_STATE_UPDATE`, `VOICE_SERVER_UPDATE`, `SETTINGS_UPDATE`, `READ_STATE_UPDATE`. Chaque envoi est filtré par `VIEW_CHANNEL` du destinataire.
+**Gateway** `GET /gateway` (WebSocket, JSON, zstd en option). Opcodes : `HELLO` (intervalle), `IDENTIFY` (jeton), `READY` (moi, serveurs, MP, réglages, read states), `HEARTBEAT/ACK`, `RESUME` (session + dernier `seq`, rejoue un tampon de 2 min), `DISPATCH` (événements numérotés), `PRESENCE_UPDATE`, `VOICE_STATE_UPDATE`, `REQUEST_MEMBERS` (liste paresseuse des gros serveurs). Événements : `MESSAGE_CREATE/UPDATE/DELETE`, `REACTION_ADD/REMOVE`, `TYPING_START`, `CHANNEL_*`, `GUILD_*`, `ROLE_*`, `MEMBER_*`, `RELATIONSHIP_*`, `PRESENCE_UPDATE`, `VOICE_STATE_UPDATE`, `VOICE_SERVER_UPDATE`, `SETTINGS_UPDATE`, `READ_STATE_UPDATE`, `NOTIFY_SETTINGS_UPDATE`. Chaque envoi est filtré par `VIEW_CHANNEL` du destinataire.
 
 **Voix** : le client envoie `VOICE_STATE_UPDATE{channel_id}` → le serveur vérifie `CONNECT`, la limite du salon, puis répond `VOICE_SERVER_UPDATE{endpoint, token}` → signalisation SDP sur `wss://…/voice` → médias en UDP (ICE, DTLS-SRTP) vers le SFU. Partage d'écran = piste vidéo en simulcast (720p30 / 1080p60 / source). E2EE : groupe MLS par appel, clés transmises via la signalisation, chiffrement SFrame côté client.
 

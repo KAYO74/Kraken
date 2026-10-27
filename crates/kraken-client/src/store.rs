@@ -117,6 +117,20 @@ pub struct Store {
     /// Appels en cours dans mes MP et groupes, et qui y est.
     pub calls: RwSignal<Vec<Call>>,
     pub call_states: RwSignal<Vec<VoiceState>>,
+    /// Où j'en suis dans chaque salon (non-lus, mentions).
+    pub reads: RwSignal<HashMap<Id, ReadState>>,
+    /// Dernier message de chaque salon.
+    pub last: RwSignal<HashMap<Id, Id>>,
+    /// Mes réglages de notification.
+    pub notify: RwSignal<Vec<NotifySetting>>,
+    /// La fenêtre a le focus (et la page est visible) : le salon affiché se lit tout seul.
+    pub focused: RwSignal<bool>,
+    /// Le salon affiché, s'il y en a un.
+    pub viewing: RwSignal<Option<Id>>,
+    /// L'heure (ms), avancée chaque minute : les sourdines prennent fin d'elles-mêmes.
+    pub now: RwSignal<i64>,
+    /// Adresse où aller (clic sur une notification du bureau) ; la coquille y navigue.
+    pub goto: RwSignal<Option<String>>,
 }
 
 pub fn store() -> Store {
@@ -138,6 +152,13 @@ impl Store {
             voice: Voice::new(me),
             calls: RwSignal::new(vec![]),
             call_states: RwSignal::new(vec![]),
+            reads: RwSignal::new(HashMap::new()),
+            last: RwSignal::new(HashMap::new()),
+            notify: RwSignal::new(vec![]),
+            focused: RwSignal::new(true),
+            viewing: RwSignal::new(None),
+            now: RwSignal::new(js_sys::Date::now() as i64),
+            goto: RwSignal::new(None),
         }
     }
 
@@ -162,6 +183,9 @@ impl Store {
         self.logs.set(HashMap::new());
         self.calls.set(vec![]);
         self.call_states.set(vec![]);
+        self.reads.set(HashMap::new());
+        self.last.set(HashMap::new());
+        self.notify.set(vec![]);
     }
 
     pub fn my_id(&self) -> Option<Id> {
@@ -199,6 +223,7 @@ impl Store {
     }
 
     pub fn upsert_guild(&self, g: GuildState) {
+        self.note_last(&g.channels);
         self.guilds.update(|gs| match gs.iter_mut().find(|x| x.guild.id == g.guild.id) {
             Some(x) => *x = g,
             None => gs.push(g),
@@ -336,12 +361,18 @@ impl Store {
 
     fn apply(&self, ev: Event) {
         match ev {
-            Event::MessageCreate(m) => self.log(m.channel_id, |l| {
-                l.pending.retain(|p| Some(&p.nonce) != m.nonce.as_ref());
-                l.insert(*m);
-            }),
+            Event::MessageCreate(m) => {
+                self.arrived(&m);
+                self.log(m.channel_id, |l| {
+                    l.pending.retain(|p| Some(&p.nonce) != m.nonce.as_ref());
+                    l.insert(*m);
+                })
+            }
             Event::MessageUpdate(m) => self.log_if_open(m.channel_id, |l| l.update(*m)),
-            Event::MessageDelete { channel_id, id } => self.log_if_open(channel_id, |l| l.remove(id)),
+            Event::MessageDelete { channel_id, id } => {
+                self.log_if_open(channel_id, |l| l.remove(id));
+                self.forget_last(channel_id, id);
+            }
             Event::ReactionAdd { channel_id, message_id, user_id, emoji } => {
                 self.log_if_open(channel_id, |l| l.react(message_id, user_id, &emoji, true))
             }
@@ -349,6 +380,7 @@ impl Store {
                 self.log_if_open(channel_id, |l| l.react(message_id, user_id, &emoji, false))
             }
             Event::ChannelCreate(c) => {
+                self.note_last(std::slice::from_ref(&c));
                 // Déjà là si l'événement a croisé le READY.
                 let Some(gid) = c.guild_id else {
                     self.dms.update(|d| {
@@ -378,6 +410,9 @@ impl Store {
                 self.logs.update(|l| {
                     l.remove(&id);
                 });
+                self.reads.update(|r| {
+                    r.remove(&id);
+                });
             }
             Event::RelationshipAdd(r) | Event::RelationshipUpdate(r) => self.upsert_rel(r),
             Event::RelationshipRemove { user_id } => self.remove_rel(user_id),
@@ -401,6 +436,8 @@ impl Store {
                 self.calls.update(|cs| cs.retain(|x| x.channel_id != channel_id));
                 self.call_states.update(|c| c.retain(|x| x.channel_id != Some(channel_id)));
             }
+            Event::ReadStateUpdate(states) => states.into_iter().for_each(|r| self.merge_read(r)),
+            Event::NotifySettingsUpdate(n) => self.upsert_notify(n),
         }
     }
 }
@@ -477,6 +514,11 @@ async fn run(store: Store) {
                 store.friends.set(r.relationships);
                 store.calls.set(r.calls);
                 store.call_states.set(r.call_voice_states);
+                store.reads.set(r.read_states.into_iter().map(|x| (x.channel_id, x)).collect());
+                store.notify.set(r.notify_settings);
+                store.last.set(HashMap::new());
+                store.guilds.with_untracked(|gs| gs.iter().for_each(|g| store.note_last(&g.channels)));
+                store.dms.with_untracked(|d| store.note_last(d));
                 // Des messages ont pu passer pendant la coupure : on recharge à l'affichage.
                 store.logs.update(|l| l.values_mut().for_each(|x| x.loaded = false));
                 store.conn.set(Conn::Ready);

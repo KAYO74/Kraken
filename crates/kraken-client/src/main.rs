@@ -16,6 +16,7 @@ mod shell;
 mod social;
 mod store;
 mod ui;
+mod unread;
 mod voice;
 
 fn main() {

@@ -128,7 +128,13 @@ pub async fn entered(state: &AppState, cid: Id, me: Id, message: Option<Message>
             Calls::snapshot(cid, e)
         })
     };
-    announce(state, cid, Event::MessageCreate(Box::new(m))).await;
+    match state.db.channel_audience(cid).await {
+        Ok(audience) => {
+            crate::reads::record(state, &m, &audience).await;
+            state.hub.send(&audience, Event::MessageCreate(Box::new(m)));
+        }
+        Err(e) => tracing::warn!("appel {cid} : {e:?}"),
+    }
     if let Some(call) = call {
         announce(state, cid, Event::CallUpdate(call)).await;
     }
