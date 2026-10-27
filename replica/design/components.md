@@ -96,7 +96,7 @@ Avatar + présence               .k-avatar, .k-presence
   sizes     xs 16, sm 24, md 32, base 40, lg 80, xl 120 ; groupe empilé (could)
   forme     carré à coins doux (rayon xs → xl selon la taille), pas un disque ; la pastille de présence reste ronde
   states    en ligne (success), inactif (warning), ne pas déranger (danger), hors ligne (status-offline), en stream (status-stream), mobile (glyphe)
-  tokens    control, anneau = --presence-ring (fond du parent)
+  tokens    control (groupes, serveurs) ; une personne sans image : avatar-N / avatar-N-text (N = 1 à 8, data-tint tiré de l'id du compte, stable partout) ; anneau = --presence-ring (fond du parent)
   a11y      role="img" + aria-label « nom, statut » ; le statut n'est jamais porté par la couleur seule (forme différente par statut au build : plein, croissant, barre, creux)
   used on   partout
 
@@ -219,9 +219,15 @@ Carte d'application autorisée   .k-card (header + <details>)
 
 Menu contextuel                 .k-menu
   variants  éléments, séparateur, danger, raccourci, sous-menu (flèche)
-  states    survol / focus (accent), danger survol (danger-solid)
+  states    survol / focus (surface-hover, comme la carte « Mon compte » et le menu ⋯), danger survol (danger-solid)
   a11y      role="menu"/"menuitem" ; flèches, Entrée, Échap ; ouvert au clic droit et par Maj+F10
   used on   partout
+
+Menu « ⋯ » (plus d'actions)     MoreMenu : .app-more, .k-menu.app-more-menu, .k-menuitem
+  variants  entrée (icône + libellé), danger (.is-danger)
+  states    survol (surface-hover), danger survol (danger-solid)
+  a11y      bouton ⋯ « Plus d'actions pour <nom> » avec aria-expanded ; focus sur la 1re entrée ; Échap rend le focus au bouton ; clic ailleurs ou focus qui sort referment
+  used on   S01 cartes d'amis (retirer, bloquer : jamais au rang d'écrire et d'appeler)
 
 Info-bulle                      .k-tooltip
   a11y      role="tooltip", liée par aria-describedby ; apparaît au focus comme au survol ; jamais seul porteur d'une info

@@ -87,7 +87,64 @@ pub fn Avatar(
         };
         view! { <i class=format!("k-presence k-presence--{k}")></i> }
     });
-    view! { <span class=class role="img" aria-label=label>{initials(user.name())}{presence}</span> }
+    // Une teinte stable par compte (somme des octets de l'id), pour reconnaître les gens d'un coup d'œil.
+    let tint = (user.id.as_bytes().iter().map(|&b| u32::from(b)).sum::<u32>() % 8 + 1).to_string();
+    view! { <span class=class data-tint=tint role="img" aria-label=label>{initials(user.name())}{presence}</span> }
+}
+
+/// « Plus d'actions » : un bouton ⋯ qui déplie les actions secondaires (retirer, bloquer…), pour ne
+/// pas les mettre au rang des actions courantes. Choisir une action, Échap, un clic ailleurs ou le
+/// focus qui sort le referment. Les enfants sont des `<button class="k-menuitem">`.
+#[component]
+pub fn MoreMenu(label: String, children: Children) -> impl IntoView {
+    let open = RwSignal::new(false);
+    let wrap = NodeRef::<html::Div>::new();
+    let button = NodeRef::<html::Button>::new();
+    let menu = NodeRef::<html::Div>::new();
+    let inside = move |t: Option<web_sys::EventTarget>| {
+        t.and_then(|t| t.dyn_into::<web_sys::Node>().ok())
+            .zip(wrap.get_untracked())
+            .is_some_and(|(t, w)| w.contains(Some(&t)))
+    };
+    Effect::new(move || {
+        if open.get()
+            && let Some(first) = menu.get().and_then(|m| m.query_selector("button").ok().flatten())
+            && let Ok(h) = first.dyn_into::<web_sys::HtmlElement>()
+        {
+            let _ = h.focus();
+        }
+    });
+    let outside = window_event_listener(leptos::ev::pointerdown, move |e| {
+        if open.get_untracked() && !inside(e.target()) {
+            open.set(false);
+        }
+    });
+    on_cleanup(move || outside.remove());
+    let on_key = move |e: leptos::ev::KeyboardEvent| {
+        if e.key() == "Escape" && open.get_untracked() {
+            e.stop_propagation();
+            open.set(false);
+            if let Some(b) = button.get_untracked() {
+                let _ = b.focus();
+            }
+        }
+    };
+    let on_focusout = move |e: leptos::ev::FocusEvent| {
+        if e.related_target().is_some() && !inside(e.related_target()) {
+            open.set(false);
+        }
+    };
+    view! {
+        <div class="app-more" node_ref=wrap on:keydown=on_key on:focusout=on_focusout>
+            <button class="k-btn k-btn--icon" node_ref=button aria-label=label title="Plus"
+                aria-expanded=move || open.get().to_string() on:click=move |_| open.update(|o| *o = !*o)>
+                <Icon icon=lu::LuEllipsis/>
+            </button>
+            <div class="k-menu app-more-menu" node_ref=menu hidden=move || !open.get() on:click=move |_| open.set(false)>
+                {children()}
+            </div>
+        </div>
+    }
 }
 
 /// En-tête de la zone principale, avec le bouton du tiroir de navigation en mobile.

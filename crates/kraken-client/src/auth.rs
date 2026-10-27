@@ -8,6 +8,7 @@ use leptos_router::hooks::{use_navigate, use_params_map, use_query_map};
 
 use crate::shell::first_text;
 use crate::store::store;
+use crate::ui::Logo;
 
 /// Où aller après la connexion : `?next=` s'il pointe dans l'appli, sinon l'accueil.
 /// Un chemin local seulement : sans `\` ni caractère de contrôle ou d'espacement, que le
@@ -37,9 +38,12 @@ fn next_path() -> Memo<String> {
 fn AuthCard(title: &'static str, sub: &'static str, children: Children) -> impl IntoView {
     view! {
         <main class="app-center app-auth">
-            <div class="k-dialog app-auth-card">
-                <header><h1>{title}</h1><p class="app-hint">{sub}</p></header>
-                {children()}
+            <div class="app-auth-stack">
+                <div class="app-auth-brand"><span class="app-auth-logo"><Logo/></span>"KRAKEN"</div>
+                <div class="k-dialog app-auth-card">
+                    <header><h1>{title}</h1><p class="app-hint">{sub}</p></header>
+                    {children()}
+                </div>
             </div>
             <p class="app-hint"><a href="/privacy">"Confidentialité"</a>" · "<a href="/terms">"Conditions"</a></p>
         </main>

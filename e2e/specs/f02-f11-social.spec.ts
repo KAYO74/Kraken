@@ -84,11 +84,13 @@ test('F02-E4 refuser une demande, en annuler une autre, retirer un ami', async (
   // Amis, puis b retire a après confirmation (Échap annule d'abord).
   await befriend(api, a, b);
   await tab(b.page, 'Tous').click();
-  await b.page.getByRole('button', { name: `Retirer ${a.name} de tes amis` }).click();
+  await b.page.getByRole('button', { name: `Plus d'actions pour ${a.name}` }).click();
+  await b.page.getByRole('button', { name: 'Retirer de tes amis' }).click();
   await expect(b.page.getByRole('alertdialog')).toBeVisible();
   await b.page.keyboard.press('Escape');
   await expect(b.page.getByRole('alertdialog')).toHaveCount(0);
-  await b.page.getByRole('button', { name: `Retirer ${a.name} de tes amis` }).click();
+  await b.page.getByRole('button', { name: `Plus d'actions pour ${a.name}` }).click();
+  await b.page.getByRole('button', { name: 'Retirer de tes amis' }).click();
   await b.page.getByRole('alertdialog').getByRole('button', { name: 'Retirer' }).click();
   await expect(b.page.getByText('Pas encore d\'amis')).toBeVisible();
   await tab(a.page, 'Tous').click();
@@ -111,6 +113,7 @@ test('F11-H1 bloquer un ami : il disparaît chez lui, ne peut ni écrire ni rede
   const dm = b.page.url();
 
   await tab(a.page, 'Tous').click();
+  await a.page.getByRole('button', { name: `Plus d'actions pour ${b.name}` }).click();
   await a.page.getByRole('button', { name: `Bloquer ${b.name}` }).click();
   const dialog = a.page.getByRole('alertdialog', { name: `Bloquer ${b.name} ?` });
   await a11y(a.page);
