@@ -311,3 +311,38 @@ async fn friend_requests_are_rate_limited(pool: PgPool) {
     // Lire sa liste n'est pas limité.
     assert_eq!(lou.call(Method::GET, "/users/@me/relationships", None).await.0, 200);
 }
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn owner_leaving_hands_the_group_on(pool: PgPool) {
+    let base = spawn(pool.clone(), 1000).await;
+    let lou = Who::new(&base, "lou").await;
+    let sam = Who::new(&base, "sam").await;
+    let noa = Who::new(&base, "noa").await;
+    let ilan = Who::new(&base, "ilan").await;
+    for f in [&sam, &noa, &ilan] {
+        lou.befriend(f).await;
+    }
+    let g: Channel = serde_json::from_value(lou.open(&[&sam, &noa], None).await.1).unwrap();
+    let member = |who: &Who| format!("/channels/{}/recipients/{}", g.id, who.user.id);
+    let leave = format!("/channels/{}/recipients/@me", g.id);
+    // Ordre d'arrivée : lou, sam, ilan, noa (retirée puis rajoutée).
+    assert_eq!(lou.call(Method::PUT, &member(&ilan), None).await.0, 204);
+    assert_eq!(lou.call(Method::DELETE, &member(&noa), None).await.0, 204);
+    assert_eq!(lou.call(Method::PUT, &member(&noa), None).await.0, 204);
+
+    // Le propriétaire part : le plus ancien membre restant (sam) le remplace.
+    assert_eq!(lou.call(Method::DELETE, &leave, None).await.0, 204);
+    assert_eq!(lou.call(Method::DELETE, &member(&sam), None).await.0, 404);
+    assert_eq!(noa.call(Method::DELETE, &member(&ilan), None).await.0, 403);
+    let mut noa_gw = noa.gateway().await;
+    assert_eq!(sam.call(Method::DELETE, &member(&noa), None).await.0, 204);
+    assert_eq!(noa_gw.next().await, Event::ChannelDelete { id: g.id });
+    assert_eq!(noa.say(g.id, "encore là ?").await, 404);
+
+    // Le dernier parti, le groupe disparaît.
+    assert_eq!(sam.call(Method::DELETE, &leave, None).await.0, 204);
+    assert_eq!(ilan.call(Method::DELETE, &leave, None).await.0, 204);
+    let left: i64 =
+        sqlx::query_scalar("select count(*) from channels where id = $1").bind(g.id).fetch_one(&pool).await.unwrap();
+    assert_eq!(left, 0);
+}
