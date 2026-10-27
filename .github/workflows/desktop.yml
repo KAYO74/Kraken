@@ -103,6 +103,22 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      # Notes de la version (docs/releases/<tag>.md, si le fichier existe), puis l'installation.
+      - if: steps.version.outputs.exists != '1'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          notes="$RUNNER_TEMP/notes.md"
+          if [ -f "docs/releases/$TAG.md" ]; then cat "docs/releases/$TAG.md"; echo; echo '## Installer'; echo; fi > "$notes"
+          cat >> "$notes" <<'EOF'
+          KRAKEN de bureau : au premier lancement, rejoins un serveur (son adresse ou un lien d'invitation) ou héberge le tien sur cet ordinateur en un clic.
+
+          - Windows : `.msi` ou `-setup.exe`
+          - macOS (Intel et Apple Silicon) : `.dmg`
+          - Linux : `.AppImage`, `.deb` (Debian, Ubuntu) ou `.rpm` (Fedora)
+
+          Les installateurs ne sont pas encore signés : Windows affiche un avertissement SmartScreen (« Informations complémentaires », puis « Exécuter quand même ») et macOS bloque le premier lancement : Réglages Système, Confidentialité et sécurité, « Ouvrir quand même ».
+          EOF
       - if: steps.version.outputs.exists != '1'
         uses: softprops/action-gh-release@v2
         with:
@@ -111,11 +127,4 @@ jobs:
           name: KRAKEN ${{ steps.version.outputs.tag }}
           files: dist/**/*
           generate_release_notes: true
-          body: |
-            KRAKEN de bureau : au premier lancement, rejoins un serveur (son adresse ou un lien d'invitation) ou héberge le tien sur cet ordinateur en un clic.
-
-            - Windows : `.msi` ou `-setup.exe`
-            - macOS (Intel et Apple Silicon) : `.dmg`
-            - Linux : `.AppImage`, `.deb` (Debian, Ubuntu) ou `.rpm` (Fedora)
-
-            Les installateurs ne sont pas encore signés : Windows affiche un avertissement SmartScreen (« Informations complémentaires », puis « Exécuter quand même ») et macOS bloque le premier lancement : Réglages Système, Confidentialité et sécurité, « Ouvrir quand même ».
+          body_path: ${{ runner.temp }}/notes.md
