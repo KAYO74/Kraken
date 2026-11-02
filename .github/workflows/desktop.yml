@@ -20,7 +20,9 @@ jobs:
         include:
           - { os: ubuntu-22.04, name: linux, target: '' }
           - { os: windows-latest, name: windows, target: '' }
-          - { os: macos-latest, name: macos, target: universal-apple-darwin }
+          # Un .dmg par puce : Apple (M1, M2…) et Intel, chacun construit et testé sur sa puce.
+          - { os: macos-latest, name: macos-apple, target: aarch64-apple-darwin }
+          - { os: macos-15-intel, name: macos-intel, target: x86_64-apple-darwin }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -64,10 +66,10 @@ jobs:
               release/kraken-desktop.exe --self-test
               ;;
             macOS)
-              for bin in universal-apple-darwin/release/bundle/macos/*.app/Contents/MacOS/*; do
+              for bin in ${{ matrix.target }}/release/bundle/macos/*.app/Contents/MacOS/*; do
+                # Rien de Homebrew : absent des Mac des gens, l'appli n'y démarrerait pas.
+                if otool -L "$bin" | grep -E '/opt/homebrew|/usr/local'; then echo "$bin dépend de Homebrew"; exit 1; fi
                 "$bin" --self-test
-                # La tranche Intel aussi, si Rosetta est là.
-                if arch -x86_64 /usr/bin/true 2> /dev/null; then arch -x86_64 "$bin" --self-test; fi
               done
               ;;
           esac
@@ -82,6 +84,37 @@ jobs:
             apps/desktop/target/**/release/bundle/msi/*.msi
             apps/desktop/target/**/release/bundle/nsis/*.exe
             apps/desktop/target/**/release/bundle/dmg/*.dmg
+      # La commande du README, comme chez quelqu'un : le .dmg de sa puce dans Téléchargements, en
+      # quarantaine et déjà ouvert par Safari, zsh, sans Homebrew ; l'appli doit démarrer et rester ouverte.
+      - name: Installation macOS (commande du README)
+        if: runner.os == 'macOS'
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -eu
+          chip=${{ matrix.target == 'aarch64-apple-darwin' && 'Apple' || 'Intel' }}
+          dmg=~/Downloads/KRAKEN-macOS-$chip.dmg
+          cp apps/desktop/target/${{ matrix.target }}/release/bundle/dmg/*.dmg "$dmg"
+          xattr -w com.apple.quarantine "0083;$(printf %x "$(date +%s)");Safari;" "$dmg"
+          hdiutil attach -quiet "$dmg"
+          awk -v m="Puce $chip" 'index($0, m) == 1 {f = 1} f && /^```sh/ {g = 1; next} g && /^```/ {exit} g' README.md > "$RUNNER_TEMP/cmd.sh"
+          cat "$RUNNER_TEMP/cmd.sh"
+          test -s "$RUNNER_TEMP/cmd.sh"
+          hidden=""
+          for d in /opt/homebrew /usr/local/opt /usr/local/Cellar; do
+            if [ -e "$d" ]; then sudo mv "$d" "$d.off"; hidden="$hidden $d"; fi
+          done
+          trap 'for d in $hidden; do sudo mv "$d.off" "$d"; done' EXIT
+          zsh -c "$(cat "$RUNNER_TEMP/cmd.sh")"
+          sleep 15
+          if ! pgrep -f /Applications/KRAKEN.app/Contents/MacOS/ > /dev/null; then
+            echo "KRAKEN ne tourne pas"
+            f=$(ls -t ~/Library/Logs/DiagnosticReports/ | head -1)
+            [ -n "$f" ] && head -c 3000 ~/Library/Logs/DiagnosticReports/"$f"
+            exit 1
+          fi
+          if xattr -lr /Applications/KRAKEN.app | grep -q quarantine; then echo "quarantaine restée"; exit 1; fi
+          pkill -f /Applications/KRAKEN.app/Contents/MacOS/ || true
 
   release:
     if: github.event_name == 'push'
@@ -109,7 +142,8 @@ jobs:
           mkdir out
           find dist -type f | while read -r f; do
             case "$f" in
-              *.dmg) n=KRAKEN-macOS.dmg ;;
+              *_aarch64.dmg) n=KRAKEN-macOS-Apple.dmg ;;
+              *_x64.dmg) n=KRAKEN-macOS-Intel.dmg ;;
               *-setup.exe) n=KRAKEN-Windows.exe ;;
               *.msi) n=KRAKEN-Windows.msi ;;
               *.AppImage) n=KRAKEN-Linux.AppImage ;;
@@ -120,7 +154,7 @@ jobs:
             mv "$f" "out/$n"
           done
           ls out
-          test "$(ls out | wc -l)" -eq 6
+          test "$(ls out | wc -l)" -eq 7
       # Notes de la version (docs/releases/<tag>.md, si le fichier existe), puis comment installer.
       - if: steps.version.outputs.exists != '1'
         env:
