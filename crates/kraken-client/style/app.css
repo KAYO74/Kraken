@@ -384,11 +384,15 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-dm-item { display: flex; align-items: center; border-radius: var(--radius-md); }
 .app-dm-item:hover { background: var(--surface-hover); }
 .app-dm-item > .k-dm { flex: 1; min-width: 0; }
-.app-dm-close { flex: none; width: 28px; height: 28px; margin-right: var(--space-2); visibility: hidden; }
+.app-dm-close { flex: none; width: calc(var(--size-icon) + 2 * var(--space-2)); height: calc(var(--size-icon) + 2 * var(--space-2)); margin-right: var(--space-2); visibility: hidden; }
 .app-dm-item:hover .app-dm-close, .app-dm-item:focus-within .app-dm-close { visibility: visible; }
 @media (hover: none) { .app-dm-close { visibility: visible; } }
 
 /* Membres d'un groupe privé : la couronne du propriétaire, et le menu ⋯ à droite. */
 .app-owner { flex: none; margin-left: var(--space-2); color: var(--warning); vertical-align: middle; }
 .app-members .k-dm > .app-more { margin-left: auto; overflow: visible; }
-@media (hover: none) { .app-members .k-dm .k-btn--icon { visibility: visible; } }
+/* Invisible au repos mais focalisable : Tab l'atteint et l'affiche (la ligne n'a rien d'autre à focaliser). */
+.app-members .k-dm .app-more > .k-btn--icon { visibility: visible; opacity: 0; }
+.app-members .k-dm:is(:hover, :focus-within) .app-more > .k-btn--icon,
+.app-members .app-more > .k-btn--icon[aria-expanded="true"] { opacity: 1; }
+@media (hover: none) { .app-members .k-dm .k-btn--icon { visibility: visible; opacity: 1; } }

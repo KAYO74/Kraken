@@ -56,8 +56,11 @@ test('groupe-H1 le propriétaire a une couronne et peut retirer un membre', asyn
   await expect(bMembers.getByRole('listitem')).toHaveCount(3);
   await expect(bMembers.getByRole('button', { name: /Plus d'actions/ })).toHaveCount(0);
 
-  await members.getByRole('listitem').filter({ hasText: b.name }).hover();
-  await members.getByRole('button', { name: `Plus d'actions pour ${b.name}` }).click();
+  // Au clavier : le ⋯ est invisible au repos mais doit rester focalisable.
+  const more = members.getByRole('button', { name: `Plus d'actions pour ${b.name}` });
+  await more.focus();
+  await expect(more).toBeFocused();
+  await a.page.keyboard.press('Enter');
   await members.getByRole('button', { name: 'Retirer du groupe' }).click();
   const confirm = a.page.getByRole('alertdialog', { name: new RegExp(`Retirer ${b.name} du groupe`) });
   await expect(confirm).toBeVisible();
