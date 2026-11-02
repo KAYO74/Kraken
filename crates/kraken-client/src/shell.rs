@@ -13,6 +13,7 @@ use crate::icons::{Icon, lu};
 use crate::store::{Conn, store};
 use crate::ui::{Avatar, Logo, initials, modal};
 use crate::unread::{MentionBadge, MutedMark, NotifyDialog, Target, TargetMenu, UnreadText};
+use crate::update::{UpdateEntry, UpdateTile, Updater};
 
 /// Serveur affiché d'après l'URL `/channels/{guild}/…`, `None` sur l'accueil.
 pub fn current_ids() -> Memo<(Option<Id>, Option<Id>)> {
@@ -151,6 +152,8 @@ pub fn Shell() -> impl IntoView {
 fn Rail() -> impl IntoView {
     let s = store();
     let ids = current_ids();
+    // Appli de bureau : veille des mises à jour (la tuile, et l'entrée de « Mon compte »).
+    provide_context(Updater::start());
     let home_current = move || ids.get().0.is_none().then_some("page");
     let u = crate::unread::ui();
     let private = Memo::new(move |_| s.private_mentions());
@@ -205,6 +208,7 @@ fn Rail() -> impl IntoView {
                     <Icon icon=lu::LuCompass/>
                 </a>
             </nav>
+            <UpdateTile/>
             <Me/>
         </div>
     }
@@ -574,6 +578,7 @@ fn Me() -> impl IntoView {
                     <a class="k-mecard-item" href="/settings/appearance" on:click=picked>
                         <Icon icon=lu::LuPalette/>"Apparence"
                     </a>
+                    <UpdateEntry me_open=open/>
                     <hr/>
                     <button class="k-mecard-item is-danger" on:click={ let leave = leave.clone(); leave }>
                         <Icon icon=lu::LuLogOut/>"Se déconnecter"

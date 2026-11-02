@@ -40,7 +40,7 @@ fn main() {
     embed_vc_runtime();
     // Les commandes de l'appli passent par l'ACL : seule la page locale a droit aux quatre
     // premières (capabilities/default.json) ; celles du contrôle à distance, seulement la page de
-    // l'instance (capacité ajoutée au lancement, `remote.rs`).
+    // l'instance (capacité ajoutée au lancement, `remote.rs`) ; `update_status` et `update_install`, de même.
     let manifest = tauri_build::AppManifest::new().commands(&[
         "join",
         "host_start",
@@ -49,6 +49,8 @@ fn main() {
         "remote_begin",
         "remote_input",
         "remote_end",
+        "update_status",
+        "update_install",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest)).expect("tauri-build");
 }

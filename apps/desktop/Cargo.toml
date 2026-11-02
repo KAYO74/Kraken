@@ -1,7 +1,7 @@
 [package]
 name = "kraken-desktop"
 description = "KRAKEN pour Windows, macOS et Linux : rejoindre une instance, ou en héberger une sur cet ordinateur"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/KAYO74/Kraken"
@@ -37,6 +37,11 @@ rand = "0.9"
 # Contrôle à distance : la question posée hors de la page, et la saisie simulée (X11 sous Linux,
 # sans libxdo ; SendInput sous Windows ; CGEvent sous macOS).
 tauri-plugin-dialog = "2.8"
+# Mises à jour : vérifiées (signature minisign) et installées dans l'appli ; sans `latest.json`
+# signé, `update.rs` se rabat sur l'API GitHub et ouvre la page de téléchargement.
+tauri-plugin-updater = "2"
+semver = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 enigo = "0.6"
 
 # Linux : réglages de WebKitGTK pour le vocal (même version que wry).
