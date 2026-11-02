@@ -18,7 +18,8 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = [
     "Storage", "Window", "Document", "Element", "HtmlElement", "KeyboardEvent", "Location", "Navigator", "Clipboard",
-    "HtmlInputElement", "HtmlDocument", "MediaQueryList",
+    "HtmlInputElement", "File", "FileList", "Blob", "Url", "HtmlCanvasElement", "CanvasRenderingContext2d",
+    "HtmlImageElement", "HtmlDocument", "MediaQueryList",
     # Messages : saisie (curseur, autocomplétion), saut vers un message.
     "HtmlTextAreaElement", "Node", "ScrollIntoViewOptions", "ScrollLogicalPosition", "ScrollBehavior",
     # Salons vocaux : WebRTC, micro, partage d'écran.

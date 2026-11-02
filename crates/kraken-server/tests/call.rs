@@ -20,6 +20,7 @@ fn config(ring_secs: u64) -> Config {
     Config {
         addr: "127.0.0.1:0".into(),
         web_dir: "/nonexistent".into(),
+        data_dir: std::env::temp_dir().join("kraken-test-data").to_string_lossy().into(),
         database_url: String::new(),
         public_url: "http://127.0.0.1:8080/".into(),
         smtp_url: None,

@@ -146,14 +146,7 @@ fn Account() -> impl IntoView {
         });
     };
     view! {
-        {move || s.me.get().map(|u| view! {
-            <div class="k-card app-account">
-                <header>
-                    <Avatar user=u.clone() size="lg"/>
-                    <div><b class="text-strong">{u.name().to_string()}</b><div class="type-sm text-muted">{format!("@{}", u.username)}</div></div>
-                </header>
-            </div>
-        })}
+        <div class="k-card app-account"><crate::avatar::AvatarBlock/></div>
         <form class="k-setting app-name-form" on:submit=save_name>
             <label for="display-name">"Nom affiché"</label>
             <p id="display-name-h">{move || format!("Ce que les autres voient. Ton pseudo unique @{} ne change pas : il reste écrit en dessous.", username())}</p>

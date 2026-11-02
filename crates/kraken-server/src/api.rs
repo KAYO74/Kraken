@@ -130,6 +130,13 @@ pub async fn create_message(
     // les clients ignorent un message qu'ils ont déjà.
     let audience = state.db.channel_audience(cid).await?;
     if created {
+        // Un MP fermé par son destinataire revient dans sa liste avant le message.
+        let reopened = state.db.reopen_dm(cid).await?;
+        for u in reopened {
+            if let Some(c) = state.db.private_channel(cid, u).await? {
+                state.hub.send(&[u], Event::ChannelCreate(c));
+            }
+        }
         crate::reads::record(&state, &m, &audience).await;
     }
     state.hub.send(&audience, Event::MessageCreate(Box::new(m.clone())));

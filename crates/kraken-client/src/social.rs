@@ -278,6 +278,8 @@ pub enum Confirm {
     RemoveFriend(User),
     Block(User),
     LeaveGroup(Channel),
+    /// Le propriétaire retire quelqu'un d'un groupe.
+    RemoveMember(Channel, User),
 }
 
 /// Confirmer un retrait d'ami, un blocage ou un départ de groupe.
@@ -307,6 +309,14 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
             "Tu ne verras plus ce groupe ni ses messages. Pour y revenir, il faudra qu'un membre t'y ajoute.".to_string(),
             "Quitter le groupe",
         ),
+        Confirm::RemoveMember(c, u) => (
+            format!("Retirer {} du groupe ?", u.name()),
+            format!(
+                "Cette personne ne verra plus « {} » ni ses messages. Tu pourras l'y ajouter de nouveau plus tard.",
+                private_title(c)
+            ),
+            "Retirer du groupe",
+        ),
     };
     let what = StoredValue::new(what);
     let confirm = move |e: leptos::ev::SubmitEvent| {
@@ -319,6 +329,7 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                 Confirm::RemoveFriend(u) => crate::api::remove_relationship(u.id).await.map(|()| None),
                 Confirm::Block(u) => crate::api::set_relationship(u.id, RelationshipKind::Blocked).await.map(Some),
                 Confirm::LeaveGroup(c) => crate::api::leave_group(c.id).await.map(|()| None),
+                Confirm::RemoveMember(c, u) => crate::api::remove_member(c.id, u.id).await.map(|()| None),
             };
             match done {
                 // Fermer d'abord : la suite peut retirer l'écran qui porte ce dialogue.
@@ -331,6 +342,9 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                             navigate("/channels/@me", Default::default());
                             s.dms.update(|d| d.retain(|x| x.id != c.id));
                         }
+                        Confirm::RemoveMember(c, u) => s.dms.update(|d| {
+                            d.iter_mut().filter(|x| x.id == c.id).for_each(|x| x.recipients.retain(|r| r.id != u.id))
+                        }),
                     }
                 }
                 Err(e) => {

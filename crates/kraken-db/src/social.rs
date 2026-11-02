@@ -274,7 +274,14 @@ impl Db {
         if me == other {
             return Err(DbError::Invalid("self"));
         }
-        if self.user(other).await?.is_none() {
+        // Un compte en cours de suppression ne reçoit plus de MP, même déjà ouvert.
+        let active: bool = sqlx::query_scalar(
+            "select exists(select 1 from users where id = $1 and deleted_at is null and deletion_requested_at is null)",
+        )
+        .bind(other)
+        .fetch_one(&self.pool)
+        .await?;
+        if !active {
             return Err(DbError::NotFound);
         }
         match self.blocks(me, other).await? {
@@ -324,14 +331,55 @@ impl Db {
         };
         sqlx::query(
             "insert into channel_recipients (channel_id, user_id) select $1, unnest($2::uuid[])
-             on conflict (channel_id, user_id) do update set closed = false",
+             on conflict (channel_id, user_id) do nothing",
         )
         .bind(cid)
         .bind(vec![me, other])
         .execute(&mut *tx)
         .await?;
+        // Je le rouvre pour moi ; l'autre ne le retrouve qu'à son prochain message.
+        sqlx::query("update channel_recipients set closed = false where channel_id = $1 and user_id = $2 and closed")
+            .bind(cid)
+            .bind(me)
+            .execute(&mut *tx)
+            .await?;
         tx.commit().await?;
         Ok((cid, created))
+    }
+
+    /// Ferme un MP pour moi seul : il quitte ma liste, et y revient dès qu'un message arrive
+    /// ou que je le rouvre. `NotFound` si je n'en fais pas partie, `Invalid("kind")` pour un groupe
+    /// (qu'on quitte, qu'on ne ferme pas).
+    pub async fn close_dm(&self, cid: Id, me: Id) -> Result<()> {
+        let kind: Option<String> = sqlx::query_scalar(
+            "select c.kind from channels c join channel_recipients cr on cr.channel_id = c.id
+             where c.id = $1 and cr.user_id = $2 and c.guild_id is null",
+        )
+        .bind(cid)
+        .bind(me)
+        .fetch_optional(&self.pool)
+        .await?;
+        match kind.as_deref() {
+            None => return Err(DbError::NotFound),
+            Some("dm") => {}
+            Some(_) => return Err(DbError::Invalid("kind")),
+        }
+        sqlx::query("update channel_recipients set closed = true where channel_id = $1 and user_id = $2")
+            .bind(cid)
+            .bind(me)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Rouvre, chez ceux qui l'avaient fermé, le MP où un message vient d'arriver ; rend ceux-là.
+    pub async fn reopen_dm(&self, cid: Id) -> Result<Vec<Id>> {
+        Ok(sqlx::query_scalar(
+            "update channel_recipients set closed = false where channel_id = $1 and closed returning user_id",
+        )
+        .bind(cid)
+        .fetch_all(&self.pool)
+        .await?)
     }
 
     /// Nouveau groupe avec ces amis (de 2 à [`MAX_GROUP_MEMBERS`] − 1), dont je suis le
@@ -427,6 +475,7 @@ impl Db {
         if row(&mut tx, me, target).await?.as_deref() != Some("friend") {
             return Err(DbError::Forbidden("not_friend"));
         }
+        active_user(&mut tx, target).await?;
         if count as usize >= MAX_GROUP_MEMBERS {
             return Err(DbError::Invalid("group_full"));
         }

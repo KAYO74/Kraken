@@ -114,19 +114,22 @@ pub(crate) fn kind_str(k: ChannelKind) -> &'static str {
     }
 }
 
-const CHANNEL_COLS: &str = "id, guild_id, parent_id, kind, name, topic, position, last_message_id";
+const CHANNEL_COLS: &str = "id, guild_id, parent_id, kind, name, topic, position, last_message_id, owner_id";
 
 fn channel_from(r: &PgRow) -> sqlx::Result<Channel> {
+    let kind = kind_from(r.try_get("kind")?);
     Ok(Channel {
         id: r.try_get("id")?,
         guild_id: r.try_get("guild_id")?,
         parent_id: r.try_get("parent_id")?,
-        kind: kind_from(r.try_get("kind")?),
+        kind,
         name: r.try_get("name")?,
         topic: r.try_get("topic")?,
         position: r.try_get("position")?,
         recipients: vec![],
         last_message_id: r.try_get("last_message_id")?,
+        // Seuls les groupes ont un propriétaire visible (dans un MP, ce n'est qu'un détail interne).
+        owner_id: if kind == ChannelKind::GroupDm { r.try_get("owner_id")? } else { None },
     })
 }
 
@@ -251,6 +254,26 @@ impl Db {
             Some(r) => user_from(&r, "u")?,
             None => None,
         })
+    }
+
+    /// Pose (ou retire, avec `None`) la clé de l'avatar ; rend l'utilisateur à jour et l'ancienne
+    /// clé, dont le fichier est à supprimer.
+    pub async fn set_avatar(&self, id: Id, key: Option<&str>) -> Result<(User, Option<String>)> {
+        let mut tx = self.pool.begin().await?;
+        let old: Option<Option<String>> =
+            sqlx::query_scalar("select avatar_key from users where id = $1 and deleted_at is null for update")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let old = old.ok_or(DbError::NotFound)?;
+        let r =
+            sqlx::query(&format!("update users as u set avatar_key = $2 where u.id = $1 returning {}", user_cols("u")))
+                .bind(id)
+                .bind(key)
+                .fetch_one(&mut *tx)
+                .await?;
+        tx.commit().await?;
+        Ok((user_from(&r, "u")?.ok_or(DbError::NotFound)?, old))
     }
 
     pub async fn set_display_name(&self, id: Id, name: Option<&str>) -> Result<User> {
@@ -423,7 +446,8 @@ impl Db {
     /// Demande de suppression : le compte est fermé tout de suite (sessions révoquées,
     /// connexion refusée) et anonymisé par la tâche `account_purge` après le délai de grâce.
     /// Ses serveurs sans autre membre disparaissent ; les autres passent au plus ancien membre.
-    pub async fn request_deletion(&self, uid: Id) -> Result<()> {
+    /// Ses amis, demandes et blocages disparaissent aussitôt ; rend qui prévenir.
+    pub async fn request_deletion(&self, uid: Id) -> Result<Notices> {
         let mut tx = self.pool.begin().await?;
         // La ligne verrouillée d'abord : un `create_guild` concurrent attend, puis voit le compte fermé.
         sqlx::query("update users set deletion_requested_at = now() where id = $1").bind(uid).execute(&mut *tx).await?;
@@ -444,14 +468,26 @@ impl Db {
             .bind(uid)
             .execute(&mut *tx)
             .await?;
+        // Un compte fermé ne reste l'ami de personne : on retire les deux sens.
+        let others: Vec<Id> = sqlx::query_scalar(
+            "delete from relationships where user_id = $1 or target_id = $1
+             returning case when user_id = $1 then target_id else user_id end",
+        )
+        .bind(uid)
+        .fetch_all(&mut *tx)
+        .await?;
         tx.commit().await?;
-        Ok(())
+        let mut others = others;
+        others.sort_unstable();
+        others.dedup();
+        Ok(others.into_iter().map(|o| (o, Event::RelationshipRemove { user_id: uid })).collect())
     }
 
     /// Anonymise les comptes dont la demande de suppression a plus de `grace_days` jours :
     /// identité, e-mail, mot de passe, profil et liens effacés ; les messages restent sous
     /// « compte supprimé ».
-    pub async fn purge_deleted_accounts(&self, grace_days: i32) -> Result<u64> {
+    /// Rend le nombre de comptes et les clés d'avatar dont le fichier est à supprimer.
+    pub async fn purge_deleted_accounts(&self, grace_days: i32) -> Result<(u64, Vec<String>)> {
         let mut tx = self.pool.begin().await?;
         let ids: Vec<Id> = sqlx::query_scalar(
             "select id from users where deletion_requested_at < now() - make_interval(days => $1) and deleted_at is null for update",
@@ -459,6 +495,11 @@ impl Db {
         .bind(grace_days)
         .fetch_all(&mut *tx)
         .await?;
+        let avatars: Vec<String> =
+            sqlx::query_scalar("select avatar_key from users where id = any($1) and avatar_key is not null")
+                .bind(&ids)
+                .fetch_all(&mut *tx)
+                .await?;
         for table in ["sessions", "auth_tokens", "relationships", "connections", "user_settings", "members"] {
             sqlx::query(&format!("delete from {table} where user_id = any($1)")).bind(&ids).execute(&mut *tx).await?;
         }
@@ -474,7 +515,7 @@ impl Db {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
-        Ok(ids.len() as u64)
+        Ok((ids.len() as u64, avatars))
     }
 
     // ───────── serveurs ─────────
@@ -484,7 +525,7 @@ impl Db {
     pub async fn create_guild(&self, owner: Id, name: &str) -> Result<GuildState> {
         let name = name.trim();
         if !(2..=100).contains(&name.chars().count()) {
-            return Err(DbError::Invalid("name"));
+            return Err(DbError::Invalid("guild_name"));
         }
         let mut tx = self.pool.begin().await?;
         // FOR SHARE : sérialisé avec `request_deletion`, un compte fermé ne crée plus rien.

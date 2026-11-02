@@ -3,6 +3,7 @@
 
 mod api;
 mod auth;
+mod avatar;
 mod call;
 mod error;
 mod gateway;
@@ -34,6 +35,8 @@ pub const DEMO_PASSWORD: &str = "kraken-demo";
 pub struct Config {
     pub addr: String,
     pub web_dir: String,
+    /// Dossier des fichiers envoyés (photos de profil), à sauvegarder avec la base.
+    pub data_dir: String,
     pub database_url: String,
     /// Adresse publique de l'instance, pour les liens des e-mails ; `https://` active les
     /// cookies `Secure`.
@@ -71,6 +74,7 @@ impl Config {
             public_url,
             addr,
             web_dir: var("KRAKEN_WEB_DIR").unwrap_or_else(|| "crates/kraken-client/dist".into()),
+            data_dir: var("KRAKEN_DATA_DIR").unwrap_or_else(|| "./data".into()),
             database_url: var("DATABASE_URL").unwrap_or_else(|| "postgres://kraken:kraken@127.0.0.1/kraken".into()),
             smtp_url: var("KRAKEN_SMTP_URL"),
             smtp_from,
@@ -200,6 +204,11 @@ pub fn app(state: AppState) -> Router {
             limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(api::REACTIONS_PER_MIN)),
             limit::check,
         ));
+    // Photo de profil : un envoi coûte un décodage d'image ; même limite que les connexions,
+    // compteur à part. Le corps fait jusqu'à MAX_AVATAR_BYTES, que le gestionnaire borne lui-même.
+    let avatars = Router::new()
+        .route("/users/@me/avatar", put(avatar::set).delete(avatar::remove))
+        .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
     // Messages lus : fréquents (le client les regroupe), compteur à part ; réglages de
     // notification : même limite que le social, compteur à part.
     let reads = Router::new()
@@ -227,7 +236,7 @@ pub fn app(state: AppState) -> Router {
             "/users/@me/channels",
             get(social::private_channels).merge(post(social::open_private).route_layer(social_limit.clone())),
         )
-        .route("/channels/{id}", patch(social::edit_channel))
+        .route("/channels/{id}", patch(social::edit_channel).delete(social::close_channel))
         .route(
             "/channels/{id}/recipients/{uid}",
             put(social::add_recipient).route_layer(social_limit).delete(social::remove_recipient),
@@ -240,6 +249,8 @@ pub fn app(state: AppState) -> Router {
         .merge(reactions)
         .merge(reads)
         .merge(notify)
+        .merge(avatars)
+        .route("/avatars/{key}", get(avatar::get))
         .route("/voice", delete(voice::leave))
         .route("/health", get(api::health))
         .route("/instance", get(api::instance))

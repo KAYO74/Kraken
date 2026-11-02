@@ -277,6 +277,10 @@ fn ChannelView(channel: Channel) -> impl IntoView {
                 })}
                 {is_dm.then(|| view! { <StartCall channel=cid blocked=other_blocked/> })}
                 {(kind == ChannelKind::GroupDm).then(|| view! {
+                    <button class="k-btn k-btn--icon" aria-label="Liste des membres" title="Membres"
+                        aria-expanded=move || members_open.get().to_string() on:click=move |_| members_open.update(|v| *v = !*v)>
+                        <Icon icon=lu::LuUsers/>
+                    </button>
                     <button class="k-btn k-btn--icon" aria-label="Ajouter des amis au groupe" title="Ajouter des amis"
                         on:click=move |_| dialog.set(Some(PrivateDialog::Add))><Icon icon=lu::LuUserPlus/></button>
                     <button class="k-btn k-btn--icon" aria-label="Renommer le groupe" title="Renommer"
@@ -323,6 +327,7 @@ fn ChannelView(channel: Channel) -> impl IntoView {
                 })}
             </section>
             {(!is_dm).then(|| view! { <Show when=move || members_open.get()><Members guild=channel.guild_id.unwrap()/></Show> })}
+            {(kind == ChannelKind::GroupDm).then(|| view! { <Show when=move || members_open.get()><GroupMembers channel=cid/></Show> })}
         </div>
         {move || chat.deleting.get().map(|m| view! { <DeleteDialog msg=m/> })}
         {move || dialog.get().map(|d| {
@@ -1109,7 +1114,7 @@ fn Members(guild: Id) -> impl IntoView {
         <aside class="app-aside app-aside--members" aria-label="Membres">
             <h2 class="k-category">"Membres "<span class="k-badge k-badge--neutral">{move || members().len()}</span></h2>
             <ul class="app-members">
-                <For each=members key=|m| (m.user.id, m.user.display_name.clone(), m.nick.clone()) let:m>
+                <For each=members key=|m| (m.user.id, m.user.display_name.clone(), m.user.avatar.clone(), m.nick.clone()) let:m>
                     <li class="k-dm">
                         <Avatar user=m.user.clone() size="md"/>
                         <div class="app-ellipsis">
@@ -1120,5 +1125,59 @@ fn Members(guild: Id) -> impl IntoView {
                 </For>
             </ul>
         </aside>
+    }
+}
+
+/// Membres d'un groupe privé : une couronne pour le propriétaire, qui peut retirer les autres.
+#[component]
+fn GroupMembers(channel: Id) -> impl IntoView {
+    use crate::social::{Confirm, ConfirmDialog};
+    use crate::ui::MoreMenu;
+    let s = store();
+    let removing = RwSignal::new(None::<User>);
+    let owner = Memo::new(move |_| s.channel(channel).and_then(|c| c.owner_id));
+    let members = Memo::new(move |_| {
+        let mut v: Vec<User> = s.me.get().into_iter().collect();
+        v.extend(s.channel(channel).map(|c| c.recipients).unwrap_or_default());
+        v
+    });
+    let i_own = move || owner.get().is_some() && owner.get() == my_id();
+    view! {
+        <aside class="app-aside app-aside--members" aria-label="Membres du groupe">
+            <h2 class="k-category">"Membres "<span class="k-badge k-badge--neutral">{move || members.with(Vec::len)}</span></h2>
+            <ul class="app-members">
+                <For each=move || members.get() key=move |u| (u.id, u.display_name.clone(), u.avatar.clone(), owner.get(), i_own()) let:u>
+                    {
+                        let is_owner = owner.get() == Some(u.id);
+                        let removable = i_own() && Some(u.id) != my_id();
+                        let name = u.name().to_string();
+                        let target = u.clone();
+                        view! {
+                            <li class="k-dm">
+                                <Avatar user=u.clone() size="md"/>
+                                <div class="app-ellipsis">
+                                    {name.clone()}
+                                    {is_owner.then(|| view! {
+                                        <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" (propriétaire)"</span></span>
+                                    })}
+                                    <small>{format!("@{}", u.username)}</small>
+                                </div>
+                                {removable.then(|| view! {
+                                    <MoreMenu label=format!("Plus d'actions pour {name}")>
+                                        <button class="k-menuitem is-danger" on:click=move |_| removing.set(Some(target.clone()))>
+                                            <Icon icon=lu::LuUserMinus/>"Retirer du groupe"
+                                        </button>
+                                    </MoreMenu>
+                                })}
+                            </li>
+                        }
+                    }
+                </For>
+            </ul>
+        </aside>
+        {move || removing.get().and_then(|u| {
+            let c = untrack(|| s.channel(channel))?;
+            Some(view! { <ConfirmDialog what=Confirm::RemoveMember(c, u) close=Callback::new(move |()| removing.set(None))/> })
+        })}
     }
 }

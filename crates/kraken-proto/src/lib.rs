@@ -121,6 +121,9 @@ pub struct Channel {
     /// Le message le plus récent (non-lus : comparé à [`ReadState::last_read`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_message_id: Option<Id>,
+    /// Groupes : son propriétaire, seul à pouvoir en retirer quelqu'un.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<Id>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -303,6 +306,12 @@ pub struct SetRelationship {
 
 /// Personnes au plus dans un groupe privé, soi compris.
 pub const MAX_GROUP_MEMBERS: usize = 10;
+
+/// Poids maximal d'une photo de profil envoyée, en octets (8 Mio).
+pub const MAX_AVATAR_BYTES: usize = 8 * 1024 * 1024;
+
+/// Côté, en pixels, de la photo de profil telle que le serveur la garde.
+pub const AVATAR_SIZE: u32 = 256;
 
 /// Longueur maximale du nom d'un groupe, en caractères.
 pub const MAX_GROUP_NAME: usize = 100;

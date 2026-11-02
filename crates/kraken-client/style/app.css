@@ -357,3 +357,38 @@ button.app-reply:hover span { color: var(--text-strong); }
 .k-menu [role="menuitem"] { width: 100%; border: 0; background: none; font-family: inherit; text-align: left; }
 .app-notify { display: grid; gap: var(--space-6); }
 .app-notify .k-setting { padding: 0; border: 0; }
+
+/* Photo de profil : bloc des réglages et fenêtre de recadrage */
+.app-avatar-edit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-6); }
+.app-avatar-side { display: grid; gap: var(--space-3); min-width: 0; }
+.app-avatar-side p { margin: 0; }
+.app-avatar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.app-file:focus-visible + .k-btn { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.app-crop { display: grid; grid-template-columns: minmax(0, 20rem) auto; justify-content: center; align-items: start; gap: var(--space-7); }
+.app-crop-main { display: grid; gap: var(--space-4); }
+.app-crop-stage { position: relative; aspect-ratio: 1; overflow: hidden; border-radius: var(--radius-xl); background: var(--media); touch-action: none; }
+.app-crop-stage canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.app-crop-stage canvas:active { cursor: grabbing; }
+.app-crop-stage canvas:focus-visible { outline-offset: -4px; }
+.app-crop-frame { position: absolute; inset: 10%; border-radius: var(--radius-xl); border: 2px solid var(--text-strong); pointer-events: none;
+  box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--media) 60%, transparent); }
+.app-range { width: 100%; accent-color: var(--accent); }
+.app-crop-previews { display: flex; flex-direction: column; align-items: center; gap: var(--space-5); }
+.app-crop-previews figure { display: grid; justify-items: center; gap: var(--space-2); margin: 0; }
+@media (max-width: 640px) {
+  .app-crop { grid-template-columns: minmax(0, 1fr); }
+  .app-crop-previews { flex-direction: row; justify-content: center; align-items: flex-end; }
+}
+
+/* Fermer un MP : la croix apparaît au survol et au focus (toujours là sur écran tactile). */
+.app-dm-item { display: flex; align-items: center; border-radius: var(--radius-md); }
+.app-dm-item:hover { background: var(--surface-hover); }
+.app-dm-item > .k-dm { flex: 1; min-width: 0; }
+.app-dm-close { flex: none; width: 28px; height: 28px; margin-right: var(--space-2); visibility: hidden; }
+.app-dm-item:hover .app-dm-close, .app-dm-item:focus-within .app-dm-close { visibility: visible; }
+@media (hover: none) { .app-dm-close { visibility: visible; } }
+
+/* Membres d'un groupe privé : la couronne du propriétaire, et le menu ⋯ à droite. */
+.app-owner { flex: none; margin-left: var(--space-2); color: var(--warning); vertical-align: middle; }
+.app-members .k-dm > .app-more { margin-left: auto; overflow: visible; }
+@media (hover: none) { .app-members .k-dm .k-btn--icon { visibility: visible; } }
