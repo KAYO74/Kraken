@@ -24,6 +24,10 @@ jobs:
           - { os: macos-latest, name: macos-apple, target: aarch64-apple-darwin }
           - { os: macos-15-intel, name: macos-intel, target: x86_64-apple-darwin }
     runs-on: ${{ matrix.os }}
+    # Clé de signature des mises à jour (secrets du dépôt) ; absente, les paquets ne sont pas signés.
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - if: runner.os == 'Linux'
@@ -46,10 +50,19 @@ jobs:
         shell: bash
         run: sh scripts/build-client.sh release
       - run: npm install -g @tauri-apps/cli@2
+      # Mises à jour dans l'appli : paquets signés (.sig) seulement si le secret de signature existe ;
+      # sans lui, la construction reste la même et l'appli propose un téléchargement à la main.
       - name: tauri build
         working-directory: apps/desktop
         shell: bash
-        run: tauri build ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+        run: |
+          set -eu
+          config=""
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo '{"bundle":{"createUpdaterArtifacts":true}}' > updater-config.json
+            config="--config updater-config.json"
+          fi
+          tauri build ${{ matrix.target && format('--target {0}', matrix.target) || '' }} $config
       # PostgreSQL et le serveur démarrent pour de vrai, avec le client livré dans le paquet.
       - name: Self-test
         shell: bash
@@ -73,11 +86,32 @@ jobs:
               done
               ;;
           esac
+      # Paquets de mise à jour sous leurs noms fixes (Release) : l'.app.tar.gz de macOS, et la
+      # signature (.sig) de l'installateur NSIS (Windows) ou de l'AppImage (Linux), qui servent eux-mêmes.
+      - name: Paquets de mise à jour
+        if: env.TAURI_SIGNING_PRIVATE_KEY != ''
+        shell: bash
+        run: |
+          set -eu
+          b=apps/desktop/target
+          mkdir -p "$b/updater"
+          one() { f=$(ls $1 | head -1); test -f "$f"; cp "$f" "$b/updater/$2"; }
+          case "$RUNNER_OS" in
+            Linux) one "$b/release/bundle/appimage/*.AppImage.sig" KRAKEN-Linux.AppImage.sig ;;
+            Windows) one "$b/release/bundle/nsis/*-setup.exe.sig" KRAKEN-Windows.exe.sig ;;
+            macOS)
+              n=${{ matrix.target == 'aarch64-apple-darwin' && 'Apple' || 'Intel' }}
+              one "$b/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz" "KRAKEN-macOS-$n.app.tar.gz"
+              one "$b/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig" "KRAKEN-macOS-$n.app.tar.gz.sig"
+              ;;
+          esac
+          ls "$b/updater"
       - uses: actions/upload-artifact@v4
         with:
           name: kraken-${{ matrix.name }}
           if-no-files-found: error
           path: |
+            apps/desktop/target/updater/*
             apps/desktop/target/**/release/bundle/deb/*.deb
             apps/desktop/target/**/release/bundle/rpm/*.rpm
             apps/desktop/target/**/release/bundle/appimage/*.AppImage
@@ -153,8 +187,11 @@ jobs:
             esac
             mv "$f" "out/$n"
           done
+          # Paquets de mise à jour (déjà sous leur nom fixe), présents si la construction était signée.
+          find dist -type f -path '*/updater/*' | while read -r f; do mv "$f" "out/$(basename "$f")"; done
           ls out
-          test "$(ls out | wc -l)" -eq 7
+          n=$(ls out | wc -l)
+          if ls out/*.sig > /dev/null 2>&1; then test "$n" -eq 13; else test "$n" -eq 7; fi
       # Notes de la version (docs/releases/<tag>.md, si le fichier existe), puis comment installer.
       - if: steps.version.outputs.exists != '1'
         env:
@@ -163,6 +200,38 @@ jobs:
           notes="$RUNNER_TEMP/notes.md"
           if [ -f "docs/releases/$TAG.md" ]; then cat "docs/releases/$TAG.md"; echo; fi > "$notes"
           sed "s/@TAG@/$TAG/g" docs/releases/installer.md >> "$notes"
+      # latest.json : ce que lit l'appli (tauri-plugin-updater). Seulement si les paquets sont signés.
+      - if: steps.version.outputs.exists != '1'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          if ls out/*.sig > /dev/null 2>&1; then
+            python3 - <<'PY'
+          import json, os, datetime
+          tag, repo = os.environ["TAG"], os.environ["REPO"]
+          base = f"https://github.com/{repo}/releases/download/{tag}"
+          sig = lambda n: open(f"out/{n}.sig").read().strip()
+          # Plateforme -> fichier à télécharger (sa signature : <fichier>.sig).
+          files = {
+              "darwin-aarch64": "KRAKEN-macOS-Apple.app.tar.gz",
+              "darwin-x86_64": "KRAKEN-macOS-Intel.app.tar.gz",
+              "windows-x86_64": "KRAKEN-Windows.exe",
+              "linux-x86_64": "KRAKEN-Linux.AppImage",
+          }
+          notes = ""
+          if os.path.exists(f"docs/releases/{tag}.md"):
+              notes = open(f"docs/releases/{tag}.md").read().strip()
+          data = {
+              "version": tag.lstrip("v"),
+              "notes": notes,
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": {p: {"signature": sig(n), "url": f"{base}/{n}"} for p, n in files.items()},
+          }
+          json.dump(data, open("out/latest.json", "w"), indent=2, ensure_ascii=False)
+          PY
+            cat out/latest.json
+          fi
       - if: steps.version.outputs.exists != '1'
         uses: softprops/action-gh-release@v2
         with:

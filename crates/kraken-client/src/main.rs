@@ -19,6 +19,7 @@ mod social;
 mod store;
 mod ui;
 mod unread;
+mod update;
 mod voice;
 
 fn main() {

@@ -270,7 +270,7 @@ fn send(msg: &VoiceClientMsg) {
 }
 
 /// L'appli de bureau KRAKEN : sa fonction `invoke`, absente d'un navigateur.
-fn tauri() -> Option<(JsValue, js_sys::Function)> {
+pub fn tauri() -> Option<(JsValue, js_sys::Function)> {
     let internals = js_sys::Reflect::get(&window(), &"__TAURI_INTERNALS__".into()).ok().filter(|v| v.is_object())?;
     let invoke = js_sys::Reflect::get(&internals, &"invoke".into()).ok()?.dyn_into().ok()?;
     Some((internals, invoke))

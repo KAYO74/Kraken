@@ -13,6 +13,7 @@ mod host;
 mod media;
 mod remote;
 mod selftest;
+mod update;
 
 use std::fs;
 use std::net::IpAddr;
@@ -226,9 +227,12 @@ fn main() {
     let app = tauri::Builder::default()
         .manage(Hosting::default())
         .manage(remote::Remote::default())
+        .manage(update::Updates::default())
         // Seulement pour la fenêtre native du contrôle à distance : aucune page n'a droit à ses
         // commandes (aucune capacité ne les cite).
         .plugin(tauri_plugin_dialog::init())
+        // Les commandes du plugin ne sont dans aucune capacité : la page n'appelle que `update_*`.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             join,
             host_start,
@@ -236,7 +240,9 @@ fn main() {
             host_open,
             remote::remote_begin,
             remote::remote_input,
-            remote::remote_end
+            remote::remote_end,
+            update::update_status,
+            update::update_install
         ])
         .setup(|app| {
             let saved = saved(app.handle());
@@ -330,6 +336,15 @@ fn main() {
             #[cfg(windows)]
             app.manage(SecureOrigin(insecure.clone()));
             media::prepare(&builder.build()?, insecure.is_some());
+            // Au lancement puis toutes les 6 h ; la page lit le résultat par `update_status`.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                loop {
+                    update::refresh(&handle, true).await;
+                    tokio::time::sleep(update::EVERY).await;
+                }
+            });
             Ok(())
         })
         .build(context)
