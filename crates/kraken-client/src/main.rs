@@ -8,6 +8,7 @@ mod avatar;
 mod call;
 mod chat;
 mod emoji;
+mod files;
 mod home;
 mod icons;
 mod legal;

@@ -41,6 +41,8 @@ pub struct Pending {
     pub error: Option<String>,
     /// En réponse à ce message.
     pub reply_to: Option<Id>,
+    /// Fichiers déjà envoyés, joints à ce message.
+    pub files: Vec<Attachment>,
 }
 
 #[derive(Clone, Default, PartialEq)]

@@ -13,6 +13,7 @@ use wasm_bindgen::JsCast;
 
 use crate::call::{DmCall, StartCall, VoiceRoom};
 use crate::emoji::EmojiPicker;
+use crate::files::{self, MessageMedia, Tray, TrayView, Viewer, ViewerState};
 use crate::icons::{Icon, lu};
 use crate::markdown::Body;
 use crate::shell::first_text;
@@ -120,6 +121,12 @@ struct Chat {
     /// messages » se place avant le premier. Fixé à l'ouverture, ou quand un message arrive
     /// fenêtre inactive ; effacé quand j'écris.
     since: RwSignal<Option<Id>>,
+    /// Fichiers en attente d'être joints au prochain message.
+    tray: Tray,
+    /// Un fichier est tenu au-dessus du fil (calque de dépôt).
+    dragging: RwSignal<bool>,
+    /// Visionneuse d'images ouverte.
+    viewer: RwSignal<Option<ViewerState>>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -172,8 +179,12 @@ fn ChannelView(channel: Channel) -> impl IntoView {
         deleting: RwSignal::new(None),
         notice: RwSignal::new(None),
         since: RwSignal::new(None),
+        tray: files::new_tray(),
+        dragging: RwSignal::new(false),
+        viewer: RwSignal::new(None),
     };
     provide_context(chat);
+    on_cleanup(move || files::dispose_tray(chat.tray));
     // Non-lus : la ligne des nouveaux messages part d'où j'en étais en ouvrant le salon.
     let read_at = move || s.reads.with_untracked(|r| r.get(&cid).and_then(|x| x.last_read));
     if s.unread(cid) {
@@ -225,6 +236,45 @@ fn ChannelView(channel: Channel) -> impl IntoView {
         });
     };
     let close_dialog = Callback::new(move |()| dialog.set(None));
+
+    // Glisser des fichiers sur le fil : un calque dit où ils iront. Le compteur absorbe les
+    // dragenter/dragleave des éléments enfants.
+    let depth = StoredValue::new(0i32);
+    let drop_place = Signal::derive(move || if is_dm { title.get() } else { format!("#{}", title.get()) });
+    let carries_files = |e: &web_sys::DragEvent| {
+        e.data_transfer().is_some_and(|dt| {
+            let types = dt.types();
+            (0..types.length()).any(|i| types.get(i).as_string().as_deref() == Some("Files"))
+        })
+    };
+    let on_drag_enter = move |e: web_sys::DragEvent| {
+        if other_blocked.get_untracked() || !carries_files(&e) {
+            return;
+        }
+        e.prevent_default();
+        depth.update_value(|d| *d += 1);
+        chat.dragging.set(true);
+    };
+    let on_drag_over = move |e: web_sys::DragEvent| {
+        if !other_blocked.get_untracked() && carries_files(&e) {
+            e.prevent_default();
+        }
+    };
+    let on_drag_leave = move |_: web_sys::DragEvent| {
+        depth.update_value(|d| *d = (*d - 1).max(0));
+        if depth.get_value() == 0 {
+            chat.dragging.set(false);
+        }
+    };
+    let on_drop = move |e: web_sys::DragEvent| {
+        depth.set_value(0);
+        chat.dragging.set(false);
+        if other_blocked.get_untracked() || !carries_files(&e) {
+            return;
+        }
+        e.prevent_default();
+        files::add_files(chat.tray, cid, files::files_of(e.data_transfer().and_then(|d| d.files())), chat.notice);
+    };
 
     // Charger l'historique à l'ouverture, et après une reconnexion.
     Effect::new(move || {
@@ -310,7 +360,8 @@ fn ChannelView(channel: Channel) -> impl IntoView {
             </div>
         </Header>
         <div class="app-body">
-            <section class="app-chat" aria-label=label>
+            <section class="app-chat" aria-label=label on:dragenter=on_drag_enter on:dragover=on_drag_over
+                on:dragleave=on_drag_leave on:drop=on_drop>
                 {is_dm.then(|| view! { <DmCall channel=cid/> })}
                 <MessageList channel=cid title=title.into() is_dm=is_dm/>
                 <Show when=move || other_blocked.get() fallback=move || view! { <Composer placeholder=place/> }>
@@ -321,6 +372,7 @@ fn ChannelView(channel: Channel) -> impl IntoView {
                     </div>
                     <Show when=move || unblock_error.get().is_some()><p class="k-error app-compose-note" role="alert">{move || unblock_error.get()}</p></Show>
                 </Show>
+                <files::DropOverlay dragging=chat.dragging place=drop_place/>
                 {move || chat.picker.get().map(|p| {
                     let title = if matches!(p, Pick::React(_)) { "Réagir avec un emoji" } else { "Insérer un emoji" };
                     view! { <EmojiPicker title=title on_pick=on_pick on_close=on_close/> }
@@ -330,6 +382,7 @@ fn ChannelView(channel: Channel) -> impl IntoView {
             {(kind == ChannelKind::GroupDm).then(|| view! { <Show when=move || members_open.get()><GroupMembers channel=cid/></Show> })}
         </div>
         {move || chat.deleting.get().map(|m| view! { <DeleteDialog msg=m/> })}
+        {move || chat.viewer.get().map(|st| view! { <Viewer state=st viewer=chat.viewer/> })}
         {move || dialog.get().map(|d| {
             use crate::social::{Confirm, ConfirmDialog, PeoplePicker, PickFor, RenameGroup};
             let c = untrack(|| s.channel(cid))?;
@@ -416,7 +469,7 @@ fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView
     let retry = move |p: Pending| {
         s.log(channel, |l| l.pending.retain(|x| x.nonce != p.nonce));
         // Même nonce : si le premier envoi était arrivé, le serveur renvoie ce message-là.
-        send(channel, p.content, p.reply_to, Some(p.nonce));
+        send(channel, p.content, p.reply_to, Some(p.nonce), p.files);
     };
     let forget = move |nonce: String| s.log(channel, |l| l.pending.retain(|x| x.nonce != nonce));
     let intro = move || {
@@ -458,7 +511,8 @@ fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView
                                 {me.clone().map(|u| view! { <Avatar user=u/> })}
                                 <div>
                                     <header><b>{me.map(|u| u.name().to_string())}</b><time>{if failed.is_some() { "pas envoyé" } else { "envoi…" }}</time></header>
-                                    <Body content=p.content.clone() mentions=vec![] everyone=false guild=None/>
+                                    {(!p.content.is_empty()).then(|| view! { <Body content=p.content.clone() mentions=vec![] everyone=false guild=None/> })}
+                                    {(!p.files.is_empty()).then(|| view! { <files::Attachments channel=channel files=p.files.clone() viewer=chat().viewer/> })}
                                     {failed.map(|e| view! {
                                         <p class="k-error" role="alert">{e}" "
                                             <button class="k-btn k-btn--link" on:click=move |_| retry(again.clone())>"Réessayer"</button>" · "
@@ -557,7 +611,10 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
     let reply = msg.reply.clone().map(|r| match (r.id, r.author.clone()) {
         (Some(rid), author) => {
             let who = author.map(|a| a.name().to_string()).unwrap_or_else(|| "Compte supprimé".into());
-            let excerpt = kraken_core::markdown::summary(&r.content);
+            let mut excerpt = kraken_core::markdown::summary(&r.content);
+            if excerpt.is_empty() {
+                excerpt = "Fichier joint".into();
+            }
             let label = format!("Aller au message d'origine, de {who}");
             view! {
                 <button type="button" class="k-reply app-reply" aria-label=label title=excerpt.clone() on:click=move |_| jump(chat, rid)>
@@ -633,7 +690,9 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
                 } else {
                     let m = body.get_value();
                     let edited = m.edited_at.map(|e| view! { <span class="app-edited" title=format!("Modifié le {}", when(e))>"(édité)"</span> });
-                    view! { <Body content=m.content mentions=m.mentions everyone=m.mention_everyone guild=chat.guild/>{edited} }.into_any()
+                    let media = m.clone();
+                    let text = (!m.content.is_empty()).then(|| view! { <Body content=m.content mentions=m.mentions everyone=m.mention_everyone guild=chat.guild/>{edited} });
+                    view! { {text}<MessageMedia msg=media mine=mine viewer=chat.viewer notice=chat.notice/> }.into_any()
                 }}
                 {reaction_bar}
             </div>
@@ -879,12 +938,22 @@ fn nonce() -> String {
 
 /// Envoi optimiste : le message apparaît grisé, puis est remplacé par le MESSAGE_CREATE du
 /// gateway (même nonce) ou par la réponse REST si le gateway est en retard.
-fn send(channel: Id, content: String, reply_to: Option<Id>, again: Option<String>) {
+fn send(
+    channel: Id,
+    content: String,
+    reply_to: Option<Id>,
+    again: Option<String>,
+    files: Vec<kraken_proto::Attachment>,
+) {
     let s = store();
     let n = again.unwrap_or_else(nonce);
-    s.log(channel, |l| l.pending.push(Pending { nonce: n.clone(), content: content.clone(), error: None, reply_to }));
+    let refs: Vec<kraken_proto::AttachmentRef> =
+        files.iter().map(|a| kraken_proto::AttachmentRef { id: a.id, alt: a.alt.clone() }).collect();
+    s.log(channel, |l| {
+        l.pending.push(Pending { nonce: n.clone(), content: content.clone(), error: None, reply_to, files })
+    });
     spawn_local(async move {
-        match crate::api::send_message(channel, &content, &n, reply_to).await {
+        match crate::api::send_message(channel, &content, &n, reply_to, refs).await {
             Ok(m) => s.log(channel, |l| {
                 l.pending.retain(|p| p.nonce != n);
                 l.insert(m);
@@ -1007,7 +1076,19 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
     };
     let submit = move || {
         let t = text.get_untracked();
-        if t.trim().is_empty() || too_long() {
+        let (busy, failed, ready) = files::tray_status(chat.tray);
+        if (t.trim().is_empty() && ready == 0 && busy == 0 && failed == 0) || too_long() {
+            return;
+        }
+        if busy > 0 {
+            chat.notice.set(Some("Patiente : l'envoi des fichiers n'est pas terminé.".into()));
+            return;
+        }
+        if failed > 0 {
+            chat.notice.set(Some("Retire les fichiers dont l'envoi a échoué avant d'envoyer le message.".into()));
+            return;
+        }
+        if t.trim().is_empty() && ready == 0 {
             return;
         }
         at.set(0);
@@ -1015,7 +1096,24 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
         let reply = chat.replying.get_untracked().map(|m| m.id);
         chat.replying.set(None);
         chat.since.set(None);
-        send(chat.channel, t.trim().to_string(), reply, None);
+        let attached = files::take_done(chat.tray);
+        send(chat.channel, t.trim().to_string(), reply, None, attached);
+    };
+    let picker = NodeRef::<html::Input>::new();
+    let can_attach = move || chat.guild.is_none_or(|g| s.guild_perms(g) & perms::ATTACH_FILES != 0);
+    let on_pick_files = move |_| {
+        let Some(input) = picker.get_untracked() else { return };
+        let picked = files::files_of(input.files());
+        // Le même fichier, choisi deux fois de suite, doit redéclencher le changement.
+        input.set_value("");
+        files::add_files(chat.tray, chat.channel, picked, chat.notice);
+    };
+    let on_paste = move |e: leptos::ev::ClipboardEvent| {
+        let pasted = files::files_of(e.clipboard_data().and_then(|d| d.files()));
+        if !pasted.is_empty() && can_attach() {
+            e.prevent_default();
+            files::add_files(chat.tray, chat.channel, pasted, chat.notice);
+        }
     };
     let keydown = move |e: leptos::ev::KeyboardEvent| {
         let key = e.key();
@@ -1088,12 +1186,19 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
                     </div>
                 }
             })}
+            <TrayView tray=chat.tray channel=chat.channel/>
             <form class="k-composer" on:submit=move |e| { e.prevent_default(); submit(); }>
-                <button type="button" class="k-btn k-btn--icon" aria-label="Joindre un fichier (bientôt)" disabled><Icon icon=lu::LuPlus/></button>
+                <input type="file" multiple class="k-sr app-file" tabindex="-1" aria-hidden="true" node_ref=picker on:change=on_pick_files/>
+                <button type="button" class="k-btn k-btn--icon" disabled=move || !can_attach()
+                    aria-label=move || if can_attach() { "Joindre un fichier" } else { "Joindre un fichier (non autorisé ici)" }
+                    title="Joindre un fichier" on:click=move |_| { if let Some(i) = picker.get_untracked() { i.click() } }>
+                    <Icon icon=lu::LuPaperclip/>
+                </button>
                 <textarea rows="1" placeholder=placeholder aria-label=placeholder bind:value=text node_ref=chat.composer
                     aria-autocomplete="list"
                     aria-controls=move || found.get().map(|_| list_id2.clone())
                     aria-activedescendant=move || found.get().map(|_| opt_id(active.get()))
+                    on:paste=on_paste
                     on:input=move |_| track() on:click=move |_| track() on:keyup=move |e| {
                         if matches!(e.key().as_str(), "ArrowLeft" | "ArrowRight" | "Home" | "End") { track() }
                     }

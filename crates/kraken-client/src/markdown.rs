@@ -59,7 +59,7 @@ fn one(i: Inline, lk: &Rc<Lookup>) -> AnyView {
         Inline::Underline(v) => view! { <u>{inline(v, lk)}</u> }.into_any(),
         Inline::Strike(v) => view! { <s>{inline(v, lk)}</s> }.into_any(),
         Inline::Code(t) => view! { <code class="app-code-inline">{t}</code> }.into_any(),
-        Inline::Link(url) => {
+        Inline::Link(url) | Inline::LinkQuiet(url) => {
             let href = url.clone();
             view! { <a href=href target="_blank" rel="noopener noreferrer nofollow ugc">{url}</a> }.into_any()
         }

@@ -30,6 +30,9 @@ fn config(data_dir: &std::path::Path) -> Config {
         rtc_ips: vec![std::net::Ipv4Addr::LOCALHOST.into()],
         rtc_public_port: None,
         ring_secs: 30,
+        max_upload_bytes: 25 * 1024 * 1024,
+        link_previews: true,
+        preview_allow_private: false,
     }
 }
 

@@ -37,6 +37,7 @@ pub async fn instance() -> ApiResult<Instance> {
 }
 
 thread_local! {
+    static MAX_UPLOAD: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     static PUBLIC_URL: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
 }
 
@@ -55,6 +56,95 @@ pub async fn public_url() -> String {
         }
         Err(_) => origin(),
     }
+}
+
+/// Taille au plus d'un fichier joint, d'après l'instance (25 Mo si elle ne répond pas).
+pub async fn max_upload_bytes() -> u64 {
+    if MAX_UPLOAD.get() == 0
+        && let Ok(i) = instance().await
+        && i.max_upload_bytes > 0
+    {
+        MAX_UPLOAD.set(i.max_upload_bytes);
+    }
+    match MAX_UPLOAD.get() {
+        0 => DEFAULT_MAX_UPLOAD_BYTES,
+        n => n,
+    }
+}
+
+/// Un envoi en cours, que l'on peut interrompre.
+#[derive(Clone)]
+pub struct Upload(web_sys::XmlHttpRequest);
+
+impl Upload {
+    pub fn abort(&self) {
+        let _ = self.0.abort();
+    }
+}
+
+/// Envoie un fichier dans le salon avec `XMLHttpRequest` (le seul moyen d'avoir la progression
+/// de l'envoi). `progress` reçoit une fraction entre 0 et 1.
+pub fn upload<F: Fn(f64) + 'static>(
+    channel: Id,
+    file: &web_sys::File,
+    progress: F,
+) -> Result<(Upload, impl std::future::Future<Output = ApiResult<Attachment>> + use<F>), ApiError> {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen::closure::Closure;
+
+    let xhr = web_sys::XmlHttpRequest::new().map_err(|_| network())?;
+    let name = String::from(js_sys::encode_uri_component(&file.name()));
+    xhr.open_with_async("POST", &format!("/api/v1/channels/{channel}/attachments?filename={name}"), true)
+        .map_err(|_| network())?;
+    if !file.type_().is_empty() {
+        let _ = xhr.set_request_header("content-type", &file.type_());
+    }
+    let (tx, rx) = futures::channel::oneshot::channel::<ApiResult<Attachment>>();
+    let tx = Rc::new(RefCell::new(Some(tx)));
+    let finish = {
+        let tx = tx.clone();
+        move |r: ApiResult<Attachment>| {
+            if let Some(tx) = tx.borrow_mut().take() {
+                let _ = tx.send(r);
+            }
+        }
+    };
+    let on_progress = Closure::<dyn FnMut(web_sys::ProgressEvent)>::new(move |e: web_sys::ProgressEvent| {
+        if e.length_computable() && e.total() > 0.0 {
+            progress((e.loaded() / e.total()).clamp(0.0, 1.0));
+        }
+    });
+    if let Ok(up) = xhr.upload() {
+        up.set_onprogress(Some(on_progress.as_ref().unchecked_ref()));
+    }
+    let on_load = {
+        let (xhr, finish) = (xhr.clone(), finish.clone());
+        Closure::<dyn FnMut()>::new(move || {
+            let text = xhr.response_text().ok().flatten().unwrap_or_default();
+            let status = xhr.status().unwrap_or(0);
+            finish(if (200..300).contains(&status) {
+                serde_json::from_str(&text).map_err(|_| network())
+            } else {
+                Err(serde_json::from_str(&text).unwrap_or_else(|_| network()))
+            });
+        })
+    };
+    let on_fail = {
+        let finish = finish.clone();
+        Closure::<dyn FnMut()>::new(move || finish(Err(network())))
+    };
+    xhr.set_onload(Some(on_load.as_ref().unchecked_ref()));
+    xhr.set_onerror(Some(on_fail.as_ref().unchecked_ref()));
+    xhr.set_onabort(Some(on_fail.as_ref().unchecked_ref()));
+    xhr.send_with_opt_blob(Some(file)).map_err(|_| network())?;
+    let handle = Upload(xhr);
+    Ok((handle, async move {
+        // Les fonctions JS doivent vivre jusqu'à la fin de l'envoi.
+        let _keep = (on_progress, on_load, on_fail);
+        rx.await.unwrap_or_else(|_| Err(network()))
+    }))
 }
 
 pub async fn register(username: &str, email: &str, password: &str) -> ApiResult<AuthResp> {
@@ -83,9 +173,36 @@ pub async fn messages_before(channel: Id, before: Id) -> ApiResult<Vec<Message>>
     call(Method::GET, &format!("/channels/{channel}/messages?limit=100&before={before}"), NO_BODY).await
 }
 
-pub async fn send_message(channel: Id, content: &str, nonce: &str, reply_to: Option<Id>) -> ApiResult<Message> {
-    let body = CreateMessage { content: content.into(), nonce: Some(nonce.into()), reply_to };
+pub async fn send_message(
+    channel: Id,
+    content: &str,
+    nonce: &str,
+    reply_to: Option<Id>,
+    attachments: Vec<AttachmentRef>,
+) -> ApiResult<Message> {
+    let body = CreateMessage { content: content.into(), nonce: Some(nonce.into()), reply_to, attachments };
     call(Method::POST, &format!("/channels/{channel}/messages"), Some(body)).await
+}
+
+/// L'auteur retire l'aperçu d'un lien de son message.
+pub async fn remove_embed(channel: Id, id: Id, url: &str) -> ApiResult<Message> {
+    let u = String::from(js_sys::encode_uri_component(url));
+    call(Method::DELETE, &format!("/channels/{channel}/messages/{id}/embeds?url={u}"), NO_BODY).await
+}
+
+/// Retire de la saisie un fichier envoyé mais pas encore joint.
+pub async fn delete_attachment(channel: Id, id: Id) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/channels/{channel}/attachments/{id}"), NO_BODY).await
+}
+
+/// Adresse de l'original d'un fichier joint (le cookie de session accompagne l'`<img>` et le lien).
+pub fn attachment_url(channel: Id, id: Id) -> String {
+    format!("/api/v1/channels/{channel}/attachments/{id}")
+}
+
+/// Adresse d'une image d'aperçu de lien.
+pub fn embed_image_url(channel: Id, key: &str) -> String {
+    format!("/api/v1/channels/{channel}/embeds/{key}")
 }
 
 pub async fn edit_message(channel: Id, id: Id, content: &str) -> ApiResult<Message> {

@@ -41,12 +41,14 @@ services:
       KRAKEN_PROCESSORS: ${KRAKEN_PROCESSORS:-}
       KRAKEN_SOURCE_URL: ${KRAKEN_SOURCE_URL:-}
       KRAKEN_SEED: ${KRAKEN_SEED:-}
+      KRAKEN_MAX_UPLOAD_MB: ${KRAKEN_MAX_UPLOAD_MB:-}
+      KRAKEN_LINK_PREVIEWS: ${KRAKEN_LINK_PREVIEWS:-}
       # Salons vocaux : le son et l'image passent en UDP, directement (pas par Caddy).
       KRAKEN_RTC_PORT: ${KRAKEN_RTC_PORT:-3478}
       KRAKEN_RTC_IPS: ${KRAKEN_RTC_IPS:-}
       KRAKEN_RTC_PUBLIC_PORT: ${KRAKEN_RTC_PUBLIC_PORT:-}
       RUST_LOG: ${RUST_LOG:-info}
-      # Photos de profil : dans le volume `data`, à sauvegarder avec la base.
+      # Photos de profil et fichiers joints : dans le volume `data`, à sauvegarder avec la base.
       KRAKEN_DATA_DIR: /var/lib/kraken
     volumes:
       - data:/var/lib/kraken

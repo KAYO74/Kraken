@@ -2,13 +2,17 @@
 //! client web à la racine. Données dans PostgreSQL (`kraken-db`).
 
 mod api;
+mod attach;
 mod auth;
 mod avatar;
 mod call;
+mod embed;
 mod error;
+mod fetch;
 mod gateway;
 mod jobs;
 mod limit;
+mod media;
 mod reads;
 mod social;
 mod voice;
@@ -62,6 +66,14 @@ pub struct Config {
     pub rtc_public_port: Option<u16>,
     /// Secondes pendant lesquelles un appel de MP sonne chez ceux qui n'ont pas répondu.
     pub ring_secs: u64,
+    /// Taille au plus d'un fichier joint, en octets (`KRAKEN_MAX_UPLOAD_MB`, 25 par défaut).
+    pub max_upload_bytes: u64,
+    /// Aperçus des liens des messages (`KRAKEN_LINK_PREVIEWS=0` les coupe tous).
+    pub link_previews: bool,
+    /// RÉSERVÉ AUX TESTS (`KRAKEN_TEST_PREVIEW_ALLOW_PRIVATE=1`) : lève, pour les aperçus, le
+    /// refus des adresses internes et des ports autres que 80 et 443, afin de viser un serveur
+    /// local. Éteint partout ailleurs ; ne jamais l'allumer sur une instance réelle (SSRF).
+    pub preview_allow_private: bool,
 }
 
 impl Config {
@@ -86,6 +98,7 @@ impl Config {
                 processors: var("KRAKEN_PROCESSORS"),
                 source_url: var("KRAKEN_SOURCE_URL").unwrap_or_else(|| env!("CARGO_PKG_REPOSITORY").into()),
                 public_url: String::new(),
+                max_upload_bytes: 0,
             },
             rtc_port: var("KRAKEN_RTC_PORT").map_or(kraken_voice::DEFAULT_PORT, |v| {
                 v.trim().parse().unwrap_or_else(|_| {
@@ -100,6 +113,12 @@ impl Config {
                 .and_then(|v| v.trim().parse().ok())
                 .filter(|s| (1..=600).contains(s))
                 .unwrap_or(kraken_proto::CALL_RING_SECONDS),
+            max_upload_bytes: var("KRAKEN_MAX_UPLOAD_MB")
+                .and_then(|v| v.trim().parse::<u64>().ok())
+                .filter(|mb| (1..=4096).contains(mb))
+                .map_or(kraken_proto::DEFAULT_MAX_UPLOAD_BYTES, |mb| mb * 1024 * 1024),
+            link_previews: !matches!(var("KRAKEN_LINK_PREVIEWS").as_deref(), Some("0" | "false" | "off" | "no")),
+            preview_allow_private: var("KRAKEN_TEST_PREVIEW_ALLOW_PRIVATE").as_deref() == Some("1"),
         }
     }
 
@@ -125,6 +144,8 @@ pub struct AppState {
     pub voice: Option<Arc<Sfu>>,
     /// Appels en cours des MP et des groupes.
     pub calls: Arc<call::Calls>,
+    /// Réveille la boucle des tâches de fond quand on vient d'en ajouter une.
+    pub jobs_wake: Arc<tokio::sync::Notify>,
 }
 
 impl AppState {
@@ -156,7 +177,7 @@ impl AppState {
             Err(e) => tracing::warn!("appels restés ouverts : {e:?}"),
         }
         let voice = voice::start(&cfg, &db, &hub).await;
-        Ok(Self { db, hub, cfg: Arc::new(cfg), mailer, voice, calls: Arc::default() })
+        Ok(Self { db, hub, cfg: Arc::new(cfg), mailer, voice, calls: Arc::default(), jobs_wake: Arc::default() })
     }
 
     /// Ajoute à ce serveur ses états vocaux, pour les salons que le membre voit.
@@ -209,6 +230,14 @@ pub fn app(state: AppState) -> Router {
     let avatars = Router::new()
         .route("/users/@me/avatar", put(avatar::set).delete(avatar::remove))
         .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
+    // Fichiers joints : un envoi écrit sur le disque et décode une image ; compteur à part. Le corps
+    // fait jusqu'à `max_upload_bytes`, que le gestionnaire borne lui-même en le lisant en flux.
+    let uploads = Router::new().route("/channels/{id}/attachments", post(attach::upload)).route_layer(
+        axum::middleware::from_fn_with_state(
+            limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(attach::UPLOADS_PER_MIN)),
+            limit::check,
+        ),
+    );
     // Messages lus : fréquents (le client les regroupe), compteur à part ; réglages de
     // notification : même limite que le social, compteur à part.
     let reads = Router::new()
@@ -250,6 +279,7 @@ pub fn app(state: AppState) -> Router {
         .merge(reads)
         .merge(notify)
         .merge(avatars)
+        .merge(uploads)
         .route("/avatars/{key}", get(avatar::get))
         .route("/voice", delete(voice::leave))
         .route("/health", get(api::health))
@@ -262,6 +292,10 @@ pub fn app(state: AppState) -> Router {
         .route("/guilds/{id}/channels", get(api::guild_channels).post(api::create_channel))
         .route("/channels/{id}/messages", get(api::messages).post(api::create_message))
         .route("/channels/{id}/messages/{mid}", patch(api::edit_message).delete(api::delete_message))
+        .route("/channels/{id}/messages/{mid}/embeds", delete(api::remove_embed))
+        .route("/channels/{id}/attachments/{aid}", get(attach::get).delete(attach::remove))
+        .route("/channels/{id}/attachments/{aid}/preview", get(attach::preview))
+        .route("/channels/{id}/embeds/{key}", get(attach::embed_image))
         .route("/channels/{id}/invites", post(api::create_invite))
         .route("/invites/{code}", get(api::invite).post(api::join))
         .fallback(|| async { error::AppError::not_found() });

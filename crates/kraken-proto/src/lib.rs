@@ -77,6 +77,9 @@ pub struct Instance {
     /// soit l'adresse par laquelle la page a été ouverte. Vide si le serveur ne la donne pas.
     #[serde(default)]
     pub public_url: String,
+    /// Taille au plus d'un fichier joint, en octets (0 : réponse d'un ancien serveur).
+    #[serde(default)]
+    pub max_upload_bytes: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -200,6 +203,75 @@ pub struct Message {
     /// Message d'appel d'un MP ou d'un groupe (son auteur a lancé l'appel) ; le texte est vide.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call: Option<CallInfo>,
+    /// Fichiers joints, dans l'ordre d'envoi.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<Attachment>,
+    /// Aperçus des liens du texte, ajoutés par le serveur après l'envoi.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub embeds: Vec<Embed>,
+}
+
+/// Fichiers joints à un message au plus.
+pub const MAX_ATTACHMENTS: usize = 10;
+/// Taille par défaut d'un fichier joint, en octets (`KRAKEN_MAX_UPLOAD_MB` la change).
+pub const DEFAULT_MAX_UPLOAD_BYTES: u64 = 25 * 1024 * 1024;
+/// Longueur au plus du texte alternatif d'une image.
+pub const MAX_ALT_TEXT: usize = 1024;
+/// Liens d'un message qui reçoivent un aperçu, au plus.
+pub const MAX_EMBEDS: usize = 5;
+
+/// Un fichier joint. L'original se télécharge sous
+/// `/channels/{salon}/attachments/{id}` ; une image a aussi un aperçu sans métadonnées sous
+/// `…/preview`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Attachment {
+    pub id: Id,
+    pub filename: String,
+    pub mime: String,
+    pub size: u64,
+    /// Dimensions d'une image lisible ; `None` pour tout autre fichier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alt: Option<String>,
+}
+
+/// Un fichier déjà envoyé, à rattacher au message qui se crée.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AttachmentRef {
+    pub id: Id,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alt: Option<String>,
+}
+
+/// L'aperçu d'un lien : ce que la page dit d'elle-même.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Embed {
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_name: Option<String>,
+    /// Image de la page, gardée sur le serveur : `/channels/{salon}/embeds/{clé}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<EmbedImage>,
+    /// Petite icône du site, même adresse que l'image.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub favicon: Option<String>,
+    /// Retiré par l'auteur : gardé côté serveur (pour ne pas revenir à une modification), jamais envoyé.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EmbedImage {
+    pub key: String,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// Ce qu'un message d'appel retient de l'appel.
@@ -239,6 +311,10 @@ pub struct CreateMessage {
     /// Répondre à ce message du même salon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reply_to: Option<Id>,
+    /// Fichiers déjà envoyés (`POST /channels/{id}/attachments`), dans l'ordre voulu. Le texte
+    /// peut alors rester vide.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<AttachmentRef>,
 }
 
 /// `PATCH /channels/{id}/messages/{mid}` : nouveau texte (auteur seulement).
