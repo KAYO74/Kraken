@@ -18,7 +18,7 @@ fn presence(state: &AppState, mut r: Relationship) -> Relationship {
     r
 }
 
-fn notify(state: &AppState, notices: Notices) {
+pub(crate) fn notify(state: &AppState, notices: Notices) {
     for (uid, ev) in notices {
         let ev = match ev {
             Event::RelationshipAdd(r) => Event::RelationshipAdd(presence(state, r)),
@@ -126,9 +126,19 @@ pub async fn open_private(
     if created {
         let audience = state.db.channel_audience(cid).await?;
         announce(&state, cid, &audience, Event::ChannelCreate).await?;
+    } else {
+        // Rouvert après l'avoir fermé : il revient dans ma liste, ici et sur mes autres appareils.
+        announce(&state, cid, &[me], Event::ChannelCreate).await?;
     }
     let status = if created { StatusCode::CREATED } else { StatusCode::OK };
     Ok((status, Json(mine(&state, cid, me).await?)))
+}
+
+/// Fermer un MP pour moi seul (il revient avec le prochain message) ; pas un groupe.
+pub async fn close_channel(State(state): State<AppState>, auth: Auth, Path(cid): Path<Id>) -> ApiResult<StatusCode> {
+    state.db.close_dm(cid, auth.user.id).await?;
+    state.hub.send(&[auth.user.id], Event::ChannelDelete { id: cid });
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Renommer un groupe.

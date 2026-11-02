@@ -45,6 +45,9 @@ COPY --from=server /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certific
 COPY --from=server /kraken-server /usr/local/bin/kraken-server
 COPY --from=client /src/crates/kraken-client/dist /srv/kraken/web
 ENV KRAKEN_ADDR=0.0.0.0:8080 KRAKEN_WEB_DIR=/srv/kraken/web
+# Dossier des photos de profil, à l'identité de l'utilisateur ci-dessous : un volume neuf en hérite.
+COPY --chown=10001:10001 deploy/data/.gitkeep /var/lib/kraken/.gitkeep
+ENV KRAKEN_DATA_DIR=/var/lib/kraken
 # Utilisateur sans droits (pas de useradd : il faudrait exécuter une commande arm64)
 USER 10001:10001
 # 8080 : HTTP et gateway (derrière Caddy) ; 3478/udp : son et image des salons vocaux.

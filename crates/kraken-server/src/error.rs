@@ -52,6 +52,7 @@ impl From<DbError> for AppError {
             DbError::Invalid("group_full") => {
                 Self::invalid(format!("Ce groupe est complet : {MAX_GROUP_MEMBERS} personnes au plus."))
             }
+            DbError::Invalid("guild_name") => Self::invalid("Le nom d'un serveur compte de 2 à 100 caractères."),
             DbError::Invalid("name") => Self::invalid(format!("Le nom tient en {MAX_GROUP_NAME} caractères au plus.")),
             DbError::Invalid("mute") => Self::invalid("Une sourdine dure de 1 minute à 30 jours, ou sans fin."),
             DbError::Invalid("target") => Self::invalid("Un serveur ou un salon, l'un des deux."),

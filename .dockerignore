@@ -12,6 +12,7 @@ replica/clone-screens
 backups
 docs
 deploy
+!deploy/data/.gitkeep
 docker-compose.yml
 install.sh
 install.ps1

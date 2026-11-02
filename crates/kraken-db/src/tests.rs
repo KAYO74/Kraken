@@ -135,8 +135,8 @@ async fn sessions_tokens_and_deletion(pool: PgPool) {
     db.request_deletion(a.id).await.unwrap();
     assert!(db.session_user(b"t3").await.unwrap().is_none());
     assert!(db.user_credentials("lou").await.unwrap().is_none());
-    assert_eq!(db.purge_deleted_accounts(14).await.unwrap(), 0, "délai de grâce");
-    assert_eq!(db.purge_deleted_accounts(-1).await.unwrap(), 2, "lou et sam");
+    assert_eq!(db.purge_deleted_accounts(14).await.unwrap().0, 0, "délai de grâce");
+    assert_eq!(db.purge_deleted_accounts(-1).await.unwrap().0, 2, "lou et sam");
     let left: Option<String> =
         sqlx::query_scalar("select email from users where id = $1").bind(a.id).fetch_one(&db.pool).await.unwrap();
     assert!(left.is_none());

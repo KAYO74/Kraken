@@ -68,7 +68,10 @@ async fn handle(state: &AppState, job: Job) {
         "account_purge" => {
             // Tâche permanente : jamais en lettre morte, reprise dans une heure en cas d'échec.
             let next = match state.db.purge_deleted_accounts(GRACE_DAYS).await {
-                Ok(n) => {
+                Ok((n, avatars)) => {
+                    for key in avatars {
+                        crate::avatar::forget(state, Some(key)).await;
+                    }
                     if n > 0 {
                         tracing::info!("{n} compte(s) anonymisé(s)");
                     }

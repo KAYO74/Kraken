@@ -4,6 +4,7 @@
 mod api;
 mod app;
 mod auth;
+mod avatar;
 mod call;
 mod chat;
 mod emoji;

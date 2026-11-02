@@ -89,7 +89,26 @@ pub fn Avatar(
     });
     // Une teinte stable par compte (somme des octets de l'id), pour reconnaître les gens d'un coup d'œil.
     let tint = (user.id.as_bytes().iter().map(|&b| u32::from(b)).sum::<u32>() % 8 + 1).to_string();
-    view! { <span class=class data-tint=tint role="img" aria-label=label>{initials(user.name())}{presence}</span> }
+    // La photo remplace les initiales ; si elle ne charge pas, les initiales reviennent. Le
+    // `<span>` porte déjà le nom (role="img"), l'image est donc décorative.
+    let broken = RwSignal::new(false);
+    let initials = initials(user.name());
+    let content = {
+        let photo = user.avatar.clone();
+        move || match &photo {
+            Some(key) if !broken.get() => view! {
+                <img src=avatar_url(key) alt="" loading="lazy" decoding="async" on:error=move |_| broken.set(true)/>
+            }
+            .into_any(),
+            _ => initials.clone().into_any(),
+        }
+    };
+    view! { <span class=class data-tint=tint role="img" aria-label=label>{content}{presence}</span> }
+}
+
+/// Adresse d'une photo de profil, d'après la clé gardée dans `User::avatar`.
+pub fn avatar_url(key: &str) -> String {
+    format!("/api/v1/avatars/{key}")
 }
 
 /// « Plus d'actions » : un bouton ⋯ qui déplie les actions secondaires (retirer, bloquer…), pour ne

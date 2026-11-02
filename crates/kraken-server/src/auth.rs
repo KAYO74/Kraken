@@ -182,12 +182,17 @@ pub async fn update_me(State(state): State<AppState>, auth: Auth, Json(req): Jso
         )));
     }
     let user = state.db.set_display_name(auth.user.id, name).await?;
-    let mut audience = state.db.related_users(user.id).await?;
-    audience.push(user.id);
+    state.hub.send(&audience_of(&state, user.id).await?, Event::UserUpdate(user.clone()));
+    Ok(Json(user))
+}
+
+/// Ceux à prévenir quand ce profil change : l'intéressé et tous ceux qui le voient.
+pub async fn audience_of(state: &AppState, uid: Id) -> ApiResult<Vec<Id>> {
+    let mut audience = state.db.related_users(uid).await?;
+    audience.push(uid);
     audience.sort_unstable();
     audience.dedup();
-    state.hub.send(&audience, Event::UserUpdate(user.clone()));
-    Ok(Json(user))
+    Ok(audience)
 }
 
 pub async fn verify_email(State(state): State<AppState>, Json(req): Json<TokenReq>) -> ApiResult<StatusCode> {
@@ -241,7 +246,8 @@ pub async fn delete_account(
     if !verify_password(req.password, hash).await {
         return Err(AppError(StatusCode::FORBIDDEN, "bad_password", "Mot de passe incorrect.".into()));
     }
-    state.db.request_deletion(auth.user.id).await?;
+    let notices = state.db.request_deletion(auth.user.id).await?;
+    crate::social::notify(&state, notices);
     state.kick(auth.user.id);
     Ok((StatusCode::ACCEPTED, clear_cookie(&state)))
 }

@@ -133,6 +133,34 @@ pub async fn update_me(display_name: &str) -> ApiResult<User> {
     call(Method::PATCH, "/users/@me", Some(UpdateMe { display_name: Some(display_name.into()) })).await
 }
 
+/// Envoie la photo de profil (déjà recadrée) : le corps de la requête est l'image elle-même.
+pub async fn set_avatar(bytes: &[u8], mime: &str) -> ApiResult<User> {
+    let body = js_sys::Uint8Array::from(bytes);
+    let req = RequestBuilder::new("/api/v1/users/@me/avatar")
+        .method(Method::PUT)
+        .header("content-type", mime)
+        .body(body)
+        .map_err(|_| network())?;
+    let resp = req.send().await.map_err(|_| network())?;
+    if resp.ok() {
+        resp.json().await.map_err(|_| network())
+    } else if resp.status() == 413 {
+        Err(resp.json().await.unwrap_or_else(|_| too_large()))
+    } else {
+        Err(resp.json().await.unwrap_or_else(|_| network()))
+    }
+}
+
+fn too_large() -> ApiError {
+    let mo = MAX_AVATAR_BYTES / (1024 * 1024);
+    ApiError { code: "too_large".into(), message: format!("Cette image pèse trop lourd : {mo} Mo au plus.") }
+}
+
+/// Retirer la photo de profil.
+pub async fn remove_avatar() -> ApiResult<User> {
+    call(Method::DELETE, "/users/@me/avatar", NO_BODY).await
+}
+
 pub async fn logout_all() -> ApiResult<()> {
     call(Method::POST, "/auth/logout-all", NO_BODY).await
 }
@@ -181,6 +209,16 @@ pub async fn rename_group(channel: Id, name: &str) -> ApiResult<Channel> {
 
 pub async fn add_recipient(channel: Id, user: Id) -> ApiResult<()> {
     call(Method::PUT, &format!("/channels/{channel}/recipients/{user}"), NO_BODY).await
+}
+
+/// Fermer un MP : il quitte ma liste, et y revient avec le prochain message.
+pub async fn close_dm(channel: Id) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/channels/{channel}"), NO_BODY).await
+}
+
+/// Retirer quelqu'un d'un groupe (propriétaire seulement).
+pub async fn remove_member(channel: Id, user: Id) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/channels/{channel}/recipients/{user}"), NO_BODY).await
 }
 
 pub async fn leave_group(channel: Id) -> ApiResult<()> {

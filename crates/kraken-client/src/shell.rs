@@ -217,6 +217,7 @@ fn HomeSidebar() -> impl IntoView {
     let loc = use_location();
     let on_friends = move || (loc.pathname.get() == "/channels/@me").then_some("page");
     let picking = RwSignal::new(false);
+    let navigate = use_navigate();
     let incoming = Memo::new(move |_| {
         s.friends.with(|f| f.iter().filter(|r| r.kind == kraken_proto::RelationshipKind::PendingIncoming).count())
     });
@@ -239,7 +240,7 @@ fn HomeSidebar() -> impl IntoView {
             <Show when=move || s.dms.with(|d| d.is_empty()) && s.conn.get() == Conn::Ready>
                 <p class="app-hint">"Aucune conversation pour l'instant."</p>
             </Show>
-            <For each=move || s.dms.get() key=|c| (c.id, c.name.clone(), c.recipients.iter().map(|u| u.name().to_string()).collect::<Vec<_>>()) let:c>
+            <For each=move || s.dms.get() key=|c| (c.id, c.name.clone(), c.owner_id, c.recipients.iter().map(|u| (u.name().to_string(), u.avatar.clone())).collect::<Vec<_>>()) let:c>
                 {
                     let id = c.id;
                     let title = crate::social::private_title(&c);
@@ -251,7 +252,30 @@ fn HomeSidebar() -> impl IntoView {
                     let unread = Memo::new(move |_| s.channel(id).is_some_and(|c| s.shows_unread(&c)));
                     let muted = Memo::new(move |_| s.channel(id).is_some_and(|c| s.channel_muted(&c)));
                     let mentions = Memo::new(move |_| s.channel(id).map_or(0, |c| s.mentions(&c)));
+                    // Fermer un MP (pas un groupe, qu'on quitte) : il revient avec le prochain message.
+                    let close_dm = (!group).then(|| {
+                        let navigate = navigate.clone();
+                        let name = title.clone();
+                        let close = move |_| {
+                            let navigate = navigate.clone();
+                            spawn_local(async move {
+                                if crate::api::close_dm(id).await.is_ok() {
+                                    if loc.pathname.get_untracked().ends_with(&id.to_string()) {
+                                        navigate("/channels/@me", Default::default());
+                                    }
+                                    s.dms.update(|d| d.retain(|c| c.id != id));
+                                }
+                            });
+                        };
+                        view! {
+                            <button type="button" class="k-btn k-btn--icon app-dm-close" aria-label=format!("Fermer la conversation avec {name}")
+                                title="Fermer la conversation" on:click=close>
+                                <Icon icon=lu::LuX small=true/>
+                            </button>
+                        }
+                    });
                     view! {
+                        <div class="app-dm-item">
                         <a class="k-dm" href=format!("/channels/@me/{id}")
                             data-unread=move || unread.get().then_some("") data-muted=move || muted.get().then_some("")
                             on:contextmenu=u.on_context(Target::Channel(id)) on:keydown=u.on_key(Target::Channel(id))
@@ -266,6 +290,8 @@ fn HomeSidebar() -> impl IntoView {
                             </Show>
                             <MutedMark on=muted/><MentionBadge count=mentions/>
                         </a>
+                        {close_dm}
+                        </div>
                         <VoiceUsers guild=None channel=id name=title.clone() hidden=Signal::derive(|| false)/>
                     }
                 }

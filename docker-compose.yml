@@ -46,6 +46,10 @@ services:
       KRAKEN_RTC_IPS: ${KRAKEN_RTC_IPS:-}
       KRAKEN_RTC_PUBLIC_PORT: ${KRAKEN_RTC_PUBLIC_PORT:-}
       RUST_LOG: ${RUST_LOG:-info}
+      # Photos de profil : dans le volume `data`, à sauvegarder avec la base.
+      KRAKEN_DATA_DIR: /var/lib/kraken
+    volumes:
+      - data:/var/lib/kraken
     expose:
       - "8080"
     ports:
@@ -88,4 +92,5 @@ services:
 
 volumes:
   db:
+  data:
   caddy:

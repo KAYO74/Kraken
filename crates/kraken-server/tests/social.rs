@@ -14,6 +14,7 @@ fn config(auth_per_min: u32) -> Config {
     Config {
         addr: "127.0.0.1:0".into(),
         web_dir: "/nonexistent".into(),
+        data_dir: std::env::temp_dir().join("kraken-test-data").to_string_lossy().into(),
         database_url: String::new(),
         public_url: "http://127.0.0.1".into(),
         smtp_url: None,
@@ -261,6 +262,7 @@ async fn groups_rename_add_and_leave(pool: PgPool) {
     assert_eq!(s, 201);
     let g: Channel = serde_json::from_value(v).unwrap();
     assert_eq!((g.kind, g.name.as_deref(), g.recipients.len()), (ChannelKind::GroupDm, Some("La bande"), 2));
+    assert_eq!(g.owner_id, Some(lou.user.id));
     // Sam le reçoit, vu de chez lui : lou et noa.
     let Event::ChannelCreate(seen) = sam_gw.next().await else { panic!("CHANNEL_CREATE attendu") };
     assert_eq!(seen.recipients.iter().map(|u| u.id).collect::<Vec<_>>(), [lou.user.id, noa.user.id]);

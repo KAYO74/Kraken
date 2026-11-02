@@ -149,7 +149,7 @@ pub fn Friends() -> impl IntoView {
                         } else {
                             view! {
                                 <ul class="app-list">
-                                    <For each=move || rows.get() key=|r| (r.user.id, r.kind as u8, r.status as u8, r.user.display_name.clone()) let:r>
+                                    <For each=move || rows.get() key=|r| (r.user.id, r.kind as u8, r.status as u8, r.user.display_name.clone(), r.user.avatar.clone()) let:r>
                                         <FriendRow r=r error=error confirm=confirm/>
                                     </For>
                                 </ul>
