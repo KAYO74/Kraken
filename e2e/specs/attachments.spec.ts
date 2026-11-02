@@ -135,7 +135,10 @@ test('PJ-H2 plusieurs images : grille, flèches entre les images du message, Éc
     { name: 'un.png', mimeType: 'image/png', buffer: png(200, 100, 10) },
     { name: 'deux.png', mimeType: 'image/png', buffer: png(100, 200, 90) },
   ]);
-  await expect(page.getByRole('list', { name: 'Fichiers à joindre' }).getByRole('listitem')).toHaveCount(2);
+  const tray = page.getByRole('list', { name: 'Fichiers à joindre' });
+  await expect(tray.getByRole('listitem')).toHaveCount(2);
+  // Entrée pendant l'envoi est refusée (« Patiente ») : attendre la fin des téléversements.
+  await expect(tray.getByRole('progressbar')).toHaveCount(0);
   // Un message peut ne porter que des fichiers.
   await page.getByLabel('Écrire dans #général').press('Enter');
   const msg = messages(page).filter({ has: page.locator('.app-media') });
@@ -151,6 +154,11 @@ test('PJ-H2 plusieurs images : grille, flèches entre les images du message, Éc
   await expect(viewer).toContainText('2 sur 2');
   await page.keyboard.press('ArrowLeft');
   await expect(viewer).toContainText('1 sur 2');
+  await viewer.getByRole('button', { name: 'Image suivante' }).click();
+  await expect(viewer).toContainText('2 sur 2');
+  await viewer.getByRole('button', { name: 'Image précédente' }).click();
+  await expect(viewer).toContainText('1 sur 2');
+  await expect(viewer).not.toContainText('on:click');
   await page.keyboard.press('Escape');
   await expect(viewer).toHaveCount(0);
   await expect(first).toBeFocused();

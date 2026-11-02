@@ -393,15 +393,17 @@ pub fn Viewer(state: ViewerState, viewer: RwSignal<Option<ViewerState>>) -> impl
                             if count > 1 { format!("{size} · {} sur {count}", index.get() + 1) } else { size }
                         }}</small>
                     </div>
-                    <a class="k-btn k-btn--ghost k-btn--sm" href=url target="_blank" rel="noopener noreferrer">
-                        <Icon icon=lu::LuExternalLink small=true/>"Ouvrir l'original"
+                    <a class="k-btn k-btn--ghost k-btn--sm" href=url target="_blank" rel="noopener noreferrer"
+                        aria-label="Ouvrir l'original">
+                        <Icon icon=lu::LuExternalLink small=true/><span>"Ouvrir l'original"</span>
                     </a>
                     <a class="k-btn k-btn--ghost k-btn--sm" href=move || format!("{}?download=1", url())
-                        download=move || current().map(|a| a.filename).unwrap_or_default()>
-                        <Icon icon=lu::LuDownload small=true/>"Télécharger"
+                        download=move || current().map(|a| a.filename).unwrap_or_default() aria-label="Télécharger">
+                        <Icon icon=lu::LuDownload small=true/><span>"Télécharger"</span>
                     </a>
-                    <button type="button" class="k-btn k-btn--ghost k-btn--sm" autofocus on:click=move |_| viewer.set(None)>
-                        <Icon icon=lu::LuX small=true/>"Fermer"
+                    <button type="button" class="k-btn k-btn--ghost k-btn--sm" autofocus aria-label="Fermer"
+                        on:click=move |_| viewer.set(None)>
+                        <Icon icon=lu::LuX small=true/><span>"Fermer"</span>
                     </button>
                 </header>
                 <div class="app-viewer-stage">
@@ -412,7 +414,7 @@ pub fn Viewer(state: ViewerState, viewer: RwSignal<Option<ViewerState>>) -> impl
                     <img src=move || format!("{}/preview", url())
                         alt=move || current().map(|a| a.alt.unwrap_or(a.filename)).unwrap_or_default()/>
                     <button type="button" class="k-btn k-btn--icon app-viewer-nav" aria-label="Image suivante" title="Suivante (→)"
-                        disabled=move || index.get() + 1 >= count hidden={count < 2} on:click=move |_| step(1)>
+                        disabled=move || { index.get() + 1 >= count } hidden={count < 2} on:click=move |_| step(1)>
                         <Icon icon=lu::LuChevronRight/>
                     </button>
                 </div>

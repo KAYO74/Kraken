@@ -849,6 +849,9 @@ impl Db {
                 return Err(DbError::Invalid("attachments"));
             }
         }
+        // Message et réservation des fichiers dans une même transaction : deux envois simultanés
+        // des mêmes fichiers ne laissent pas de message vide (le perdant est annulé).
+        let mut tx = self.pool.begin().await?;
         let id: Option<Id> = sqlx::query_scalar(
             "with m as (insert into messages (channel_id, author_id, content, nonce, kind, reply_to_id, mention_everyone)
                         values ($1, $2, $3, $4, case when $5::uuid is null then 'default' else 'reply' end, $5, $6)
@@ -863,23 +866,30 @@ impl Db {
         .bind(&d.nonce)
         .bind(d.reply_to)
         .bind(everyone)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *tx)
         .await?;
+        if let Some(id) = id {
+            for a in d.attachments {
+                let done = sqlx::query(
+                    "update attachments set message_id = $1, status = 'ready', alt_text = $4
+                     where id = $2 and uploader_id = $3 and message_id is null",
+                )
+                .bind(id)
+                .bind(a.id)
+                .bind(author)
+                .bind(a.alt.as_deref().map(str::trim).filter(|t| !t.is_empty()))
+                .execute(&mut *tx)
+                .await?;
+                if done.rows_affected() != 1 {
+                    tx.rollback().await?;
+                    return Err(DbError::Invalid("attachments"));
+                }
+            }
+        }
+        tx.commit().await?;
         let r = match id {
             Some(id) => {
                 self.set_mentions(id, &mentioned).await?;
-                for a in d.attachments {
-                    sqlx::query(
-                        "update attachments set message_id = $1, status = 'ready', alt_text = $4
-                         where id = $2 and uploader_id = $3 and message_id is null",
-                    )
-                    .bind(id)
-                    .bind(a.id)
-                    .bind(author)
-                    .bind(a.alt.as_deref().map(str::trim).filter(|t| !t.is_empty()))
-                    .execute(&self.pool)
-                    .await?;
-                }
                 self.message(id).await?.ok_or(DbError::NotFound)?
             }
             None => {

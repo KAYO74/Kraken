@@ -643,6 +643,46 @@ async fn attachments_belong_to_their_author_and_channel_and_leave_with_the_messa
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn two_sends_of_the_same_file_leave_one_message(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (a, _) = two_users(&db).await;
+    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
+    for round in 0..10 {
+        let key: &'static str = Box::leak(format!("race{round}").into_boxed_str());
+        let f = db
+            .create_attachment(NewAttachment {
+                channel_id: general,
+                uploader_id: a.id,
+                filename: "f.txt",
+                mime: "text/plain",
+                size: 1,
+                storage_key: key,
+                dims: None,
+                preview: false,
+            })
+            .await
+            .unwrap();
+        let r = vec![AttachmentRef { id: f, alt: None }];
+        // Deux nonces différents à chaque tour : ce ne sont pas des renvois.
+        let send = |n: &str| {
+            let d = Draft { content: "", nonce: Some(format!("{n}{round}")), attachments: &r, ..Default::default() };
+            db.send_message(general, a.id, d)
+        };
+        let (x, y) = tokio::join!(send("x"), send("y"));
+        assert_eq!(x.is_ok() as u8 + y.is_ok() as u8, 1, "un seul envoi gagne");
+    }
+    // Aucun message vide : chacun porte son fichier.
+    let empty: i64 = sqlx::query_scalar(
+        "select count(*) from messages m where content = '' and not exists (select 1 from attachments a where a.message_id = m.id)",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(empty, 0);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn account_purge_returns_uploaded_files(pool: PgPool) {
     let db = Db::from_pool(pool);
     let (a, b) = two_users(&db).await;

@@ -446,4 +446,14 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-viewer-nav { flex: none; color: var(--on-media); }
 .app-viewer-nav:hover { background: color-mix(in srgb, var(--on-media) 16%, transparent); color: var(--on-media); }
 @keyframes app-viewer-in { from { opacity: 0; transform: scale(.96); } }
+/* Petit écran : plein écran, flèches posées sur l'image, libellés de la barre réduits à l'icône. */
+@media (max-width: 639px) {
+  .app-viewer { width: 100vw; height: 100dvh; border-radius: 0; }
+  .app-viewer-bar .k-btn > span { display: none; }
+  .app-viewer-stage { position: relative; }
+  .app-viewer-stage > img { min-width: 0; max-width: 100%; max-height: 100%; }
+  .app-viewer-nav { position: absolute; z-index: 1; background: var(--shadow-scrim); }
+  .app-viewer-nav:first-child { left: var(--space-2); }
+  .app-viewer-nav:last-child { right: var(--space-2); }
+}
 @media (prefers-reduced-motion: reduce) { .app-viewer { animation: none; } .app-tile-bar > span { transition: none; } }
