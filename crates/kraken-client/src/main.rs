@@ -9,6 +9,7 @@ mod call;
 mod chat;
 mod emoji;
 mod files;
+mod guild;
 mod home;
 mod icons;
 mod legal;

@@ -60,6 +60,19 @@ pub fn base(is_owner: bool, everyone: u64, member_roles: impl IntoIterator<Item 
     if p & ADMINISTRATOR != 0 { ALL } else { p }
 }
 
+/// Rang le plus haut d'un membre : la position de son rôle le plus élevé (0 : `@everyone`
+/// seulement). Le propriétaire est au-dessus de tout.
+pub fn top_position(is_owner: bool, positions: impl IntoIterator<Item = i32>) -> i32 {
+    if is_owner { i32::MAX } else { positions.into_iter().fold(0, i32::max) }
+}
+
+/// Hiérarchie : le propriétaire peut tout (même sur lui-même) ; les autres seulement sur
+/// quelqu'un de strictement plus bas qu'eux, jamais sur le propriétaire. `ADMINISTRATOR` n'y
+/// change rien.
+pub fn outranks(actor_owner: bool, actor_top: i32, target_owner: bool, target_top: i32) -> bool {
+    actor_owner || (!target_owner && actor_top > target_top)
+}
+
 /// Droits dans un salon, à partir de [`base`].
 pub fn in_channel(base: u64, guild_id: Uuid, member_id: Uuid, member_roles: &[Uuid], overwrites: &[Overwrite]) -> u64 {
     if base & ADMINISTRATOR != 0 {
@@ -99,6 +112,18 @@ mod tests {
     fn owner_and_admin_have_everything() {
         assert_eq!(base(true, 0, []), ALL);
         assert_eq!(base(false, 0, [ADMINISTRATOR]), ALL);
+    }
+
+    #[test]
+    fn hierarchy() {
+        assert_eq!(top_position(false, []), 0);
+        assert_eq!(top_position(false, [3, 7, 1]), 7);
+        assert_eq!(top_position(true, [3]), i32::MAX);
+        assert!(outranks(true, i32::MAX, true, i32::MAX), "le propriétaire peut tout");
+        assert!(outranks(false, 5, false, 2));
+        assert!(!outranks(false, 5, false, 5), "à égalité : non");
+        assert!(!outranks(false, 5, false, 6));
+        assert!(!outranks(false, 5, true, i32::MAX), "jamais sur le propriétaire");
     }
 
     #[test]

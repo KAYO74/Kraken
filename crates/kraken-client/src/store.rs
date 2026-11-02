@@ -133,6 +133,8 @@ pub struct Store {
     pub now: RwSignal<i64>,
     /// Adresse où aller (clic sur une notification du bureau) ; la coquille y navigue.
     pub goto: RwSignal<Option<String>>,
+    /// Bannis des serveurs dont j'ai ouvert la liste (tenue à jour par le gateway).
+    pub bans: RwSignal<HashMap<Id, Vec<Ban>>>,
 }
 
 pub fn store() -> Store {
@@ -161,6 +163,7 @@ impl Store {
             viewing: RwSignal::new(None),
             now: RwSignal::new(js_sys::Date::now() as i64),
             goto: RwSignal::new(None),
+            bans: RwSignal::new(HashMap::new()),
         }
     }
 
@@ -188,6 +191,7 @@ impl Store {
         self.reads.set(HashMap::new());
         self.last.set(HashMap::new());
         self.notify.set(vec![]);
+        self.bans.set(HashMap::new());
     }
 
     pub fn my_id(&self) -> Option<Id> {
@@ -252,6 +256,43 @@ impl Store {
             let Some(m) = g.members.iter().find(|m| m.user.id == me) else { return 0 };
             let role = |id: &Id| g.roles.iter().find(|r| r.id == *id).map_or(0, |r| r.permissions);
             kraken_core::perms::base(g.guild.owner_id == me, role(&guild), m.roles.iter().map(role))
+        })
+    }
+
+    /// Rang le plus haut d'un membre (suivi) : position de son rôle le plus élevé ; le
+    /// propriétaire est au-dessus de tout.
+    pub fn top_of(&self, guild: Id, uid: Id) -> i32 {
+        self.guilds.with(|gs| {
+            let Some(g) = gs.iter().find(|g| g.guild.id == guild) else { return 0 };
+            let held = g.members.iter().find(|m| m.user.id == uid).map(|m| m.roles.as_slice()).unwrap_or(&[]);
+            let positions = g.roles.iter().filter(|r| held.contains(&r.id)).map(|r| r.position);
+            kraken_core::perms::top_position(g.guild.owner_id == uid, positions)
+        })
+    }
+
+    /// Puis-je agir (exclure, bannir, donner un rôle) sur ce membre ? Même règle que le serveur,
+    /// qui reste seul juge : ceci ne sert qu'à montrer ou cacher des boutons.
+    pub fn outranks(&self, guild: Id, target: Id) -> bool {
+        let Some(me) = self.my_id() else { return false };
+        let owner = |u| self.guilds.with(|gs| gs.iter().any(|g| g.guild.id == guild && g.guild.owner_id == u));
+        kraken_core::perms::outranks(owner(me), self.top_of(guild, me), owner(target), self.top_of(guild, target))
+    }
+
+    /// Puis-je modifier, donner ou retirer ce rôle ?
+    pub fn can_manage_role(&self, guild: Id, role: &Role) -> bool {
+        let Some(me) = self.my_id() else { return false };
+        self.guild_perms(guild) & kraken_core::perms::MANAGE_ROLES != 0
+            && role.id != guild
+            && (self.guilds.with(|gs| gs.iter().any(|g| g.guild.id == guild && g.guild.owner_id == me))
+                || self.top_of(guild, me) > role.position)
+    }
+
+    /// Couleur (1 à 8, dans la palette) du rôle coloré le plus haut de ce membre (suivi).
+    pub fn role_color(&self, guild: Option<Id>, uid: Id) -> Option<u32> {
+        self.guilds.with(|gs| {
+            let g = gs.iter().find(|g| Some(g.guild.id) == guild)?;
+            let m = g.members.iter().find(|m| m.user.id == uid)?;
+            g.roles.iter().filter(|r| m.roles.contains(&r.id) && r.color.is_some()).max_by_key(|r| r.position)?.color
         })
     }
 
@@ -361,6 +402,27 @@ impl Store {
         }
     }
 
+    /// Rôle supprimé : les rangs se resserrent (comme côté serveur) et les membres le perdent.
+    pub fn apply_role_delete(&self, guild_id: Id, role_id: Id) {
+        self.in_guild(guild_id, |g| {
+            let at = g.roles.iter().find(|r| r.id == role_id).map(|r| r.position);
+            g.roles.retain(|r| r.id != role_id);
+            if let Some(at) = at {
+                g.roles.iter_mut().filter(|r| r.id != guild_id && r.position > at).for_each(|r| r.position -= 1);
+            }
+            g.members.iter_mut().for_each(|m| m.roles.retain(|r| *r != role_id));
+        });
+    }
+
+    /// Change un serveur sur place.
+    pub fn in_guild(&self, guild: Id, f: impl FnOnce(&mut GuildState)) {
+        self.guilds.update(|gs| {
+            if let Some(g) = gs.iter_mut().find(|g| g.guild.id == guild) {
+                f(g)
+            }
+        });
+    }
+
     fn apply(&self, ev: Event) {
         match ev {
             Event::MessageCreate(m) => {
@@ -427,6 +489,41 @@ impl Store {
                     g.members.push(member);
                 }
             }),
+            Event::GuildMemberUpdate { guild_id, member } => self.in_guild(guild_id, |g| {
+                if let Some(m) = g.members.iter_mut().find(|m| m.user.id == member.user.id) {
+                    *m = member;
+                }
+            }),
+            Event::GuildMemberRemove { guild_id, user_id } => {
+                if self.my_id() == Some(user_id) {
+                    // Parti, exclu ou banni : le serveur disparaît de ma liste (la coquille quitte son écran).
+                    self.guilds.update(|gs| gs.retain(|g| g.guild.id != guild_id));
+                    self.bans.update(|b| {
+                        b.remove(&guild_id);
+                    });
+                } else {
+                    self.in_guild(guild_id, |g| g.members.retain(|m| m.user.id != user_id));
+                }
+            }
+            Event::GuildRoleCreate { guild_id, role } | Event::GuildRoleUpdate { guild_id, role } => {
+                self.in_guild(guild_id, |g| match g.roles.iter_mut().find(|r| r.id == role.id) {
+                    Some(r) => *r = role,
+                    None => g.roles.push(role),
+                })
+            }
+            Event::GuildRoleDelete { guild_id, role_id } => self.apply_role_delete(guild_id, role_id),
+            Event::GuildBanAdd { guild_id, ban } => self.bans.update(|b| {
+                if let Some(list) = b.get_mut(&guild_id) {
+                    list.retain(|x| x.user.id != ban.user.id);
+                    list.insert(0, ban);
+                }
+            }),
+            Event::GuildBanRemove { guild_id, user_id } => self.bans.update(|b| {
+                if let Some(list) = b.get_mut(&guild_id) {
+                    list.retain(|x| x.user.id != user_id);
+                }
+            }),
+            Event::GuildOwnerUpdate { guild_id, owner_id } => self.in_guild(guild_id, |g| g.guild.owner_id = owner_id),
             Event::VoiceStateUpdate(v) => self.voice_state(v),
             Event::CallUpdate(c) => {
                 self.calls.update(|cs| match cs.iter_mut().find(|x| x.channel_id == c.channel_id) {

@@ -75,6 +75,19 @@ pub fn Shell() -> impl IntoView {
         }
     };
     let ids = current_ids();
+    // Le serveur affiché disparaît de ma liste (parti, exclu, banni, y compris depuis un autre
+    // appareil) : retour à l'accueil. Un serveur qui n'a jamais été là garde sa page « Introuvable ».
+    let seen = StoredValue::new(None::<Id>);
+    let home = use_navigate();
+    Effect::new(move || {
+        let Some(g) = ids.get().0 else { return seen.set_value(None) };
+        if s.guild(g).is_some() {
+            seen.set_value(Some(g));
+        } else if seen.get_value() == Some(g) {
+            seen.set_value(None);
+            home("/channels/@me", NavigateOptions { replace: true, ..Default::default() });
+        }
+    });
     let notify_ui = crate::unread::provide_ui();
     // Clic sur une notification du bureau : on va au salon.
     let go = use_navigate();
@@ -313,6 +326,7 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
     let ids = current_ids();
     let collapsed = RwSignal::new(Vec::<Id>::new());
     let invite_open = RwSignal::new(false);
+    let leaving = RwSignal::new(None::<crate::social::Confirm>);
     let u = crate::unread::ui();
     // Sans les états vocaux ni les derniers messages : un micro coupé ou un message reçu ne
     // redessine pas toute la liste (ni ne vole le focus).
@@ -351,6 +365,25 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                             <a class="k-btn k-btn--icon" href=format!("/guilds/{gid}/settings") aria-label="Paramètres du serveur" title="Paramètres">
                                 <Icon icon=lu::LuSettings/>
                             </a>
+                            <crate::ui::MoreMenu label="Plus d'actions pour ce serveur".to_string()>
+                                {
+                                    let mine = s.my_id() == Some(g.guild.owner_id);
+                                    let (id, label) = (gid, g.guild.name.clone());
+                                    if mine {
+                                        view! {
+                                            <a class="k-menuitem" href=format!("/guilds/{gid}/settings/owner")>
+                                                <Icon icon=lu::LuCrown/>"Transférer la propriété"
+                                            </a>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <button class="k-menuitem is-danger" on:click=move |_| leaving.set(Some(crate::social::Confirm::LeaveGuild(id, label.clone())))>
+                                                <Icon icon=lu::LuLogOut/>"Quitter le serveur"
+                                            </button>
+                                        }.into_any()
+                                    }
+                                }
+                            </crate::ui::MoreMenu>
                         </div>
                         <a class="k-channel" href=format!("/guilds/{gid}/events")><Icon icon=lu::LuCalendar/>"Événements"</a>
                         {rows.into_iter().map(|c| {
@@ -399,6 +432,7 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
         <Show when=move || invite_open.get()>
             <InviteDialog guild=guild close=move || invite_open.set(false)/>
         </Show>
+        {move || leaving.get().map(|what| view! { <crate::social::ConfirmDialog what=what close=Callback::new(move |()| leaving.set(None))/> })}
     }
 }
 

@@ -141,9 +141,69 @@ pub struct Guild {
 pub struct Role {
     pub id: Id,
     pub name: String,
+    /// Numéro (1 à [`ROLE_COLORS`]) dans la palette fixe du thème, pas une valeur RGB : la
+    /// couleur suit le thème clair ou sombre. `None` : pas de couleur.
     pub color: Option<u32>,
+    /// Plus haut, plus puissant ; `@everyone` (id = id du serveur) est à 0.
     pub position: i32,
     pub permissions: u64,
+    /// Ce rôle a sa propre rubrique dans la liste des membres.
+    #[serde(default)]
+    pub hoist: bool,
+}
+
+/// Nombre de couleurs de la palette des rôles.
+pub const ROLE_COLORS: u32 = 8;
+/// Au plus ce nombre de rôles (sans `@everyone`) par serveur.
+pub const MAX_ROLES: usize = 100;
+/// Raison d'une exclusion ou d'un bannissement : au plus ce nombre de caractères.
+pub const MAX_REASON: usize = 512;
+/// Un bannissement efface au plus les messages de cette durée (7 jours).
+pub const MAX_PURGE_HOURS: u32 = 168;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateRole {
+    pub name: String,
+    pub color: Option<u32>,
+    #[serde(default)]
+    pub hoist: bool,
+    #[serde(default)]
+    pub permissions: u64,
+}
+
+/// Champs absents : inchangés. `color` à 0 : retirer la couleur.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct EditRole {
+    pub name: Option<String>,
+    pub color: Option<u32>,
+    pub hoist: Option<bool>,
+    pub permissions: Option<u64>,
+}
+
+/// Les rôles (sans `@everyone`) du plus haut au plus bas.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ReorderRoles {
+    pub ids: Vec<Id>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct BanMember {
+    pub reason: Option<String>,
+    /// Efface aussi ses messages des dernières heures (0 à [`MAX_PURGE_HOURS`]).
+    pub delete_hours: Option<u32>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TransferOwner {
+    pub user_id: Id,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Ban {
+    pub user: User,
+    pub reason: Option<String>,
+    pub moderator_id: Option<Id>,
+    pub created_at: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -807,6 +867,43 @@ pub enum Event {
     MemberAdd {
         guild_id: Id,
         member: Member,
+    },
+    /// Rôles ou surnom d'un membre changés : le membre entier, à remplacer.
+    GuildMemberUpdate {
+        guild_id: Id,
+        member: Member,
+    },
+    /// Parti, exclu ou banni. Reçu par la personne elle-même, c'est qu'elle n'a plus ce serveur.
+    GuildMemberRemove {
+        guild_id: Id,
+        user_id: Id,
+    },
+    GuildRoleCreate {
+        guild_id: Id,
+        role: Role,
+    },
+    /// Rôle modifié ou déplacé : le rôle entier, à sa nouvelle place.
+    GuildRoleUpdate {
+        guild_id: Id,
+        role: Role,
+    },
+    GuildRoleDelete {
+        guild_id: Id,
+        role_id: Id,
+    },
+    /// À ceux qui peuvent bannir seulement.
+    GuildBanAdd {
+        guild_id: Id,
+        ban: Ban,
+    },
+    GuildBanRemove {
+        guild_id: Id,
+        user_id: Id,
+    },
+    /// Propriété transférée.
+    GuildOwnerUpdate {
+        guild_id: Id,
+        owner_id: Id,
     },
     /// Nom affiché ou avatar changé : envoyé à l'intéressé et à ceux qui le voient.
     UserUpdate(User),
