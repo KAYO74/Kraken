@@ -562,3 +562,154 @@ async fn private_messages_all_count_and_settings_persist(pool: PgPool) {
     assert_eq!(db.notify_settings(b.id).await.unwrap().len(), 1);
     assert!(db.notify_settings(a.id).await.unwrap().is_empty());
 }
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn attachments_belong_to_their_author_and_channel_and_leave_with_the_message(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (a, b) = two_users(&db).await;
+    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
+    let other = db
+        .create_channel(g.guild.id, &CreateChannel { name: "autre".into(), kind: ChannelKind::Text, parent_id: None })
+        .await
+        .unwrap()
+        .id;
+    let new = |channel_id, uploader_id, key: &'static str, dims| NewAttachment {
+        channel_id,
+        uploader_id,
+        filename: "f.png",
+        mime: "image/png",
+        size: 10,
+        storage_key: key,
+        dims,
+        preview: dims.is_some(),
+    };
+    let img = db.create_attachment(new(general, a.id, "k1", Some((4, 3)))).await.unwrap();
+    let txt = db.create_attachment(new(general, a.id, "k2", None)).await.unwrap();
+    let elsewhere = db.create_attachment(new(other, a.id, "k3", None)).await.unwrap();
+    let theirs = db.create_attachment(new(general, b.id, "k4", None)).await.unwrap();
+    let refs = |ids: &[Id]| ids.iter().map(|id| AttachmentRef { id: *id, alt: None }).collect::<Vec<_>>();
+
+    // Ni le fichier d'un autre, ni celui d'un autre salon, ni 11 fichiers, ni un doublon.
+    for bad in [vec![theirs], vec![elsewhere], vec![img, img]] {
+        let r = refs(&bad);
+        let d = Draft { content: "x", attachments: &r, ..Default::default() };
+        assert_eq!(db.send_message(general, a.id, d).await.err(), Some(DbError::Invalid("attachments")));
+    }
+    let many = refs(&[img; 11]);
+    assert_eq!(
+        db.send_message(general, a.id, Draft { content: "x", attachments: &many, ..Default::default() }).await.err(),
+        Some(DbError::Invalid("attachments"))
+    );
+    // Sans texte ni fichier : refusé ; avec fichiers seuls : accepté, texte alternatif gardé.
+    assert!(db.send_message(general, a.id, Draft { content: " ", ..Default::default() }).await.is_err());
+    let r = vec![AttachmentRef { id: img, alt: Some(" un dessin ".into()) }, AttachmentRef { id: txt, alt: None }];
+    let (m, _) = db
+        .send_message(
+            general,
+            a.id,
+            Draft { content: "", nonce: Some("n".into()), attachments: &r, ..Default::default() },
+        )
+        .await
+        .unwrap();
+    assert_eq!(m.attachments.len(), 2);
+    assert_eq!((m.attachments[0].width, m.attachments[0].alt.as_deref()), (Some(4), Some("un dessin")));
+    // Renvoi du même nonce : le même message, sans erreur.
+    let (again, created) = db
+        .send_message(
+            general,
+            a.id,
+            Draft { content: "", nonce: Some("n".into()), attachments: &r, ..Default::default() },
+        )
+        .await
+        .unwrap();
+    assert!(!created && again.id == m.id);
+    // Les envois non joints se comptent, puis partent avec le ménage.
+    assert_eq!(db.pending_attachments(a.id).await.unwrap(), 1);
+    assert!(db.purge_orphan_attachments(1).await.unwrap().is_empty(), "trop récents");
+    sqlx::query("update attachments set created_at = now() - interval '2 hours' where message_id is null")
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let mut gone = db.purge_orphan_attachments(1).await.unwrap();
+    gone.sort();
+    assert_eq!(gone, vec!["attachments/k3".to_string(), "attachments/k4".to_string()]);
+    // Supprimer le message rend les chemins de ses fichiers (l'original et l'aperçu de l'image).
+    let mut files = db.delete_message(general, m.id, a.id, false).await.unwrap();
+    files.sort();
+    assert_eq!(files, vec!["attachments/k1", "attachments/k1.p", "attachments/k2"]);
+    let left: i64 = sqlx::query_scalar("select count(*) from attachments").fetch_one(&db.pool).await.unwrap();
+    assert_eq!(left, 0);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn two_sends_of_the_same_file_leave_one_message(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (a, _) = two_users(&db).await;
+    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
+    for round in 0..10 {
+        let key: &'static str = Box::leak(format!("race{round}").into_boxed_str());
+        let f = db
+            .create_attachment(NewAttachment {
+                channel_id: general,
+                uploader_id: a.id,
+                filename: "f.txt",
+                mime: "text/plain",
+                size: 1,
+                storage_key: key,
+                dims: None,
+                preview: false,
+            })
+            .await
+            .unwrap();
+        let r = vec![AttachmentRef { id: f, alt: None }];
+        // Deux nonces différents à chaque tour : ce ne sont pas des renvois.
+        let send = |n: &str| {
+            let d = Draft { content: "", nonce: Some(format!("{n}{round}")), attachments: &r, ..Default::default() };
+            db.send_message(general, a.id, d)
+        };
+        let (x, y) = tokio::join!(send("x"), send("y"));
+        assert_eq!(x.is_ok() as u8 + y.is_ok() as u8, 1, "un seul envoi gagne");
+    }
+    // Aucun message vide : chacun porte son fichier.
+    let empty: i64 = sqlx::query_scalar(
+        "select count(*) from messages m where content = '' and not exists (select 1 from attachments a where a.message_id = m.id)",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(empty, 0);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn account_purge_returns_uploaded_files(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (a, b) = two_users(&db).await;
+    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
+    for (who, key) in [(a.id, "ka"), (b.id, "kb")] {
+        db.create_attachment(NewAttachment {
+            channel_id: general,
+            uploader_id: who,
+            filename: "f",
+            mime: "text/plain",
+            size: 1,
+            storage_key: key,
+            dims: None,
+            preview: false,
+        })
+        .await
+        .unwrap();
+    }
+    db.request_deletion(b.id).await.unwrap();
+    sqlx::query("update users set deletion_requested_at = now() - interval '30 days' where id = $1")
+        .bind(b.id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let (n, _, files) = db.purge_deleted_accounts(14).await.unwrap();
+    assert_eq!((n, files), (1, vec!["attachments/kb".to_string()]));
+    let left: i64 = sqlx::query_scalar("select count(*) from attachments").fetch_one(&db.pool).await.unwrap();
+    assert_eq!(left, 1);
+}

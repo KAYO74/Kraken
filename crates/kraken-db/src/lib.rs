@@ -5,6 +5,7 @@
 //! client de la base). Les dates sortent en millisecondes Unix.
 
 mod calls;
+mod files;
 mod jobs;
 mod perm;
 mod reads;
@@ -18,6 +19,7 @@ use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
 use sqlx::types::Json;
 use sqlx::{Postgres, Row, Transaction};
 
+pub use files::{NewAttachment, StoredAttachment, attachment_paths, embed_paths};
 pub use jobs::Job;
 pub use social::Notices;
 
@@ -147,7 +149,12 @@ fn message_sql(filter: &str) -> String {
                 coalesce((select json_agg(json_build_object('id', u.id, 'username', u.username,
                                   'display_name', u.display_name, 'avatar', u.avatar_key) order by u.username)
                           from message_mentions mm join users u on u.id = mm.user_id
-                          where mm.message_id = m.id), '[]') as mentions
+                          where mm.message_id = m.id), '[]') as mentions,
+                coalesce((select json_agg(json_build_object('id', t.id, 'filename', t.filename, 'mime', t.mime,
+                                  'size', t.size_bytes, 'width', t.width, 'height', t.height, 'alt', t.alt_text) order by t.id)
+                          from attachments t where t.message_id = m.id), '[]') as attachments,
+                coalesce((select jsonb_agg(e) from jsonb_array_elements(m.embeds) e
+                          where not coalesce((e->>'hidden')::boolean, false)), '[]'::jsonb) as embeds
          from messages m left join users a on a.id = m.author_id
          left join messages r on r.id = m.reply_to_id left join users ra on ra.id = r.author_id {filter}",
         user_cols("a"),
@@ -184,6 +191,8 @@ fn message_from(r: &PgRow) -> sqlx::Result<Message> {
         mentions: r.try_get::<Json<Vec<User>>, _>("mentions")?.0,
         mention_everyone: r.try_get("mention_everyone")?,
         call,
+        attachments: r.try_get::<Json<Vec<Attachment>>, _>("attachments")?.0,
+        embeds: r.try_get::<Json<Vec<Embed>>, _>("embeds")?.0,
     })
 }
 
@@ -195,6 +204,8 @@ pub struct Draft<'a> {
     pub reply_to: Option<Id>,
     /// L'auteur a le droit de mentionner `@everyone` et `@here` dans ce salon.
     pub may_mention_everyone: bool,
+    /// Fichiers déjà envoyés par l'auteur dans ce salon, à rattacher.
+    pub attachments: &'a [AttachmentRef],
 }
 
 /// Une réaction ajoutée ou retirée a-t-elle changé quelque chose ?
@@ -486,8 +497,9 @@ impl Db {
     /// Anonymise les comptes dont la demande de suppression a plus de `grace_days` jours :
     /// identité, e-mail, mot de passe, profil et liens effacés ; les messages restent sous
     /// « compte supprimé ».
-    /// Rend le nombre de comptes et les clés d'avatar dont le fichier est à supprimer.
-    pub async fn purge_deleted_accounts(&self, grace_days: i32) -> Result<(u64, Vec<String>)> {
+    /// Rend le nombre de comptes, les clés d'avatar et les chemins des fichiers joints (leurs
+    /// lignes sont supprimées avec le compte) dont le fichier est à supprimer.
+    pub async fn purge_deleted_accounts(&self, grace_days: i32) -> Result<(u64, Vec<String>, Vec<String>)> {
         let mut tx = self.pool.begin().await?;
         let ids: Vec<Id> = sqlx::query_scalar(
             "select id from users where deletion_requested_at < now() - make_interval(days => $1) and deleted_at is null for update",
@@ -500,6 +512,14 @@ impl Db {
                 .bind(&ids)
                 .fetch_all(&mut *tx)
                 .await?;
+        let mut files = Vec::new();
+        for r in sqlx::query("delete from attachments where uploader_id = any($1) returning storage_key, preview")
+            .bind(&ids)
+            .fetch_all(&mut *tx)
+            .await?
+        {
+            files.extend(attachment_paths(r.try_get("storage_key")?, r.try_get("preview")?));
+        }
         for table in ["sessions", "auth_tokens", "relationships", "connections", "user_settings", "members"] {
             sqlx::query(&format!("delete from {table} where user_id = any($1)")).bind(&ids).execute(&mut *tx).await?;
         }
@@ -515,7 +535,7 @@ impl Db {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
-        Ok((ids.len() as u64, avatars))
+        Ok((ids.len() as u64, avatars, files))
     }
 
     // ───────── serveurs ─────────
@@ -755,8 +775,13 @@ impl Db {
     /// `@pseudo` ne retiennent que ceux qui voient le salon.
     pub async fn send_message(&self, cid: Id, author: Id, d: Draft<'_>) -> Result<(Message, bool)> {
         let content = d.content.trim();
-        if content.is_empty() || content.chars().count() > MAX_MESSAGE_LEN {
+        if (content.is_empty() && d.attachments.is_empty()) || content.chars().count() > MAX_MESSAGE_LEN {
             return Err(DbError::Invalid("content"));
+        }
+        if d.attachments.len() > MAX_ATTACHMENTS
+            || d.attachments.iter().any(|a| a.alt.as_ref().is_some_and(|t| t.chars().count() > MAX_ALT_TEXT))
+        {
+            return Err(DbError::Invalid("attachments"));
         }
         let Some(channel) = self.channel(cid).await?.filter(|c| c.kind.is_textual()) else {
             return Err(DbError::NotFound);
@@ -792,6 +817,41 @@ impl Db {
         }
         let (mentioned, everyone) = self.mentioned(cid, content).await?;
         let everyone = everyone && d.may_mention_everyone;
+        // Un renvoi (même nonce) a déjà rattaché ses fichiers : on ne les revérifie pas.
+        let resend: bool = match &d.nonce {
+            Some(n) => {
+                sqlx::query_scalar(
+                    "select exists(select 1 from messages where author_id = $1 and channel_id = $2 and nonce = $3)",
+                )
+                .bind(author)
+                .bind(cid)
+                .bind(n)
+                .fetch_one(&self.pool)
+                .await?
+            }
+            None => false,
+        };
+        let files: Vec<Id> = d.attachments.iter().map(|a| a.id).collect();
+        if !resend && !files.is_empty() {
+            let mut distinct = files.clone();
+            distinct.sort_unstable();
+            distinct.dedup();
+            let mine: i64 = sqlx::query_scalar(
+                "select count(*) from attachments
+                 where id = any($1) and uploader_id = $2 and channel_id = $3 and message_id is null",
+            )
+            .bind(&distinct)
+            .bind(author)
+            .bind(cid)
+            .fetch_one(&self.pool)
+            .await?;
+            if distinct.len() != files.len() || mine as usize != distinct.len() {
+                return Err(DbError::Invalid("attachments"));
+            }
+        }
+        // Message et réservation des fichiers dans une même transaction : deux envois simultanés
+        // des mêmes fichiers ne laissent pas de message vide (le perdant est annulé).
+        let mut tx = self.pool.begin().await?;
         let id: Option<Id> = sqlx::query_scalar(
             "with m as (insert into messages (channel_id, author_id, content, nonce, kind, reply_to_id, mention_everyone)
                         values ($1, $2, $3, $4, case when $5::uuid is null then 'default' else 'reply' end, $5, $6)
@@ -806,8 +866,27 @@ impl Db {
         .bind(&d.nonce)
         .bind(d.reply_to)
         .bind(everyone)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *tx)
         .await?;
+        if let Some(id) = id {
+            for a in d.attachments {
+                let done = sqlx::query(
+                    "update attachments set message_id = $1, status = 'ready', alt_text = $4
+                     where id = $2 and uploader_id = $3 and message_id is null",
+                )
+                .bind(id)
+                .bind(a.id)
+                .bind(author)
+                .bind(a.alt.as_deref().map(str::trim).filter(|t| !t.is_empty()))
+                .execute(&mut *tx)
+                .await?;
+                if done.rows_affected() != 1 {
+                    tx.rollback().await?;
+                    return Err(DbError::Invalid("attachments"));
+                }
+            }
+        }
+        tx.commit().await?;
         let r = match id {
             Some(id) => {
                 self.set_mentions(id, &mentioned).await?;
@@ -905,7 +984,8 @@ impl Db {
     }
 
     /// Supprime un message de ce salon : son auteur, ou quelqu'un qui gère les messages.
-    pub async fn delete_message(&self, cid: Id, mid: Id, uid: Id, can_manage: bool) -> Result<()> {
+    /// Rend les chemins de ses fichiers (joints et aperçus de liens), à supprimer du disque.
+    pub async fn delete_message(&self, cid: Id, mid: Id, uid: Id, can_manage: bool) -> Result<Vec<String>> {
         let author: Option<Option<Id>> =
             sqlx::query_scalar("select author_id from messages where id = $1 and channel_id = $2")
                 .bind(mid)
@@ -917,6 +997,19 @@ impl Db {
             Some(a) if a != Some(uid) && !can_manage => return Err(DbError::Forbidden("author")),
             Some(_) => {}
         }
+        let mut files = Vec::new();
+        for r in sqlx::query("select storage_key, preview from attachments where message_id = $1")
+            .bind(mid)
+            .fetch_all(&self.pool)
+            .await?
+        {
+            files.extend(attachment_paths(r.try_get("storage_key")?, r.try_get("preview")?));
+        }
+        let embeds: Option<Json<Vec<Embed>>> = sqlx::query_scalar("select embeds from messages where id = $1")
+            .bind(mid)
+            .fetch_optional(&self.pool)
+            .await?;
+        files.extend(embed_paths(&embeds.map(|e| e.0).unwrap_or_default()));
         // Le salon garde son dernier message (la clé étrangère l'aurait effacé) : les non-lus en
         // dépendent.
         sqlx::query(
@@ -929,7 +1022,7 @@ impl Db {
         .bind(cid)
         .execute(&self.pool)
         .await?;
-        Ok(())
+        Ok(files)
     }
 
     /// Ajoute ma réaction ; `false` si elle y était déjà. Au plus

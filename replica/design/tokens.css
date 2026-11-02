@@ -119,6 +119,12 @@
   --size-card: 480px;
   --size-dialog-wide: 520px;
   --size-tile: 240px;
+  --size-thumb-w: 400px;
+  --size-thumb-h: 300px;
+  --size-pending-tile: 96px;
+  --size-embed: 432px;
+  --size-embed-thumb: 80px;
+  --size-favicon: 16px;
   --z-base: 0;
   --z-sticky: 10;
   --z-popover: 100;

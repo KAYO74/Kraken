@@ -3,7 +3,7 @@
 //!
 //! Reconnu : `**gras**`, `*italique*` ou `_italique_`, `__souligné__`, `~~barré~~`,
 //! `` `code` ``, blocs ```` ``` ````, citations `> `, `||spoiler||`, liens `http(s)://`
-//! détectés seuls, mentions `@pseudo`, `@everyone`, `@here` et salons `#nom`. Une barre
+//! détectés seuls (entre chevrons, `<https://…>`, sans aperçu), mentions `@pseudo`, `@everyone`, `@here` et salons `#nom`. Une barre
 //! oblique inverse rend littéral le signe qui la suit.
 
 /// Un bloc du message.
@@ -28,6 +28,8 @@ pub enum Inline {
     Code(String),
     /// Adresse `http://` ou `https://`, rien d'autre.
     Link(String),
+    /// Adresse entre chevrons, `<https://…>` : un lien comme un autre, mais sans aperçu.
+    LinkQuiet(String),
     /// `@pseudo` (pseudo unique, en minuscules).
     User(String),
     Everyone,
@@ -216,6 +218,17 @@ fn inline(s: &str, depth: usize) -> Vec<Inline> {
                 continue 'scan;
             }
         }
+        if c == '<'
+            && (rest[1..].starts_with("https://") || rest[1..].starts_with("http://"))
+            && let Some(n) = rest.find('>')
+            && !rest[1..n].contains(|c: char| c.is_whitespace() || "<\"".contains(c))
+            && n > rest.find("//").unwrap() + 2
+        {
+            flush(&mut text, &mut out);
+            out.push(Inline::LinkQuiet(rest[1..n].to_string()));
+            i += n + 1;
+            continue;
+        }
         if !word(prev) && (rest.starts_with("https://") || rest.starts_with("http://")) {
             let n = url_len(rest);
             if n > rest.find("//").unwrap() + 2 {
@@ -269,7 +282,7 @@ pub fn plain(inl: &[Inline]) -> String {
     let mut s = String::new();
     for i in inl {
         match i {
-            Inline::Text(t) | Inline::Code(t) | Inline::Link(t) => s.push_str(t),
+            Inline::Text(t) | Inline::Code(t) | Inline::Link(t) | Inline::LinkQuiet(t) => s.push_str(t),
             Inline::Bold(v) | Inline::Italic(v) | Inline::Underline(v) | Inline::Strike(v) | Inline::Spoiler(v) => {
                 s.push_str(&plain(v))
             }
@@ -338,6 +351,27 @@ pub fn mentions(src: &str) -> (Vec<String>, bool) {
         }
     }
     (users, all)
+}
+
+/// Adresses du message qui méritent un aperçu : celles écrites seules, dans le texte (ni dans
+/// du code, ni dans un spoiler, ni entre chevrons), sans doublon, `max` au plus.
+pub fn links(src: &str, max: usize) -> Vec<String> {
+    fn walk(inl: &[Inline], out: &mut Vec<String>, max: usize) {
+        for i in inl {
+            match i {
+                Inline::Link(u) if out.len() < max && !out.contains(u) => out.push(u.clone()),
+                Inline::Bold(v) | Inline::Italic(v) | Inline::Underline(v) | Inline::Strike(v) => walk(v, out, max),
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for b in parse(src) {
+        if let Block::Text(v) | Block::Quote(v) = b {
+            walk(&v, &mut out, max);
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -436,5 +470,16 @@ mod tests {
         let deep = "**__~~||*".repeat(50) + "x" + &"*||~~__**".repeat(50);
         let _ = parse(&deep);
         let _ = parse(&"*a".repeat(2000));
+    }
+
+    #[test]
+    fn quiet_links_get_no_preview() {
+        assert_eq!(one("<https://exemple.org/a> ok"), vec![LinkQuiet("https://exemple.org/a".into()), t(" ok")]);
+        // Chevron jamais refermé sur l'adresse : un lien ordinaire, donc avec aperçu.
+        assert_eq!(one("c <https://x y>"), vec![t("c <"), Link("https://x".into()), t(" y>")]);
+        let src = "voir https://a.example/x et <https://b.example> et `https://c.example` et ||https://d.example|| https://a.example/x";
+        assert_eq!(links(src, 5), vec!["https://a.example/x".to_string()]);
+        let many: String = (0..9).map(|i| format!("https://h{i}.example ")).collect();
+        assert_eq!(links(&many, 5).len(), 5);
     }
 }

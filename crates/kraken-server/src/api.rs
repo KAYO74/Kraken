@@ -13,13 +13,13 @@ use crate::AppState;
 use crate::auth::Auth;
 use crate::error::{ApiResult, AppError};
 
-async fn require_channel(state: &AppState, uid: Id, cid: Id, need: u64) -> ApiResult<Channel> {
+pub(crate) async fn require_channel(state: &AppState, uid: Id, cid: Id, need: u64) -> ApiResult<Channel> {
     channel_perms(state, uid, cid, need).await?;
     state.db.channel(cid).await?.ok_or_else(AppError::not_found)
 }
 
 /// Mes droits dans ce salon, s'ils contiennent `need`.
-async fn channel_perms(state: &AppState, uid: Id, cid: Id, need: u64) -> ApiResult<u64> {
+pub(crate) async fn channel_perms(state: &AppState, uid: Id, cid: Id, need: u64) -> ApiResult<u64> {
     let p = state.db.channel_perms(uid, cid).await?;
     if p & perms::VIEW_CHANNEL == 0 {
         return Err(AppError::not_found()); // ne pas révéler l'existence du salon
@@ -53,6 +53,7 @@ pub async fn health(State(state): State<AppState>) -> ApiResult<&'static str> {
 pub async fn instance(State(state): State<AppState>) -> Json<Instance> {
     let mut i = state.cfg.instance.clone();
     i.public_url = state.cfg.public_url.trim_end_matches('/').to_string();
+    i.max_upload_bytes = state.cfg.max_upload_bytes;
     Json(i)
 }
 
@@ -124,7 +125,11 @@ pub async fn create_message(
         nonce: req.nonce,
         reply_to: req.reply_to,
         may_mention_everyone: p & perms::MENTION_EVERYONE != 0,
+        attachments: &req.attachments,
     };
+    if !req.attachments.is_empty() && p & perms::ATTACH_FILES == 0 {
+        return Err(AppError::forbidden());
+    }
     let (m, created) = state.db.send_message(cid, auth.user.id, draft).await?;
     // Même pour un renvoi (même nonce) : si la diffusion avait échoué, elle a lieu cette fois ;
     // les clients ignorent un message qu'ils ont déjà.
@@ -140,6 +145,9 @@ pub async fn create_message(
         crate::reads::record(&state, &m, &audience).await;
     }
     state.hub.send(&audience, Event::MessageCreate(Box::new(m.clone())));
+    if created && p & perms::EMBED_LINKS != 0 {
+        crate::embed::schedule(&state, m.id, &m.content, false).await;
+    }
     Ok((if created { StatusCode::CREATED } else { StatusCode::OK }, Json(m)))
 }
 
@@ -156,6 +164,11 @@ pub async fn edit_message(
     if before.as_ref() != Some(&m) {
         let audience = state.db.channel_audience(cid).await?;
         state.hub.send(&audience, Event::MessageUpdate(Box::new(m.clone())));
+        if before.as_ref().is_some_and(|b| b.content != m.content) && p & perms::EMBED_LINKS != 0 {
+            // Les aperçus suivent le texte : nouveaux liens ajoutés, liens retirés effacés.
+            let had = !m.embeds.is_empty();
+            crate::embed::schedule(&state, m.id, &m.content, had).await;
+        }
     }
     Ok(Json(m))
 }
@@ -167,11 +180,32 @@ pub async fn delete_message(
     Path((cid, mid)): Path<(Id, Id)>,
 ) -> ApiResult<StatusCode> {
     let p = channel_perms(&state, auth.user.id, cid, perms::READ_HISTORY).await?;
-    state.db.delete_message(cid, mid, auth.user.id, p & perms::MANAGE_MESSAGES != 0).await?;
+    let files = state.db.delete_message(cid, mid, auth.user.id, p & perms::MANAGE_MESSAGES != 0).await?;
+    crate::attach::remove_files(&state, files).await;
     let audience = state.db.channel_audience(cid).await?;
     state.hub.send(&audience, Event::MessageDelete { channel_id: cid, id: mid });
     crate::reads::deleted(&state, cid, mid).await;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct EmbedQuery {
+    url: String,
+}
+
+/// L'auteur retire l'aperçu d'un lien de son message.
+pub async fn remove_embed(
+    State(state): State<AppState>,
+    auth: Auth,
+    Path((cid, mid)): Path<(Id, Id)>,
+    Query(q): Query<EmbedQuery>,
+) -> ApiResult<Json<Message>> {
+    channel_perms(&state, auth.user.id, cid, perms::READ_HISTORY).await?;
+    let (m, files) = state.db.hide_embed(cid, mid, auth.user.id, &q.url).await?;
+    crate::attach::remove_files(&state, files).await;
+    let audience = state.db.channel_audience(cid).await?;
+    state.hub.send(&audience, Event::MessageUpdate(Box::new(m.clone())));
+    Ok(Json(m))
 }
 
 pub async fn add_reaction(

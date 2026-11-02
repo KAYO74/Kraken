@@ -396,3 +396,64 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-members .k-dm:is(:hover, :focus-within) .app-more > .k-btn--icon,
 .app-members .app-more > .k-btn--icon[aria-expanded="true"] { opacity: 1; }
 @media (hover: none) { .app-members .k-dm .k-btn--icon { visibility: visible; opacity: 1; } }
+
+/* Fichiers joints : plateau au-dessus de la saisie (collé à elle comme « Tu réponds à… »), calque
+   de dépôt, vignettes et cartes dans les messages, visionneuse. */
+.app-pending { list-style: none; display: flex; gap: var(--space-3); margin: 0 var(--space-4); padding: var(--space-3); overflow-x: auto;
+  border: 1px solid var(--border); border-bottom: 0; border-radius: var(--radius-md) var(--radius-md) 0 0; background: var(--surface-raised); }
+.app-replying + .app-pending { border-radius: 0; }
+.app-pending + .k-composer { border-top-left-radius: 0; border-top-right-radius: 0; }
+.app-pending-item { flex: none; display: grid; align-content: start; gap: var(--space-2); width: var(--size-pending-tile); }
+.app-tile { position: relative; width: var(--size-pending-tile); height: var(--size-pending-tile); overflow: hidden; border-radius: var(--radius-md);
+  border: 1px solid var(--border); background: var(--surface-overlay); }
+.app-tile[data-failed] { border-color: var(--danger); }
+.app-tile > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.app-tile-file { display: grid; justify-items: center; align-content: center; gap: var(--space-1); height: 100%; padding: var(--space-3); color: var(--text-muted); text-align: center; }
+.app-tile-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: var(--text-xs-size); }
+.app-tile-file small { font-size: var(--text-xs-size); color: var(--text-muted); }
+.app-tile-x { position: absolute; top: var(--space-1); right: var(--space-1); background: color-mix(in srgb, var(--media) 65%, transparent); color: var(--on-media); }
+.app-tile-x:hover { background: var(--media); color: var(--on-media); }
+.app-tile-bar { position: absolute; left: 0; right: 0; bottom: 0; height: var(--space-2); background: var(--border-strong); }
+.app-tile-bar > span { display: block; height: 100%; background: var(--accent-text); transition: width var(--motion-fast) linear; }
+.app-tile-error { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; padding: var(--space-1) var(--space-2); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; background: var(--surface-raised); color: var(--danger); font-size: var(--text-xs-size); }
+.app-alt { width: 100%; height: var(--space-8); padding: 0 var(--space-3); font-size: var(--text-xs-size); }
+.app-drop { position: absolute; inset: var(--space-3) var(--space-3) calc(var(--size-composer-min) + var(--space-5)); z-index: var(--z-sticky); display: grid;
+  place-content: center; justify-items: center; gap: var(--space-3); border: var(--space-1) dashed var(--accent-text); border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent-soft) 85%, transparent); color: var(--accent-text); font-weight: var(--weight-semibold); pointer-events: none; }
+.app-drop p { margin: 0; }
+.app-media { display: grid; gap: var(--space-1); margin-top: var(--space-2); width: fit-content; max-width: min(var(--size-thumb-w), 100%); }
+.app-media[data-multi] { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(var(--size-thumb-w), 100%); }
+.app-thumb { display: block; width: fit-content; max-width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface-overlay); cursor: zoom-in; }
+.app-thumb img { display: block; width: auto; height: auto; max-width: 100%; max-height: var(--size-thumb-h); }
+.app-media[data-multi] .app-thumb { width: 100%; }
+.app-media[data-multi] .app-thumb img { width: 100%; height: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.app-thumb:focus-visible { outline: var(--space-1) solid var(--accent-text); outline-offset: var(--space-1); }
+.k-embed .app-embed-x { position: absolute; top: var(--space-2); right: var(--space-2); background: var(--surface-overlay); opacity: 0; }
+.k-embed:hover .app-embed-x, .k-embed:focus-within .app-embed-x { opacity: 1; }
+@media (hover: none) { .k-embed .app-embed-x { opacity: 1; } }
+.app-viewer-scrim { background: color-mix(in srgb, var(--media) 88%, transparent); }
+.app-viewer { width: auto; max-width: 100vw; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: var(--space-3); padding: var(--space-3);
+  background: var(--media); color: var(--on-media); border: 0; animation: app-viewer-in var(--motion-base) var(--motion-ease); }
+.app-viewer-bar { display: flex; align-items: center; gap: var(--space-2); }
+.app-viewer-bar .k-btn { color: var(--on-media); }
+.app-viewer-bar .k-btn:hover { background: color-mix(in srgb, var(--on-media) 16%, transparent); color: var(--on-media); }
+.app-viewer-name { flex: 1; min-width: 0; display: grid; }
+.app-viewer-name small { color: color-mix(in srgb, var(--on-media) 72%, transparent); font-size: var(--text-xs-size); }
+.app-viewer-stage { display: flex; align-items: center; justify-content: center; gap: var(--space-3); min-height: 0; }
+.app-viewer-stage > img { display: block; max-width: 90vw; max-height: 85dvh; object-fit: contain; }
+.app-viewer-nav { flex: none; color: var(--on-media); }
+.app-viewer-nav:hover { background: color-mix(in srgb, var(--on-media) 16%, transparent); color: var(--on-media); }
+@keyframes app-viewer-in { from { opacity: 0; transform: scale(.96); } }
+/* Petit écran : plein écran, flèches posées sur l'image, libellés de la barre réduits à l'icône. */
+@media (max-width: 639px) {
+  .app-viewer { width: 100vw; height: 100dvh; border-radius: 0; }
+  .app-viewer-bar .k-btn > span { display: none; }
+  .app-viewer-stage { position: relative; }
+  .app-viewer-stage > img { min-width: 0; max-width: 100%; max-height: 100%; }
+  .app-viewer-nav { position: absolute; z-index: 1; background: var(--shadow-scrim); }
+  .app-viewer-nav:first-child { left: var(--space-2); }
+  .app-viewer-nav:last-child { right: var(--space-2); }
+}
+@media (prefers-reduced-motion: reduce) { .app-viewer { animation: none; } .app-tile-bar > span { transition: none; } }

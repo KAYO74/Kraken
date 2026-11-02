@@ -185,16 +185,16 @@ Nouveaux messages               .k-newline
   used on   S05, S19
 
 Embed                           .k-embed
-  variants  lien simple, vidéo (vignette 16:9), couleur de bord (--embed-color)
-  states    chargé, masqué (préférence S11), chargement (skeleton)
-  tokens    surface-overlay, radius sm, bord 4
-  a11y      le titre est un lien ; la vignette vidéo a un texte alternatif
+  variants  lien simple, petite image à droite (--thumb, 80), grande image 16:9 au-dessus (--wide)
+  states    chargé, masqué (préférence S11), retiré par l'auteur (×, visible au survol et au focus)
+  tokens    surface-raised, bord 1 border, radius md, largeur size-embed (432), description sur 2 lignes
+  a11y      le titre est un lien ; l'image est décorative ; le × porte « Retirer l'aperçu »
   used on   S05
 
 Pièce jointe                    .k-attachment, .k-spoiler
-  variants  image, vidéo, fichier, spoiler
-  states    masquée (spoiler, filtre média S08), révélée, téléversement (barre de progression)
-  a11y      texte alternatif saisi à l'envoi ; spoiler = <button> « Afficher le contenu masqué »
+  variants  image (vignette size-thumb-w × size-thumb-h, grille de 2 colonnes), fichier (puce accent-soft, nom, taille, Télécharger), spoiler
+  states    masquée (spoiler, filtre média S08), révélée, téléversement (barre de progression sur la tuile en attente)
+  a11y      texte alternatif saisi à l'envoi ; la vignette ouvre une visionneuse (Échap ferme, ← → entre images) ; spoiler = <button> « Afficher le contenu masqué »
   used on   S05, S08
 
 Réaction                        .k-reaction

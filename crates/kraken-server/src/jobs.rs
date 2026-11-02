@@ -46,6 +46,11 @@ pub async fn run(state: AppState) {
     if let Err(e) = state.db.enqueue("account_purge", serde_json::json!({}), Some("cron:account_purge"), 60).await {
         tracing::error!("tâches : {e:?}");
     }
+    if let Err(e) =
+        state.db.enqueue("attachment_sweep", serde_json::json!({}), Some("cron:attachment_sweep"), 600).await
+    {
+        tracing::error!("tâches : {e:?}");
+    }
     loop {
         match state.db.claim_jobs(10).await {
             Ok(jobs) if !jobs.is_empty() => {
@@ -57,7 +62,11 @@ pub async fn run(state: AppState) {
             Ok(_) => {}
             Err(e) => tracing::error!("tâches : {e:?}"),
         }
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        // Au plus 5 s d'attente, moins si une tâche vient d'être ajoutée (aperçu de lien).
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(5)) => {}
+            _ = state.jobs_wake.notified() => {}
+        }
     }
 }
 
@@ -65,13 +74,21 @@ async fn handle(state: &AppState, job: Job) {
     let result = match job.kind.as_str() {
         "email_verify" => email(state, &job, "verify_email").await,
         "email_reset" => email(state, &job, "reset_password").await,
+        "embed_fetch" => crate::embed::run(state, &job).await,
+        "attachment_sweep" => {
+            // Tâche permanente, comme la purge des comptes : reprise toutes les heures.
+            crate::attach::sweep(state).await;
+            let _ = state.db.job_reschedule(job.id, 3600).await;
+            return;
+        }
         "account_purge" => {
             // Tâche permanente : jamais en lettre morte, reprise dans une heure en cas d'échec.
             let next = match state.db.purge_deleted_accounts(GRACE_DAYS).await {
-                Ok((n, avatars)) => {
+                Ok((n, avatars, files)) => {
                     for key in avatars {
                         crate::avatar::forget(state, Some(key)).await;
                     }
+                    crate::attach::remove_files(state, files).await;
                     if n > 0 {
                         tracing::info!("{n} compte(s) anonymisé(s)");
                     }
