@@ -141,6 +141,8 @@ test('PJ-H2 plusieurs images : grille, flèches entre les images du message, Éc
   await expect(tray.getByRole('progressbar')).toHaveCount(0);
   // Un message peut ne porter que des fichiers.
   await page.getByLabel('Écrire dans #général').press('Enter');
+  // L'envoi grisé porte déjà les vignettes ; il est remplacé par le vrai message, qui garde le focus de retour.
+  await expect(page.locator('article[data-pending]')).toHaveCount(0);
   const msg = messages(page).filter({ has: page.locator('.app-media') });
   await expect(msg).toHaveCount(1);
   await expect(msg.locator('.app-media')).toHaveAttribute('data-multi', '');
