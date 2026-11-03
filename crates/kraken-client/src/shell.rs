@@ -369,18 +369,16 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                 {
                                     let mine = s.my_id() == Some(g.guild.owner_id);
                                     let (id, label) = (gid, g.guild.name.clone());
-                                    if mine {
-                                        view! {
+                                    view! {
+                                        {mine.then(|| view! {
                                             <a class="k-menuitem" href=format!("/guilds/{gid}/settings/owner")>
                                                 <Icon icon=lu::LuCrown/>"Transférer la propriété"
                                             </a>
-                                        }.into_any()
-                                    } else {
-                                        view! {
-                                            <button class="k-menuitem is-danger" on:click=move |_| leaving.set(Some(crate::social::Confirm::LeaveGuild(id, label.clone())))>
-                                                <Icon icon=lu::LuLogOut/>"Quitter le serveur"
-                                            </button>
-                                        }.into_any()
+                                        })}
+                                        <hr/>
+                                        <button class="k-menuitem is-danger" on:click=move |_| leaving.set(Some(crate::social::Confirm::LeaveGuild(id, label.clone(), mine)))>
+                                            <Icon icon=lu::LuLogOut/>"Quitter le serveur"
+                                        </button>
                                     }
                                 }
                             </crate::ui::MoreMenu>

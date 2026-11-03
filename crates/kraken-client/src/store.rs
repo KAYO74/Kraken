@@ -250,7 +250,8 @@ impl Store {
     /// Mes droits dans un serveur, d'après ses rôles (les surcharges des salons n'y sont pas :
     /// sert à montrer ou cacher des boutons, le serveur vérifie de son côté).
     pub fn guild_perms(&self, guild: Id) -> u64 {
-        let Some(me) = self.me.with_untracked(|m| m.as_ref().map(|m| m.id)) else { return 0 };
+        // Suivi : ce que l'on peut faire change quand le READY arrive (compte, puis serveurs).
+        let Some(me) = self.me.with(|m| m.as_ref().map(|m| m.id)) else { return 0 };
         self.guilds.with(|gs| {
             let Some(g) = gs.iter().find(|g| g.guild.id == guild) else { return 0 };
             let Some(m) = g.members.iter().find(|m| m.user.id == me) else { return 0 };

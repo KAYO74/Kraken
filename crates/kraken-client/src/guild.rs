@@ -2,6 +2,8 @@
 //! membre où l'on lui donne ou retire des rôles. Le serveur reste seul juge de la hiérarchie :
 //! l'interface désactive ce qui sera refusé, sans plus.
 
+use std::collections::HashMap;
+
 use gloo_timers::future::TimeoutFuture;
 use kraken_core::perms;
 use kraken_proto::{CreateRole, EditRole, Id, ROLE_COLORS, Role};
@@ -30,24 +32,33 @@ const CATEGORIES: &[(&str, &[Perm])] = &[
             (perms::VIEW_CHANNEL, "Voir les salons", "Voir les salons et lire ce qui s'y dit."),
             (perms::MANAGE_CHANNELS, "Gérer les salons", "Créer, renommer, déplacer et supprimer des salons."),
             (perms::MANAGE_GUILD, "Gérer le serveur", "Changer le nom, l'icône et les réglages du serveur."),
-            (
-                perms::MANAGE_ROLES,
-                "Gérer les rôles",
-                "Créer des rôles, les modifier et les donner, à condition qu'ils soient plus bas que son propre rôle.",
-            ),
             (perms::MANAGE_EMOJIS, "Gérer les émojis", "Ajouter et retirer les émojis et les autocollants du serveur."),
             (perms::MANAGE_EVENTS, "Gérer les événements", "Créer, modifier et annuler les événements."),
             (perms::VIEW_AUDIT_LOG, "Voir le journal d'audit", "Consulter l'historique des actions de modération."),
             (perms::CREATE_INVITE, "Créer des invitations", "Inviter de nouvelles personnes avec un lien."),
+        ],
+    ),
+    (
+        "Membres",
+        &[
+            (perms::CHANGE_NICK, "Changer son surnom", "Choisir son propre surnom sur ce serveur."),
+            (perms::MANAGE_NICKS, "Gérer les surnoms", "Changer le surnom des autres membres."),
+            (perms::KICK, "Expulser des membres", "Faire sortir un membre, qui peut revenir avec une invitation."),
             (
-                perms::ADMINISTRATOR,
-                "Administrateur",
-                "Tous les droits, sans exception. À réserver à des personnes de confiance.",
+                perms::BAN,
+                "Bannir des membres",
+                "Faire sortir un membre pour de bon : il ne peut plus revenir avec une invitation.",
+            ),
+            (perms::TIMEOUT, "Exclure temporairement", "Empêcher un membre de parler pendant un moment."),
+            (
+                perms::MANAGE_ROLES,
+                "Gérer les rôles",
+                "Créer, modifier et donner des rôles plus bas que le sien : de quoi distribuer des droits.",
             ),
         ],
     ),
     (
-        "Messages",
+        "Salons texte",
         &[
             (perms::SEND_MESSAGES, "Écrire des messages", "Envoyer des messages dans les salons textuels."),
             (perms::SEND_IN_THREADS, "Écrire dans les fils", "Répondre dans les fils de discussion."),
@@ -78,16 +89,17 @@ const CATEGORIES: &[(&str, &[Perm])] = &[
         ],
     ),
     (
-        "Membres",
-        &[
-            (perms::CHANGE_NICK, "Changer son surnom", "Choisir son propre surnom sur ce serveur."),
-            (perms::MANAGE_NICKS, "Gérer les surnoms", "Changer le surnom des autres membres."),
-            (perms::KICK, "Expulser des membres", "Faire sortir un membre, qui peut revenir avec une invitation."),
-            (perms::BAN, "Bannir des membres", "Faire sortir un membre pour de bon, et voir la liste des bannis."),
-            (perms::TIMEOUT, "Exclure temporairement", "Empêcher un membre de parler pendant un moment."),
-        ],
+        "Avancé",
+        &[(
+            perms::ADMINISTRATOR,
+            "Administrateur",
+            "Tous les droits, sans exception ni limite de rang : à réserver à des personnes de confiance.",
+        )],
     ),
 ];
+
+/// Droits sensibles : une icône d'alerte, en plus de leur phrase.
+const SENSITIVE: [u64; 3] = [perms::ADMINISTRATOR, perms::BAN, perms::MANAGE_ROLES];
 
 const SECTIONS: [(&str, &str); 3] = [("roles", "Rôles"), ("bans", "Bannis"), ("owner", "Propriété")];
 
@@ -95,6 +107,7 @@ const SECTIONS: [(&str, &str); 3] = [("roles", "Rôles"), ("bans", "Bannis"), ("
 fn allowed(guild: Id) -> Vec<&'static str> {
     let s = store();
     let p = s.guild_perms(guild);
+    s.me.track();
     let owner = s.my_id().is_some() && s.guild(guild).is_some_and(|g| Some(g.guild.owner_id) == s.my_id());
     SECTIONS
         .iter()
@@ -120,22 +133,26 @@ pub fn GuildSettings() -> impl IntoView {
     let close2 = close.clone();
     let root = NodeRef::new();
     modal(root, close.clone());
+    // Des mémos, pas des lectures directes du store : un changement sans rapport (un membre qui
+    // arrive, un rôle modifié) ne doit pas redessiner la page ni effacer ce qu'on y saisit.
+    let open = Memo::new(move |_| gid.get().map(allowed).unwrap_or_default());
+    let exists = Memo::new(move |_| gid.get().is_some_and(|g| s.guilds.with(|gs| gs.iter().any(|x| x.guild.id == g))));
     let section = Memo::new(move |_| {
-        let Some(g) = gid.get() else { return "" };
-        let open = allowed(g);
+        let Some(_) = gid.get() else { return "" };
+        let open = open.get();
         let asked = params.read().get("section").unwrap_or_default();
         open.iter().copied().find(|x| *x == asked).or(open.first().copied()).unwrap_or("")
     });
-    let title = move || {
+    let title = Memo::new(move |_| {
         gid.get().and_then(|g| s.guild(g)).map(|g| g.guild.name).unwrap_or_else(|| "Paramètres du serveur".into())
-    };
+    });
     view! {
         <div class="k-scrim app-settings" node_ref=root>
             <div class="k-settings" role="dialog" aria-modal="true" aria-label="Paramètres du serveur">
                 <nav aria-label="Sections des paramètres du serveur">
-                    <h3>{title}</h3>
+                    <h3>{move || title.get()}</h3>
                     {move || gid.get().map(|g| {
-                        let open = allowed(g);
+                        let open = open.get();
                         SECTIONS.iter().filter(|(slug, _)| open.contains(slug)).map(|(slug, label)| view! {
                             <a class="k-navitem" href=format!("/guilds/{g}/settings/{slug}")
                                 aria-current=move || (section.get() == *slug).then_some("page")>{*label}</a>
@@ -151,7 +168,7 @@ pub fn GuildSettings() -> impl IntoView {
                     </div>
                     {move || {
                         let Some(g) = gid.get() else { return empty("Serveur introuvable", "Ce lien est peut-être ancien.").into_any() };
-                        if s.guild(g).is_none() {
+                        if !exists.get() {
                             return if s.conn.get() == Conn::Ready {
                                 empty("Serveur introuvable", "Tu n'en fais plus partie, ou il n'existe pas.").into_any()
                             } else {
@@ -202,6 +219,42 @@ async fn refocus(prefer: String, fallback: String) {
     }
 }
 
+/// Ce qu'on modifie d'un rôle avant d'enregistrer.
+#[derive(Clone, PartialEq)]
+struct Draft {
+    name: String,
+    color: Option<u32>,
+    hoist: bool,
+    permissions: u64,
+}
+
+impl Draft {
+    fn of(r: &Role) -> Self {
+        Self { name: r.name.clone(), color: r.color, hoist: r.hoist, permissions: r.permissions }
+    }
+}
+
+type Drafts = RwSignal<HashMap<Id, Draft>>;
+
+/// Applique un changement au brouillon du rôle ; il disparaît s'il redevient identique au rôle.
+fn edit(drafts: Drafts, guild: Id, role: Id, f: impl FnOnce(&mut Draft)) {
+    let Some(cur) = role_of(guild, role) else { return };
+    let mut d = drafts.with_untracked(|m| m.get(&role).cloned()).unwrap_or_else(|| Draft::of(&cur));
+    f(&mut d);
+    drafts.update(|m| {
+        if d == Draft::of(&cur) {
+            m.remove(&role);
+        } else {
+            m.insert(role, d);
+        }
+    });
+}
+
+/// Le nom à montrer pour un rôle : `@everyone` s'appelle « @tout le monde » à l'écran.
+fn role_label(guild: Id, r: &Role) -> String {
+    if r.id == guild { "@tout le monde".into() } else { r.name.clone() }
+}
+
 #[component]
 fn Roles(guild: Id) -> impl IntoView {
     let s = store();
@@ -211,6 +264,7 @@ fn Roles(guild: Id) -> impl IntoView {
     let dragging = RwSignal::new(None::<Id>);
     let over = RwSignal::new(None::<Id>);
     let busy = RwSignal::new(false);
+    let drafts: Drafts = RwSignal::new(HashMap::new());
     // Les rôles personnalisés, du plus haut au plus bas ; `@everyone` est toujours dessous.
     let roles = Memo::new(move |_| {
         s.guild(guild)
@@ -222,6 +276,14 @@ fn Roles(guild: Id) -> impl IntoView {
             .unwrap_or_default()
     });
     let ids = move || roles.with(|v| v.iter().map(|r| r.id).collect::<Vec<_>>());
+    // Combien de membres ont ce rôle (tout le monde pour `@everyone`).
+    let count = move |id: Id| {
+        s.guilds.with(|gs| {
+            gs.iter().find(|g| g.guild.id == guild).map_or(0, |g| {
+                if id == guild { g.members.len() } else { g.members.iter().filter(|m| m.roles.contains(&id)).count() }
+            })
+        })
+    };
     // Sélection par défaut, ou si le rôle choisi a disparu.
     Effect::new(move || {
         let cur = selected.get();
@@ -296,7 +358,9 @@ fn Roles(guild: Id) -> impl IntoView {
         });
     };
     let can_create = move || s.guild_perms(guild) & perms::MANAGE_ROLES != 0;
+    let unsaved = move |id: Id| drafts.with(|d| d.contains_key(&id));
     view! {
+        <div class="app-roles-page">
         <p class="app-hint">"Plus un rôle est haut dans la liste, plus il est puissant. On ne peut modifier, donner ni déplacer que les rôles plus bas que le sien."</p>
         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
         <p class="k-sr" role="status">{move || status.get()}</p>
@@ -323,7 +387,11 @@ fn Roles(guild: Id) -> impl IntoView {
                                 let Some(from_id) = dragging.get_untracked() else { return };
                                 dragging.set(None);
                                 let order = ids();
-                                let (Some(from), Some(to)) = (order.iter().position(|x| *x == from_id), order.iter().position(|x| *x == id)) else { return };
+                                let (Some(from), Some(to)) =
+                                    (order.iter().position(|x| *x == from_id), order.iter().position(|x| *x == id))
+                                else {
+                                    return;
+                                };
                                 if from != to {
                                     reorder(moved(&order, from, to), None);
                                 }
@@ -354,6 +422,11 @@ fn Roles(guild: Id) -> impl IntoView {
                                         on:click=move |_| selected.set(Some(id))>
                                         <i class="app-role-dot" data-color=move || role().and_then(|r| r.color).map(|c| c.to_string())></i>
                                         <span class="app-ellipsis">{name}</span>
+                                        <Show when=move || unsaved(id)><span class="k-sr">" (modifications non enregistrées)"</span></Show>
+                                        <span class="app-role-count" title="Membres qui ont ce rôle">
+                                            <Icon icon=lu::LuUsers small=true/>{move || count(id)}
+                                            <span class="k-sr">{move || if count(id) > 1 { " membres" } else { " membre" }}</span>
+                                        </span>
                                     </button>
                                     <button class="k-btn k-btn--icon" id=format!("role-up-{id}") disabled=move || !can_move(-1)
                                         aria-label=move || format!("Monter le rôle {}", name()) title="Monter"
@@ -368,20 +441,39 @@ fn Roles(guild: Id) -> impl IntoView {
                     <li class="app-role app-role--base">
                         <button class="app-role-pick" aria-current=move || (selected.get() == Some(guild)).then_some("true")
                             on:click=move |_| selected.set(Some(guild))>
-                            <i class="app-role-dot"></i><span class="app-ellipsis">"@everyone"</span>
+                            <i class="app-role-dot"></i><span class="app-ellipsis">"@tout le monde"</span>
+                            <Show when=move || unsaved(guild)><span class="k-sr">" (modifications non enregistrées)"</span></Show>
+                            <span class="app-role-count" title="Membres qui ont ce rôle">
+                                <Icon icon=lu::LuUsers small=true/>{move || count(guild)}
+                                <span class="k-sr">{move || if count(guild) > 1 { " membres" } else { " membre" }}</span>
+                            </span>
                         </button>
                     </li>
                 </ul>
             </div>
             <div class="app-roles-edit">
-                {move || selected.get().map(|id| view! { <RoleEditor guild=guild role=id selected=selected/> })}
+                {move || selected.get().map(|id| view! { <RoleEditor guild=guild role=id selected=selected drafts=drafts/> })}
             </div>
+        </div>
         </div>
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum RoleTab {
+    Display,
+    Permissions,
+    Members,
+}
+
+const ROLE_TABS: [(RoleTab, &str, &str); 3] = [
+    (RoleTab::Display, "display", "Affichage"),
+    (RoleTab::Permissions, "perms", "Permissions"),
+    (RoleTab::Members, "members", "Membres"),
+];
+
 #[component]
-fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>) -> impl IntoView {
+fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>, drafts: Drafts) -> impl IntoView {
     let s = store();
     let everyone = role == guild;
     let current = move || role_of(guild, role);
@@ -389,18 +481,45 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>) -> impl IntoV
         let p = s.guild_perms(guild);
         p & perms::MANAGE_ROLES != 0 && current().is_some_and(|r| everyone || s.can_manage_role(guild, &r))
     };
+    let tab = RwSignal::new(RoleTab::Display);
     let error = RwSignal::new(None::<String>);
-    let saved = RwSignal::new(false);
+    let busy = RwSignal::new(false);
     let deleting = RwSignal::new(false);
-    let name = RwSignal::new(current().map(|r| r.name).unwrap_or_default());
-    Effect::new(move || {
-        if let Some(r) = current() {
-            name.set(r.name);
+    let query = RwSignal::new(String::new());
+    // Le brouillon s'il y en a un, sinon le rôle tel qu'il est enregistré.
+    let draft = Memo::new(move |_| drafts.with(|m| m.get(&role).cloned()).or_else(|| current().map(|r| Draft::of(&r))));
+    let dirty = move || drafts.with(|m| m.contains_key(&role));
+    let tablist = NodeRef::<html::Div>::new();
+    let keys = move |e: leptos::ev::KeyboardEvent| {
+        let i = ROLE_TABS.iter().position(|x| x.0 == tab.get_untracked()).unwrap_or(0);
+        let n = ROLE_TABS.len();
+        let next = match e.key().as_str() {
+            "ArrowRight" => (i + 1) % n,
+            "ArrowLeft" => (i + n - 1) % n,
+            "Home" => 0,
+            "End" => n - 1,
+            _ => return,
+        };
+        e.prevent_default();
+        tab.set(ROLE_TABS[next].0);
+        let btn = tablist
+            .get_untracked()
+            .and_then(|l| l.query_selector(&format!("#role-tab-{}", ROLE_TABS[next].1)).ok().flatten())
+            .and_then(|b| b.dyn_into::<web_sys::HtmlElement>().ok());
+        if let Some(b) = btn {
+            let _ = b.focus();
         }
-    });
-    let apply = move |req: EditRole| {
+    };
+    let save = move |_| {
+        let (Some(d), Some(cur)) = (draft.get_untracked(), current()) else { return };
+        let req = EditRole {
+            name: (d.name != cur.name).then(|| d.name.clone()),
+            color: (d.color != cur.color).then(|| d.color.unwrap_or(0)),
+            hoist: (d.hoist != cur.hoist).then_some(d.hoist),
+            permissions: (d.permissions != cur.permissions).then_some(d.permissions),
+        };
+        busy.set(true);
         error.set(None);
-        saved.set(false);
         spawn_local(async move {
             match crate::api::edit_role(guild, role, &req).await {
                 Ok(r) => {
@@ -409,89 +528,165 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>) -> impl IntoV
                             *x = r;
                         }
                     });
-                    saved.set(true);
+                    drafts.update(|m| {
+                        m.remove(&role);
+                    });
                 }
-                Err(e) => error.set(Some(e.message)),
+                Err(e) => {
+                    error.try_set(Some(e.message));
+                }
             }
+            busy.try_set(false);
         });
     };
-    let rename = move |e: leptos::ev::SubmitEvent| {
-        e.prevent_default();
-        apply(EditRole { name: Some(name.get_untracked()), ..Default::default() });
+    let cancel = move |_| {
+        error.set(None);
+        drafts.update(|m| {
+            m.remove(&role);
+        });
     };
     let my_base = move || s.guild_perms(guild);
-    view! {
-        <Show when=move || current().is_some()>
-            <h3 class="app-roles-title">{move || if everyone { "@everyone".to_string() } else { current().map(|r| r.name).unwrap_or_default() }}</h3>
-            <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
-            <Show when=move || saved.get()><p class="app-hint" role="status">"Enregistré."</p></Show>
-            {(!everyone).then(|| view! {
-                <form class="k-field" on:submit=rename>
-                    <label class="k-label" for="role-name">"Nom du rôle"</label>
-                    <div class="app-add-row">
-                        <input id="role-name" class="k-input" maxlength="100" autocomplete="off" disabled=move || !editable()
-                            prop:value=move || name.get() on:input=move |e| name.set(event_target_value(&e))/>
-                        <button type="submit" class="k-btn" disabled=move || !editable()>"Renommer"</button>
-                    </div>
-                </form>
-                <div class="k-field">
-                    <span class="k-label" id="role-color-l">"Couleur"</span>
-                    <div class="app-swatches" role="radiogroup" aria-labelledby="role-color-l">
-                        <button type="button" role="radio" class="k-swatch app-swatch" data-color="0" aria-label="Aucune couleur" title="Aucune"
-                            aria-checked=move || current().is_some_and(|r| r.color.is_none()).to_string() disabled=move || !editable()
-                            on:click=move |_| apply(EditRole { color: Some(0), ..Default::default() })>
-                            <Icon icon=lu::LuBan small=true/>
-                        </button>
-                        {(1..=ROLE_COLORS).map(|c| {
-                            let label = COLOR_NAMES[c as usize - 1];
-                            let on = move || current().is_some_and(|r| r.color == Some(c));
-                            view! {
-                                <button type="button" role="radio" class="k-swatch app-swatch" data-color=c.to_string()
-                                    aria-label=label title=label aria-checked=move || on().to_string() disabled=move || !editable()
-                                    on:click=move |_| apply(EditRole { color: Some(c), ..Default::default() })>
-                                    <Show when=on><Icon icon=lu::LuCheck small=true/></Show>
-                                </button>
-                            }
-                        }).collect_view()}
-                    </div>
-                </div>
-                <div class="k-setting">
-                    <label for="role-hoist">"Afficher à part dans la liste des membres"</label>
-                    <input id="role-hoist" type="checkbox" role="switch" class="k-switch" aria-describedby="role-hoist-h"
-                        disabled=move || !editable() prop:checked=move || current().is_some_and(|r| r.hoist)
-                        on:change=move |e| apply(EditRole { hoist: Some(event_target_checked(&e)), ..Default::default() })/>
-                    <p id="role-hoist-h">"Les membres qui ont ce rôle forment leur propre rubrique, au-dessus des autres."</p>
-                </div>
-            })}
-            {CATEGORIES.iter().map(|(title, list)| view! {
-                <fieldset class="app-perms">
-                    <legend class="k-category">{*title}</legend>
-                    {list.iter().map(|(bit, label, help)| {
-                        let (bit, id) = (*bit, format!("perm-{bit}"));
-                        // On n'accorde que ce que l'on a soi-même.
-                        let allowed = move || editable() && (my_base() & bit != 0 || current().is_some_and(|r| r.permissions & bit != 0));
+    let tab_buttons = move || {
+        ROLE_TABS
+            .iter()
+            .map(|&(t, id, label)| {
+                let on = move || tab.get() == t;
+                view! {
+                    <button class="k-tab" role="tab" id=format!("role-tab-{id}") aria-controls="role-panel"
+                        aria-selected=move || on().to_string() tabindex=move || if on() { "0" } else { "-1" }
+                        on:click=move |_| tab.set(t)>{label}</button>
+                }
+            })
+            .collect_view()
+    };
+    let display = move || {
+        if everyone {
+            return view! { <p class="app-hint">"Tout le monde a ce rôle, automatiquement : il n'a ni nom à changer, ni couleur. Ses droits (onglet Permissions) s'ajoutent à ceux de tous les autres rôles."</p> }.into_any();
+        }
+        view! {
+            <div class="k-field">
+                <label class="k-label" for="role-name">"Nom du rôle"</label>
+                <input id="role-name" class="k-input" maxlength="100" autocomplete="off" disabled=move || !editable()
+                    prop:value=move || draft.get().map(|d| d.name).unwrap_or_default()
+                    on:input=move |e| { let v = event_target_value(&e); edit(drafts, guild, role, |d| d.name = v) }/>
+            </div>
+            <div class="k-field">
+                <span class="k-label" id="role-color-l">"Couleur du nom"</span>
+                <div class="app-swatches" role="radiogroup" aria-labelledby="role-color-l">
+                    <button type="button" role="radio" class="k-swatch app-swatch" data-color="0" aria-label="Par défaut" title="Par défaut"
+                        aria-checked=move || draft.get().is_some_and(|d| d.color.is_none()).to_string() disabled=move || !editable()
+                        on:click=move |_| edit(drafts, guild, role, |d| d.color = None)>
+                        <Icon icon=lu::LuBan small=true/>
+                    </button>
+                    {(1..=ROLE_COLORS).map(|c| {
+                        let label = COLOR_NAMES[c as usize - 1];
+                        let on = move || draft.get().is_some_and(|d| d.color == Some(c));
                         view! {
-                            <div class="k-setting">
-                                <label for=id.clone()>{*label}</label>
-                                <input id=id.clone() type="checkbox" role="switch" class="k-switch" aria-describedby=format!("{id}-h")
-                                    disabled=move || !allowed() prop:checked=move || current().is_some_and(|r| r.permissions & bit != 0)
-                                    on:change=move |_| {
-                                        let now = current().map_or(0, |r| r.permissions);
-                                        apply(EditRole { permissions: Some(now ^ bit), ..Default::default() });
-                                    }/>
-                                <p id=format!("{id}-h")>{*help}</p>
-                            </div>
+                            <button type="button" role="radio" class="k-swatch app-swatch" data-color=c.to_string()
+                                aria-label=label title=label aria-checked=move || on().to_string() disabled=move || !editable()
+                                on:click=move |_| edit(drafts, guild, role, |d| d.color = Some(c))>
+                                <Show when=on><Icon icon=lu::LuCheck small=true/></Show>
+                            </button>
                         }
                     }).collect_view()}
-                </fieldset>
-            }).collect_view()}
-            {(!everyone).then(|| view! {
-                <div class="app-roles-danger">
-                    <button class="k-btn k-btn--danger" disabled=move || !editable() on:click=move |_| deleting.set(true)>
-                        <Icon icon=lu::LuTrash2 small=true/>"Supprimer ce rôle"
-                    </button>
                 </div>
-            })}
+                <p class="k-hint">"Huit teintes qui restent lisibles sur tous les thèmes. Le nom des membres prend la couleur de leur rôle coloré le plus haut."</p>
+            </div>
+            <div class="k-setting">
+                <label for="role-hoist">"Afficher à part dans la liste des membres"</label>
+                <input id="role-hoist" type="checkbox" role="switch" class="k-switch" aria-describedby="role-hoist-h"
+                    disabled=move || !editable() prop:checked=move || draft.get().is_some_and(|d| d.hoist)
+                    on:change=move |e| { let v = event_target_checked(&e); edit(drafts, guild, role, |d| d.hoist = v) }/>
+                <p id="role-hoist-h">"Les membres qui ont ce rôle forment leur propre rubrique, au-dessus des autres."</p>
+            </div>
+            <div class="app-roles-danger">
+                <button class="k-btn k-btn--danger" disabled=move || !editable() on:click=move |_| deleting.set(true)>
+                    <Icon icon=lu::LuTrash2 small=true/>"Supprimer ce rôle"
+                </button>
+            </div>
+        }
+        .into_any()
+    };
+    let permissions = move || {
+        let q = query.get().trim().to_lowercase();
+        let shown: Vec<_> = CATEGORIES
+            .iter()
+            .map(|(title, list)| {
+                let rows: Vec<&Perm> = list
+                    .iter()
+                    .filter(|(_, label, help)| {
+                        q.is_empty() || label.to_lowercase().contains(&q) || help.to_lowercase().contains(&q)
+                    })
+                    .collect();
+                (*title, rows)
+            })
+            .filter(|(_, rows)| !rows.is_empty())
+            .collect();
+        if shown.is_empty() {
+            return view! { <p class="app-hint" role="status">"Aucun droit ne correspond à cette recherche."</p> }
+                .into_any();
+        }
+        shown
+            .into_iter()
+            .map(|(title, rows)| {
+                view! {
+                    <fieldset class="app-perms">
+                        <legend class="k-category">{title}</legend>
+                        {rows.into_iter().map(|(bit, label, help)| {
+                            let (bit, id) = (*bit, format!("perm-{bit}"));
+                            let sensitive = SENSITIVE.contains(&bit);
+                            // On n'accorde que ce que l'on a soi-même.
+                            let allowed = move || editable() && (my_base() & bit != 0 || current().is_some_and(|r| r.permissions & bit != 0));
+                            view! {
+                                <div class="k-setting">
+                                    <label for=id.clone()>
+                                        {sensitive.then(|| view! {
+                                            <span class="app-sensitive" title="Droit sensible"><Icon icon=lu::LuShieldAlert/><span class="k-sr">"Droit sensible : "</span></span>
+                                        })}
+                                        {*label}
+                                    </label>
+                                    <input id=id.clone() type="checkbox" role="switch" class="k-switch" aria-describedby=format!("{id}-h")
+                                        disabled=move || !allowed() prop:checked=move || draft.get().is_some_and(|d| d.permissions & bit != 0)
+                                        on:change=move |_| edit(drafts, guild, role, |d| d.permissions ^= bit)/>
+                                    <p id=format!("{id}-h")>{*help}</p>
+                                </div>
+                            }
+                        }).collect_view()}
+                    </fieldset>
+                }
+            })
+            .collect_view()
+            .into_any()
+    };
+    view! {
+        <Show when=move || current().is_some()>
+            <h3 class="app-roles-title">{move || current().map(|r| role_label(guild, &r)).unwrap_or_default()}</h3>
+            <div class="k-tabs" role="tablist" aria-label="Réglages du rôle" node_ref=tablist on:keydown=keys>{tab_buttons()}</div>
+            <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+            <div id="role-panel" role="tabpanel" class="app-roles-panel" tabindex="-1" aria-labelledby=move || {
+                let t = tab.get();
+                format!("role-tab-{}", ROLE_TABS.iter().find(|x| x.0 == t).map_or("display", |x| x.1))
+            }>
+                {move || match tab.get() {
+                    RoleTab::Display => display(),
+                    RoleTab::Permissions => view! {
+                        <div class="k-search app-search">
+                            <Icon icon=lu::LuSearch/>
+                            <input class="k-input" type="search" placeholder="Chercher un droit" aria-label="Chercher un droit"
+                                prop:value=move || query.get() on:input=move |e| query.set(event_target_value(&e))/>
+                        </div>
+                        {permissions()}
+                    }.into_any(),
+                    RoleTab::Members => view! { <RoleMembers guild=guild role=role editable=Signal::derive(editable)/> }.into_any(),
+                }}
+            </div>
+            <Show when=dirty>
+                <div class="app-savebar" role="region" aria-label="Modifications du rôle">
+                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/>"Modifications non enregistrées"</span>
+                    <button type="button" class="k-btn k-btn--ghost" on:click=cancel>"Annuler"</button>
+                    <button type="button" class="k-btn k-btn--primary" on:click=save aria-busy=move || busy.get().to_string()>"Enregistrer"</button>
+                </div>
+            </Show>
             {move || deleting.get().then(|| current().map(|r| view! {
                 <ConfirmDialog what=Confirm::DeleteRole(guild, r) close=Callback::new(move |()| {
                     deleting.set(false);
@@ -500,6 +695,83 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>) -> impl IntoV
             }))}
         </Show>
     }
+}
+
+/// Onglet « Membres » d'un rôle : qui l'a, et de quoi le donner ou le retirer.
+#[component]
+fn RoleMembers(guild: Id, role: Id, editable: Signal<bool>) -> impl IntoView {
+    let s = store();
+    let error = RwSignal::new(None::<String>);
+    let pick = RwSignal::new(String::new());
+    let everyone = role == guild;
+    let members = move || s.guild(guild).map(|g| g.members).unwrap_or_default();
+    let holders = Memo::new(move |_| members().into_iter().filter(|m| m.roles.contains(&role)).collect::<Vec<_>>());
+    let candidates = Memo::new(move |_| {
+        members().into_iter().filter(|m| !m.roles.contains(&role) && s.outranks(guild, m.user.id)).collect::<Vec<_>>()
+    });
+    let set = move |uid: Id, on: bool| {
+        error.set(None);
+        spawn_local(async move {
+            match crate::api::set_member_role(guild, uid, role, on).await {
+                Ok(m) => {
+                    s.in_guild(guild, |g| {
+                        if let Some(x) = g.members.iter_mut().find(|x| x.user.id == m.user.id) {
+                            *x = m;
+                        }
+                    });
+                    pick.try_set(String::new());
+                }
+                Err(e) => {
+                    error.try_set(Some(e.message));
+                }
+            }
+        });
+    };
+    if everyone {
+        return view! { <p class="app-hint">"Tout le monde est dans ce rôle, automatiquement."</p> }.into_any();
+    }
+    let add = move |e: leptos::ev::SubmitEvent| {
+        e.prevent_default();
+        if let Ok(uid) = pick.get_untracked().parse::<Id>() {
+            set(uid, true);
+        }
+    };
+    view! {
+        <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+        <form class="k-field" on:submit=add>
+            <label class="k-label" for="role-add">"Ajouter un membre à ce rôle"</label>
+            <div class="app-add-row">
+                <select id="role-add" class="k-select" disabled=move || !editable.get()
+                    prop:value=move || pick.get() on:change=move |e| pick.set(event_target_value(&e))>
+                    <option value="">"Choisis un membre"</option>
+                    {move || candidates.get().into_iter().map(|m| {
+                        let label = format!("{} (@{})", m.nick.clone().unwrap_or_else(|| m.user.name().to_string()), m.user.username);
+                        view! { <option value=m.user.id.to_string()>{label}</option> }
+                    }).collect_view()}
+                </select>
+                <button type="submit" class="k-btn" disabled=move || !editable.get() || pick.get().is_empty()>"Ajouter"</button>
+            </div>
+        </form>
+        <Show when=move || holders.with(Vec::is_empty)><p class="app-hint">"Personne n'a ce rôle pour l'instant."</p></Show>
+        <ul class="app-members" aria-label="Membres qui ont ce rôle">
+            <For each=move || holders.get() key=|m| (m.user.id, m.user.display_name.clone(), m.user.avatar.clone(), m.nick.clone()) let:m>
+                {
+                    let uid = m.user.id;
+                    let name = m.nick.clone().unwrap_or_else(|| m.user.name().to_string());
+                    let can = move || editable.get() && s.outranks(guild, uid);
+                    view! {
+                        <li class="k-dm">
+                            <Avatar user=m.user.clone() size="md"/>
+                            <div class="app-ellipsis">{name.clone()}<small>{format!("@{}", m.user.username)}</small></div>
+                            <button class="k-btn k-btn--sm" aria-label=format!("Retirer {name} de ce rôle") disabled=move || !can()
+                                on:click=move |_| set(uid, false)>"Retirer"</button>
+                        </li>
+                    }
+                }
+            </For>
+        </ul>
+    }
+    .into_any()
 }
 
 #[component]
@@ -537,25 +809,25 @@ fn Bans(guild: Id) -> impl IntoView {
         });
     };
     view! {
-        <p class="app-hint">"Une personne bannie ne peut plus rejoindre le serveur avec une invitation. Débannir lui rend cette possibilité."</p>
+        <p class="app-hint">"Une personne bannie ne peut plus rejoindre le serveur avec une invitation. Lever le bannissement lui rend cette possibilité."</p>
         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
         <Show when=move || loaded.get() && list.with(Vec::is_empty)>
             <div class="k-empty"><b>"Personne n'est banni"</b><span>"Les bannissements apparaîtront ici."</span></div>
         </Show>
-        <ul class="app-members app-bans" aria-label="Personnes bannies">
+        <ul class="app-list app-list--col" aria-label="Personnes bannies">
             <For each=move || list.get() key=|b| (b.user.id, b.created_at) let:b>
                 {
                     let uid = b.user.id;
                     let name = b.user.name().to_string();
                     view! {
-                        <li class="k-dm app-ban">
+                        <li class="app-row">
                             <Avatar user=b.user.clone() size="md"/>
-                            <div class="app-ellipsis">
-                                {name.clone()}
+                            <div>
+                                <b>{name.clone()}</b>
                                 <small>{format!("@{} · {}", b.user.username, when(b.created_at))}</small>
-                                <small>{b.reason.clone().map(|r| format!("Raison : {r}")).unwrap_or_else(|| "Aucune raison donnée".into())}</small>
+                                <small class="app-ban-reason">{b.reason.clone().map(|r| format!("Raison : {r}")).unwrap_or_else(|| "Aucune raison donnée".into())}</small>
                             </div>
-                            <button class="k-btn" aria-label=format!("Débannir {name}") on:click=move |_| unban(uid)>"Débannir"</button>
+                            <button class="k-btn" aria-label=format!("Lever le bannissement de {name}") on:click=move |_| unban(uid)>"Lever le bannissement"</button>
                         </li>
                     }
                 }

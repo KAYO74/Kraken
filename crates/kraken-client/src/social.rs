@@ -282,8 +282,8 @@ pub enum Confirm {
     LeaveGroup(Channel),
     /// Le propriétaire retire quelqu'un d'un groupe.
     RemoveMember(Channel, User),
-    /// Quitter un serveur (id, nom).
-    LeaveGuild(Id, String),
+    /// Quitter un serveur (id, nom, c'est le mien : il faut d'abord le transférer).
+    LeaveGuild(Id, String, bool),
     /// Exclure du serveur (il peut revenir par invitation).
     Kick(Id, User),
     /// Bannir du serveur, avec une raison et l'effacement de ses derniers messages.
@@ -328,7 +328,12 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
             ),
             "Retirer du groupe",
         ),
-        Confirm::LeaveGuild(_, name) => (
+        Confirm::LeaveGuild(_, name, true) => (
+            format!("Quitter « {name} » ?"),
+            "Tu es le propriétaire de ce serveur : tu ne peux pas le quitter tant qu'il t'appartient. Transfère-le d'abord à un autre membre, puis tu pourras partir.".to_string(),
+            "Transférer la propriété",
+        ),
+        Confirm::LeaveGuild(_, name, false) => (
             format!("Quitter « {name} » ?"),
             "Tu ne verras plus ce serveur, ses salons ni ses membres. Pour y revenir, il te faudra une nouvelle invitation, et tes rôles ne te seront pas rendus.".to_string(),
             "Quitter le serveur",
@@ -358,6 +363,7 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
     let hours = RwSignal::new("0".to_string());
     let moderation = matches!(what, Confirm::Kick(..) | Confirm::Ban(..));
     let banning = matches!(what, Confirm::Ban(..));
+    let owner_leave = matches!(what, Confirm::LeaveGuild(_, _, true));
     let what = StoredValue::new(what);
     let confirm = move |e: leptos::ev::SubmitEvent| {
         e.prevent_default();
@@ -370,7 +376,13 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                 Confirm::Block(u) => crate::api::set_relationship(u.id, RelationshipKind::Blocked).await.map(Some),
                 Confirm::LeaveGroup(c) => crate::api::leave_group(c.id).await.map(|()| None),
                 Confirm::RemoveMember(c, u) => crate::api::remove_member(c.id, u.id).await.map(|()| None),
-                Confirm::LeaveGuild(g, _) => crate::api::leave_guild(*g).await.map(|()| None),
+                Confirm::LeaveGuild(g, _, true) => {
+                    // Rien à confirmer : on va là où l'on transfère.
+                    navigate(&format!("/guilds/{g}/settings/owner"), Default::default());
+                    close.try_run(());
+                    return;
+                }
+                Confirm::LeaveGuild(g, _, false) => crate::api::leave_guild(*g).await.map(|()| None),
                 Confirm::Kick(g, u) => crate::api::kick(*g, u.id, reason.get_untracked().trim()).await.map(|()| None),
                 Confirm::Ban(g, u) => {
                     let reason = Some(reason.get_untracked().trim().to_string()).filter(|r| !r.is_empty());
@@ -394,7 +406,7 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                         Confirm::RemoveMember(c, u) => s.dms.update(|d| {
                             d.iter_mut().filter(|x| x.id == c.id).for_each(|x| x.recipients.retain(|r| r.id != u.id))
                         }),
-                        Confirm::LeaveGuild(g, _) => {
+                        Confirm::LeaveGuild(g, _, _) => {
                             navigate("/channels/@me", Default::default());
                             s.guilds.update(|gs| gs.retain(|x| x.guild.id != g));
                         }
@@ -428,13 +440,12 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                         })}
                         {banning.then(|| view! {
                             <div class="k-field">
-                                <label class="k-label" for="cf-hours">"Messages à effacer"</label>
+                                <label class="k-label" for="cf-hours">"Supprimer ses messages"</label>
                                 <select id="cf-hours" class="k-select" prop:value=move || hours.get()
                                     on:change=move |e| hours.set(event_target_value(&e))>
-                                    <option value="0">"Ne rien effacer"</option>
-                                    <option value="1">"La dernière heure"</option>
-                                    <option value="24">"Les dernières 24 heures"</option>
-                                    <option value="168">"Les 7 derniers jours"</option>
+                                    <option value="0">"Rien"</option>
+                                    <option value="24">"24 h"</option>
+                                    <option value="168">"7 jours"</option>
                                 </select>
                             </div>
                         })}
@@ -442,7 +453,7 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                     </div>
                     <footer>
                         <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); } autofocus>"Annuler"</button>
-                        <button type="submit" class="k-btn k-btn--danger" aria-busy=move || busy.get().to_string()>{action}</button>
+                        <button type="submit" class=if owner_leave { "k-btn k-btn--primary" } else { "k-btn k-btn--danger" } aria-busy=move || busy.get().to_string()>{action}</button>
                     </footer>
                 </form>
             </div>

@@ -30,33 +30,60 @@ test('S22-H1 créer un rôle, lui donner une couleur, le donner à un membre : l
   await owner.page.getByRole('link', { name: 'Serveur Galion' }).click();
   await expect(members(owner).getByText(crew.name)).toBeVisible();
 
-  // Réglages : créer, renommer, colorier, afficher à part.
+  // Réglages : créer, renommer, colorier, afficher à part, un droit, puis enregistrer d'un coup.
   await owner.page.getByRole('link', { name: 'Paramètres du serveur' }).click();
   await expect(owner.page.getByRole('dialog', { name: 'Paramètres du serveur' })).toBeVisible();
   await owner.page.getByRole('button', { name: 'Créer un rôle' }).click();
   const name = owner.page.getByLabel('Nom du rôle');
   await expect(name).toBeFocused();
   await name.fill('Capitaines');
-  await owner.page.getByRole('button', { name: 'Renommer' }).click();
-  await expect(owner.page.getByText('Enregistré.')).toBeVisible();
   await owner.page.getByRole('radio', { name: 'Bleu' }).click();
   await expect(owner.page.getByRole('radio', { name: 'Bleu' })).toHaveAttribute('aria-checked', 'true');
   await owner.page.getByRole('switch', { name: 'Afficher à part dans la liste des membres' }).check();
-  // Un droit, avec sa description en français.
-  const kick = owner.page.getByRole('switch', { name: 'Expulser des membres' });
+  await owner.page.getByRole('tab', { name: 'Permissions' }).click();
+  // Recherche d'un droit, avec sa description en français ; les droits sensibles portent une alerte.
+  await owner.page.getByRole('searchbox', { name: 'Chercher un droit' }).fill('expulser');
+  await expect(owner.page.getByRole('switch', { name: 'Bannir des membres' })).toHaveCount(0);
   await expect(owner.page.getByText('Faire sortir un membre, qui peut revenir avec une invitation.')).toBeVisible();
+  const kick = owner.page.getByRole('switch', { name: 'Expulser des membres' });
   await kick.check();
   await expect(kick).toBeChecked();
+  await owner.page.getByRole('searchbox', { name: 'Chercher un droit' }).fill('');
+  await expect(owner.page.getByRole('group', { name: 'Avancé' })).toBeVisible();
+  await expect(owner.page.getByRole('switch', { name: 'Droit sensible : Administrateur' })).toBeVisible();
+  // Rien n'est enregistré avant « Enregistrer » ; « Annuler » défait tout.
+  const bar = owner.page.getByRole('region', { name: 'Modifications du rôle' });
+  await expect(bar.getByText('Modifications non enregistrées')).toBeVisible();
+  expect(await roleNames(api, owner, gid)).toEqual(['Nouveau rôle']);
   await a11y(owner.page);
+  await bar.getByRole('button', { name: 'Annuler' }).click();
+  await expect(bar).toHaveCount(0);
+  await expect(kick).not.toBeChecked();
+  await kick.check();
+  await owner.page.getByRole('tab', { name: 'Affichage' }).click();
+  await expect(name).toHaveValue('Nouveau rôle');
+  await name.fill('Capitaines');
+  await owner.page.getByRole('radio', { name: 'Bleu' }).click();
+  await owner.page.getByRole('switch', { name: 'Afficher à part dans la liste des membres' }).check();
+  await bar.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(bar).toHaveCount(0);
   expect(await roleNames(api, owner, gid)).toEqual(['Capitaines']);
+  await owner.page.getByRole('tab', { name: 'Permissions' }).click();
+  await expect(kick).toBeChecked();
+
+  // Onglet Membres : donner le rôle ; le décompte de la liste suit.
+  await owner.page.getByRole('tab', { name: 'Membres' }).click();
+  await owner.page.getByLabel('Ajouter un membre à ce rôle').selectOption({ label: `${crew.name} (@${crew.name})` });
+  await owner.page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+  await expect(owner.page.getByRole('list', { name: 'Membres qui ont ce rôle' }).getByText(crew.name)).toBeVisible();
+  await expect(owner.page.getByRole('button', { name: /^Capitaines/ }).first()).toContainText('1');
   await owner.page.keyboard.press('Escape');
   await expect(owner.page.getByRole('dialog', { name: 'Paramètres du serveur' })).toHaveCount(0);
 
-  // Donner le rôle depuis le menu du membre : sa fiche.
+  // La fiche du membre (menu ⋯) montre son rôle ; on y retirera puis redonnera le rôle plus bas.
   await moreFor(owner, crew.name).click();
   await owner.page.getByRole('button', { name: 'Profil et rôles' }).click();
   const fiche = owner.page.getByRole('dialog');
-  await fiche.getByLabel('Capitaines').check();
   await expect(fiche.getByLabel('Capitaines')).toBeChecked();
   await fiche.getByRole('button', { name: 'Fermer' }).click();
 
@@ -65,7 +92,7 @@ test('S22-H1 créer un rôle, lui donner une couleur, le donner à un membre : l
     await u.page.getByRole('link', { name: 'Serveur Galion' }).click();
     await expect(members(u).getByRole('heading', { name: 'Capitaines — 1', level: 3 })).toBeVisible();
     const colored = row(u, crew.name).locator('[data-role-color="6"]');
-    await expect(colored).toHaveText(crew.name);
+    await expect(colored).toContainText(crew.name);
     const tint = await u.page.evaluate(() => {
       const probe = document.createElement('i');
       probe.style.color = 'var(--avatar-6-text)';
@@ -144,7 +171,7 @@ test('S22-H3 bannir puis débannir : plus de retour par invitation, liste des ba
   const dialog = owner.page.getByRole('alertdialog', { name: `Bannir ${crew.name} ?` });
   await a11y(owner.page);
   await dialog.getByLabel('Raison (facultatif)').fill('publicité');
-  await dialog.getByLabel('Messages à effacer').selectOption('24');
+  await dialog.getByLabel('Supprimer ses messages').selectOption('24');
   await dialog.getByRole('button', { name: 'Bannir', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(members(owner).getByText(crew.name)).toHaveCount(0);
@@ -163,7 +190,7 @@ test('S22-H3 bannir puis débannir : plus de retour par invitation, liste des ba
   const ban = owner.page.getByRole('listitem').filter({ hasText: crew.name });
   await expect(ban).toContainText('Raison : publicité');
   await a11y(owner.page);
-  await owner.page.getByRole('button', { name: `Débannir ${crew.name}` }).click();
+  await owner.page.getByRole('button', { name: `Lever le bannissement de ${crew.name}` }).click();
   await expect(owner.page.getByText('Personne n\'est banni')).toBeVisible();
   expect((await (await api(crew.token)).post(`${API}/invites/${code}`)).status()).toBe(200);
   await expect(crew.page.getByRole('link', { name: 'Serveur Corsaires' })).toBeVisible();
@@ -178,10 +205,15 @@ test('S22-H4 quitter un serveur : confirmation ; le propriétaire doit d’abord
   await crew.page.getByRole('link', { name: 'Serveur Phare' }).click();
   await expect(crew.page.getByRole('heading', { name: 'général', level: 1 })).toBeVisible();
 
-  // Le propriétaire n'a pas « Quitter » : il a « Transférer la propriété ».
+  // Le propriétaire a « Quitter le serveur » en dernier, mais la boîte l'envoie transférer d'abord.
   await owner.page.getByRole('button', { name: 'Plus d\'actions pour ce serveur' }).click();
-  await expect(owner.page.getByRole('button', { name: 'Quitter le serveur' })).toHaveCount(0);
   await expect(owner.page.getByRole('link', { name: 'Transférer la propriété' })).toBeVisible();
+  await owner.page.getByRole('button', { name: 'Quitter le serveur' }).click();
+  const ownerBox = owner.page.getByRole('alertdialog', { name: 'Quitter « Phare » ?' });
+  await expect(ownerBox).toContainText('Transfère-le d\'abord');
+  await ownerBox.getByRole('button', { name: 'Transférer la propriété' }).click();
+  await expect(owner.page).toHaveURL(new RegExp(`/guilds/${gid}/settings/owner$`));
+  await expect(owner.page.getByLabel('Nouveau propriétaire')).toBeVisible();
   await owner.page.keyboard.press('Escape');
   const refused = await (await api(owner.token)).delete(`${API}/guilds/${gid}/members/@me`);
   expect(refused.status()).toBe(403);
@@ -225,35 +257,35 @@ test('S22-K1 réordonner les rôles au clavier : boutons Monter et Descendre, le
   for (const name of ['Alpha', 'Beta', 'Gamma']) {
     expect((await http.post(`${API}/guilds/${gid}/roles`, { data: { name } })).status()).toBe(201);
   }
-  // Le dernier créé est le plus bas.
-  expect(await roleNames(api, owner, gid)).toEqual(['Gamma', 'Beta', 'Alpha']);
+  // Chaque nouveau rôle se glisse sous les autres : le premier créé est le plus haut.
+  expect(await roleNames(api, owner, gid)).toEqual(['Alpha', 'Beta', 'Gamma']);
   await owner.page.goto(`/guilds/${gid}/settings/roles`);
   const list = owner.page.getByRole('list', { name: 'Rôles, du plus haut au plus bas' });
-  const order = () => list.getByRole('listitem').evaluateAll((els) => els.map((e) => e.querySelector('.app-role-pick')!.textContent!.trim()));
-  await expect.poll(order).toEqual(['Gamma', 'Beta', 'Alpha', '@everyone']);
+  const order = () => list.getByRole('listitem').evaluateAll((els) => els.map((e) => e.querySelector('.app-role-pick .app-ellipsis')!.textContent!.trim()));
+  await expect.poll(order).toEqual(['Alpha', 'Beta', 'Gamma', '@tout le monde']);
   await a11y(owner.page);
 
   // Aux extrémités, le bouton est inactif.
-  await expect(owner.page.getByRole('button', { name: 'Monter le rôle Gamma' })).toBeDisabled();
-  await expect(owner.page.getByRole('button', { name: 'Descendre le rôle Alpha' })).toBeDisabled();
+  await expect(owner.page.getByRole('button', { name: 'Monter le rôle Alpha' })).toBeDisabled();
+  await expect(owner.page.getByRole('button', { name: 'Descendre le rôle Gamma' })).toBeDisabled();
 
-  const down = owner.page.getByRole('button', { name: 'Descendre le rôle Gamma' });
+  const down = owner.page.getByRole('button', { name: 'Descendre le rôle Alpha' });
   await down.focus();
   await owner.page.keyboard.press('Enter');
-  await expect.poll(order).toEqual(['Beta', 'Gamma', 'Alpha', '@everyone']);
+  await expect.poll(order).toEqual(['Beta', 'Alpha', 'Gamma', '@tout le monde']);
   await expect(down).toBeFocused();
   await owner.page.keyboard.press('Space');
-  await expect.poll(order).toEqual(['Beta', 'Alpha', 'Gamma', '@everyone']);
+  await expect.poll(order).toEqual(['Beta', 'Gamma', 'Alpha', '@tout le monde']);
   // Arrivé en bas, le focus passe sur « Monter » plutôt que de se perdre.
-  await expect(owner.page.getByRole('button', { name: 'Monter le rôle Gamma' })).toBeFocused();
+  await expect(owner.page.getByRole('button', { name: 'Monter le rôle Alpha' })).toBeFocused();
   await owner.page.keyboard.press('Enter');
-  await expect.poll(order).toEqual(['Beta', 'Gamma', 'Alpha', '@everyone']);
-  expect(await roleNames(api, owner, gid)).toEqual(['Beta', 'Gamma', 'Alpha']);
+  await expect.poll(order).toEqual(['Beta', 'Alpha', 'Gamma', '@tout le monde']);
+  expect(await roleNames(api, owner, gid)).toEqual(['Beta', 'Alpha', 'Gamma']);
 
-  // Glisser-déposer : Alpha tout en haut.
-  await list.getByRole('listitem').filter({ hasText: 'Alpha' }).dragTo(list.getByRole('listitem').filter({ hasText: 'Beta' }));
-  await expect.poll(order).toEqual(['Alpha', 'Beta', 'Gamma', '@everyone']);
-  expect(await roleNames(api, owner, gid)).toEqual(['Alpha', 'Beta', 'Gamma']);
+  // Glisser-déposer : Gamma tout en haut.
+  await list.getByRole('listitem').filter({ hasText: 'Gamma' }).dragTo(list.getByRole('listitem').filter({ hasText: 'Beta' }));
+  await expect.poll(order).toEqual(['Gamma', 'Beta', 'Alpha', '@tout le monde']);
+  expect(await roleNames(api, owner, gid)).toEqual(['Gamma', 'Beta', 'Alpha']);
 });
 
 test('S22-N1 hiérarchie : un modérateur ne touche ni au propriétaire ni à un rang égal ou supérieur', async ({ user, api }) => {

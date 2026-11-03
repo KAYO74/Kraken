@@ -1247,7 +1247,11 @@ fn Members(guild: Id) -> impl IntoView {
         <aside class="app-aside app-aside--members" aria-label="Membres">
             <h2 class="k-category">"Membres "<span class="k-badge k-badge--neutral">{total}</span></h2>
             <For each=move || groups.get()
-                key=|(r, ms)| (r.as_ref().map(|r| (r.id, r.name.clone())), ms.iter().map(|m| m.user.id).collect::<Vec<_>>())
+                key=|(r, ms)| (
+                    r.as_ref().map(|r| (r.id, r.name.clone())),
+                    // Un nom, un surnom ou une photo qui change redessine la rubrique : les lignes en dépendent.
+                    ms.iter().map(|m| (m.user.id, m.user.display_name.clone(), m.user.avatar.clone(), m.nick.clone())).collect::<Vec<_>>(),
+                )
                 let:group>
                 {
                     let (role, members) = group;
@@ -1283,8 +1287,8 @@ fn Members(guild: Id) -> impl IntoView {
                                     view! {
                                         <li class="k-dm" on:contextmenu=context>
                                             <Avatar user=m.user.clone() size="md"/>
-                                            <div class="app-ellipsis">
-                                                <span data-role-color=move || s.role_color(Some(guild), uid).map(|c| c.to_string())>{name.clone()}</span>
+                                            <div class="app-ellipsis" data-role-color=move || s.role_color(Some(guild), uid).map(|c| c.to_string())>
+                                                {name.clone()}
                                                 <Show when=is_owner>
                                                     <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" (propriétaire)"</span></span>
                                                 </Show>
@@ -1294,6 +1298,7 @@ fn Members(guild: Id) -> impl IntoView {
                                                 <button class="k-menuitem" on:click=move |_| profile.set(Some(uid))>
                                                     <Icon icon=lu::LuShield/>"Profil et rôles"
                                                 </button>
+                                                <Show when=move || can_kick() || can_ban()><hr/></Show>
                                                 <Show when=can_kick>
                                                     <button class="k-menuitem is-danger" on:click={ let u = for_kick.clone(); move |_| confirm.set(Some(Confirm::Kick(guild, u.clone()))) }>
                                                         <Icon icon=lu::LuUserMinus/>"Expulser"

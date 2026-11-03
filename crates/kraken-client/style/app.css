@@ -487,7 +487,10 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-group[data-role-color] { color: var(--role); }
 .app-role-dot { display: inline-block; flex: none; width: var(--space-4); height: var(--space-4); border-radius: var(--radius-pill);
   background: var(--role, var(--border-strong)); }
-.app-roles { display: grid; grid-template-columns: minmax(0, var(--size-tile)) minmax(0, 1fr); gap: var(--space-7); align-items: start; }
+.app-roles { display: grid; grid-template-columns: minmax(0, var(--size-sidebar)) minmax(0, 1fr); gap: var(--space-7); align-items: start; margin-top: var(--space-5); }
+/* Deux colonnes : la liste et l'éditeur ont besoin de plus de place que le contenu d'un réglage ordinaire. */
+.k-settings main:has(.app-roles-page) > * { max-width: calc(var(--size-sidebar) + var(--size-settings-content) + var(--space-7)); }
+.app-roles-edit { max-width: var(--size-settings-content); }
 .app-roles-list { display: grid; gap: var(--space-3); }
 .app-roles-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .app-role { display: flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-1) 0 0; border-radius: var(--radius-md); border: 1px solid transparent; }
@@ -511,9 +514,6 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-swatch:disabled { opacity: .5; cursor: not-allowed; }
 .app-perms { margin: 0; padding: 0; border: 0; min-width: 0; }
 .app-perms legend { padding: 0; margin-top: var(--space-5); }
-.app-ban { align-items: center; }
-.app-ban .k-btn { margin-left: auto; flex: none; }
-.app-ban small { display: block; white-space: normal; }
 .app-member-head { display: flex; align-items: center; gap: var(--space-5); }
 .app-member-head h2 { margin: 0; overflow-wrap: anywhere; }
 .app-role-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
@@ -522,3 +522,16 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-role-checks label { display: flex; align-items: center; gap: var(--space-3); flex: 1; cursor: pointer; color: var(--text-strong); }
 .app-pick-box { flex: none; width: var(--size-icon); height: var(--size-icon); margin: 0; accent-color: var(--accent); }
 @media (max-width: 639px) { .app-roles { grid-template-columns: minmax(0, 1fr); } }
+.app-role-count { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; color: var(--text-muted); font-size: var(--text-xs-size); }
+.app-role-pick[aria-current="true"] .app-role-count { color: var(--text-secondary); }
+.app-roles-panel { display: grid; gap: var(--space-5); align-content: start; }
+.app-roles-panel:focus { outline: none; }
+.app-sensitive { display: inline-flex; vertical-align: middle; margin-right: var(--space-2); color: var(--warning); }
+.app-savebar { position: sticky; bottom: 0; z-index: var(--z-sticky); display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap;
+  gap: var(--space-3); margin-top: var(--space-5); padding: var(--space-4) var(--space-5); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-pop); }
+.app-savebar > span { display: inline-flex; align-items: center; gap: var(--space-3); flex: 1; min-width: 0; color: var(--text-strong); }
+.app-savebar > span .k-icon { color: var(--warning); }
+.app-list--col { grid-template-columns: minmax(0, 1fr); }
+.app-row .app-ban-reason { display: block; color: var(--text-muted); overflow-wrap: anywhere; }
+.app-list--col .app-row small { display: block; }
