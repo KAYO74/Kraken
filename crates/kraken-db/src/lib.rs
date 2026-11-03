@@ -7,6 +7,7 @@
 mod calls;
 mod files;
 mod jobs;
+mod moderation;
 mod perm;
 mod reads;
 mod seed;
@@ -86,6 +87,19 @@ fn user_from(r: &PgRow, p: &str) -> sqlx::Result<Option<User>> {
         display_name: r.try_get(format!("{p}_display").as_str())?,
         avatar: r.try_get(format!("{p}_avatar").as_str())?,
     }))
+}
+
+const ROLE_COLS: &str = "id, name, color, position, permissions, hoist";
+
+fn role_from(r: &PgRow) -> sqlx::Result<Role> {
+    Ok(Role {
+        id: r.try_get("id")?,
+        name: r.try_get("name")?,
+        color: r.try_get::<Option<i32>, _>("color")?.map(|c| c as u32),
+        position: r.try_get("position")?,
+        permissions: r.try_get::<i64, _>("permissions")? as u64,
+        hoist: r.try_get("hoist")?,
+    })
 }
 
 fn kind_from(s: &str) -> ChannelKind {
@@ -608,37 +622,40 @@ impl Db {
                 .into_iter()
                 .filter(|c| ctx.channel(uid, c.id, c.parent_id) & perms::VIEW_CHANNEL != 0)
                 .collect();
-        let roles = sqlx::query(
-            "select id, name, color, position, permissions from roles where guild_id = $1 order by position",
-        )
-        .bind(gid)
-        .fetch_all(&self.pool)
-        .await?
-        .iter()
-        .map(|r| {
-            Ok(Role {
-                id: r.try_get("id")?,
-                name: r.try_get("name")?,
-                color: r.try_get::<Option<i32>, _>("color")?.map(|c| c as u32),
-                position: r.try_get("position")?,
-                permissions: r.try_get::<i64, _>("permissions")? as u64,
-            })
-        })
-        .collect::<sqlx::Result<Vec<_>>>()?;
+        let roles = self.roles(gid).await?;
         // États vocaux : en mémoire dans le serveur, ajoutés par lui.
         Ok(Some(GuildState { guild, channels, roles, members: self.members(gid).await?, voice_states: vec![] }))
     }
 
-    async fn members(&self, gid: Id) -> Result<Vec<Member>> {
+    /// Rôles du serveur, `@everyone` compris, du plus bas au plus haut.
+    pub(crate) async fn roles(&self, gid: Id) -> Result<Vec<Role>> {
+        sqlx::query(&format!("select {ROLE_COLS} from roles where guild_id = $1 order by position, id"))
+            .bind(gid)
+            .fetch_all(&self.pool)
+            .await?
+            .iter()
+            .map(role_from)
+            .collect::<sqlx::Result<_>>()
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn members(&self, gid: Id) -> Result<Vec<Member>> {
+        self.members_of(gid, None).await
+    }
+
+    /// Un seul membre (`only`) ou tous.
+    async fn members_of(&self, gid: Id, only: Option<Id>) -> Result<Vec<Member>> {
         let rows = sqlx::query(&format!(
             "select {}, m.nick, (extract(epoch from m.joined_at) * 1000)::int8 as joined_ms,
                     coalesce(array_agg(mr.role_id) filter (where mr.role_id is not null), '{{}}') as roles
              from members m join users u on u.id = m.user_id
              left join member_roles mr on mr.guild_id = m.guild_id and mr.user_id = m.user_id
-             where m.guild_id = $1 group by u.id, m.nick, m.joined_at order by m.joined_at",
+             where m.guild_id = $1 and ($2::uuid is null or m.user_id = $2)
+             group by u.id, m.nick, m.joined_at order by m.joined_at",
             user_cols("u")
         ))
         .bind(gid)
+        .bind(only)
         .fetch_all(&self.pool)
         .await?;
         rows.iter()

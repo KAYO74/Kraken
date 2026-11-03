@@ -1,7 +1,9 @@
 //! Social (F02, F03, F11) : choisir des amis pour un MP ou un groupe, renommer et quitter un
-//! groupe, confirmer le retrait d'un ami ou un blocage.
+//! groupe, confirmer le retrait d'un ami, un blocage, un départ de serveur ou une sanction.
 
-use kraken_proto::{Channel, ChannelKind, Id, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, RelationshipKind, User};
+use kraken_proto::{
+    BanMember, Channel, ChannelKind, Id, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_REASON, RelationshipKind, Role, User,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
@@ -280,6 +282,15 @@ pub enum Confirm {
     LeaveGroup(Channel),
     /// Le propriétaire retire quelqu'un d'un groupe.
     RemoveMember(Channel, User),
+    /// Quitter un serveur (id, nom, c'est le mien : il faut d'abord le transférer).
+    LeaveGuild(Id, String, bool),
+    /// Exclure du serveur (il peut revenir par invitation).
+    Kick(Id, User),
+    /// Bannir du serveur, avec une raison et l'effacement de ses derniers messages.
+    Ban(Id, User),
+    DeleteRole(Id, Role),
+    /// Donner le serveur (id, nom) à ce membre.
+    Transfer(Id, String, User),
 }
 
 /// Confirmer un retrait d'ami, un blocage ou un départ de groupe.
@@ -317,7 +328,42 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
             ),
             "Retirer du groupe",
         ),
+        Confirm::LeaveGuild(_, name, true) => (
+            format!("Quitter « {name} » ?"),
+            "Tu es le propriétaire de ce serveur : tu ne peux pas le quitter tant qu'il t'appartient. Transfère-le d'abord à un autre membre, puis tu pourras partir.".to_string(),
+            "Transférer la propriété",
+        ),
+        Confirm::LeaveGuild(_, name, false) => (
+            format!("Quitter « {name} » ?"),
+            "Tu ne verras plus ce serveur, ses salons ni ses membres. Pour y revenir, il te faudra une nouvelle invitation, et tes rôles ne te seront pas rendus.".to_string(),
+            "Quitter le serveur",
+        ),
+        Confirm::Kick(_, u) => (
+            format!("Expulser {} ?", u.name()),
+            "Cette personne sort du serveur et perd ses rôles, mais ses messages restent. Elle pourra revenir avec une invitation.".to_string(),
+            "Expulser",
+        ),
+        Confirm::Ban(_, u) => (
+            format!("Bannir {} ?", u.name()),
+            "Cette personne sort du serveur et ne pourra plus le rejoindre par invitation, tant que tu ne l'auras pas débannie dans les réglages du serveur.".to_string(),
+            "Bannir",
+        ),
+        Confirm::DeleteRole(_, r) => (
+            format!("Supprimer le rôle « {} » ?", r.name),
+            "Tous ceux qui l'ont le perdent, avec les droits qu'il leur donnait. Cette action est définitive.".to_string(),
+            "Supprimer le rôle",
+        ),
+        Confirm::Transfer(_, name, u) => (
+            format!("Donner « {name} » à {} ?", u.name()),
+            "Cette personne devient propriétaire : elle aura tous les droits, et tu seras un membre comme un autre. Tu ne pourras pas le reprendre sans son accord.".to_string(),
+            "Transférer la propriété",
+        ),
     };
+    let reason = RwSignal::new(String::new());
+    let hours = RwSignal::new("0".to_string());
+    let moderation = matches!(what, Confirm::Kick(..) | Confirm::Ban(..));
+    let banning = matches!(what, Confirm::Ban(..));
+    let owner_leave = matches!(what, Confirm::LeaveGuild(_, _, true));
     let what = StoredValue::new(what);
     let confirm = move |e: leptos::ev::SubmitEvent| {
         e.prevent_default();
@@ -330,6 +376,21 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                 Confirm::Block(u) => crate::api::set_relationship(u.id, RelationshipKind::Blocked).await.map(Some),
                 Confirm::LeaveGroup(c) => crate::api::leave_group(c.id).await.map(|()| None),
                 Confirm::RemoveMember(c, u) => crate::api::remove_member(c.id, u.id).await.map(|()| None),
+                Confirm::LeaveGuild(g, _, true) => {
+                    // Rien à confirmer : on va là où l'on transfère.
+                    navigate(&format!("/guilds/{g}/settings/owner"), Default::default());
+                    close.try_run(());
+                    return;
+                }
+                Confirm::LeaveGuild(g, _, false) => crate::api::leave_guild(*g).await.map(|()| None),
+                Confirm::Kick(g, u) => crate::api::kick(*g, u.id, reason.get_untracked().trim()).await.map(|()| None),
+                Confirm::Ban(g, u) => {
+                    let reason = Some(reason.get_untracked().trim().to_string()).filter(|r| !r.is_empty());
+                    let delete_hours = hours.get_untracked().parse().ok().filter(|h| *h > 0);
+                    crate::api::ban(*g, u.id, &BanMember { reason, delete_hours }).await.map(|_| None)
+                }
+                Confirm::DeleteRole(g, r) => crate::api::delete_role(*g, r.id).await.map(|()| None),
+                Confirm::Transfer(g, _, u) => crate::api::transfer_guild(*g, u.id).await.map(|()| None),
             };
             match done {
                 // Fermer d'abord : la suite peut retirer l'écran qui porte ce dialogue.
@@ -345,6 +406,15 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                         Confirm::RemoveMember(c, u) => s.dms.update(|d| {
                             d.iter_mut().filter(|x| x.id == c.id).for_each(|x| x.recipients.retain(|r| r.id != u.id))
                         }),
+                        Confirm::LeaveGuild(g, _, _) => {
+                            navigate("/channels/@me", Default::default());
+                            s.guilds.update(|gs| gs.retain(|x| x.guild.id != g));
+                        }
+                        Confirm::Kick(g, u) | Confirm::Ban(g, u) => {
+                            s.in_guild(g, |x| x.members.retain(|m| m.user.id != u.id))
+                        }
+                        Confirm::DeleteRole(g, r) => s.apply_role_delete(g, r.id),
+                        Confirm::Transfer(g, _, u) => s.in_guild(g, |x| x.guild.owner_id = u.id),
                     }
                 }
                 Err(e) => {
@@ -361,11 +431,29 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                 <form on:submit=confirm>
                     <div>
                         <p id="cf-d">{body}</p>
+                        {moderation.then(|| view! {
+                            <div class="k-field">
+                                <label class="k-label" for="cf-reason">"Raison (facultatif)"</label>
+                                <input id="cf-reason" class="k-input" maxlength=MAX_REASON autocomplete="off"
+                                    prop:value=move || reason.get() on:input=move |e| reason.set(event_target_value(&e))/>
+                            </div>
+                        })}
+                        {banning.then(|| view! {
+                            <div class="k-field">
+                                <label class="k-label" for="cf-hours">"Supprimer ses messages"</label>
+                                <select id="cf-hours" class="k-select" prop:value=move || hours.get()
+                                    on:change=move |e| hours.set(event_target_value(&e))>
+                                    <option value="0">"Rien"</option>
+                                    <option value="24">"24 h"</option>
+                                    <option value="168">"7 jours"</option>
+                                </select>
+                            </div>
+                        })}
                         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
                     </div>
                     <footer>
                         <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); } autofocus>"Annuler"</button>
-                        <button type="submit" class="k-btn k-btn--danger" aria-busy=move || busy.get().to_string()>{action}</button>
+                        <button type="submit" class=if owner_leave { "k-btn k-btn--primary" } else { "k-btn k-btn--danger" } aria-busy=move || busy.get().to_string()>{action}</button>
                     </footer>
                 </form>
             </div>

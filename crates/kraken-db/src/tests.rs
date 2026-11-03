@@ -713,3 +713,290 @@ async fn account_purge_returns_uploaded_files(pool: PgPool) {
     let left: i64 = sqlx::query_scalar("select count(*) from attachments").fetch_one(&db.pool).await.unwrap();
     assert_eq!(left, 1);
 }
+
+// ───────── modération : rôles, hiérarchie, exclusion, bannissement, départ ─────────
+
+async fn user(db: &Db, name: &str) -> User {
+    db.create_user(name, &format!("{name}@example.org"), "h".into()).await.unwrap()
+}
+
+/// Un serveur à `owner`, avec `others` dedans.
+async fn guild_with(db: &Db, owner: &User, others: &[&User]) -> Id {
+    let g = db.create_guild(owner.id, "Abysse").await.unwrap();
+    let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
+    let inv = db.create_invite(g.guild.id, Some(general), owner.id, 0, None).await.unwrap();
+    for u in others {
+        db.use_invite(&inv.code, u.id).await.unwrap();
+    }
+    g.guild.id
+}
+
+fn role(name: &str, permissions: u64) -> CreateRole {
+    CreateRole { name: name.into(), color: None, hoist: false, permissions }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn role_crud_and_order(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (a, b) = two_users(&db).await;
+    let gid = guild_with(&db, &a, &[&b]).await;
+
+    let r1 = db
+        .create_role(gid, a.id, &CreateRole { color: Some(3), hoist: true, ..role("Modos", perms::KICK) })
+        .await
+        .unwrap();
+    let r2 = db.create_role(gid, a.id, &role("Vétérans", 0)).await.unwrap();
+    let r3 = db.create_role(gid, a.id, &role("Invités", 0)).await.unwrap();
+    // Un nouveau rôle se place juste au-dessus de @everyone : le dernier créé est le plus bas.
+    let order = |roles: Vec<Role>| roles.into_iter().filter(|r| r.id != gid).map(|r| r.name).rev().collect::<Vec<_>>();
+    assert_eq!(order(db.roles(gid).await.unwrap()), ["Modos", "Vétérans", "Invités"]);
+    assert_eq!((r1.color, r1.hoist, r1.position), (Some(3), true, 1));
+
+    // Renommer, recolorer, retirer la couleur ; entrées invalides refusées.
+    let e = db
+        .edit_role(gid, r2.id, a.id, &EditRole { name: Some(" Anciens ".into()), color: Some(5), ..Default::default() })
+        .await
+        .unwrap();
+    assert_eq!((e.name.as_str(), e.color), ("Anciens", Some(5)));
+    let e = db.edit_role(gid, r2.id, a.id, &EditRole { color: Some(0), ..Default::default() }).await.unwrap();
+    assert_eq!(e.color, None);
+    let edit = |r: &Role, e: EditRole| {
+        let (db, rid) = (db.clone(), r.id);
+        async move { db.edit_role(gid, rid, a.id, &e).await }
+    };
+    assert_eq!(
+        edit(&r2, EditRole { color: Some(ROLE_COLORS + 1), ..Default::default() }).await,
+        Err(DbError::Invalid("color"))
+    );
+    assert_eq!(
+        edit(&r2, EditRole { name: Some("  ".into()), ..Default::default() }).await,
+        Err(DbError::Invalid("role_name"))
+    );
+    assert_eq!(
+        edit(&r2, EditRole { permissions: Some(1 << 60), ..Default::default() }).await,
+        Err(DbError::Invalid("permissions"))
+    );
+    // @everyone : ses droits seulement.
+    let ev = db
+        .edit_role(gid, gid, a.id, &EditRole { permissions: Some(perms::VIEW_CHANNEL), ..Default::default() })
+        .await
+        .unwrap();
+    assert_eq!(ev.permissions, perms::VIEW_CHANNEL);
+    assert_eq!(
+        db.edit_role(gid, gid, a.id, &EditRole { name: Some("x".into()), ..Default::default() }).await,
+        Err(DbError::Invalid("everyone"))
+    );
+
+    // Réordonner : le plus haut d'abord ; seuls les rôles déplacés sont rendus.
+    let changed = db.reorder_roles(gid, a.id, &[r3.id, r2.id, r1.id]).await.unwrap();
+    assert_eq!(changed.len(), 2, "le rôle du milieu ne bouge pas");
+    assert_eq!(order(db.roles(gid).await.unwrap()), ["Invités", "Anciens", "Modos"]);
+    assert_eq!(db.reorder_roles(gid, a.id, &[r3.id, r2.id]).await, Err(DbError::Invalid("roles")), "il en manque un");
+    assert_eq!(db.reorder_roles(gid, a.id, &[r3.id, r3.id, r1.id]).await, Err(DbError::Invalid("roles")));
+
+    // Suppression : les positions se resserrent, ceux qui l'avaient le perdent.
+    db.set_member_role(gid, a.id, b.id, r3.id, true).await.unwrap();
+    db.delete_role(gid, r3.id, a.id).await.unwrap();
+    let roles = db.roles(gid).await.unwrap();
+    assert_eq!(roles.iter().map(|r| r.position).collect::<Vec<_>>(), [0, 1, 2]);
+    assert!(db.members(gid).await.unwrap().iter().all(|m| m.roles.is_empty()));
+    assert_eq!(db.delete_role(gid, gid, a.id).await, Err(DbError::Invalid("everyone")));
+    assert_eq!(db.delete_role(gid, r3.id, a.id).await, Err(DbError::NotFound));
+    let audited: i64 = sqlx::query_scalar("select count(*) from audit_log where guild_id = $1")
+        .bind(gid)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert!(audited >= 8);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn role_hierarchy_binds_everyone_but_the_owner(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, mod_) = two_users(&db).await;
+    let (adm, low) = (user(&db, "adm").await, user(&db, "low").await);
+    let gid = guild_with(&db, &own, &[&mod_, &adm, &low]).await;
+    let all = perms::MANAGE_ROLES | perms::KICK | perms::BAN;
+    let high = db.create_role(gid, own.id, &role("Haut", all)).await.unwrap();
+    let mid = db.create_role(gid, own.id, &role("Moyen", all)).await.unwrap();
+    let small = db.create_role(gid, own.id, &role("Petit", 0)).await.unwrap();
+    // Ordre voulu : Haut > Moyen > Petit.
+    db.reorder_roles(gid, own.id, &[high.id, mid.id, small.id]).await.unwrap();
+    let adm_role = db.create_role(gid, own.id, &role("Admin", perms::ADMINISTRATOR)).await.unwrap();
+    db.reorder_roles(gid, own.id, &[high.id, mid.id, small.id, adm_role.id]).await.unwrap();
+    db.set_member_role(gid, own.id, mod_.id, mid.id, true).await.unwrap();
+    db.set_member_role(gid, own.id, adm.id, adm_role.id, true).await.unwrap();
+
+    // `mod_` (Moyen) : peut donner Petit, pas Moyen (égal) ni Haut (supérieur).
+    assert!(db.set_member_role(gid, mod_.id, low.id, small.id, true).await.is_ok());
+    for r in [mid.id, high.id] {
+        assert_eq!(
+            db.set_member_role(gid, mod_.id, low.id, r, true).await.map(|_| ()),
+            Err(DbError::Forbidden("hierarchy"))
+        );
+    }
+    // Il ne peut pas toucher à un rang égal ou supérieur, ni au propriétaire, ni à lui-même.
+    let owner_hit = db.kick_member(gid, mod_.id, own.id, None).await;
+    assert_eq!(owner_hit, Err(DbError::Forbidden("hierarchy")));
+    db.set_member_role(gid, own.id, low.id, high.id, true).await.unwrap();
+    assert_eq!(db.kick_member(gid, mod_.id, low.id, None).await, Err(DbError::Forbidden("hierarchy")), "Haut > Moyen");
+    assert_eq!(
+        db.ban_member(gid, mod_.id, low.id, &Default::default()).await.map(|_| ()),
+        Err(DbError::Forbidden("hierarchy"))
+    );
+    assert_eq!(db.kick_member(gid, mod_.id, mod_.id, None).await, Err(DbError::Invalid("self_target")));
+    // Rôle ADMINISTRATOR (au rang le plus bas) : tous les droits, mais pas de passe-droit hiérarchique.
+    assert_eq!(db.kick_member(gid, adm.id, low.id, None).await, Err(DbError::Forbidden("hierarchy")));
+    assert_eq!(db.kick_member(gid, adm.id, mod_.id, None).await, Err(DbError::Forbidden("hierarchy")));
+    // Ni créer un rôle avec plus de droits que soi, ni modifier un rôle plus haut.
+    assert_eq!(db.create_role(gid, mod_.id, &role("X", perms::MANAGE_GUILD)).await, Err(DbError::Forbidden("perm")));
+    assert_eq!(
+        db.edit_role(gid, high.id, mod_.id, &EditRole { name: Some("Pirate".into()), ..Default::default() }).await,
+        Err(DbError::Forbidden("hierarchy"))
+    );
+    assert_eq!(db.delete_role(gid, mid.id, mod_.id).await, Err(DbError::Forbidden("hierarchy")), "rôle de même rang");
+    // Réordonner : le haut de la liste, jusqu'à son propre rang, est figé.
+    let swap = db.reorder_roles(gid, mod_.id, &[mid.id, high.id, small.id, adm_role.id]).await;
+    assert_eq!(swap, Err(DbError::Forbidden("hierarchy")));
+    let below = db.reorder_roles(gid, mod_.id, &[high.id, mid.id, adm_role.id, small.id]).await;
+    assert_eq!(below.map(|c| c.len()), Ok(2), "permuter deux rôles plus bas que soi est permis");
+
+    // Le propriétaire n'est lié par rien, même pas à lui-même.
+    assert!(db.set_member_role(gid, own.id, own.id, high.id, true).await.is_ok());
+    assert!(db.kick_member(gid, own.id, low.id, Some("test")).await.is_ok());
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn permission_denials(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, plain) = two_users(&db).await;
+    let out = user(&db, "out").await;
+    let gid = guild_with(&db, &own, &[&plain]).await;
+    let r = db.create_role(gid, own.id, &role("R", 0)).await.unwrap();
+    // Un simple membre n'a aucun de ces droits (403) ; un étranger ne sait même pas que le serveur existe (404).
+    let denied = Err::<(), _>(DbError::Forbidden("perm"));
+    assert_eq!(db.create_role(gid, plain.id, &role("X", 0)).await.map(|_| ()), denied);
+    assert_eq!(db.edit_role(gid, r.id, plain.id, &EditRole::default()).await.map(|_| ()), denied);
+    assert_eq!(db.delete_role(gid, r.id, plain.id).await, denied);
+    assert_eq!(db.reorder_roles(gid, plain.id, &[r.id]).await.map(|_| ()), denied);
+    assert_eq!(db.set_member_role(gid, plain.id, plain.id, r.id, true).await.map(|_| ()), denied);
+    assert_eq!(db.kick_member(gid, plain.id, own.id, None).await, denied);
+    assert_eq!(db.ban_member(gid, plain.id, own.id, &Default::default()).await.map(|_| ()), denied);
+    assert_eq!(db.unban(gid, plain.id, own.id).await, denied);
+    assert_eq!(db.bans(gid, plain.id).await.map(|_| ()), denied);
+    assert_eq!(db.transfer_ownership(gid, plain.id, plain.id).await, Err(DbError::Forbidden("owner_only")));
+    assert_eq!(db.create_role(gid, out.id, &role("X", 0)).await.map(|_| ()), Err(DbError::NotFound));
+    assert_eq!(db.kick_member(gid, out.id, plain.id, None).await, Err(DbError::NotFound));
+    assert_eq!(db.bans(gid, out.id).await.map(|_| ()), Err(DbError::NotFound));
+    assert_eq!(db.leave_guild(gid, out.id).await, Err(DbError::NotFound));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn kick_ban_unban_and_rejoin(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, a) = two_users(&db).await;
+    let b = user(&db, "bob").await;
+    let g = db.create_guild(own.id, "Abysse").await.unwrap();
+    let gid = g.guild.id;
+    let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
+    let inv = db.create_invite(gid, Some(general), own.id, 0, None).await.unwrap();
+    for u in [&a, &b] {
+        db.use_invite(&inv.code, u.id).await.unwrap();
+    }
+
+    // Exclusion : retiré, mais il peut revenir par invitation.
+    db.kick_member(gid, own.id, a.id, Some("  bruyant ")).await.unwrap();
+    assert!(db.guild_state(gid, a.id).await.unwrap().is_none());
+    assert!(db.use_invite(&inv.code, a.id).await.unwrap().1.is_some());
+    assert_eq!(
+        db.kick_member(gid, own.id, a.id, Some(&"x".repeat(MAX_REASON + 1))).await,
+        Err(DbError::Invalid("reason"))
+    );
+    let reason: Option<String> = sqlx::query_scalar("select reason from audit_log where action = 'member_kick'")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(reason.as_deref(), Some("bruyant"));
+
+    // Bannissement avec effacement des messages récents (les anciens restent).
+    let (old, _) = db.create_message(general, b.id, "ancien", None).await.unwrap();
+    sqlx::query("update messages set created_at = now() - interval '3 days' where id = $1")
+        .bind(old.id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    db.create_message(general, b.id, "récent", None).await.unwrap();
+    db.create_message(general, own.id, "du chef", None).await.unwrap();
+    let out = db
+        .ban_member(gid, own.id, b.id, &BanMember { reason: Some("spam".into()), delete_hours: Some(24) })
+        .await
+        .unwrap();
+    assert!(out.was_member);
+    assert_eq!((out.ban.user.id, out.ban.reason.as_deref(), out.purged.len()), (b.id, Some("spam"), 1));
+    let left: Vec<String> = db.messages(general, None, 10).await.unwrap().into_iter().map(|m| m.content).collect();
+    assert_eq!(left.len(), 2);
+    assert!(left.contains(&"ancien".to_string()) && left.contains(&"du chef".to_string()));
+    assert!(db.guild_state(gid, b.id).await.unwrap().is_none());
+    assert_eq!(db.use_invite(&inv.code, b.id).await.map(|_| ()), Err(DbError::Forbidden("banned")));
+    assert_eq!(db.bans(gid, own.id).await.unwrap().iter().map(|b| b.user.id).collect::<Vec<_>>(), [b.id]);
+    assert_eq!(
+        db.ban_member(gid, own.id, b.id, &BanMember { delete_hours: Some(MAX_PURGE_HOURS + 1), ..Default::default() })
+            .await
+            .map(|_| ()),
+        Err(DbError::Invalid("hours"))
+    );
+
+    // Bannir quelqu'un qui n'est pas (ou plus) là marche aussi ; jamais soi-même ni le propriétaire.
+    let ghost = user(&db, "ghost").await;
+    assert!(!db.ban_member(gid, own.id, ghost.id, &Default::default()).await.unwrap().was_member);
+    assert_eq!(
+        db.ban_member(gid, own.id, own.id, &Default::default()).await.map(|_| ()),
+        Err(DbError::Invalid("self_target"))
+    );
+    assert_eq!(db.ban_member(gid, own.id, Id::nil(), &Default::default()).await.map(|_| ()), Err(DbError::NotFound));
+
+    // Débannir : il peut rejoindre de nouveau ; une seconde fois, il n'y a plus rien.
+    db.unban(gid, own.id, b.id).await.unwrap();
+    assert_eq!(db.unban(gid, own.id, b.id).await, Err(DbError::NotFound));
+    assert!(db.use_invite(&inv.code, b.id).await.unwrap().1.is_some());
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn leaving_and_ownership_transfer(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, a) = two_users(&db).await;
+    let gid = guild_with(&db, &own, &[&a]).await;
+    let r = db.create_role(gid, own.id, &role("R", 0)).await.unwrap();
+    db.set_member_role(gid, own.id, a.id, r.id, true).await.unwrap();
+
+    // Le propriétaire ne part pas sans transférer ; un autre peut partir, et revenir sans ses rôles.
+    assert_eq!(db.leave_guild(gid, own.id).await, Err(DbError::Forbidden("owner_leave")));
+    db.leave_guild(gid, a.id).await.unwrap();
+    assert_eq!(db.leave_guild(gid, a.id).await, Err(DbError::NotFound));
+    assert!(db.guild_state(gid, a.id).await.unwrap().is_none());
+    let general = db
+        .guild_state(gid, own.id)
+        .await
+        .unwrap()
+        .unwrap()
+        .channels
+        .iter()
+        .find(|c| c.kind == ChannelKind::Text)
+        .unwrap()
+        .id;
+    let inv = db.create_invite(gid, Some(general), own.id, 0, None).await.unwrap();
+    let (back, _) = db.use_invite(&inv.code, a.id).await.unwrap();
+    assert!(back.members.iter().find(|m| m.user.id == a.id).unwrap().roles.is_empty());
+
+    // Transfert : à un membre seulement, jamais à soi-même, réservé au propriétaire.
+    let out = user(&db, "out").await;
+    assert_eq!(db.transfer_ownership(gid, own.id, own.id).await, Err(DbError::Invalid("self_target")));
+    assert_eq!(db.transfer_ownership(gid, own.id, out.id).await, Err(DbError::NotFound));
+    assert_eq!(db.transfer_ownership(gid, a.id, a.id).await, Err(DbError::Forbidden("owner_only")));
+    db.transfer_ownership(gid, own.id, a.id).await.unwrap();
+    assert_eq!(db.guild_state(gid, a.id).await.unwrap().unwrap().guild.owner_id, a.id);
+    assert_eq!(db.guild_perms(a.id, gid).await.unwrap(), perms::ALL);
+    // L'ancien propriétaire est un membre comme les autres : il peut partir, et n'a plus la main.
+    assert_eq!(db.kick_member(gid, own.id, a.id, None).await, Err(DbError::Forbidden("perm")));
+    db.leave_guild(gid, own.id).await.unwrap();
+}

@@ -28,9 +28,9 @@ Salons privés (surcharges de permissions),salons,must,yes,partial,"S05 S23 ; mo
 Mode lent et sujet du salon,salons,should,yes,no,S23
 Fils de discussion,salons,should,yes,no,S24
 Salons forum,salons,could,yes,no,S24
-Rôles avec couleur et permissions,moderation,must,yes,no,S22 F07
-Expulser bannir exclure temporairement,moderation,must,yes,no,S22
-Journal d'audit,moderation,should,yes,no,S22
+Rôles avec couleur et permissions,moderation,must,yes,yes,"S22 ; créer, renommer, couleur d'une palette fixe, réordonner (glisser ou boutons), supprimer, droits par catégorie, donner ou retirer sur un membre, rubrique « affiché à part » dans la liste des membres, hiérarchie des rangs, transfert de propriété"
+Expulser bannir exclure temporairement,moderation,must,yes,partial,"S22 ; expulser, bannir (raison, effacement des derniers messages), débannir, quitter un serveur, hiérarchie respectée ; pas encore d'exclusion temporaire"
+Journal d'audit,moderation,should,yes,partial,"S22 ; les actions de rôles et de modération sont écrites dans audit_log, pas encore d'écran pour les lire"
 AutoMod (mots interdits spam),moderation,could,yes,no,S22
 Filtre de contenu média sensible (flou bloquer),moderation,could,yes,no,S08 ; nécessite un classifieur
 Envoyer modifier supprimer un message,messages,must,yes,yes,"S05 F10 ; envoi optimiste (nonce, réessai ou abandon), modifier le sien, supprimer le sien ou tout message avec MANAGE_MESSAGES"

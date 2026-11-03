@@ -684,7 +684,7 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
                 }
             }}
             <div>
-                {(!cont).then(|| view! { <header><b title=handle>{name.clone()}</b><time datetime=iso(at)>{when(at)}</time></header> })}
+                {(!cont).then(|| view! { <header><b title=handle data-role-color=move || author_id.and_then(|a| s.role_color(chat.guild, a)).map(|c| c.to_string())>{name.clone()}</b><time datetime=iso(at)>{when(at)}</time></header> })}
                 {move || if editing() {
                     view! { <EditBox msg=body.get_value()/> }.into_any()
                 } else {
@@ -1213,23 +1213,114 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
 
 #[component]
 fn Members(guild: Id) -> impl IntoView {
+    use crate::guild::MemberDialog;
+    use crate::social::{Confirm, ConfirmDialog};
+    use crate::ui::MoreMenu;
+    use kraken_proto::{Member, Role};
     let s = store();
-    let members = move || s.guild(guild).map(|g| g.members).unwrap_or_default();
+    let profile = RwSignal::new(None::<Id>);
+    let confirm = RwSignal::new(None::<Confirm>);
+    let total = move || s.guild(guild).map_or(0, |g| g.members.len());
+    // Une rubrique par rôle « affiché à part » (le plus haut de chaque membre), puis les autres.
+    let groups = Memo::new(move |_| {
+        let Some(g) = s.guild(guild) else { return vec![] };
+        let mut hoisted: Vec<Role> = g.roles.iter().filter(|r| r.hoist && r.id != guild).cloned().collect();
+        hoisted.sort_by_key(|r| std::cmp::Reverse(r.position));
+        let mut placed: Vec<Id> = Vec::new();
+        let mut out: Vec<(Option<Role>, Vec<Member>)> = Vec::new();
+        for r in hoisted {
+            let ms: Vec<Member> =
+                g.members.iter().filter(|m| m.roles.contains(&r.id) && !placed.contains(&m.user.id)).cloned().collect();
+            placed.extend(ms.iter().map(|m| m.user.id));
+            if !ms.is_empty() {
+                out.push((Some(r), ms));
+            }
+        }
+        let rest: Vec<Member> = g.members.iter().filter(|m| !placed.contains(&m.user.id)).cloned().collect();
+        if !rest.is_empty() {
+            out.push((None, rest));
+        }
+        out
+    });
+    let my = my_id();
     view! {
         <aside class="app-aside app-aside--members" aria-label="Membres">
-            <h2 class="k-category">"Membres "<span class="k-badge k-badge--neutral">{move || members().len()}</span></h2>
-            <ul class="app-members">
-                <For each=members key=|m| (m.user.id, m.user.display_name.clone(), m.user.avatar.clone(), m.nick.clone()) let:m>
-                    <li class="k-dm">
-                        <Avatar user=m.user.clone() size="md"/>
-                        <div class="app-ellipsis">
-                            {m.nick.clone().unwrap_or_else(|| m.user.name().to_string())}
-                            <small>{format!("@{}", m.user.username)}</small>
-                        </div>
-                    </li>
-                </For>
-            </ul>
+            <h2 class="k-category">"Membres "<span class="k-badge k-badge--neutral">{total}</span></h2>
+            <For each=move || groups.get()
+                key=|(r, ms)| (
+                    r.as_ref().map(|r| (r.id, r.name.clone())),
+                    // Un nom, un surnom ou une photo qui change redessine la rubrique : les lignes en dépendent.
+                    ms.iter().map(|m| (m.user.id, m.user.display_name.clone(), m.user.avatar.clone(), m.nick.clone())).collect::<Vec<_>>(),
+                )
+                let:group>
+                {
+                    let (role, members) = group;
+                    let count = members.len();
+                    let head = role.as_ref().map(|r| (r.name.clone(), r.color)).or_else(|| groups.with_untracked(|g| (g.len() > 1).then(|| ("Membres".to_string(), None))));
+                    view! {
+                        {head.map(|(name, color)| view! {
+                            <h3 class="app-group" data-role-color=color.map(|c| c.to_string())>{format!("{name} — {count}")}</h3>
+                        })}
+                        <ul class="app-members" aria-label=role.as_ref().map(|r| format!("Membres : {}", r.name))>
+                            <For each=move || members.clone() key=|m| (m.user.id, m.user.display_name.clone(), m.user.avatar.clone(), m.nick.clone()) let:m>
+                                {
+                                    let uid = m.user.id;
+                                    let name = m.nick.clone().unwrap_or_else(|| m.user.name().to_string());
+                                    let is_owner = move || s.guild(guild).is_some_and(|g| g.guild.owner_id == uid);
+                                    let others = Some(uid) != my;
+                                    let can_kick = move || others && s.guild_perms(guild) & perms::KICK != 0 && s.outranks(guild, uid);
+                                    let can_ban = move || others && s.guild_perms(guild) & perms::BAN != 0 && s.outranks(guild, uid);
+                                    let user = m.user.clone();
+                                    let (for_kick, for_ban) = (user.clone(), user.clone());
+                                    // Clic droit : ouvre le même menu que le bouton « ⋯ » de la ligne.
+                                    let context = move |e: leptos::ev::MouseEvent| {
+                                        let button = e
+                                            .current_target()
+                                            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                                            .and_then(|el| el.query_selector(".app-more > button").ok().flatten())
+                                            .and_then(|b| b.dyn_into::<web_sys::HtmlElement>().ok());
+                                        if let Some(b) = button {
+                                            e.prevent_default();
+                                            b.click();
+                                        }
+                                    };
+                                    view! {
+                                        <li class="k-dm" on:contextmenu=context>
+                                            <Avatar user=m.user.clone() size="md"/>
+                                            <div class="app-ellipsis" data-role-color=move || s.role_color(Some(guild), uid).map(|c| c.to_string())>
+                                                {name.clone()}
+                                                <Show when=is_owner>
+                                                    <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" (propriétaire)"</span></span>
+                                                </Show>
+                                                <small>{format!("@{}", m.user.username)}</small>
+                                            </div>
+                                            <MoreMenu label=format!("Plus d'actions pour {name}")>
+                                                <button class="k-menuitem" on:click=move |_| profile.set(Some(uid))>
+                                                    <Icon icon=lu::LuShield/>"Profil et rôles"
+                                                </button>
+                                                <Show when=move || can_kick() || can_ban()><hr/></Show>
+                                                <Show when=can_kick>
+                                                    <button class="k-menuitem is-danger" on:click={ let u = for_kick.clone(); move |_| confirm.set(Some(Confirm::Kick(guild, u.clone()))) }>
+                                                        <Icon icon=lu::LuUserMinus/>"Expulser"
+                                                    </button>
+                                                </Show>
+                                                <Show when=can_ban>
+                                                    <button class="k-menuitem is-danger" on:click={ let u = for_ban.clone(); move |_| confirm.set(Some(Confirm::Ban(guild, u.clone()))) }>
+                                                        <Icon icon=lu::LuBan/>"Bannir"
+                                                    </button>
+                                                </Show>
+                                            </MoreMenu>
+                                        </li>
+                                    }
+                                }
+                            </For>
+                        </ul>
+                    }
+                }
+            </For>
         </aside>
+        {move || profile.get().map(|u| view! { <MemberDialog guild=guild user=u close=Callback::new(move |()| profile.set(None))/> })}
+        {move || confirm.get().map(|what| view! { <ConfirmDialog what=what close=Callback::new(move |()| confirm.set(None))/> })}
     }
 }
 

@@ -2,7 +2,7 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use kraken_db::DbError;
-use kraken_proto::{ApiError, MAX_GROUP_MEMBERS, MAX_GROUP_NAME};
+use kraken_proto::{ApiError, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_PURGE_HOURS, MAX_REASON, MAX_ROLES};
 
 /// Erreur d'API : un code stable que le client traduit, et un message de secours.
 #[derive(Debug)]
@@ -56,7 +56,32 @@ impl From<DbError> for AppError {
             DbError::Invalid("name") => Self::invalid(format!("Le nom tient en {MAX_GROUP_NAME} caractères au plus.")),
             DbError::Invalid("mute") => Self::invalid("Une sourdine dure de 1 minute à 30 jours, ou sans fin."),
             DbError::Invalid("target") => Self::invalid("Un serveur ou un salon, l'un des deux."),
+            DbError::Invalid("self_target") => Self::invalid("Tu ne peux pas faire ça sur toi-même."),
+            DbError::Invalid("role_name") => Self::invalid("Le nom d'un rôle compte de 1 à 100 caractères."),
+            DbError::Invalid("color") => Self::invalid("Cette couleur n'existe pas dans la palette."),
+            DbError::Invalid("reason") => Self::invalid(format!("La raison tient en {MAX_REASON} caractères au plus.")),
+            DbError::Invalid("hours") => {
+                Self::invalid(format!("On peut effacer les messages de {MAX_PURGE_HOURS} heures au plus."))
+            }
+            DbError::Invalid("roles") => {
+                Self::invalid(format!("{MAX_ROLES} rôles au plus, et l'ordre doit les citer tous."))
+            }
+            DbError::Invalid("permissions") => Self::invalid("Droit inconnu."),
+            DbError::Invalid("everyone") => Self::invalid("@everyone ne peut être ni renommé, ni supprimé, ni donné."),
             DbError::Invalid(f) => Self::invalid(format!("Valeur refusée : {f}.")),
+            DbError::Forbidden("hierarchy") => Self(
+                StatusCode::FORBIDDEN,
+                "hierarchy",
+                "Son rang est égal ou supérieur au tien (le propriétaire est intouchable).".into(),
+            ),
+            DbError::Forbidden("owner_leave") => Self(
+                StatusCode::FORBIDDEN,
+                "owner_leave",
+                "Tu possèdes ce serveur : transfère-le à un autre membre avant de le quitter.".into(),
+            ),
+            DbError::Forbidden("owner_only") => {
+                Self(StatusCode::FORBIDDEN, "forbidden", "Seul le propriétaire peut faire ça.".into())
+            }
             DbError::Forbidden("banned") => {
                 Self(StatusCode::FORBIDDEN, "banned", "Tu as été banni de ce serveur.".into())
             }

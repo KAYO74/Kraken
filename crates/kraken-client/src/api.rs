@@ -357,3 +357,52 @@ pub async fn ack_guild(guild: Id) -> ApiResult<Vec<ReadState>> {
 pub async fn set_notify(req: &SetNotify) -> ApiResult<NotifySetting> {
     call(Method::PUT, "/users/@me/notifications", Some(req)).await
 }
+
+// ───────── rôles, modération, départ ─────────
+
+pub async fn create_role(guild: Id, req: &CreateRole) -> ApiResult<Role> {
+    call(Method::POST, &format!("/guilds/{guild}/roles"), Some(req)).await
+}
+
+pub async fn edit_role(guild: Id, role: Id, req: &EditRole) -> ApiResult<Role> {
+    call(Method::PATCH, &format!("/guilds/{guild}/roles/{role}"), Some(req)).await
+}
+
+pub async fn delete_role(guild: Id, role: Id) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/guilds/{guild}/roles/{role}"), NO_BODY).await
+}
+
+/// Rend les rôles dont la position a changé.
+pub async fn reorder_roles(guild: Id, ids: Vec<Id>) -> ApiResult<Vec<Role>> {
+    call(Method::PUT, &format!("/guilds/{guild}/roles"), Some(ReorderRoles { ids })).await
+}
+
+pub async fn set_member_role(guild: Id, user: Id, role: Id, on: bool) -> ApiResult<Member> {
+    let method = if on { Method::PUT } else { Method::DELETE };
+    call(method, &format!("/guilds/{guild}/members/{user}/roles/{role}"), NO_BODY).await
+}
+
+pub async fn kick(guild: Id, user: Id, reason: &str) -> ApiResult<()> {
+    let reason = String::from(js_sys::encode_uri_component(reason));
+    call(Method::DELETE, &format!("/guilds/{guild}/members/{user}?reason={reason}"), NO_BODY).await
+}
+
+pub async fn ban(guild: Id, user: Id, req: &BanMember) -> ApiResult<Ban> {
+    call(Method::PUT, &format!("/guilds/{guild}/bans/{user}"), Some(req)).await
+}
+
+pub async fn unban(guild: Id, user: Id) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/guilds/{guild}/bans/{user}"), NO_BODY).await
+}
+
+pub async fn bans(guild: Id) -> ApiResult<Vec<Ban>> {
+    call(Method::GET, &format!("/guilds/{guild}/bans"), NO_BODY).await
+}
+
+pub async fn leave_guild(guild: Id) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/guilds/{guild}/members/@me"), NO_BODY).await
+}
+
+pub async fn transfer_guild(guild: Id, to: Id) -> ApiResult<()> {
+    call(Method::POST, &format!("/guilds/{guild}/owner"), Some(TransferOwner { user_id: to })).await
+}

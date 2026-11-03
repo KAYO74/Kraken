@@ -13,6 +13,7 @@ mod gateway;
 mod jobs;
 mod limit;
 mod media;
+mod moderation;
 mod reads;
 mod social;
 mod voice;
@@ -290,6 +291,17 @@ pub fn app(state: AppState) -> Router {
         .route("/guilds", post(api::create_guild))
         .route("/guilds/{id}", get(api::guild))
         .route("/guilds/{id}/channels", get(api::guild_channels).post(api::create_channel))
+        .route("/guilds/{id}/roles", post(moderation::create_role).put(moderation::reorder_roles))
+        .route("/guilds/{id}/roles/{rid}", patch(moderation::edit_role).delete(moderation::delete_role))
+        .route("/guilds/{id}/members/@me", delete(moderation::leave))
+        .route("/guilds/{id}/members/{uid}", delete(moderation::kick))
+        .route(
+            "/guilds/{id}/members/{uid}/roles/{rid}",
+            put(moderation::add_member_role).delete(moderation::remove_member_role),
+        )
+        .route("/guilds/{id}/bans", get(moderation::bans))
+        .route("/guilds/{id}/bans/{uid}", put(moderation::ban).delete(moderation::unban))
+        .route("/guilds/{id}/owner", post(moderation::transfer))
         .route("/channels/{id}/messages", get(api::messages).post(api::create_message))
         .route("/channels/{id}/messages/{mid}", patch(api::edit_message).delete(api::delete_message))
         .route("/channels/{id}/messages/{mid}/embeds", delete(api::remove_embed))
