@@ -160,11 +160,13 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-add h2 { margin: 0 0 var(--space-2); font-size: var(--text-lg-size); color: var(--text-strong); }
 .app-add-row { display: flex; gap: var(--space-3); margin: var(--space-4) 0; }
 .app-add-row .k-input { flex: 1; min-width: 0; }
+.app-add-row .k-select { width: 0; flex: 1 1 12rem; min-width: 0; }
 .app-add-ok { margin: 0; color: var(--text-secondary); font-size: var(--text-sm-size); }
 .app-row > .app-row-actions { flex: none; display: flex; align-items: center; gap: var(--space-1); }
 .app-friends-error { margin: 0 0 var(--space-3); }
 /* Menu ⋯ (MoreMenu) : sous son bouton, aligné à droite. */
 .app-more { position: relative; }
+.app-more-menu hr { border-top-color: var(--border-strong); }
 .app-more-menu { position: absolute; top: calc(100% + var(--space-1)); right: 0; width: max-content; border: 1px solid var(--border-strong); }
 
 /* Social : nouvelle conversation, choix d'amis, MP bloqué, messages repliés, comptes bloqués */
