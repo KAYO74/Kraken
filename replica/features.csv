@@ -23,9 +23,9 @@ Dossiers de serveurs,serveurs,could,yes,no,S02
 Serveurs favoris,serveurs,could,yes,no,S11 ; nitro : gratuit
 Plus de serveurs par compte (200),serveurs,could,yes,no,nitro : gratuit ; plafond réglable par l'instance
 Explorer des serveurs publics,serveurs,could,yes,no,S30
-Salons texte annonces et catégories,salons,must,yes,partial,"S05 ; affichage et catégories repliables, création par API seulement"
-Salons privés (surcharges de permissions),salons,must,yes,partial,"S05 S23 ; moteur et contrôle d'accès faits, pas d'écran d'édition"
-Mode lent et sujet du salon,salons,should,yes,no,S23
+Salons texte annonces et catégories,salons,must,yes,partial,"S05 S23 ; catégories repliables ; création (« + » d'une catégorie, menu du serveur, Réglages › Salons) de salons textuels, vocaux et de catégories ; renommer, sujet, supprimer (le dernier salon d'écriture reste) ; ranger avec Monter et Descendre, d'une catégorie à l'autre ; en direct pour tous les membres ; pas de glisser-déposer, annonces et forums pas créables depuis l'écran"
+Salons privés (surcharges de permissions),salons,must,yes,yes,"S05 S23 ; interrupteur « Salon privé » (une catégorie privée l'est pour ses salons), onglet Permissions : autoriser, hériter ou refuser chaque droit par rôle et par membre, mêmes libellés et droits sensibles que les rôles ; le salon apparaît et disparaît en direct pour qui le voit ou non ; on ne règle que des droits qu'on a soi-même, sur un rang plus bas, sans se retirer l'accès"
+Mode lent et sujet du salon,salons,should,yes,yes,"S23 ; sujet dans l'en-tête du salon ; mode lent de 5 s à 1 h appliqué par le serveur (429), décompte sous la saisie, sans effet sur qui gère les messages ou les salons"
 Fils de discussion,salons,should,yes,no,S24
 Salons forum,salons,could,yes,no,S24
 Rôles avec couleur et permissions,moderation,must,yes,yes,"S22 ; créer, renommer, couleur d'une palette fixe, réordonner (glisser ou boutons), supprimer, droits par catégorie, donner ou retirer sur un membre, rubrique « affiché à part » dans la liste des membres, hiérarchie des rangs, transfert de propriété"
@@ -39,8 +39,8 @@ Répondre à un message,messages,must,yes,yes,"S05 ; citation au-dessus, clic po
 Réactions emoji,messages,must,yes,yes,"S05 ; emojis Unicode, sélecteur de 86 emojis, 20 différents au plus par message ; emojis perso pas encore"
 Épingler un message,messages,should,yes,no,S05
 Transférer un message,messages,could,yes,no,S13
-Aperçus de liens (embeds),messages,must,yes,no,S05
-Pièces jointes images vidéos fichiers,messages,must,yes,no,S05
+Aperçus de liens (embeds),messages,must,yes,yes,"S05 ; carte avec site, titre, description et image gardée en local, retirable par l'auteur ; page récupérée par le serveur sans jamais viser le réseau local ; selon le droit « Aperçu des liens »"
+Pièces jointes images vidéos fichiers,messages,must,yes,yes,"S05 ; trombone, glisser-déposer ou coller, 10 par message, taille maximale réglée par l'instance ; vignettes d'images et visionneuse au clavier, carte de téléchargement pour les autres fichiers"
 Envois lourds jusqu'à 500 Mo,messages,should,yes,no,nitro : gratuit ; plafond réglable par l'instance
 Messages longs (4000 caractères),messages,should,yes,yes,nitro : gratuit
 Texte alternatif des images,messages,should,yes,no,S12

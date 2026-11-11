@@ -203,7 +203,11 @@ jobs:
           cache: npm
           cache-dependency-path: e2e/package-lock.json
       - working-directory: e2e
-        run: npm ci && npx playwright install --with-deps chromium
+        # --with-deps passe par apt ; si le miroir apt est en panne, le navigateur seul suffit
+        # (les bibliothèques sont déjà sur l'image du runner, seules des polices manquent).
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium || npx playwright install chromium
       - working-directory: e2e
         run: npx playwright test
       - if: failure()

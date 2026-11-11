@@ -1,8 +1,11 @@
 use axum::Json;
-use axum::http::StatusCode;
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use kraken_db::DbError;
-use kraken_proto::{ApiError, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_PURGE_HOURS, MAX_REASON, MAX_ROLES};
+use kraken_proto::{
+    ApiError, MAX_CHANNEL_NAME, MAX_CHANNELS, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_OVERWRITES, MAX_PURGE_HOURS,
+    MAX_REASON, MAX_ROLES, MAX_TOPIC,
+};
 
 /// Erreur d'API : un code stable que le client traduit, et un message de secours.
 #[derive(Debug)]
@@ -41,6 +44,11 @@ impl From<DbError> for AppError {
                 "already_sent",
                 "Ta demande est déjà partie : elle attend sa réponse dans « En attente ».".into(),
             ),
+            DbError::Conflict("last_text") => Self(
+                StatusCode::CONFLICT,
+                "last_text",
+                "C'est le dernier salon d'écriture du serveur : crée-en un autre avant de le supprimer.".into(),
+            ),
             DbError::Conflict(f) => Self(StatusCode::CONFLICT, "conflict", format!("Déjà utilisé : {f}.")),
             DbError::Invalid("reactions") => Self::invalid("20 emojis différents au plus sur un message."),
             DbError::Invalid("emoji") => Self::invalid("Seuls les emojis servent de réaction."),
@@ -53,6 +61,26 @@ impl From<DbError> for AppError {
                 Self::invalid(format!("Ce groupe est complet : {MAX_GROUP_MEMBERS} personnes au plus."))
             }
             DbError::Invalid("guild_name") => Self::invalid("Le nom d'un serveur compte de 2 à 100 caractères."),
+            DbError::Invalid("channel_name") => Self::invalid(format!(
+                "Le nom d'un salon compte de 1 à {MAX_CHANNEL_NAME} caractères, sans caractère de contrôle."
+            )),
+            DbError::Invalid("channels") => {
+                Self::invalid(format!("Un serveur compte {MAX_CHANNELS} salons et catégories au plus."))
+            }
+            DbError::Invalid("topic") => Self::invalid(format!(
+                "Le sujet tient en {MAX_TOPIC} caractères au plus, et seuls les salons d'écriture en ont un."
+            )),
+            DbError::Invalid("slowmode") => Self::invalid(
+                "Mode lent : aucun, 5 s, 10 s, 30 s, 1 min, 5 min, 15 min ou 1 h, et seulement dans un salon d'écriture.",
+            ),
+            DbError::Invalid("parent_id") => Self::invalid("Cette catégorie n'existe pas ou n'est pas visible."),
+            DbError::Invalid("overwrite") => Self::invalid("Un droit ne peut pas être à la fois autorisé et refusé."),
+            DbError::Invalid("overwrite_kind") => {
+                Self::invalid("Ce réglage existe déjà pour un autre genre de cible (rôle ou membre).")
+            }
+            DbError::Invalid("overwrites") => {
+                Self::invalid(format!("{MAX_OVERWRITES} réglages de droits au plus par salon."))
+            }
             DbError::Invalid("name") => Self::invalid(format!("Le nom tient en {MAX_GROUP_NAME} caractères au plus.")),
             DbError::Invalid("mute") => Self::invalid("Une sourdine dure de 1 minute à 30 jours, ou sans fin."),
             DbError::Invalid("target") => Self::invalid("Un serveur ou un salon, l'un des deux."),
@@ -82,6 +110,16 @@ impl From<DbError> for AppError {
             DbError::Forbidden("owner_only") => {
                 Self(StatusCode::FORBIDDEN, "forbidden", "Seul le propriétaire peut faire ça.".into())
             }
+            DbError::Forbidden("lockout") => Self(
+                StatusCode::FORBIDDEN,
+                "lockout",
+                "Ce changement te retirerait l'accès à ce salon, ou le droit de le gérer.".into(),
+            ),
+            DbError::Slowmode(n) => Self(
+                StatusCode::TOO_MANY_REQUESTS,
+                "slowmode",
+                format!("Mode lent : encore {n} s avant ton prochain message."),
+            ),
             DbError::Forbidden("banned") => {
                 Self(StatusCode::FORBIDDEN, "banned", "Tu as été banni de ce serveur.".into())
             }
@@ -141,6 +179,14 @@ impl From<DbError> for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        (self.0, Json(ApiError { code: self.1.into(), message: self.2 })).into_response()
+        // Mode lent : le message dit combien de secondes attendre ; l'en-tête le dit aux machines.
+        let wait = (self.1 == "slowmode")
+            .then(|| self.2.split(|c: char| !c.is_ascii_digit()).find_map(|d| d.parse::<u32>().ok()))
+            .flatten();
+        let mut res = (self.0, Json(ApiError { code: self.1.into(), message: self.2 })).into_response();
+        if let Some(n) = wait {
+            res.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from(n));
+        }
+        res
     }
 }

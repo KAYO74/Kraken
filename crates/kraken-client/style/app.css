@@ -324,6 +324,8 @@ button.app-reply:hover span { color: var(--text-strong); }
     transition: transform var(--motion-base) var(--motion-ease), visibility var(--motion-base); }
   /* Au-dessus de la barre latérale : la carte « Mon compte » déborde du rail. */
   .app-rail { left: 0; z-index: calc(var(--z-modal) + 1); }
+  /* Une fenêtre passe devant le tiroir et la barre des serveurs, jamais dessous. */
+  .k-scrim { z-index: calc(var(--z-modal) + 2); }
   .app-nav { left: var(--size-rail); width: min(var(--size-sidebar), 100vw - var(--size-rail)); }
   .app[data-drawer] .app-rail, .app[data-drawer] .app-nav { transform: none; visibility: visible; }
   .app[data-drawer] .app-scrim { display: block; position: fixed; inset: 0; z-index: var(--z-sticky); background: var(--shadow-scrim); }
@@ -534,6 +536,63 @@ button.app-reply:hover span { color: var(--text-strong); }
   border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-pop); }
 .app-savebar > span { display: inline-flex; align-items: center; gap: var(--space-3); flex: 1; min-width: 0; color: var(--text-strong); }
 .app-savebar > span .k-icon { color: var(--warning); }
+/* Étroit : « Non enregistré » tient sur une ligne, à côté des deux boutons. */
+.app-bar-short { display: none; }
+@media (max-width: 639px) { .app-bar-long { display: none; } .app-bar-short { display: inline; } }
 .app-list--col { grid-template-columns: minmax(0, 1fr); }
 .app-row .app-ban-reason { display: block; color: var(--text-muted); overflow-wrap: anywhere; }
 .app-list--col .app-row small { display: block; }
+
+/* Salons (S23) : commandes au bout des lignes de la barre latérale, rangement, réglages d'un salon, droits par salon */
+.k-select, .k-input { min-width: 0; }
+.app-chan, .app-cat { display: flex; align-items: center; min-width: 0; border-radius: var(--radius-md); }
+.app-cat { align-items: flex-end; }
+.app-chan > .k-channel, .app-cat > .k-category { flex: 1; min-width: 0; }
+.app-cat > .k-category { text-align: left; }
+.app-sidebar .app-chan > .k-channel { background: none; }
+.app-chan:is(:hover, :focus-within), .app-chan:has(.k-channel[aria-current="page"]) { background: var(--surface-hover); }
+/* Invisible au repos mais focalisable : Tab l'atteint et l'affiche (toujours là sur écran tactile et en mobile). */
+.app-row-act { flex: none; width: calc(var(--size-icon) + 2 * var(--space-2)); height: calc(var(--size-icon) + 2 * var(--space-2)); opacity: 0; }
+.app-chan:is(:hover, :focus-within) .app-row-act, .app-cat:is(:hover, :focus-within) .app-row-act, .app-row-act:focus-visible { opacity: 1; }
+.app-chan > .app-row-act { margin-right: var(--space-2); }
+@media (hover: none), (max-width: 639px) {
+  .app-row-act { opacity: 1; }
+  /* Au doigt : des cibles de 36 px au moins (28 px à la souris). */
+  .app-row-act, .app-chan-item .k-btn--icon { width: calc(var(--size-icon) + 2 * var(--space-3)); height: calc(var(--size-icon) + 2 * var(--space-3)); }
+}
+
+.app-textarea { height: auto; min-height: var(--size-header); padding: var(--space-3) var(--space-4); font: inherit; resize: vertical; }
+.app-chan-form { display: grid; gap: var(--space-5); }
+.app-saved { display: flex; align-items: center; gap: var(--space-2); }
+.app-slow { display: flex; align-items: center; gap: var(--space-2); margin: 0 var(--space-4) var(--space-2); color: var(--text-muted); font-size: var(--text-sm-size); }
+.app-slow[data-wait] { color: var(--warning); }
+
+.app-chan-tools { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-4) 0; }
+.app-chan-admin { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.app-chan-item { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border-radius: var(--radius-md); color: var(--text-secondary); }
+.app-chan-item:hover { background: var(--surface-hover); }
+.app-chan-item[data-category] { margin-top: var(--space-3); color: var(--text-strong); font-weight: var(--weight-semibold); }
+.app-chan-item[data-nested] { padding-left: var(--space-8); }
+.app-chan-icon { display: grid; place-items: center; flex: none; width: var(--space-6); color: var(--text-muted); }
+.app-chan-name { flex: 1; min-width: 0; }
+.app-role-icon { display: grid; place-items: center; flex: none; color: var(--text-muted); }
+
+/* Droit par salon : autoriser, hériter ou refuser, en trois cases d'un même bloc (des boutons radio) */
+.app-ow-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-6);
+  padding: var(--space-4) 0; border-bottom: 1px solid var(--border); }
+.app-ow-text { flex: 1 1 14rem; min-width: 0; display: grid; gap: var(--space-1); }
+.app-ow-label { font-weight: var(--weight-medium); color: var(--text-strong); }
+.app-tri { display: inline-flex; flex: none; overflow: hidden; border: 1px solid var(--border-input); border-radius: var(--radius-md); }
+.app-tri label { position: relative; display: grid; place-items: center; width: var(--space-10); height: var(--space-8); color: var(--text-muted); cursor: pointer; }
+.app-tri label + label { border-left: 1px solid var(--border-input); }
+.app-tri input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.app-tri label:has(input:checked) { background: var(--control); color: var(--text-strong); }
+.app-tri label[data-state="allow"]:has(input:checked) { background: var(--accent); color: var(--on-accent); }
+.app-tri label[data-state="deny"]:has(input:checked) { background: var(--danger-solid); color: var(--on-danger); }
+.app-tri label:has(input:focus-visible) { outline: var(--space-1) solid var(--accent-text); outline-offset: calc(-1 * var(--space-1)); }
+.app-tri label:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.app-tri input:disabled { cursor: not-allowed; }
+.app-ow-key { display: flex; flex-wrap: wrap; gap: var(--space-5); margin: var(--space-4) 0; padding: 0; list-style: none; color: var(--text-muted); font-size: var(--text-sm-size); }
+.app-ow-key li { display: inline-flex; align-items: center; gap: var(--space-2); }
+.app-chan-name .k-icon { margin-left: var(--space-2); vertical-align: middle; }

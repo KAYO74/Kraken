@@ -166,6 +166,20 @@ pub fn MoreMenu(label: String, children: Children) -> impl IntoView {
     }
 }
 
+/// Avant d'ouvrir une fenêtre depuis une entrée d'un menu « Plus d'actions » : le focus passe au
+/// bouton du menu, pour qu'il y revienne à la fermeture (l'entrée, elle, disparaît avec le menu).
+pub fn focus_menu_trigger(e: &leptos::ev::MouseEvent) {
+    let button = e
+        .target()
+        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+        .and_then(|el| el.closest(".app-more").ok().flatten())
+        .and_then(|more| more.query_selector("button").ok().flatten())
+        .and_then(|b| b.dyn_into::<web_sys::HtmlElement>().ok());
+    if let Some(b) = button {
+        let _ = b.focus();
+    }
+}
+
 /// En-tête de la zone principale, avec le bouton du tiroir de navigation en mobile.
 #[component]
 pub fn Header(children: Children) -> impl IntoView {

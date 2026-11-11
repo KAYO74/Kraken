@@ -289,6 +289,8 @@ pub enum Confirm {
     /// Bannir du serveur, avec une raison et l'effacement de ses derniers messages.
     Ban(Id, User),
     DeleteRole(Id, Role),
+    /// Supprimer un salon de serveur, ou une catégorie (ses salons en sortent).
+    DeleteChannel(Channel),
     /// Donner le serveur (id, nom) à ce membre.
     Transfer(Id, String, User),
 }
@@ -353,6 +355,29 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
             "Tous ceux qui l'ont le perdent, avec les droits qu'il leur donnait. Cette action est définitive.".to_string(),
             "Supprimer le rôle",
         ),
+        Confirm::DeleteChannel(c) => {
+            let name = c.name.clone().unwrap_or_default();
+            match c.kind {
+                ChannelKind::Category => (
+                    format!("Supprimer la catégorie « {name} » ?"),
+                    format!(
+                        "Les salons qu'elle contient ne sont pas supprimés : ils sortent de la catégorie.{} Cette action est définitive.",
+                        if c.private { " Ses salons gardent les mêmes règles d'accès." } else { "" }
+                    ),
+                    "Supprimer la catégorie",
+                ),
+                ChannelKind::Voice | ChannelKind::Stage => (
+                    format!("Supprimer le salon vocal « {name} » ?"),
+                    "Le salon disparaît pour tout le monde, et les personnes qui s'y trouvent sont déconnectées. Cette action est définitive.".to_string(),
+                    "Supprimer le salon",
+                ),
+                _ => (
+                    format!("Supprimer #{name} ?"),
+                    "Le salon et tous ses messages, avec leurs fichiers, sont supprimés pour tout le monde. Cette action est définitive.".to_string(),
+                    "Supprimer le salon",
+                ),
+            }
+        }
         Confirm::Transfer(_, name, u) => (
             format!("Donner « {name} » à {} ?", u.name()),
             "Cette personne devient propriétaire : elle aura tous les droits, et tu seras un membre comme un autre. Tu ne pourras pas le reprendre sans son accord.".to_string(),
@@ -390,6 +415,7 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                     crate::api::ban(*g, u.id, &BanMember { reason, delete_hours }).await.map(|_| None)
                 }
                 Confirm::DeleteRole(g, r) => crate::api::delete_role(*g, r.id).await.map(|()| None),
+                Confirm::DeleteChannel(c) => crate::api::delete_channel(c.id).await.map(|()| None),
                 Confirm::Transfer(g, _, u) => crate::api::transfer_guild(*g, u.id).await.map(|()| None),
             };
             match done {
@@ -414,6 +440,12 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                             s.in_guild(g, |x| x.members.retain(|m| m.user.id != u.id))
                         }
                         Confirm::DeleteRole(g, r) => s.apply_role_delete(g, r.id),
+                        Confirm::DeleteChannel(c) => {
+                            if let Some(g) = c.guild_id {
+                                navigate(&format!("/channels/{g}"), Default::default());
+                            }
+                            s.remove_channel(c.id);
+                        }
                         Confirm::Transfer(g, _, u) => s.in_guild(g, |x| x.guild.owner_id = u.id),
                     }
                 }

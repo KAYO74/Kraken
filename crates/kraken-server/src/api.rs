@@ -33,17 +33,6 @@ pub(crate) async fn channel_perms(state: &AppState, uid: Id, cid: Id, need: u64)
 /// Réactions ajoutées ou retirées par minute et par client.
 pub const REACTIONS_PER_MIN: u32 = 300;
 
-async fn require_guild(state: &AppState, uid: Id, gid: Id, need: u64) -> ApiResult<()> {
-    let p = state.db.guild_perms(uid, gid).await?;
-    if p == 0 {
-        return Err(AppError::not_found());
-    }
-    if p & need != need {
-        return Err(AppError::forbidden());
-    }
-    Ok(())
-}
-
 /// Pour les sondes de disponibilité : 200 si la base répond.
 pub async fn health(State(state): State<AppState>) -> ApiResult<&'static str> {
     state.db.ping().await?;
@@ -81,19 +70,6 @@ pub async fn guild_channels(
     Ok(Json(g.channels))
 }
 
-pub async fn create_channel(
-    State(state): State<AppState>,
-    auth: Auth,
-    Path(gid): Path<Id>,
-    Json(req): Json<CreateChannel>,
-) -> ApiResult<(StatusCode, Json<Channel>)> {
-    require_guild(&state, auth.user.id, gid, perms::MANAGE_CHANNELS).await?;
-    let c = state.db.create_channel(gid, &req).await?;
-    let audience = state.db.channel_audience(c.id).await?;
-    state.hub.send(&audience, Event::ChannelCreate(c.clone()));
-    Ok((StatusCode::CREATED, Json(c)))
-}
-
 #[derive(Deserialize)]
 pub struct Page {
     before: Option<Id>,
@@ -126,6 +102,7 @@ pub async fn create_message(
         reply_to: req.reply_to,
         may_mention_everyone: p & perms::MENTION_EVERYONE != 0,
         attachments: &req.attachments,
+        slowmode_exempt: p & (perms::MANAGE_MESSAGES | perms::MANAGE_CHANNELS) != 0,
     };
     if !req.attachments.is_empty() && p & perms::ATTACH_FILES == 0 {
         return Err(AppError::forbidden());

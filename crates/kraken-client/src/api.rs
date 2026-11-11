@@ -321,7 +321,12 @@ pub async fn open_private(recipients: Vec<Id>, name: Option<String>) -> ApiResul
 }
 
 pub async fn rename_group(channel: Id, name: &str) -> ApiResult<Channel> {
-    call(Method::PATCH, &format!("/channels/{channel}"), Some(EditChannel { name: Some(name.into()) })).await
+    call(
+        Method::PATCH,
+        &format!("/channels/{channel}"),
+        Some(EditChannel { name: Some(name.into()), ..Default::default() }),
+    )
+    .await
 }
 
 pub async fn add_recipient(channel: Id, user: Id) -> ApiResult<()> {
@@ -340,6 +345,35 @@ pub async fn remove_member(channel: Id, user: Id) -> ApiResult<()> {
 
 pub async fn leave_group(channel: Id) -> ApiResult<()> {
     call(Method::DELETE, &format!("/channels/{channel}/recipients/@me"), NO_BODY).await
+}
+
+// ───────── salons d'un serveur ─────────
+
+pub async fn create_channel(guild: Id, req: &CreateChannel) -> ApiResult<Channel> {
+    call(Method::POST, &format!("/guilds/{guild}/channels"), Some(req)).await
+}
+
+pub async fn edit_channel(channel: Id, req: &EditChannel) -> ApiResult<Channel> {
+    call(Method::PATCH, &format!("/channels/{channel}"), Some(req)).await
+}
+
+/// Supprimer un salon ou une catégorie, avec ses messages.
+pub async fn delete_channel(channel: Id) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/channels/{channel}"), NO_BODY).await
+}
+
+/// Rend les salons dont la place a changé.
+pub async fn move_channel(channel: Id, req: &MoveChannel) -> ApiResult<Vec<Channel>> {
+    call(Method::PUT, &format!("/channels/{channel}/position"), Some(req)).await
+}
+
+pub async fn overwrites(channel: Id) -> ApiResult<Vec<PermissionOverwrite>> {
+    call(Method::GET, &format!("/channels/{channel}/permissions"), NO_BODY).await
+}
+
+/// Pose la surcharge d'un rôle ou d'un membre ; rend toutes celles du salon.
+pub async fn set_overwrite(channel: Id, target: Id, req: &SetOverwrite) -> ApiResult<Vec<PermissionOverwrite>> {
+    call(Method::PUT, &format!("/channels/{channel}/permissions/{target}"), Some(req)).await
 }
 
 // ───────── non-lus et notifications ─────────

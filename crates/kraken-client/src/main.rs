@@ -6,6 +6,7 @@ mod app;
 mod auth;
 mod avatar;
 mod call;
+mod channels;
 mod chat;
 mod emoji;
 mod files;

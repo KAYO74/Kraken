@@ -38,6 +38,29 @@ pub const DEFAULT_EVERYONE: u64 = VIEW_CHANNEL
     | CREATE_INVITE
     | CHANGE_NICK;
 
+/// Droits qu'une surcharge de salon peut accorder ou refuser : ceux qui ont un sens dans un salon.
+/// Les droits du serveur entier (rôles, bannissement, administrateur…) n'y figurent pas.
+pub const CHANNEL_SCOPE: u64 = VIEW_CHANNEL
+    | SEND_MESSAGES
+    | SEND_IN_THREADS
+    | CREATE_THREADS
+    | EMBED_LINKS
+    | ATTACH_FILES
+    | ADD_REACTIONS
+    | MENTION_EVERYONE
+    | MANAGE_MESSAGES
+    | READ_HISTORY
+    | CONNECT
+    | SPEAK
+    | VIDEO
+    | STREAM
+    | USE_SOUNDBOARD
+    | MUTE_MEMBERS
+    | MOVE_MEMBERS
+    | PRIORITY_SPEAKER
+    | MANAGE_CHANNELS
+    | CREATE_INVITE;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
     Role(Uuid),
@@ -73,28 +96,36 @@ pub fn outranks(actor_owner: bool, actor_top: i32, target_owner: bool, target_to
     actor_owner || (!target_owner && actor_top > target_top)
 }
 
-/// Droits dans un salon, à partir de [`base`].
+/// Droits dans un salon, à partir de [`base`] : une seule couche de surcharges.
 pub fn in_channel(base: u64, guild_id: Uuid, member_id: Uuid, member_roles: &[Uuid], overwrites: &[Overwrite]) -> u64 {
+    in_layers(base, guild_id, member_id, member_roles, &[overwrites])
+}
+
+/// Droits dans un salon rangé dans une catégorie : les surcharges de la catégorie s'appliquent
+/// d'abord, puis celles du salon, qui l'emportent sur elles.
+pub fn in_layers(base: u64, guild_id: Uuid, member_id: Uuid, member_roles: &[Uuid], layers: &[&[Overwrite]]) -> u64 {
     if base & ADMINISTRATOR != 0 {
         return ALL;
     }
     let mut p = base;
-    if let Some(o) = overwrites.iter().find(|o| o.target == Target::Role(guild_id)) {
-        p = (p & !o.deny) | o.allow;
-    }
-    let (mut allow, mut deny) = (0, 0);
-    for o in overwrites {
-        if let Target::Role(r) = o.target
-            && r != guild_id
-            && member_roles.contains(&r)
-        {
-            allow |= o.allow;
-            deny |= o.deny;
+    for overwrites in layers {
+        if let Some(o) = overwrites.iter().find(|o| o.target == Target::Role(guild_id)) {
+            p = (p & !o.deny) | o.allow;
         }
-    }
-    p = (p & !deny) | allow;
-    if let Some(o) = overwrites.iter().find(|o| o.target == Target::Member(member_id)) {
-        p = (p & !o.deny) | o.allow;
+        let (mut allow, mut deny) = (0, 0);
+        for o in *overwrites {
+            if let Target::Role(r) = o.target
+                && r != guild_id
+                && member_roles.contains(&r)
+            {
+                allow |= o.allow;
+                deny |= o.deny;
+            }
+        }
+        p = (p & !deny) | allow;
+        if let Some(o) = overwrites.iter().find(|o| o.target == Target::Member(member_id)) {
+            p = (p & !o.deny) | o.allow;
+        }
     }
     // Sans VIEW_CHANNEL, rien d'autre ne compte.
     if p & VIEW_CHANNEL == 0 { 0 } else { p }
@@ -112,6 +143,33 @@ mod tests {
     fn owner_and_admin_have_everything() {
         assert_eq!(base(true, 0, []), ALL);
         assert_eq!(base(false, 0, [ADMINISTRATOR]), ALL);
+    }
+
+    #[test]
+    fn a_channel_overrides_its_category() {
+        let b = base(false, DEFAULT_EVERYONE, []);
+        let category = [Overwrite { target: Target::Role(G), allow: 0, deny: VIEW_CHANNEL }];
+        let channel = [Overwrite { target: Target::Role(R), allow: VIEW_CHANNEL, deny: 0 }];
+        // Catégorie privée : personne ne voit, sauf le rôle que le salon rouvre.
+        assert_eq!(in_layers(b, G, M, &[], &[&category, &[]]), 0);
+        assert_eq!(in_layers(b, G, M, &[], &[&category, &channel]), 0);
+        assert_ne!(in_layers(b, G, M, &[R], &[&category, &channel]), 0);
+        // Les deux couches ont une surcharge de `@everyone` : celle du salon compte aussi.
+        let both = [Overwrite { target: Target::Role(G), allow: 0, deny: SEND_MESSAGES }];
+        let p = in_layers(b, G, M, &[], &[&[], &both]);
+        assert_eq!(p & SEND_MESSAGES, 0);
+        let open = [Overwrite { target: Target::Role(G), allow: SEND_MESSAGES, deny: 0 }];
+        let p = in_layers(b, G, M, &[], &[&both, &open]);
+        assert_ne!(p & SEND_MESSAGES, 0, "le salon reprend ce que sa catégorie retirait");
+    }
+
+    #[test]
+    fn channel_scope_leaves_out_server_wide_rights() {
+        assert_eq!(CHANNEL_SCOPE & !ALL, 0);
+        for bit in [ADMINISTRATOR, BAN, KICK, MANAGE_ROLES, MANAGE_GUILD, TIMEOUT] {
+            assert_eq!(CHANNEL_SCOPE & bit, 0);
+        }
+        assert_ne!(CHANNEL_SCOPE & VIEW_CHANNEL, 0);
     }
 
     #[test]

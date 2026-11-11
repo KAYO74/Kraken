@@ -69,7 +69,7 @@ async fn invites_messages_and_private_channels(pool: PgPool) {
 
     // Salon privé : caché à @everyone.
     let staff = db
-        .create_channel(gid, &CreateChannel { name: "staff".into(), kind: ChannelKind::Text, parent_id: None })
+        .create_channel(gid, a.id, &CreateChannel { name: "staff".into(), kind: ChannelKind::Text, parent_id: None })
         .await
         .unwrap();
     sqlx::query(
@@ -185,7 +185,11 @@ async fn odd_inputs_and_races(pool: PgPool) {
     assert_eq!(db.create_message(general, a.id, "a\0b", None).await.err(), Some(DbError::Invalid("value")));
     // Le même nonce dans un autre salon est un autre message.
     let other = db
-        .create_channel(g.guild.id, &CreateChannel { name: "staff".into(), kind: ChannelKind::Text, parent_id: None })
+        .create_channel(
+            g.guild.id,
+            a.id,
+            &CreateChannel { name: "staff".into(), kind: ChannelKind::Text, parent_id: None },
+        )
         .await
         .unwrap();
     db.create_message(general, a.id, "un", Some("n".into())).await.unwrap();
@@ -208,7 +212,11 @@ async fn edit_delete_reply_react_and_mention(pool: PgPool) {
     let inv = db.create_invite(g.guild.id, Some(general), a.id, 0, None).await.unwrap();
     db.use_invite(&inv.code, b.id).await.unwrap();
     let other = db
-        .create_channel(g.guild.id, &CreateChannel { name: "autre".into(), kind: ChannelKind::Text, parent_id: None })
+        .create_channel(
+            g.guild.id,
+            a.id,
+            &CreateChannel { name: "autre".into(), kind: ChannelKind::Text, parent_id: None },
+        )
         .await
         .unwrap();
 
@@ -570,7 +578,11 @@ async fn attachments_belong_to_their_author_and_channel_and_leave_with_the_messa
     let g = db.create_guild(a.id, "Abysse").await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let other = db
-        .create_channel(g.guild.id, &CreateChannel { name: "autre".into(), kind: ChannelKind::Text, parent_id: None })
+        .create_channel(
+            g.guild.id,
+            a.id,
+            &CreateChannel { name: "autre".into(), kind: ChannelKind::Text, parent_id: None },
+        )
         .await
         .unwrap()
         .id;

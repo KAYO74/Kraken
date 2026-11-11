@@ -22,10 +22,10 @@ use crate::ui::{Avatar, modal, when};
 pub const COLOR_NAMES: [&str; ROLE_COLORS as usize] =
     ["Rouge", "Or", "Citron vert", "Vert", "Turquoise", "Bleu", "Violet", "Rose"];
 
-type Perm = (u64, &'static str, &'static str);
+pub(crate) type Perm = (u64, &'static str, &'static str);
 
 /// Les droits par catégorie, avec ce que chacun permet.
-const CATEGORIES: &[(&str, &[Perm])] = &[
+pub(crate) const CATEGORIES: &[(&str, &[Perm])] = &[
     (
         "Général",
         &[
@@ -99,9 +99,10 @@ const CATEGORIES: &[(&str, &[Perm])] = &[
 ];
 
 /// Droits sensibles : une icône d'alerte, en plus de leur phrase.
-const SENSITIVE: [u64; 3] = [perms::ADMINISTRATOR, perms::BAN, perms::MANAGE_ROLES];
+pub(crate) const SENSITIVE: [u64; 4] = [perms::ADMINISTRATOR, perms::BAN, perms::MANAGE_ROLES, perms::MANAGE_CHANNELS];
 
-const SECTIONS: [(&str, &str); 3] = [("roles", "Rôles"), ("bans", "Bannis"), ("owner", "Propriété")];
+const SECTIONS: [(&str, &str); 4] =
+    [("roles", "Rôles"), ("channels", "Salons"), ("bans", "Bannis"), ("owner", "Propriété")];
 
 /// Sections que je peux ouvrir dans ce serveur.
 fn allowed(guild: Id) -> Vec<&'static str> {
@@ -114,6 +115,7 @@ fn allowed(guild: Id) -> Vec<&'static str> {
         .map(|(slug, _)| *slug)
         .filter(|slug| match *slug {
             "roles" => p & perms::MANAGE_ROLES != 0,
+            "channels" => p & perms::MANAGE_CHANNELS != 0,
             "bans" => p & perms::BAN != 0,
             _ => owner,
         })
@@ -177,6 +179,7 @@ pub fn GuildSettings() -> impl IntoView {
                         }
                         match section.get() {
                             "roles" => view! { <Roles guild=g/> }.into_any(),
+                            "channels" => view! { <crate::channels::ChannelsAdmin guild=g/> }.into_any(),
                             "bans" => view! { <Bans guild=g/> }.into_any(),
                             "owner" => view! { <Ownership guild=g/> }.into_any(),
                             _ => empty("Rien à régler ici", "Tes rôles ne te donnent accès à aucun réglage de ce serveur.").into_any(),
@@ -206,7 +209,7 @@ fn moved(ids: &[Id], from: usize, to: usize) -> Vec<Id> {
 }
 
 /// Rend le focus à un bouton qu'un déplacement vient de redessiner (`fallback` s'il est devenu inactif).
-async fn refocus(prefer: String, fallback: String) {
+pub(crate) async fn refocus(prefer: String, fallback: String) {
     TimeoutFuture::new(60).await;
     for id in [prefer, fallback] {
         if let Some(el) = document().get_element_by_id(&id)
@@ -682,7 +685,7 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>, drafts: Draft
             </div>
             <Show when=dirty>
                 <div class="app-savebar" role="region" aria-label="Modifications du rôle">
-                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/>"Modifications non enregistrées"</span>
+                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/><span class="app-bar-long">"Modifications non enregistrées"</span><span class="app-bar-short">"Non enregistré"</span></span>
                     <button type="button" class="k-btn k-btn--ghost" on:click=cancel>"Annuler"</button>
                     <button type="button" class="k-btn k-btn--primary" on:click=save aria-busy=move || busy.get().to_string()>"Enregistrer"</button>
                 </div>

@@ -9,26 +9,26 @@ use sqlx::{Postgres, Row, Transaction};
 
 use crate::{Db, DbError, ROLE_COLS, Result, role_from, user_cols, user_from};
 
-type Tx<'a> = Transaction<'a, Postgres>;
+pub(crate) type Tx<'a> = Transaction<'a, Postgres>;
 
 /// Où en est quelqu'un dans un serveur : propriétaire ou non, droits, rang.
-struct Standing {
-    is_owner: bool,
-    base: u64,
-    top: i32,
+pub(crate) struct Standing {
+    pub is_owner: bool,
+    pub base: u64,
+    pub top: i32,
 }
 
 impl Standing {
-    fn need(&self, bit: u64) -> Result<()> {
+    pub(crate) fn need(&self, bit: u64) -> Result<()> {
         if self.base & bit == bit { Ok(()) } else { Err(DbError::Forbidden("perm")) }
     }
 
     /// Peut-il agir sur ce rôle (le modifier, le donner, le retirer) ?
-    fn over_role(&self, role_position: i32) -> Result<()> {
+    pub(crate) fn over_role(&self, role_position: i32) -> Result<()> {
         if self.is_owner || self.top > role_position { Ok(()) } else { Err(DbError::Forbidden("hierarchy")) }
     }
 
-    fn over(&self, target: &Standing) -> Result<()> {
+    pub(crate) fn over(&self, target: &Standing) -> Result<()> {
         if perms::outranks(self.is_owner, self.top, target.is_owner, target.top) {
             Ok(())
         } else {
@@ -38,7 +38,7 @@ impl Standing {
 }
 
 /// Verrouille le serveur et lit qui est son propriétaire ; `NotFound` s'il n'existe pas.
-async fn lock(tx: &mut Tx<'_>, gid: Id) -> Result<Id> {
+pub(crate) async fn lock(tx: &mut Tx<'_>, gid: Id) -> Result<Id> {
     sqlx::query_scalar("select owner_id from guilds where id = $1 for update")
         .bind(gid)
         .fetch_optional(&mut **tx)
@@ -47,7 +47,7 @@ async fn lock(tx: &mut Tx<'_>, gid: Id) -> Result<Id> {
 }
 
 /// `None` si ce n'est pas un membre.
-async fn standing(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id) -> Result<Option<Standing>> {
+pub(crate) async fn standing(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id) -> Result<Option<Standing>> {
     let member: bool = sqlx::query_scalar("select exists(select 1 from members where guild_id = $1 and user_id = $2)")
         .bind(gid)
         .bind(uid)
@@ -83,13 +83,26 @@ async fn standing(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id) -> Result<Option
 }
 
 /// Celui qui agit : membre du serveur (sinon `NotFound`, on ne révèle rien) qui a ce droit.
-async fn actor(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id, need: u64) -> Result<Standing> {
+pub(crate) async fn actor(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id, need: u64) -> Result<Standing> {
     let s = standing(tx, gid, owner, uid).await?.ok_or(DbError::NotFound)?;
     s.need(need)?;
     Ok(s)
 }
 
-async fn audit(
+/// Quelqu'un n'est plus membre : ses surcharges de droits dans les salons du serveur partent.
+async fn forget_member_overwrites(tx: &mut Tx<'_>, gid: Id, uid: Id) -> Result<()> {
+    sqlx::query(
+        "delete from permission_overwrites po using channels c
+         where po.channel_id = c.id and c.guild_id = $1 and po.target_id = $2 and po.target_kind = 'member'",
+    )
+    .bind(gid)
+    .bind(uid)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub(crate) async fn audit(
     tx: &mut Tx<'_>,
     gid: Id,
     actor: Id,
@@ -103,6 +116,26 @@ async fn audit(
         .bind(action)
         .bind(target)
         .bind(reason)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+/// Une ligne du journal avec le détail de ce qui a changé (nom du salon, par exemple).
+pub(crate) async fn audit_changes(
+    tx: &mut Tx<'_>,
+    gid: Id,
+    actor: Id,
+    action: &str,
+    target: Option<Id>,
+    changes: serde_json::Value,
+) -> Result<()> {
+    sqlx::query("insert into audit_log (guild_id, actor_id, action, target_id, changes) values ($1, $2, $3, $4, $5)")
+        .bind(gid)
+        .bind(actor)
+        .bind(action)
+        .bind(target)
+        .bind(sqlx::types::Json(changes))
         .execute(&mut **tx)
         .await?;
     Ok(())
@@ -130,7 +163,7 @@ fn clean_color(c: u32) -> Result<Option<i32>> {
 }
 
 /// Droits que l'on peut accorder : valides, et que l'on a soi-même.
-fn grantable(who: &Standing, changed: u64) -> Result<()> {
+pub(crate) fn grantable(who: &Standing, changed: u64) -> Result<()> {
     if changed & !perms::ALL != 0 {
         return Err(DbError::Invalid("permissions"));
     }
@@ -249,6 +282,11 @@ impl Db {
         let role = role_in(&mut tx, gid, rid).await?;
         me.over_role(role.position)?;
         sqlx::query("delete from roles where id = $1").bind(rid).execute(&mut *tx).await?;
+        // Ses surcharges de salons partent avec lui : sans rôle, elles ne serviraient plus à rien.
+        sqlx::query("delete from permission_overwrites where target_id = $1 and target_kind = 'role'")
+            .bind(rid)
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("update roles set position = position - 1 where guild_id = $1 and id <> $1 and position > $2")
             .bind(gid)
             .bind(role.position)
@@ -367,6 +405,7 @@ impl Db {
             .bind(uid)
             .execute(&mut *tx)
             .await?;
+        forget_member_overwrites(&mut tx, gid, uid).await?;
         audit(&mut tx, gid, by, "member_kick", Some(uid), reason.as_deref()).await?;
         tx.commit().await?;
         Ok(())
@@ -406,6 +445,7 @@ impl Db {
             .bind(uid)
             .execute(&mut *tx)
             .await?;
+        forget_member_overwrites(&mut tx, gid, uid).await?;
         sqlx::query(
             "insert into bans (guild_id, user_id, moderator_id, reason) values ($1, $2, $3, $4)
              on conflict (guild_id, user_id) do update set moderator_id = $3, reason = $4, created_at = now()",
@@ -520,6 +560,7 @@ impl Db {
         if done == 0 {
             return Err(DbError::NotFound);
         }
+        forget_member_overwrites(&mut tx, gid, uid).await?;
         tx.commit().await?;
         Ok(())
     }
