@@ -7,7 +7,7 @@ use leptos_router::path;
 
 use crate::store::{Store, keep_connected};
 use crate::ui::{NotFound, Stub};
-use crate::{auth, chat, guild, home, legal, settings, shell};
+use crate::{auth, channels, chat, guild, home, legal, settings, shell};
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -36,7 +36,8 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("channels/:guild") view=chat::GuildIndex/>
                     <Route path=path!("channels/:guild/:channel") view=chat::GuildChannel/>
                     <Route path=path!("channels/:guild/:channel/threads") view=|| view! { <Stub id="S24" title="Fils et forum"/> }/>
-                    <Route path=path!("channels/:guild/:channel/settings") view=|| view! { <Stub id="S23" title="Paramètres du salon"/> }/>
+                    <Route path=path!("channels/:guild/:channel/settings") view=channels::ChannelSettings/>
+                    <Route path=path!("channels/:guild/:channel/settings/:section") view=channels::ChannelSettings/>
                     <Route path=path!("guilds/new") view=shell::CreateGuild/>
                     <Route path=path!("guilds/:guild/settings") view=guild::GuildSettings/>
                     <Route path=path!("guilds/:guild/settings/:section") view=guild::GuildSettings/>

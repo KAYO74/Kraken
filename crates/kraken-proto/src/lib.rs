@@ -127,6 +127,21 @@ pub struct Channel {
     /// Groupes : son propriétaire, seul à pouvoir en retirer quelqu'un.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner_id: Option<Id>,
+    /// Mode lent : secondes à attendre entre deux messages (0 : aucun). Sans effet sur ceux qui
+    /// gèrent les messages ou les salons.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub slowmode_s: u32,
+    /// Salon privé : `@everyone` ne le voit pas (lui-même, ou sa catégorie).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub private: bool,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -236,6 +251,52 @@ pub struct CreateChannel {
     pub name: String,
     pub kind: ChannelKind,
     pub parent_id: Option<Id>,
+}
+
+/// Au plus ce nombre de salons (catégories comprises) par serveur.
+pub const MAX_CHANNELS: usize = 500;
+/// Longueur maximale du nom d'un salon, en caractères.
+pub const MAX_CHANNEL_NAME: usize = 100;
+/// Longueur maximale du sujet d'un salon, en caractères.
+pub const MAX_TOPIC: usize = 1024;
+/// Délais possibles du mode lent, en secondes : aucun, 5 s, 10 s, 30 s, 1 min, 5 min, 15 min, 1 h.
+pub const SLOWMODE_STEPS: [u32; 8] = [0, 5, 10, 30, 60, 300, 900, 3600];
+/// Au plus ce nombre de surcharges de droits par salon.
+pub const MAX_OVERWRITES: usize = 100;
+
+/// `PUT /channels/{id}/position` : place le salon dans ce parent (`None` : hors catégorie ; une
+/// catégorie n'a jamais de parent), à ce rang (0 : en premier) parmi les salons que l'on voit
+/// dans ce parent, une fois le salon déplacé retiré de la liste.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MoveChannel {
+    pub parent_id: Option<Id>,
+    pub index: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OverwriteKind {
+    Role,
+    Member,
+}
+
+/// Ce qu'un rôle ou un membre peut (`allow`) ou ne peut pas (`deny`) faire dans un salon, en plus
+/// de ses droits du serveur. Un droit absent des deux est hérité.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PermissionOverwrite {
+    pub target_id: Id,
+    pub kind: OverwriteKind,
+    pub allow: u64,
+    pub deny: u64,
+}
+
+/// `PUT /channels/{id}/permissions/{target}` : remplace la surcharge de ce rôle ou membre
+/// (`allow` et `deny` vides : elle est retirée).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetOverwrite {
+    pub kind: OverwriteKind,
+    pub allow: u64,
+    pub deny: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -462,10 +523,18 @@ pub struct OpenPrivate {
     pub name: Option<String>,
 }
 
-/// `PATCH /channels/{id}` : renommer un groupe (vide : retour aux noms des membres).
+/// `PATCH /channels/{id}` : renommer un groupe (vide : retour aux noms des membres), ou modifier
+/// un salon de serveur. Champs absents : inchangés. `topic` vide : plus de sujet. `private` :
+/// `@everyone` ne voit plus le salon (ou le revoit).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EditChannel {
     pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub topic: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slowmode_s: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub private: Option<bool>,
 }
 
 // ───────── non-lus et notifications ─────────

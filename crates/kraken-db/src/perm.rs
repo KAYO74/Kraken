@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use kraken_core::perms::{self, Overwrite, Target};
 use kraken_proto::Id;
-use sqlx::{PgPool, Row};
+use sqlx::{PgConnection, PgPool, Row};
 
 use crate::Result;
 
@@ -33,16 +33,22 @@ pub(crate) struct Ctx {
 impl Ctx {
     /// `only` : ne charger que ce membre. `None` si le serveur n'existe pas.
     pub async fn load(pool: &PgPool, gid: Id, only: Option<Id>) -> Result<Option<Self>> {
+        let mut conn = pool.acquire().await?;
+        Self::load_on(&mut conn, gid, only).await
+    }
+
+    /// Comme [`Self::load`], sur une connexion (dans une transaction : on y voit ses changements).
+    pub async fn load_on(conn: &mut PgConnection, gid: Id, only: Option<Id>) -> Result<Option<Self>> {
         let Some(owner) = sqlx::query_scalar::<_, Id>("select owner_id from guilds where id = $1")
             .bind(gid)
-            .fetch_optional(pool)
+            .fetch_optional(&mut *conn)
             .await?
         else {
             return Ok(None);
         };
         let role_perms = sqlx::query("select id, permissions from roles where guild_id = $1")
             .bind(gid)
-            .fetch_all(pool)
+            .fetch_all(&mut *conn)
             .await?
             .iter()
             .map(|r| Ok((r.try_get("id")?, r.try_get::<i64, _>("permissions")? as u64)))
@@ -54,7 +60,7 @@ impl Ctx {
         )
         .bind(gid)
         .bind(only)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?
         .iter()
         .map(|r| Ok((r.try_get("user_id")?, r.try_get("roles")?)))
@@ -65,7 +71,7 @@ impl Ctx {
              from permission_overwrites po join channels c on c.id = po.channel_id where c.guild_id = $1",
         )
         .bind(gid)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?
         {
             let target: Id = r.try_get("target_id")?;
@@ -81,6 +87,19 @@ impl Ctx {
             });
         }
         Ok(Some(Self { gid, owner, role_perms, members, overwrites }))
+    }
+
+    /// Un membre qui n'a que `@everyone` ne voit pas ce salon (le sien ou celui de sa catégorie).
+    pub fn is_private(&self, cid: Id, parent: Option<Id>) -> bool {
+        let everyone = self.role_perms.get(&self.gid).copied().unwrap_or(0);
+        let (above, own) = self.layers(cid, parent);
+        perms::in_layers(everyone, self.gid, Id::nil(), &[], &[above, own]) & perms::VIEW_CHANNEL == 0
+    }
+
+    /// Surcharges de la catégorie, puis celles du salon.
+    fn layers(&self, cid: Id, parent: Option<Id>) -> (&[Overwrite], &[Overwrite]) {
+        let get = |id: Id| self.overwrites.get(&id).map_or(&[][..], Vec::as_slice);
+        (parent.map_or(&[][..], get), get(cid))
     }
 
     pub fn is_member(&self, uid: Id) -> bool {
@@ -104,12 +123,8 @@ impl Ctx {
         if base == 0 {
             return 0;
         }
-        let mut ow = Vec::new();
-        if let Some(p) = parent.and_then(|p| self.overwrites.get(&p)) {
-            ow.extend(p);
-        }
-        ow.extend(self.overwrites.get(&cid).into_iter().flatten());
+        let (above, own) = self.layers(cid, parent);
         let roles = self.members.get(&uid).map(Vec::as_slice).unwrap_or(&[]);
-        perms::in_channel(base, self.gid, uid, roles, &ow)
+        perms::in_layers(base, self.gid, uid, roles, &[above, own])
     }
 }

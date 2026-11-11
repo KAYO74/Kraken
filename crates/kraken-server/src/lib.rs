@@ -6,6 +6,7 @@ mod attach;
 mod auth;
 mod avatar;
 mod call;
+mod channels;
 mod embed;
 mod error;
 mod fetch;
@@ -266,7 +267,7 @@ pub fn app(state: AppState) -> Router {
             "/users/@me/channels",
             get(social::private_channels).merge(post(social::open_private).route_layer(social_limit.clone())),
         )
-        .route("/channels/{id}", patch(social::edit_channel).delete(social::close_channel))
+        .route("/channels/{id}", patch(channels::edit).delete(channels::delete))
         .route(
             "/channels/{id}/recipients/{uid}",
             put(social::add_recipient).route_layer(social_limit).delete(social::remove_recipient),
@@ -290,7 +291,10 @@ pub fn app(state: AppState) -> Router {
         .route("/users/@me", get(auth::me).patch(auth::update_me))
         .route("/guilds", post(api::create_guild))
         .route("/guilds/{id}", get(api::guild))
-        .route("/guilds/{id}/channels", get(api::guild_channels).post(api::create_channel))
+        .route("/guilds/{id}/channels", get(api::guild_channels).post(channels::create))
+        .route("/channels/{id}/position", put(channels::position))
+        .route("/channels/{id}/permissions", get(channels::overwrites))
+        .route("/channels/{id}/permissions/{target}", put(channels::set_overwrite).delete(channels::remove_overwrite))
         .route("/guilds/{id}/roles", post(moderation::create_role).put(moderation::reorder_roles))
         .route("/guilds/{id}/roles/{rid}", patch(moderation::edit_role).delete(moderation::delete_role))
         .route("/guilds/{id}/members/@me", delete(moderation::leave))

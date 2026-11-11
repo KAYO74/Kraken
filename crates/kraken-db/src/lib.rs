@@ -5,6 +5,7 @@
 //! client de la base). Les dates sortent en millisecondes Unix.
 
 mod calls;
+mod channels;
 mod files;
 mod jobs;
 mod moderation;
@@ -20,6 +21,7 @@ use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
 use sqlx::types::Json;
 use sqlx::{Postgres, Row, Transaction};
 
+pub use channels::clean_channel_name;
 pub use files::{NewAttachment, StoredAttachment, attachment_paths, embed_paths};
 pub use jobs::Job;
 pub use social::Notices;
@@ -33,6 +35,8 @@ pub enum DbError {
     Invalid(&'static str),
     /// Interdit par une règle de données (bannissement…).
     Forbidden(&'static str),
+    /// Mode lent : encore tant de secondes avant le prochain message.
+    Slowmode(u32),
     Internal(String),
 }
 
@@ -130,7 +134,8 @@ pub(crate) fn kind_str(k: ChannelKind) -> &'static str {
     }
 }
 
-const CHANNEL_COLS: &str = "id, guild_id, parent_id, kind, name, topic, position, last_message_id, owner_id";
+const CHANNEL_COLS: &str =
+    "id, guild_id, parent_id, kind, name, topic, position, last_message_id, owner_id, slowmode_s";
 
 fn channel_from(r: &PgRow) -> sqlx::Result<Channel> {
     let kind = kind_from(r.try_get("kind")?);
@@ -146,6 +151,9 @@ fn channel_from(r: &PgRow) -> sqlx::Result<Channel> {
         last_message_id: r.try_get("last_message_id")?,
         // Seuls les groupes ont un propriétaire visible (dans un MP, ce n'est qu'un détail interne).
         owner_id: if kind == ChannelKind::GroupDm { r.try_get("owner_id")? } else { None },
+        slowmode_s: r.try_get::<i32, _>("slowmode_s")? as u32,
+        // Calculé avec les surcharges du serveur, pas ici.
+        private: false,
     })
 }
 
@@ -220,6 +228,8 @@ pub struct Draft<'a> {
     pub may_mention_everyone: bool,
     /// Fichiers déjà envoyés par l'auteur dans ce salon, à rattacher.
     pub attachments: &'a [AttachmentRef],
+    /// L'auteur gère les messages ou les salons : le mode lent ne le retient pas.
+    pub slowmode_exempt: bool,
 }
 
 /// Une réaction ajoutée ou retirée a-t-elle changé quelque chose ?
@@ -621,6 +631,10 @@ impl Db {
                 .collect::<sqlx::Result<Vec<_>>>()?
                 .into_iter()
                 .filter(|c| ctx.channel(uid, c.id, c.parent_id) & perms::VIEW_CHANNEL != 0)
+                .map(|mut c| {
+                    c.private = ctx.is_private(c.id, c.parent_id);
+                    c
+                })
                 .collect();
         let roles = self.roles(gid).await?;
         // États vocaux : en mémoire dans le serveur, ajoutés par lui.
@@ -731,32 +745,6 @@ impl Db {
         };
         let Some(ctx) = perm::Ctx::load(&self.pool, gid, None).await? else { return Ok(vec![]) };
         Ok(ctx.member_ids().filter(|u| ctx.channel(*u, cid, c.parent_id) & perms::VIEW_CHANNEL != 0).collect())
-    }
-
-    pub async fn create_channel(&self, gid: Id, req: &CreateChannel) -> Result<Channel> {
-        let name = req.name.trim();
-        if name.is_empty() || name.chars().count() > 100 {
-            return Err(DbError::Invalid("name"));
-        }
-        if matches!(req.kind, ChannelKind::Dm | ChannelKind::GroupDm | ChannelKind::Thread) {
-            return Err(DbError::Invalid("kind"));
-        }
-        if let Some(p) = req.parent_id {
-            let ok: bool = sqlx::query_scalar(
-                "select exists(select 1 from channels where id = $1 and guild_id = $2 and kind = 'category')",
-            )
-            .bind(p)
-            .bind(gid)
-            .fetch_one(&self.pool)
-            .await?;
-            if !ok || req.kind == ChannelKind::Category {
-                return Err(DbError::Invalid("parent_id"));
-            }
-        }
-        let mut tx = self.pool.begin().await?;
-        let id = insert_channel(&mut tx, gid, req.parent_id, req.kind, name).await?;
-        tx.commit().await?;
-        self.channel(id).await?.ok_or(DbError::NotFound)
     }
 
     // ───────── messages ─────────
@@ -885,6 +873,33 @@ impl Db {
         .bind(everyone)
         .fetch_optional(&mut *tx)
         .await?;
+        if id.is_some() && channel.slowmode_s > 0 && !d.slowmode_exempt {
+            // Une seule instruction décide : deux envois simultanés de la même personne ne passent pas.
+            let taken = sqlx::query(
+                "insert into slowmode_marks (channel_id, user_id, last_at) values ($1, $2, now())
+                 on conflict (channel_id, user_id) do update set last_at = now()
+                   where slowmode_marks.last_at <= now() - make_interval(secs => $3)
+                 returning 1",
+            )
+            .bind(cid)
+            .bind(author)
+            .bind(f64::from(channel.slowmode_s))
+            .fetch_optional(&mut *tx)
+            .await?;
+            if taken.is_none() {
+                let wait: f64 = sqlx::query_scalar(
+                    "select extract(epoch from (last_at + make_interval(secs => $3) - now()))::float8
+                     from slowmode_marks where channel_id = $1 and user_id = $2",
+                )
+                .bind(cid)
+                .bind(author)
+                .bind(f64::from(channel.slowmode_s))
+                .fetch_one(&mut *tx)
+                .await?;
+                tx.rollback().await?;
+                return Err(DbError::Slowmode(wait.ceil().max(1.0) as u32));
+            }
+        }
         if let Some(id) = id {
             for a in d.attachments {
                 let done = sqlx::query(
@@ -1233,7 +1248,8 @@ pub(crate) async fn insert_channel(
 ) -> Result<Id> {
     Ok(sqlx::query_scalar(
         "insert into channels (guild_id, parent_id, kind, name, position)
-         values ($1, $2, $3, $4, (select count(*) from channels where guild_id = $1 and parent_id is not distinct from $2))
+         values ($1, $2, $3, $4,
+                 (select coalesce(max(position) + 1, 0) from channels where guild_id = $1 and parent_id is not distinct from $2))
          returning id",
     )
     .bind(gid)
@@ -1246,3 +1262,5 @@ pub(crate) async fn insert_channel(
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_channels;

@@ -36,9 +36,10 @@ pub fn first_text(g: &GuildState) -> Option<Id> {
 }
 
 /// Salons dans l'ordre d'affichage : hors catégorie d'abord, puis chaque catégorie suivie
-/// de ses salons.
+/// de ses salons. Un salon dont la catégorie m'est cachée (privée) s'affiche hors catégorie.
 pub fn ordered(channels: &[Channel]) -> Vec<Channel> {
-    let mut top: Vec<&Channel> = channels.iter().filter(|c| c.parent_id.is_none()).collect();
+    let shown = |id: Id| channels.iter().any(|c| c.id == id && c.kind == ChannelKind::Category);
+    let mut top: Vec<&Channel> = channels.iter().filter(|c| c.parent_id.is_none_or(|p| !shown(p))).collect();
     top.sort_by_key(|c| (c.kind == ChannelKind::Category, c.position));
     let mut out = Vec::new();
     for c in top {
@@ -86,6 +87,18 @@ pub fn Shell() -> impl IntoView {
         } else if seen.get_value() == Some(g) {
             seen.set_value(None);
             home("/channels/@me", NavigateOptions { replace: true, ..Default::default() });
+        }
+    });
+    // Le salon affiché disparaît (supprimé, ou devenu privé sans moi) : on rouvre le serveur.
+    let seen_channel = StoredValue::new(None::<Id>);
+    let reopen = use_navigate();
+    Effect::new(move || {
+        let (Some(g), Some(c)) = ids.get() else { return seen_channel.set_value(None) };
+        if s.channel(c).is_some() {
+            seen_channel.set_value(Some(c));
+        } else if seen_channel.get_value() == Some(c) && s.guild(g).is_some() {
+            seen_channel.set_value(None);
+            reopen(&format!("/channels/{g}"), NavigateOptions { replace: true, ..Default::default() });
         }
     });
     let notify_ui = crate::unread::provide_ui();
@@ -327,7 +340,11 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
     let collapsed = RwSignal::new(Vec::<Id>::new());
     let invite_open = RwSignal::new(false);
     let leaving = RwSignal::new(None::<crate::social::Confirm>);
+    // Créer un salon : son type, et la catégorie où le ranger.
+    let creating = RwSignal::new(None::<(ChannelKind, Option<Id>)>);
     let u = crate::unread::ui();
+    // Un mémo, pas une lecture directe : les droits ne redessinent la liste que s'ils changent.
+    let can_manage = Memo::new(move |_| s.guild_perms(guild) & kraken_core::perms::MANAGE_CHANNELS != 0);
     // Sans les états vocaux ni les derniers messages : un micro coupé ou un message reçu ne
     // redessine pas toute la liste (ni ne vole le focus).
     let g = Memo::new(move |_| {
@@ -352,6 +369,7 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                     let tip = name.clone();
                     let gid = g.guild.id;
                     let rows = ordered(&g.channels);
+                    let manage = can_manage.get();
                     view! {
                         <div class="app-guild-head">
                             <h2 title=tip>{name}</h2>
@@ -370,6 +388,20 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                     let mine = s.my_id() == Some(g.guild.owner_id);
                                     let (id, label) = (gid, g.guild.name.clone());
                                     view! {
+                                        {manage.then(|| view! {
+                                            <button class="k-menuitem" on:click=move |e| {
+                                                crate::ui::focus_menu_trigger(&e);
+                                                creating.set(Some((ChannelKind::Text, None)));
+                                            }>
+                                                <Icon icon=lu::LuPlus/>"Créer un salon"
+                                            </button>
+                                            <button class="k-menuitem" on:click=move |e| {
+                                                crate::ui::focus_menu_trigger(&e);
+                                                creating.set(Some((ChannelKind::Category, None)));
+                                            }>
+                                                <Icon icon=lu::LuFolderPlus/>"Créer une catégorie"
+                                            </button>
+                                        })}
                                         {mine.then(|| view! {
                                             <a class="k-menuitem" href=format!("/guilds/{gid}/settings/owner")>
                                                 <Icon icon=lu::LuCrown/>"Transférer la propriété"
@@ -389,36 +421,61 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                             let name = c.name.clone().unwrap_or_default();
                             if c.kind == ChannelKind::Category {
                                 let open = move || !collapsed.with(|v| v.contains(&cid));
+                                let title_id = format!("cat-{cid}");
                                 view! {
-                                    <button class="k-category" aria-expanded=move || open().to_string()
-                                        on:click=move |_| collapsed.update(|v| if v.contains(&cid) { v.retain(|x| *x != cid) } else { v.push(cid) })>
-                                        <Icon icon=lu::LuChevronDown small=true/>{name}
-                                    </button>
+                                    <div class="app-cat">
+                                        <button class="k-category" id=title_id.clone() aria-expanded=move || open().to_string()
+                                            on:click=move |_| collapsed.update(|v| if v.contains(&cid) { v.retain(|x| *x != cid) } else { v.push(cid) })>
+                                            <Icon icon=lu::LuChevronDown small=true/>{name}
+                                            {c.private.then(|| view! { <Icon icon=lu::LuLock small=true/><span class="k-sr">" (privée)"</span> })}
+                                        </button>
+                                        {manage.then(|| view! {
+                                            <button type="button" class="k-btn k-btn--icon app-row-act" aria-label="Créer un salon" aria-describedby=title_id.clone()
+                                                title="Créer un salon dans cette catégorie" on:click=move |_| creating.set(Some((ChannelKind::Text, Some(cid))))>
+                                                <Icon icon=lu::LuPlus small=true/>
+                                            </button>
+                                            <a class="k-btn k-btn--icon app-row-act" href=format!("/channels/{gid}/{cid}/settings") aria-label="Paramètres de la catégorie"
+                                                aria-describedby=title_id.clone() title="Paramètres de la catégorie">
+                                                <Icon icon=lu::LuSettings small=true/>
+                                            </a>
+                                        })}
+                                    </div>
                                 }.into_any()
                             } else {
                                 let parent = c.parent_id;
                                 let hidden = move || parent.is_some_and(|p| collapsed.with(|v| v.contains(&p)))
                                     && ids.get().1 != Some(cid);
                                 let voice = matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage);
+                                let private = c.private;
                                 let (icon, kind) = match c.kind {
-                                    _ if voice => (lu::LuVolume2, "salon vocal "),
-                                    ChannelKind::Announcement => (lu::LuMegaphone, "annonces "),
-                                    ChannelKind::Forum => (lu::LuMessagesSquare, "forum "),
+                                    _ if voice => (lu::LuVolume2, if private { "salon vocal privé " } else { "salon vocal " }),
+                                    ChannelKind::Announcement => (lu::LuMegaphone, if private { "annonces privées " } else { "annonces " }),
+                                    ChannelKind::Forum => (lu::LuMessagesSquare, if private { "forum privé " } else { "forum " }),
+                                    _ if private => (lu::LuLock, "salon privé "),
                                     _ => (lu::LuHash, ""),
                                 };
                                 let unread = Memo::new(move |_| s.channel(cid).is_some_and(|c| s.shows_unread(&c)));
                                 let muted = Memo::new(move |_| s.channel(cid).is_some_and(|c| s.channel_muted(&c)));
                                 let mentions = Memo::new(move |_| s.channel(cid).map_or(0, |c| s.mentions(&c)));
                                 let textual = c.kind.is_textual();
+                                let name_id = format!("chan-{cid}");
                                 view! {
-                                    <a class="k-channel" href=format!("/channels/{gid}/{cid}") hidden=hidden
-                                        data-unread=move || unread.get().then_some("") data-muted=move || muted.get().then_some("")
-                                        on:contextmenu=move |e| if textual { u.on_context(Target::Channel(cid))(e) }
-                                        on:keydown=move |e| if textual { u.on_key(Target::Channel(cid))(e) }
-                                        aria-current=move || (ids.get().1 == Some(cid)).then_some("page")>
-                                        <Icon icon=icon/><span class="k-sr">{kind}</span><span class="app-ellipsis">{name.clone()}</span>
-                                        <UnreadText on=unread/><MutedMark on=muted/><MentionBadge count=mentions/>
-                                    </a>
+                                    <div class="app-chan" hidden=hidden>
+                                        <a class="k-channel" href=format!("/channels/{gid}/{cid}")
+                                            data-unread=move || unread.get().then_some("") data-muted=move || muted.get().then_some("")
+                                            on:contextmenu=move |e| if textual { u.on_context(Target::Channel(cid))(e) }
+                                            on:keydown=move |e| if textual { u.on_key(Target::Channel(cid))(e) }
+                                            aria-current=move || (ids.get().1 == Some(cid)).then_some("page")>
+                                            <Icon icon=icon/><span class="k-sr">{kind}</span><span class="app-ellipsis" id=name_id.clone()>{name.clone()}</span>
+                                            <UnreadText on=unread/><MutedMark on=muted/><MentionBadge count=mentions/>
+                                        </a>
+                                        {manage.then(|| view! {
+                                            <a class="k-btn k-btn--icon app-row-act" href=format!("/channels/{gid}/{cid}/settings") aria-label="Paramètres du salon"
+                                                aria-describedby=name_id.clone() title="Paramètres du salon">
+                                                <Icon icon=lu::LuSettings small=true/>
+                                            </a>
+                                        })}
+                                    </div>
                                     {voice.then(|| view! { <VoiceUsers guild=Some(gid) channel=cid name=name hidden=Signal::derive(hidden)/> })}
                                 }.into_any()
                             }
@@ -431,6 +488,10 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
             <InviteDialog guild=guild close=move || invite_open.set(false)/>
         </Show>
         {move || leaving.get().map(|what| view! { <crate::social::ConfirmDialog what=what close=Callback::new(move |()| leaving.set(None))/> })}
+        {move || creating.get().map(|(kind, parent)| view! {
+            <crate::channels::CreateChannelDialog guild=guild kind=kind parent=parent go=true close=Callback::new(move |()| creating.set(None))
+                restore="button[aria-label=\"Plus d'actions pour ce serveur\"]"/>
+        })}
     }
 }
 

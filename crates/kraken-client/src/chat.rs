@@ -22,6 +22,38 @@ use crate::ui::{Avatar, Header, Stub, iso, modal, when};
 
 thread_local! {
     static DRAFTS: std::cell::RefCell<std::collections::HashMap<Id, String>> = Default::default();
+    /// Mode lent : jusqu'à quand (ms) j'attends avant d'écrire de nouveau, par salon. Garde le
+    /// compte quand on change de salon et qu'on revient.
+    static SLOW_UNTIL: std::cell::RefCell<std::collections::HashMap<Id, i64>> = Default::default();
+}
+
+/// Secondes à attendre encore avant d'écrire dans ce salon (mode lent).
+fn slow_left(channel: Id) -> u32 {
+    let until = SLOW_UNTIL.with_borrow(|m| m.get(&channel).copied()).unwrap_or(0);
+    let left = until - js_sys::Date::now() as i64;
+    if left <= 0 { 0 } else { ((left + 999) / 1000) as u32 }
+}
+
+/// Fait suivre `wait` au temps qui passe tant qu'il reste de l'attente.
+fn run_wait(channel: Id, wait: RwSignal<u32>, said: RwSignal<String>) {
+    let n = slow_left(channel);
+    wait.set(n);
+    if n == 0 {
+        return;
+    }
+    spawn_local(async move {
+        loop {
+            TimeoutFuture::new(250).await;
+            let n = slow_left(channel);
+            if wait.try_set(n).is_some() {
+                return;
+            }
+            if n == 0 {
+                said.try_set("Tu peux de nouveau écrire.".into());
+                return;
+            }
+        }
+    });
 }
 
 fn param(name: &'static str) -> Memo<Option<Id>> {
@@ -56,17 +88,34 @@ fn Loading() -> impl IntoView {
     }
 }
 
+/// Ce que montre `GuildChannel` : un salon d'écriture ne se reconstruit pas quand son nom, son
+/// sujet ou son mode lent changent (la saisie, le défilement et le focus restent) ; les autres si.
+#[derive(Clone, PartialEq)]
+enum Shown {
+    Text(Id),
+    Other(Channel),
+}
+
 #[component]
 pub fn GuildChannel() -> impl IntoView {
     let s = store();
     let channel = param("channel");
-    let current = Memo::new(move |_| channel.get().and_then(|c| s.channel(c)));
+    let current = Memo::new(move |_| {
+        channel
+            .get()
+            .and_then(|c| s.channel(c))
+            .map(|c| if c.kind.is_textual() { Shown::Text(c.id) } else { Shown::Other(c) })
+    });
     view! {
         {move || match current.get() {
             None => view! { <Loading/> }.into_any(),
-            Some(c) if c.kind == ChannelKind::Voice || c.kind == ChannelKind::Stage => view! { <VoiceRoom channel=c/> }.into_any(),
-            Some(c) if c.kind == ChannelKind::Forum => view! { <Stub id="S24" title="Forum"/> }.into_any(),
-            Some(c) => view! { <ChannelView channel=c/> }.into_any(),
+            Some(Shown::Text(id)) => match untrack(|| s.channel(id)) {
+                Some(c) => view! { <ChannelView channel=c/> }.into_any(),
+                None => view! { <Loading/> }.into_any(),
+            },
+            Some(Shown::Other(c)) if c.kind == ChannelKind::Voice || c.kind == ChannelKind::Stage => view! { <VoiceRoom channel=c/> }.into_any(),
+            Some(Shown::Other(c)) if c.kind == ChannelKind::Forum => view! { <Stub id="S24" title="Forum"/> }.into_any(),
+            Some(Shown::Other(_)) => view! { <Loading/> }.into_any(),
         }}
     }
 }
@@ -316,7 +365,7 @@ fn ChannelView(channel: Channel) -> impl IntoView {
         <Header>
             <Icon icon=header_icon/>
             <h1 class="app-title app-ellipsis">{move || title.get()}</h1>
-            {channel.topic.clone().map(|t| { let tip = t.clone(); view! { <span class="app-topic app-ellipsis" title=tip>{t}</span> } })}
+            {move || s.channel(cid).and_then(|c| c.topic).map(|t| { let tip = t.clone(); view! { <span class="app-topic app-ellipsis" title=tip>{t}</span> } })}
             <div class="app-header-tools">
                 {(!is_dm).then(|| view! {
                     <a class="k-btn k-btn--icon" href=format!("/channels/{}/{cid}/threads", channel.guild_id.unwrap()) aria-label="Fils" title="Fils"><Icon icon=lu::LuMessageSquareText/></a>
@@ -1050,6 +1099,15 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
     let chat = chat();
     let text = chat.draft;
     let too_long = move || text.with(|t| t.chars().count() > MAX_MESSAGE_LEN);
+    // Mode lent : le délai du salon (suivi), ceux qui gèrent les messages ou les salons n'attendent pas,
+    // et le décompte de ma propre attente.
+    let slow = Memo::new(move |_| s.channel(chat.channel).map_or(0, |c| c.slowmode_s));
+    let exempt =
+        move || chat.guild.is_some_and(|g| s.guild_perms(g) & (perms::MANAGE_MESSAGES | perms::MANAGE_CHANNELS) != 0);
+    let wait = RwSignal::new(0u32);
+    let waiting = move || wait.get() > 0;
+    let said = RwSignal::new(String::new());
+    run_wait(chat.channel, wait, said);
     // Autocomplétion des mentions : le mot sous le curseur, la suggestion choisie, refermée par Échap.
     let at = RwSignal::new(0usize);
     let active = RwSignal::new(0usize);
@@ -1090,6 +1148,19 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
         }
         if t.trim().is_empty() && ready == 0 {
             return;
+        }
+        let delay = slow.get_untracked();
+        if delay > 0 && !exempt() {
+            let left = slow_left(chat.channel);
+            if left > 0 {
+                chat.notice.set(Some(format!("Mode lent : attends encore {left} s avant d'envoyer un autre message.")));
+                return;
+            }
+            // Un peu de marge : le serveur compte à partir de l'arrivée du message.
+            let until = js_sys::Date::now() as i64 + i64::from(delay) * 1000 + 500;
+            SLOW_UNTIL.with_borrow_mut(|m| m.insert(chat.channel, until));
+            said.set(format!("Mode lent : tu pourras écrire de nouveau dans {}.", crate::channels::slow_label(delay)));
+            run_wait(chat.channel, wait, said);
         }
         at.set(0);
         text.set(String::new());
@@ -1162,6 +1233,17 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
                 <p class="k-error app-compose-note" role="alert">{n}" "
                     <button type="button" class="k-btn k-btn--link" on:click=move |_| chat.notice.set(None)>"Fermer"</button></p>
             })}
+            <Show when=move || { slow.get() > 0 && !exempt() }>
+                <p class="app-slow" data-wait=move || waiting().then_some("")>
+                    <Icon icon=lu::LuTimer small=true/>
+                    <span aria-hidden="true">{move || if waiting() {
+                        format!("Mode lent : encore {} s avant ton prochain message", wait.get())
+                    } else {
+                        format!("Mode lent : {} entre deux messages", crate::channels::slow_label(slow.get()))
+                    }}</span>
+                    <span class="k-sr" role="status">{move || said.get()}</span>
+                </p>
+            </Show>
             <Show when=too_long>
                 <p class="k-error app-compose-note" role="alert">{move || format!("{} caractères sur {MAX_MESSAGE_LEN} : raccourcis un peu.", text.with(|t| t.chars().count()))}</p>
             </Show>

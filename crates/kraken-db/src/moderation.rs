@@ -9,26 +9,26 @@ use sqlx::{Postgres, Row, Transaction};
 
 use crate::{Db, DbError, ROLE_COLS, Result, role_from, user_cols, user_from};
 
-type Tx<'a> = Transaction<'a, Postgres>;
+pub(crate) type Tx<'a> = Transaction<'a, Postgres>;
 
 /// Où en est quelqu'un dans un serveur : propriétaire ou non, droits, rang.
-struct Standing {
-    is_owner: bool,
-    base: u64,
-    top: i32,
+pub(crate) struct Standing {
+    pub is_owner: bool,
+    pub base: u64,
+    pub top: i32,
 }
 
 impl Standing {
-    fn need(&self, bit: u64) -> Result<()> {
+    pub(crate) fn need(&self, bit: u64) -> Result<()> {
         if self.base & bit == bit { Ok(()) } else { Err(DbError::Forbidden("perm")) }
     }
 
     /// Peut-il agir sur ce rôle (le modifier, le donner, le retirer) ?
-    fn over_role(&self, role_position: i32) -> Result<()> {
+    pub(crate) fn over_role(&self, role_position: i32) -> Result<()> {
         if self.is_owner || self.top > role_position { Ok(()) } else { Err(DbError::Forbidden("hierarchy")) }
     }
 
-    fn over(&self, target: &Standing) -> Result<()> {
+    pub(crate) fn over(&self, target: &Standing) -> Result<()> {
         if perms::outranks(self.is_owner, self.top, target.is_owner, target.top) {
             Ok(())
         } else {
@@ -38,7 +38,7 @@ impl Standing {
 }
 
 /// Verrouille le serveur et lit qui est son propriétaire ; `NotFound` s'il n'existe pas.
-async fn lock(tx: &mut Tx<'_>, gid: Id) -> Result<Id> {
+pub(crate) async fn lock(tx: &mut Tx<'_>, gid: Id) -> Result<Id> {
     sqlx::query_scalar("select owner_id from guilds where id = $1 for update")
         .bind(gid)
         .fetch_optional(&mut **tx)
@@ -47,7 +47,7 @@ async fn lock(tx: &mut Tx<'_>, gid: Id) -> Result<Id> {
 }
 
 /// `None` si ce n'est pas un membre.
-async fn standing(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id) -> Result<Option<Standing>> {
+pub(crate) async fn standing(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id) -> Result<Option<Standing>> {
     let member: bool = sqlx::query_scalar("select exists(select 1 from members where guild_id = $1 and user_id = $2)")
         .bind(gid)
         .bind(uid)
@@ -83,13 +83,13 @@ async fn standing(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id) -> Result<Option
 }
 
 /// Celui qui agit : membre du serveur (sinon `NotFound`, on ne révèle rien) qui a ce droit.
-async fn actor(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id, need: u64) -> Result<Standing> {
+pub(crate) async fn actor(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id, need: u64) -> Result<Standing> {
     let s = standing(tx, gid, owner, uid).await?.ok_or(DbError::NotFound)?;
     s.need(need)?;
     Ok(s)
 }
 
-async fn audit(
+pub(crate) async fn audit(
     tx: &mut Tx<'_>,
     gid: Id,
     actor: Id,
@@ -103,6 +103,26 @@ async fn audit(
         .bind(action)
         .bind(target)
         .bind(reason)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+/// Une ligne du journal avec le détail de ce qui a changé (nom du salon, par exemple).
+pub(crate) async fn audit_changes(
+    tx: &mut Tx<'_>,
+    gid: Id,
+    actor: Id,
+    action: &str,
+    target: Option<Id>,
+    changes: serde_json::Value,
+) -> Result<()> {
+    sqlx::query("insert into audit_log (guild_id, actor_id, action, target_id, changes) values ($1, $2, $3, $4, $5)")
+        .bind(gid)
+        .bind(actor)
+        .bind(action)
+        .bind(target)
+        .bind(sqlx::types::Json(changes))
         .execute(&mut **tx)
         .await?;
     Ok(())
@@ -130,7 +150,7 @@ fn clean_color(c: u32) -> Result<Option<i32>> {
 }
 
 /// Droits que l'on peut accorder : valides, et que l'on a soi-même.
-fn grantable(who: &Standing, changed: u64) -> Result<()> {
+pub(crate) fn grantable(who: &Standing, changed: u64) -> Result<()> {
     if changed & !perms::ALL != 0 {
         return Err(DbError::Invalid("permissions"));
     }

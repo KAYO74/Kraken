@@ -415,6 +415,38 @@ impl Store {
         });
     }
 
+    /// Salon de serveur créé, modifié ou déplacé : remplacé à sa place, sinon ajouté. Le dernier
+    /// message connu reste si le nouvel état ne le dit pas.
+    pub fn upsert_channel(&self, guild: Id, c: Channel) {
+        self.in_guild(guild, |g| match g.channels.iter_mut().find(|x| x.id == c.id) {
+            Some(x) => {
+                let last = x.last_message_id;
+                *x = c;
+                x.last_message_id = x.last_message_id.or(last);
+            }
+            None => g.channels.push(c),
+        });
+    }
+
+    /// Salon de serveur supprimé, ou devenu invisible pour moi : il quitte la liste, avec ceux qui
+    /// y parlaient et ce qu'on en savait.
+    pub fn remove_channel(&self, id: Id) {
+        self.guilds.update(|gs| {
+            for g in gs.iter_mut().filter(|g| g.channels.iter().any(|c| c.id == id)) {
+                g.channels.retain(|c| c.id != id);
+                g.voice_states.retain(|v| v.channel_id != Some(id));
+                // Les salons d'une catégorie supprimée en sortent.
+                g.channels.iter_mut().filter(|c| c.parent_id == Some(id)).for_each(|c| c.parent_id = None);
+            }
+        });
+        self.last.update(|l| {
+            l.remove(&id);
+        });
+        if self.viewing.get_untracked() == Some(id) {
+            self.viewing.set(None);
+        }
+    }
+
     /// Change un serveur sur place.
     pub fn in_guild(&self, guild: Id, f: impl FnOnce(&mut GuildState)) {
         self.guilds.update(|gs| {
@@ -463,12 +495,12 @@ impl Store {
                     }
                 });
             }
-            Event::ChannelUpdate(c) => {
-                if c.guild_id.is_none() {
-                    self.upsert_dm(c);
-                }
-            }
+            Event::ChannelUpdate(c) => match c.guild_id {
+                None => self.upsert_dm(c),
+                Some(gid) => self.upsert_channel(gid, c),
+            },
             Event::ChannelDelete { id } => {
+                self.remove_channel(id);
                 self.dms.update(|d| d.retain(|c| c.id != id));
                 self.calls.update(|cs| cs.retain(|x| x.channel_id != id));
                 self.call_states.update(|c| c.retain(|x| x.channel_id != Some(id)));
