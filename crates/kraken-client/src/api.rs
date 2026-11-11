@@ -9,7 +9,11 @@ use serde_json::json;
 pub type ApiResult<T> = Result<T, ApiError>;
 
 fn network() -> ApiError {
-    ApiError { code: "network".into(), message: "Le serveur ne répond pas. Vérifie ta connexion.".into() }
+    ApiError {
+        code: "network".into(),
+        message: "Le serveur ne répond pas. Vérifie ta connexion.".into(),
+        timeout_until: None,
+    }
 }
 
 async fn call<T: DeserializeOwned>(method: Method, path: &str, body: Option<impl Serialize>) -> ApiResult<T> {
@@ -225,6 +229,20 @@ pub async fn create_invite(channel: Id) -> ApiResult<Invite> {
     call(Method::POST, &format!("/channels/{channel}/invites"), Some(CreateInvite::default())).await
 }
 
+/// Une invitation avec ses réglages (durée, nombre d'usages).
+pub async fn create_invite_with(channel: Id, req: &CreateInvite) -> ApiResult<Invite> {
+    call(Method::POST, &format!("/channels/{channel}/invites"), Some(req)).await
+}
+
+/// Les invitations du serveur : vivantes, puis mortes depuis peu.
+pub async fn guild_invites(guild: Id) -> ApiResult<Vec<GuildInvite>> {
+    call(Method::GET, &format!("/guilds/{guild}/invites"), NO_BODY).await
+}
+
+pub async fn revoke_invite(code: &str) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/invites/{code}"), NO_BODY).await
+}
+
 pub async fn invite(code: &str) -> ApiResult<Invite> {
     call(Method::GET, &format!("/invites/{code}"), NO_BODY).await
 }
@@ -270,7 +288,11 @@ pub async fn set_avatar(bytes: &[u8], mime: &str) -> ApiResult<User> {
 
 fn too_large() -> ApiError {
     let mo = MAX_AVATAR_BYTES / (1024 * 1024);
-    ApiError { code: "too_large".into(), message: format!("Cette image pèse trop lourd : {mo} Mo au plus.") }
+    ApiError {
+        code: "too_large".into(),
+        message: format!("Cette image pèse trop lourd : {mo} Mo au plus."),
+        timeout_until: None,
+    }
 }
 
 /// Retirer la photo de profil.
@@ -435,6 +457,20 @@ pub async fn bans(guild: Id) -> ApiResult<Vec<Ban>> {
 
 pub async fn leave_guild(guild: Id) -> ApiResult<()> {
     call(Method::DELETE, &format!("/guilds/{guild}/members/@me"), NO_BODY).await
+}
+
+/// Supprimer le serveur (son propriétaire, qui retape le nom).
+pub async fn delete_guild(guild: Id, name: &str) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/guilds/{guild}"), Some(DeleteGuild { name: name.to_string() })).await
+}
+
+/// Exclure temporairement un membre.
+pub async fn timeout_member(guild: Id, user: Id, req: &TimeoutMember) -> ApiResult<Member> {
+    call(Method::PUT, &format!("/guilds/{guild}/members/{user}/timeout"), Some(req)).await
+}
+
+pub async fn lift_timeout(guild: Id, user: Id) -> ApiResult<Member> {
+    call(Method::DELETE, &format!("/guilds/{guild}/members/{user}/timeout"), NO_BODY).await
 }
 
 pub async fn transfer_guild(guild: Id, to: Id) -> ApiResult<()> {

@@ -6,8 +6,12 @@ use std::collections::HashMap;
 
 use gloo_timers::future::TimeoutFuture;
 use kraken_core::perms;
-use kraken_proto::{CreateRole, EditRole, Id, ROLE_COLORS, Role};
+use kraken_proto::{
+    CreateInvite, CreateRole, EditRole, GuildInvite, Id, InviteState, MAX_REASON, ROLE_COLORS, Role, TimeoutMember,
+    User,
+};
 use leptos::html;
+use leptos::portal::Portal;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::{use_navigate, use_params_map};
@@ -16,7 +20,7 @@ use wasm_bindgen::JsCast;
 use crate::icons::{Icon, lu};
 use crate::social::{Confirm, ConfirmDialog};
 use crate::store::{Conn, store};
-use crate::ui::{Avatar, modal, when};
+use crate::ui::{Avatar, MoreMenu, modal, when};
 
 /// Nom de chaque couleur de la palette (numéro − 1) : la teinte vient du thème, `--avatar-N-text`.
 pub const COLOR_NAMES: [&str; ROLE_COLORS as usize] =
@@ -101,8 +105,13 @@ pub(crate) const CATEGORIES: &[(&str, &[Perm])] = &[
 /// Droits sensibles : une icône d'alerte, en plus de leur phrase.
 pub(crate) const SENSITIVE: [u64; 4] = [perms::ADMINISTRATOR, perms::BAN, perms::MANAGE_ROLES, perms::MANAGE_CHANNELS];
 
-const SECTIONS: [(&str, &str); 4] =
-    [("roles", "Rôles"), ("channels", "Salons"), ("bans", "Bannis"), ("owner", "Propriété")];
+const SECTIONS: [(&str, &str); 5] = [
+    ("roles", "Rôles"),
+    ("channels", "Salons"),
+    ("invites", "Invitations"),
+    ("bans", "Bannis"),
+    ("owner", "Propriété"),
+];
 
 /// Sections que je peux ouvrir dans ce serveur.
 fn allowed(guild: Id) -> Vec<&'static str> {
@@ -116,6 +125,8 @@ fn allowed(guild: Id) -> Vec<&'static str> {
         .filter(|slug| match *slug {
             "roles" => p & perms::MANAGE_ROLES != 0,
             "channels" => p & perms::MANAGE_CHANNELS != 0,
+            // Qui gère le serveur voit toutes les invitations, qui peut seulement en créer voit les siennes.
+            "invites" => p & (perms::MANAGE_GUILD | perms::CREATE_INVITE) != 0,
             "bans" => p & perms::BAN != 0,
             _ => owner,
         })
@@ -180,6 +191,7 @@ pub fn GuildSettings() -> impl IntoView {
                         match section.get() {
                             "roles" => view! { <Roles guild=g/> }.into_any(),
                             "channels" => view! { <crate::channels::ChannelsAdmin guild=g/> }.into_any(),
+                            "invites" => view! { <Invites guild=g/> }.into_any(),
                             "bans" => view! { <Bans guild=g/> }.into_any(),
                             "owner" => view! { <Ownership guild=g/> }.into_any(),
                             _ => empty("Rien à régler ici", "Tes rôles ne te donnent accès à aucun réglage de ce serveur.").into_any(),
@@ -777,6 +789,213 @@ fn RoleMembers(guild: Id, role: Id, editable: Signal<bool>) -> impl IntoView {
     .into_any()
 }
 
+/// Durées proposées pour une nouvelle invitation (secondes ; `never` : elle n'expire pas).
+const INVITE_AGES: [(&str, &str); 7] = [
+    ("1800", "30 minutes"),
+    ("3600", "1 heure"),
+    ("21600", "6 heures"),
+    ("43200", "12 heures"),
+    ("86400", "1 jour"),
+    ("604800", "7 jours"),
+    ("never", "Jamais"),
+];
+
+/// Nombres d'utilisations proposés (0 : sans limite).
+const INVITE_USES: [(&str, &str); 7] = [
+    ("0", "Illimité"),
+    ("1", "1 utilisation"),
+    ("5", "5 utilisations"),
+    ("10", "10 utilisations"),
+    ("25", "25 utilisations"),
+    ("50", "50 utilisations"),
+    ("100", "100 utilisations"),
+];
+
+/// Invitations du serveur : les vivantes d'abord, puis celles qui ne servent plus depuis peu.
+/// Qui gère le serveur voit toutes les invitations, les autres seulement les leurs.
+#[component]
+fn Invites(guild: Id) -> impl IntoView {
+    let s = store();
+    let rows = RwSignal::new(None::<Vec<GuildInvite>>);
+    let error = RwSignal::new(None::<String>);
+    let said = RwSignal::new(String::new());
+    // Le code copié à l'instant, et si la copie a réussi.
+    let copied = RwSignal::new(None::<(String, bool)>);
+    let age = RwSignal::new("604800".to_string());
+    let uses = RwSignal::new("0".to_string());
+    let busy = RwSignal::new(false);
+    let list = NodeRef::<html::Ul>::new();
+    let load = move || {
+        spawn_local(async move {
+            match crate::api::guild_invites(guild).await {
+                Ok(l) => {
+                    rows.try_set(Some(l));
+                }
+                Err(e) => {
+                    error.try_set(Some(e.message));
+                }
+            }
+        });
+    };
+    load();
+    let manage = Memo::new(move |_| s.guild_perms(guild) & perms::MANAGE_GUILD != 0);
+    let can_create = Memo::new(move |_| s.guild_perms(guild) & perms::CREATE_INVITE != 0);
+    let create = move |e: leptos::ev::SubmitEvent| {
+        e.prevent_default();
+        let Some(channel) = s.guild(guild).as_ref().and_then(crate::shell::first_text) else {
+            error.set(Some("Aucun salon où inviter.".into()));
+            return;
+        };
+        let max_age = age.get_untracked().parse::<u32>().ok();
+        let max_uses = uses.get_untracked().parse::<u32>().ok().filter(|n| *n > 0);
+        busy.set(true);
+        error.set(None);
+        spawn_local(async move {
+            match crate::api::create_invite_with(channel, &CreateInvite { max_age, max_uses }).await {
+                Ok(i) => {
+                    said.try_set(format!("Invitation {} créée.", i.code));
+                    load();
+                }
+                Err(e) => {
+                    error.try_set(Some(e.message));
+                }
+            }
+            busy.try_set(false);
+        });
+    };
+    let revoke = move |code: String| {
+        error.set(None);
+        spawn_local(async move {
+            match crate::api::revoke_invite(&code).await {
+                Ok(()) => {
+                    rows.try_update(|r| {
+                        if let Some(r) = r {
+                            r.retain(|i| i.code != code);
+                        }
+                    });
+                    said.try_set(format!("Invitation {code} révoquée."));
+                    // La ligne et son menu ont disparu : le focus revient à la liste.
+                    if let Some(l) = list.get_untracked() {
+                        let _ = l.focus();
+                    }
+                }
+                Err(e) => {
+                    error.try_set(Some(e.message));
+                }
+            }
+        });
+    };
+    let copy = move |code: String| {
+        spawn_local(async move {
+            let link = format!("{}/invite/{code}", crate::api::public_url().await);
+            let done = crate::ui::copy_text(&link).await;
+            copied.try_set(Some((code.clone(), done)));
+            TimeoutFuture::new(2500).await;
+            copied.try_update(|c| {
+                if c.as_ref().is_some_and(|(x, _)| *x == code) {
+                    *c = None;
+                }
+            });
+        });
+    };
+    view! {
+        <p class="app-hint">
+            {move || if manage.get() {
+                "Toutes les invitations du serveur, avec celles qui ne servent plus depuis une semaine ou moins. Une invitation révoquée cesse de marcher aussitôt."
+            } else {
+                "Tu ne vois que les invitations que tu as créées. Une invitation révoquée cesse de marcher aussitôt."
+            }}
+        </p>
+        <Show when=move || can_create.get()>
+            <form class="app-invite-form" on:submit=create aria-label="Nouvelle invitation">
+                <div class="k-field">
+                    <label class="k-label" for="inv-age">"Expire après"</label>
+                    <select id="inv-age" class="k-select" on:change=move |e| age.set(event_target_value(&e))>
+                        {INVITE_AGES.iter().map(|(v, label)| view! {
+                            <option value=*v prop:selected=move || age.get() == *v>{*label}</option>
+                        }).collect_view()}
+                    </select>
+                </div>
+                <div class="k-field">
+                    <label class="k-label" for="inv-uses">"Nombre d'utilisations"</label>
+                    <select id="inv-uses" class="k-select" on:change=move |e| uses.set(event_target_value(&e))>
+                        {INVITE_USES.iter().map(|(v, label)| view! {
+                            <option value=*v prop:selected=move || uses.get() == *v>{*label}</option>
+                        }).collect_view()}
+                    </select>
+                </div>
+                <button type="submit" class="k-btn k-btn--primary" disabled=move || busy.get() aria-busy=move || busy.get().to_string()>"Créer une invitation"</button>
+            </form>
+        </Show>
+        <p class="app-add-ok" role="status">{move || said.get()}</p>
+        <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+        <Show when=move || rows.with(|r| r.is_none()) && error.with(Option::is_none)>
+            <div aria-busy="true"><div class="k-skeleton app-skel-row"></div></div>
+        </Show>
+        <Show when=move || rows.with(|r| r.as_ref().is_some_and(Vec::is_empty))>
+            <div class="k-empty"><b>"Aucune invitation"</b><span>"Celles que tu crées apparaissent ici."</span></div>
+        </Show>
+        <ul class="app-list app-list--col" aria-label="Invitations" node_ref=list tabindex="-1">
+            <For each=move || rows.get().unwrap_or_default() key=|i| (i.code.clone(), i.uses, i.state as u8) let:i>
+                {
+                    let now = crate::ui::now_ms();
+                    let dead = i.state != InviteState::Active;
+                    let code = i.code.clone();
+                    let (c_copy, c_status, c_revoke, c_menu) = (code.clone(), code.clone(), code.clone(), code.clone());
+                    let badge = match i.state {
+                        InviteState::Active => None,
+                        InviteState::Expired => Some("Expirée"),
+                        InviteState::Exhausted => Some("Épuisée"),
+                    };
+                    let by = i.inviter.as_ref().map_or("un compte supprimé".to_string(), |u| u.name().to_string());
+                    let channel = i.channel_name.clone().map(|n| format!(" · #{n}")).unwrap_or_default();
+                    let used = if i.max_uses == 0 { format!("{} / ∞", i.uses) } else { format!("{} / {}", i.uses, i.max_uses) };
+                    let used_text = match (i.uses, i.max_uses) {
+                        (n, 0) => format!("{n} utilisation{}, sans limite", if n > 1 { "s" } else { "" }),
+                        (n, m) => format!("{n} utilisation{} sur {m}", if n > 1 { "s" } else { "" }),
+                    };
+                    let expiry = match (i.state, i.expires_at) {
+                        (InviteState::Expired, Some(t)) => format!("a expiré ({})", when(t)),
+                        (InviteState::Expired, None) => "a expiré".to_string(),
+                        (InviteState::Exhausted, _) => "plus aucune utilisation".to_string(),
+                        (InviteState::Active, Some(t)) => format!("expire dans {}", crate::ui::left(t, now)),
+                        (InviteState::Active, None) => "n'expire jamais".to_string(),
+                    };
+                    view! {
+                        <li class="app-row app-invite" data-dead=dead.then_some("")>
+                            <div>
+                                <b><code class="app-code">{code}</code>
+                                    {badge.map(|b| view! { " " <span class="k-badge k-badge--neutral">{b}</span> })}</b>
+                                <small>{format!("Créée par {by}{channel}")}</small>
+                                <small>
+                                    <span aria-hidden="true">{used}</span><span class="k-sr">{used_text}</span>
+                                    " · "{expiry}
+                                </small>
+                            </div>
+                            <div class="app-row-actions">
+                                <span class="app-copied" role="status">
+                                    {move || copied.with(|c| c.as_ref().filter(|(x, _)| *x == c_status).map(|(_, ok)| if *ok { "Copié" } else { "Copie impossible" }))}
+                                </span>
+                                {(!dead).then(|| view! {
+                                    <button type="button" class="k-btn" aria-label=format!("Copier le lien de l'invitation {c_copy}")
+                                        on:click={ let c = c_copy.clone(); move |_| copy(c.clone()) }>
+                                        <Icon icon=lu::LuCopy small=true/>"Copier"
+                                    </button>
+                                })}
+                                <MoreMenu label=format!("Plus d'actions pour l'invitation {c_menu}")>
+                                    <button class="k-menuitem is-danger" on:click=move |_| revoke(c_revoke.clone())>
+                                        <Icon icon=lu::LuTrash2/>"Révoquer"
+                                    </button>
+                                </MoreMenu>
+                            </div>
+                        </li>
+                    }
+                }
+            </For>
+        </ul>
+    }
+}
+
 #[component]
 fn Bans(guild: Id) -> impl IntoView {
     let s = store();
@@ -844,6 +1063,7 @@ fn Ownership(guild: Id) -> impl IntoView {
     let s = store();
     let target = RwSignal::new(String::new());
     let confirm = RwSignal::new(None::<Confirm>);
+    let deleting = RwSignal::new(false);
     let others = Memo::new(move |_| {
         s.guild(guild)
             .map(|g| g.members.into_iter().filter(|m| Some(m.user.id) != s.my_id()).collect::<Vec<_>>())
@@ -875,6 +1095,178 @@ fn Ownership(guild: Id) -> impl IntoView {
             </div>
         </form>
         {move || confirm.get().map(|what| view! { <ConfirmDialog what=what close=Callback::new(move |()| confirm.set(None))/> })}
+        <section class="app-danger" aria-labelledby="danger-t">
+            <h3 id="danger-t">"Zone dangereuse"</h3>
+            <p class="app-hint">"Supprimer le serveur efface ses salons, ses messages, ses rôles et ses invitations, pour tout le monde. Il n'y a aucun moyen de revenir en arrière."</p>
+            <button type="button" class="k-btn k-btn--danger" on:click=move |_| deleting.set(true)>"Supprimer le serveur…"</button>
+        </section>
+        // Montée hors de la fenêtre des réglages : à 390 px, rien ne la rogne ni ne la masque.
+        {move || deleting.get().then(|| view! {
+            <Portal>
+                <DeleteGuildDialog guild=guild close=Callback::new(move |()| deleting.set(false))/>
+            </Portal>
+        })}
+    }
+}
+
+/// Supprimer le serveur : dit ce qui disparaît, et n'agit qu'une fois son nom retapé.
+#[component]
+fn DeleteGuildDialog(guild: Id, close: Callback<()>) -> impl IntoView {
+    let s = store();
+    let navigate = use_navigate();
+    let root = NodeRef::<html::Div>::new();
+    modal(root, move || {
+        close.try_run(());
+    });
+    let name = s.guild(guild).map(|g| g.guild.name).unwrap_or_default();
+    let typed = RwSignal::new(String::new());
+    let busy = RwSignal::new(false);
+    let error = RwSignal::new(None::<String>);
+    let matches = Memo::new({
+        let expected = name.clone();
+        move |_| typed.with(|t| !t.trim().is_empty() && t.trim() == expected)
+    });
+    let submit = move |e: leptos::ev::SubmitEvent| {
+        e.prevent_default();
+        if !matches.get_untracked() || busy.get_untracked() {
+            return;
+        }
+        busy.set(true);
+        error.set(None);
+        let navigate = navigate.clone();
+        spawn_local(async move {
+            match crate::api::delete_guild(guild, typed.get_untracked().trim()).await {
+                Ok(()) => {
+                    // Fermer d'abord : la suite retire l'écran qui porte ce dialogue.
+                    close.try_run(());
+                    navigate("/channels/@me", Default::default());
+                    s.remove_guild(guild);
+                }
+                Err(e) => {
+                    busy.try_set(false);
+                    error.try_set(Some(e.message));
+                }
+            }
+        });
+    };
+    view! {
+        <div class="k-scrim" node_ref=root>
+            <div class="k-dialog app-dialog-tall" role="alertdialog" aria-modal="true" aria-labelledby="dg-t" aria-describedby="dg-d">
+                <header><h2 id="dg-t">{format!("Supprimer « {name} » ?")}</h2></header>
+                <form on:submit=submit>
+                    <div>
+                        <div id="dg-d">
+                            <p>"Tout ça disparaît pour tout le monde, tout de suite :"</p>
+                            <ul class="app-gone">
+                                <li>"les salons, leurs messages et leurs fichiers,"</li>
+                                <li>"les rôles et les droits,"</li>
+                                <li>"les invitations."</li>
+                            </ul>
+                            <p><b>"C'est irréversible."</b>" Les personnes en vocal sont déconnectées."</p>
+                        </div>
+                        <div class="k-field">
+                            <label class="k-label" for="dg-name">"Tape le nom du serveur"</label>
+                            <input id="dg-name" class="k-input" autocomplete="off" spellcheck="false" aria-describedby="dg-hint"
+                                prop:value=move || typed.get() on:input=move |e| typed.set(event_target_value(&e))/>
+                            <small id="dg-hint" class="app-hint app-wrap">{format!("Pour confirmer, retape : {name}")}</small>
+                        </div>
+                        <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+                    </div>
+                    <footer>
+                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); } autofocus>"Annuler"</button>
+                        <button type="submit" class="k-btn k-btn--danger" disabled=move || !matches.get() || busy.get() aria-busy=move || busy.get().to_string()>"Supprimer le serveur"</button>
+                    </footer>
+                </form>
+            </div>
+        </div>
+    }
+}
+
+/// Durées d'une exclusion temporaire : secondes et libellé (de 60 s à une semaine ; le serveur va jusqu'à 28 jours).
+const TIMEOUT_STEPS: [(u32, &str); 6] = [
+    (60, "60 secondes"),
+    (300, "5 minutes"),
+    (600, "10 minutes"),
+    (3600, "1 heure"),
+    (86_400, "1 jour"),
+    (604_800, "1 semaine"),
+];
+
+/// Exclure temporairement un membre : une durée, une raison facultative. La personne garde la
+/// lecture, mais ne peut plus écrire, réagir, joindre de fichier ni parler en vocal.
+#[component]
+pub fn TimeoutDialog(guild: Id, user: User, close: Callback<()>) -> impl IntoView {
+    let s = store();
+    let root = NodeRef::<html::Div>::new();
+    modal(root, move || {
+        close.try_run(());
+    });
+    let uid = user.id;
+    let name = s.name_of(Some(guild), uid).unwrap_or_else(|| user.name().to_string());
+    let seconds = RwSignal::new(TIMEOUT_STEPS[0].0);
+    let reason = RwSignal::new(String::new());
+    let busy = RwSignal::new(false);
+    let error = RwSignal::new(None::<String>);
+    let submit = move |e: leptos::ev::SubmitEvent| {
+        e.prevent_default();
+        busy.set(true);
+        error.set(None);
+        let reason = Some(reason.get_untracked().trim().to_string()).filter(|r| !r.is_empty());
+        spawn_local(async move {
+            match crate::api::timeout_member(guild, uid, &TimeoutMember { seconds: seconds.get_untracked(), reason })
+                .await
+            {
+                Ok(m) => {
+                    s.in_guild(guild, |g| {
+                        if let Some(x) = g.members.iter_mut().find(|x| x.user.id == m.user.id) {
+                            *x = m;
+                        }
+                    });
+                    close.try_run(());
+                }
+                Err(e) => {
+                    busy.try_set(false);
+                    error.try_set(Some(e.message));
+                }
+            }
+        });
+    };
+    view! {
+        <div class="k-scrim" node_ref=root>
+            <div class="k-dialog app-dialog-tall" role="dialog" aria-modal="true" aria-labelledby="to-t" aria-describedby="to-d">
+                <header><h2 id="to-t">{format!("Exclure {name} temporairement")}</h2></header>
+                <form on:submit=submit>
+                    <div>
+                        <p id="to-d">"Pendant ce temps, cette personne peut lire le serveur, mais ni écrire, ni réagir, ni envoyer de fichier, ni parler en vocal. L'exclusion se termine toute seule, et tu peux la lever avant."</p>
+                        <fieldset class="app-radios" role="radiogroup" aria-labelledby="to-len">
+                            <legend id="to-len" class="k-label">"Durée"</legend>
+                            <div class="app-radio-grid">
+                                {TIMEOUT_STEPS.iter().map(|(n, label)| {
+                                    let id = format!("to-{n}");
+                                    view! {
+                                        <label class="app-radio" for=id.clone()>
+                                            <input id=id.clone() type="radio" name="to-len" prop:checked=move || seconds.get() == *n
+                                                on:change=move |_| seconds.set(*n)/>
+                                            <span>{*label}</span>
+                                        </label>
+                                    }
+                                }).collect_view()}
+                            </div>
+                        </fieldset>
+                        <div class="k-field">
+                            <label class="k-label" for="to-reason">"Raison (facultatif)"</label>
+                            <input id="to-reason" class="k-input" maxlength=MAX_REASON autocomplete="off"
+                                prop:value=move || reason.get() on:input=move |e| reason.set(event_target_value(&e))/>
+                        </div>
+                        <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+                    </div>
+                    <footer>
+                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); } autofocus>"Annuler"</button>
+                        <button type="submit" class="k-btn k-btn--primary" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>"Exclure"</button>
+                    </footer>
+                </form>
+            </div>
+        </div>
     }
 }
 

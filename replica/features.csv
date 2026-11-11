@@ -17,7 +17,8 @@ MP de groupe,mp,must,yes,yes,"S03 ; créer entre amis (10 personnes au plus), no
 Permissions de MP par serveur et demandes de message,mp,should,yes,no,S08
 Filtre anti-spam des MP,mp,should,yes,no,S08
 Créer un serveur (avec modèles),serveurs,must,yes,partial,S21 F05 ; sans modèles ni icône
-Rejoindre via invitation (expiration et usages max),serveurs,must,yes,partial,"F06 ; expiration et usages max côté API, pas encore dans l'UI"
+Supprimer un serveur,serveurs,must,yes,yes,"S22 ; propriétaire seul (403 sinon), nom à retaper (400 name_mismatch), zone dangereuse de Réglages › Propriété ; salons, messages, fichiers, rôles, invitations et états vocaux partent avec lui, GUILD_DELETE à tous les membres"
+Rejoindre via invitation (expiration et usages max),serveurs,must,yes,yes,"F06 S22 ; Réglages › Invitations : créer (durée de 30 min à 7 jours ou sans fin, 1 à 100 utilisations ou illimité), lister les vivantes puis les mortes depuis moins d'une semaine (« Expirée », « Épuisée »), copier le lien, révoquer ; qui gère le serveur voit tout, les autres seulement les leurs ; un lien mort dit pourquoi (expiré, épuisé, révoqué) ; trace dans le journal d'audit"
 Rail des serveurs avec non-lus et mentions,serveurs,must,yes,partial,"S02 ; point de non-lu, badge de mentions (serveurs et accueil), Marquer comme lu ; sans dossiers ni MP non lus en tuiles"
 Dossiers de serveurs,serveurs,could,yes,no,S02
 Serveurs favoris,serveurs,could,yes,no,S11 ; nitro : gratuit
@@ -29,7 +30,7 @@ Mode lent et sujet du salon,salons,should,yes,yes,"S23 ; sujet dans l'en-tête d
 Fils de discussion,salons,should,yes,no,S24
 Salons forum,salons,could,yes,no,S24
 Rôles avec couleur et permissions,moderation,must,yes,yes,"S22 ; créer, renommer, couleur d'une palette fixe, réordonner (glisser ou boutons), supprimer, droits par catégorie, donner ou retirer sur un membre, rubrique « affiché à part » dans la liste des membres, hiérarchie des rangs, transfert de propriété"
-Expulser bannir exclure temporairement,moderation,must,yes,partial,"S22 ; expulser, bannir (raison, effacement des derniers messages), débannir, quitter un serveur, hiérarchie respectée ; pas encore d'exclusion temporaire"
+Expulser bannir exclure temporairement,moderation,must,yes,yes,"S22 ; expulser, bannir (raison, effacement des derniers messages), débannir, quitter un serveur, hiérarchie respectée ; exclusion temporaire de 60 s à 1 semaine (jusqu'à 28 jours par l'API), avec raison : lecture seule, refus d'écrire, de réagir, de joindre un fichier ou de parler (403 timed_out), sortie du vocal, fin comparée à l'heure sans tâche de fond, pastille « Exclu jusqu'à » dans la liste des membres, zone de saisie grisée, Lever l'exclusion ; ni le propriétaire ni un administrateur"
 Journal d'audit,moderation,should,yes,partial,"S22 ; les actions de rôles et de modération sont écrites dans audit_log, pas encore d'écran pour les lire"
 AutoMod (mots interdits spam),moderation,could,yes,no,S22
 Filtre de contenu média sensible (flou bloquer),moderation,could,yes,no,S08 ; nécessite un classifieur

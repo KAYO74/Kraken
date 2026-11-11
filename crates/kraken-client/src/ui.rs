@@ -232,6 +232,76 @@ pub fn when(ms: i64) -> String {
     }
 }
 
+/// Maintenant, en millisecondes Unix.
+pub fn now_ms() -> i64 {
+    js_sys::Date::now() as i64
+}
+
+/// Combien de temps il reste jusqu'à `until`, en une expression courte : « 2 j », « 3 h »,
+/// « 12 min », « moins d'une minute ». Arrondi vers le haut, pour ne jamais annoncer « 0 ».
+pub fn left(until: i64, now: i64) -> String {
+    let secs = ((until - now).max(0) as u64).div_ceil(1000);
+    let (mins, hours, days) = (secs.div_ceil(60), secs.div_ceil(3600), secs.div_ceil(86_400));
+    if secs < 60 {
+        "moins d'une minute".into()
+    } else if mins < 60 {
+        format!("{mins} min")
+    } else if hours < 24 {
+        format!("{hours} h")
+    } else {
+        format!("{days} j")
+    }
+}
+
+/// `until` tant qu'il est dans le futur ; devient `None` à l'heure dite, sans que rien d'autre
+/// ne change (un seul minuteur, pas de compte à rebours). Une durée plus longue que ce qu'un
+/// minuteur du navigateur sait attendre est découpée en plusieurs attentes.
+pub fn still(until: impl Fn() -> Option<i64> + Copy + Send + Sync + 'static) -> Signal<Option<i64>> {
+    use gloo_timers::future::TimeoutFuture;
+    let tick = RwSignal::new(0u32);
+    Effect::new(move |_| {
+        tick.track();
+        if let Some(t) = until() {
+            let left = t - now_ms();
+            if left > 0 {
+                let wait = left.min(i64::from(i32::MAX) - 1000) as u32;
+                leptos::task::spawn_local(async move {
+                    TimeoutFuture::new(wait + 50).await;
+                    tick.try_update(|n| *n += 1);
+                });
+            }
+        }
+    });
+    Signal::derive(move || {
+        tick.track();
+        until().filter(|t| *t > now_ms())
+    })
+}
+
+/// Copie `text` dans le presse-papiers. L'API moderne si la page le permet, sinon (instance en
+/// HTTP sur le réseau local, ou refus du navigateur) la sélection d'un champ caché. Vrai si c'est fait.
+pub async fn copy_text(text: &str) -> bool {
+    use wasm_bindgen_futures::JsFuture;
+    let Some(w) = web_sys::window() else { return false };
+    if w.is_secure_context() && JsFuture::from(w.navigator().clipboard().write_text(text)).await.is_ok() {
+        return true;
+    }
+    let Some(doc) = w.document() else { return false };
+    let Some(body) = doc.body() else { return false };
+    let Ok(el) = doc.create_element("textarea") else { return false };
+    let Ok(area) = el.dyn_into::<web_sys::HtmlTextAreaElement>() else { return false };
+    area.set_value(text);
+    let _ = area.set_attribute("readonly", "");
+    let _ = area.set_attribute("aria-hidden", "true");
+    let _ = area.set_attribute("tabindex", "-1");
+    area.set_class_name("app-copy-buffer");
+    let _ = body.append_child(&area);
+    area.select();
+    let done = doc.dyn_into::<web_sys::HtmlDocument>().ok().and_then(|d| d.exec_command("copy").ok()).unwrap_or(false);
+    area.remove();
+    done
+}
+
 pub fn iso(ms: i64) -> String {
     js_sys::Date::new(&(ms as f64).into()).to_iso_string().into()
 }

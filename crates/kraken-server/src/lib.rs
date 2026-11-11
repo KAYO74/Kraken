@@ -290,7 +290,9 @@ pub fn app(state: AppState) -> Router {
         .route("/auth/logout-all", post(auth::logout_all))
         .route("/users/@me", get(auth::me).patch(auth::update_me))
         .route("/guilds", post(api::create_guild))
-        .route("/guilds/{id}", get(api::guild))
+        .route("/guilds/{id}", get(api::guild).delete(moderation::delete_guild))
+        .route("/guilds/{id}/invites", get(api::guild_invites))
+        .route("/guilds/{id}/members/{uid}/timeout", put(moderation::timeout).delete(moderation::lift_timeout))
         .route("/guilds/{id}/channels", get(api::guild_channels).post(channels::create))
         .route("/channels/{id}/position", put(channels::position))
         .route("/channels/{id}/permissions", get(channels::overwrites))
@@ -313,7 +315,7 @@ pub fn app(state: AppState) -> Router {
         .route("/channels/{id}/attachments/{aid}/preview", get(attach::preview))
         .route("/channels/{id}/embeds/{key}", get(attach::embed_image))
         .route("/channels/{id}/invites", post(api::create_invite))
-        .route("/invites/{code}", get(api::invite).post(api::join))
+        .route("/invites/{code}", get(api::invite).post(api::join).delete(api::revoke_invite))
         .fallback(|| async { error::AppError::not_found() });
     let index = format!("{}/index.html", state.cfg.web_dir);
     Router::new()

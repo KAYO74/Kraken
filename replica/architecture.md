@@ -99,6 +99,8 @@ REST sous `/api/v1`, JSON, jeton `Authorization: Session <t>` (ou `Bot <t>`). Qu
 | POST /channels/{id}/invites, GET /guilds/{id}/invites | créer, lister | CREATE_INVITE / MANAGE_GUILD | max_age, max_uses | invite | F05 |
 | GET /invites/{code} | aperçu | anon | — | serveur, nb membres | F06 |
 | POST /invites/{code} | rejoindre | user non banni | — | guild | F06 |
+| DELETE /invites/{code} | révoquer (suppression ; la trace reste dans `audit_log`) | créateur / MANAGE_GUILD | — | 204 | F06 |
+| PUT/DELETE /guilds/{id}/members/{uid}/timeout | exclusion temporaire (60 s à 28 j), la lever ; 403 `timed_out` sur écrire, réagir, joindre, parler | TIMEOUT (sous son rang) | seconds, reason | membre | S22 |
 | GET /channels/{id}/messages?before=&after=&limit= | historique | VIEW_CHANNEL+READ_HISTORY | — | messages | F01 |
 | POST /channels/{id}/messages | envoyer (mode lent, AutoMod, mentions) | SEND_MESSAGES | content, nonce, reply_to, attachment_ids, sticker_ids | message | F01 |
 | PATCH/DELETE /channels/{id}/messages/{mid} | modifier (auteur), supprimer (auteur ou MANAGE_MESSAGES) | — | content | message | F10 |

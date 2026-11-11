@@ -4,6 +4,7 @@ use gloo_timers::future::TimeoutFuture;
 use kraken_core::perms;
 use kraken_proto::{Channel, ChannelKind, Id, MAX_MESSAGE_LEN, Message, User};
 use leptos::html;
+use leptos::portal::Portal;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::NavigateOptions;
@@ -1108,6 +1109,10 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
     let waiting = move || wait.get() > 0;
     let said = RwSignal::new(String::new());
     run_wait(chat.channel, wait, said);
+    // Exclu temporairement : on lit, on n'écrit pas. Un seul minuteur lève l'interdit à l'heure dite.
+    let excluded = crate::ui::still(move || chat.guild.and_then(|g| s.my_timeout(g)));
+    let locked = move || excluded.get().is_some();
+    let lock_text = move || excluded.get().map(|t| format!("Exclu jusqu'à {}", when(t)));
     // Autocomplétion des mentions : le mot sous le curseur, la suggestion choisie, refermée par Échap.
     let at = RwSignal::new(0usize);
     let active = RwSignal::new(0usize);
@@ -1133,6 +1138,9 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
         }
     };
     let submit = move || {
+        if locked() {
+            return;
+        }
         let t = text.get_untracked();
         let (busy, failed, ready) = files::tray_status(chat.tray);
         if (t.trim().is_empty() && ready == 0 && busy == 0 && failed == 0) || too_long() {
@@ -1171,7 +1179,7 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
         send(chat.channel, t.trim().to_string(), reply, None, attached);
     };
     let picker = NodeRef::<html::Input>::new();
-    let can_attach = move || chat.guild.is_none_or(|g| s.guild_perms(g) & perms::ATTACH_FILES != 0);
+    let can_attach = move || !locked() && chat.guild.is_none_or(|g| s.guild_perms(g) & perms::ATTACH_FILES != 0);
     let on_pick_files = move |_| {
         let Some(input) = picker.get_untracked() else { return };
         let picked = files::files_of(input.files());
@@ -1244,6 +1252,13 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
                     <span class="k-sr" role="status">{move || said.get()}</span>
                 </p>
             </Show>
+            <Show when=locked>
+                <p class="app-slow" data-timeout>
+                    <Icon icon=lu::LuTimer small=true/>
+                    <span>{lock_text}</span>
+                    <span class="app-slow-more">"Tu peux lire, pas écrire."</span>
+                </p>
+            </Show>
             <Show when=too_long>
                 <p class="k-error app-compose-note" role="alert">{move || format!("{} caractères sur {MAX_MESSAGE_LEN} : raccourcis un peu.", text.with(|t| t.chars().count()))}</p>
             </Show>
@@ -1276,7 +1291,10 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
                     title="Joindre un fichier" on:click=move |_| { if let Some(i) = picker.get_untracked() { i.click() } }>
                     <Icon icon=lu::LuPaperclip/>
                 </button>
-                <textarea rows="1" placeholder=placeholder aria-label=placeholder bind:value=text node_ref=chat.composer
+                <textarea rows="1" disabled=locked
+                    placeholder=move || lock_text().unwrap_or_else(|| placeholder.get())
+                    aria-label=move || lock_text().unwrap_or_else(|| placeholder.get())
+                    bind:value=text node_ref=chat.composer
                     aria-autocomplete="list"
                     aria-controls=move || found.get().map(|_| list_id2.clone())
                     aria-activedescendant=move || found.get().map(|_| opt_id(active.get()))
@@ -1285,9 +1303,9 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
                         if matches!(e.key().as_str(), "ArrowLeft" | "ArrowRight" | "Home" | "End") { track() }
                     }
                     on:keydown=keydown></textarea>
-                <button type="button" class="k-btn k-btn--icon" aria-label="Insérer un emoji" title="Emoji"
+                <button type="button" class="k-btn k-btn--icon" aria-label="Insérer un emoji" title="Emoji" disabled=locked
                     on:click=move |_| chat.picker.set(Some(Pick::Insert))><Icon icon=lu::LuSmile/></button>
-                <button type="submit" class="k-btn k-btn--icon" aria-label="Envoyer"><Icon icon=lu::LuSendHorizontal/></button>
+                <button type="submit" class="k-btn k-btn--icon" aria-label="Envoyer" disabled=locked><Icon icon=lu::LuSendHorizontal/></button>
             </form>
         </div>
     }
@@ -1295,13 +1313,31 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
 
 #[component]
 fn Members(guild: Id) -> impl IntoView {
-    use crate::guild::MemberDialog;
+    use crate::guild::{MemberDialog, TimeoutDialog};
     use crate::social::{Confirm, ConfirmDialog};
     use crate::ui::MoreMenu;
     use kraken_proto::{Member, Role};
     let s = store();
     let profile = RwSignal::new(None::<Id>);
     let confirm = RwSignal::new(None::<Confirm>);
+    let excluding = RwSignal::new(None::<User>);
+    let note = RwSignal::new(None::<String>);
+    // Lever l'exclusion : le membre mis à jour revient aussi par le gateway.
+    let lift = move |uid: Id| {
+        note.set(None);
+        spawn_local(async move {
+            match crate::api::lift_timeout(guild, uid).await {
+                Ok(m) => s.in_guild(guild, |g| {
+                    if let Some(x) = g.members.iter_mut().find(|x| x.user.id == m.user.id) {
+                        *x = m;
+                    }
+                }),
+                Err(e) => {
+                    note.try_set(Some(e.message));
+                }
+            }
+        });
+    };
     let total = move || s.guild(guild).map_or(0, |g| g.members.len());
     // Une rubrique par rôle « affiché à part » (le plus haut de chaque membre), puis les autres.
     let groups = Memo::new(move |_| {
@@ -1328,6 +1364,7 @@ fn Members(guild: Id) -> impl IntoView {
     view! {
         <aside class="app-aside app-aside--members" aria-label="Membres">
             <h2 class="k-category">"Membres "<span class="k-badge k-badge--neutral">{total}</span></h2>
+            <Show when=move || note.get().is_some()><p class="k-error app-compose-note" role="alert">{move || note.get()}</p></Show>
             <For each=move || groups.get()
                 key=|(r, ms)| (
                     r.as_ref().map(|r| (r.id, r.name.clone())),
@@ -1352,8 +1389,11 @@ fn Members(guild: Id) -> impl IntoView {
                                     let others = Some(uid) != my;
                                     let can_kick = move || others && s.guild_perms(guild) & perms::KICK != 0 && s.outranks(guild, uid);
                                     let can_ban = move || others && s.guild_perms(guild) & perms::BAN != 0 && s.outranks(guild, uid);
+                                    let can_exclude = move || others && s.guild_perms(guild) & perms::TIMEOUT != 0 && s.outranks(guild, uid);
+                                    // Exclu temporairement : la fin vient du store (suivi), et disparaît à l'heure dite.
+                                    let excluded = crate::ui::still(move || s.member_timeout(guild, uid));
                                     let user = m.user.clone();
-                                    let (for_kick, for_ban) = (user.clone(), user.clone());
+                                    let (for_kick, for_ban, for_timeout) = (user.clone(), user.clone(), user.clone());
                                     // Clic droit : ouvre le même menu que le bouton « ⋯ » de la ligne.
                                     let context = move |e: leptos::ev::MouseEvent| {
                                         let button = e
@@ -1375,12 +1415,28 @@ fn Members(guild: Id) -> impl IntoView {
                                                     <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" (propriétaire)"</span></span>
                                                 </Show>
                                                 <small>{format!("@{}", m.user.username)}</small>
+                                                <Show when=move || excluded.get().is_some()>
+                                                    <small class="app-timeout">
+                                                        <Icon icon=lu::LuTimer small=true/>
+                                                        {move || excluded.get().map(|t| format!("Exclu jusqu'à {}", crate::ui::when(t)))}
+                                                    </small>
+                                                </Show>
                                             </div>
                                             <MoreMenu label=format!("Plus d'actions pour {name}")>
                                                 <button class="k-menuitem" on:click=move |_| profile.set(Some(uid))>
                                                     <Icon icon=lu::LuShield/>"Profil et rôles"
                                                 </button>
-                                                <Show when=move || can_kick() || can_ban()><hr/></Show>
+                                                <Show when=move || can_exclude() || can_kick() || can_ban()><hr/></Show>
+                                                <Show when=move || can_exclude() && excluded.get().is_none()>
+                                                    <button class="k-menuitem" on:click={ let u = for_timeout.clone(); move |e| { crate::ui::focus_menu_trigger(&e); excluding.set(Some(u.clone())) } }>
+                                                        <Icon icon=lu::LuTimer/>"Exclure temporairement…"
+                                                    </button>
+                                                </Show>
+                                                <Show when=move || can_exclude() && excluded.get().is_some()>
+                                                    <button class="k-menuitem" on:click=move |_| lift(uid)>
+                                                        <Icon icon=lu::LuTimerOff/>"Lever l'exclusion"
+                                                    </button>
+                                                </Show>
                                                 <Show when=can_kick>
                                                     <button class="k-menuitem is-danger" on:click={ let u = for_kick.clone(); move |_| confirm.set(Some(Confirm::Kick(guild, u.clone()))) }>
                                                         <Icon icon=lu::LuUserMinus/>"Expulser"
@@ -1403,6 +1459,12 @@ fn Members(guild: Id) -> impl IntoView {
         </aside>
         {move || profile.get().map(|u| view! { <MemberDialog guild=guild user=u close=Callback::new(move |()| profile.set(None))/> })}
         {move || confirm.get().map(|what| view! { <ConfirmDialog what=what close=Callback::new(move |()| confirm.set(None))/> })}
+        // Hors de la liste des membres, qui est un tiroir par-dessus le fil en dessous de 1024 px.
+        {move || excluding.get().map(|user| view! {
+            <Portal>
+                <TimeoutDialog guild=guild user=user.clone() close=Callback::new(move |()| excluding.set(None))/>
+            </Portal>
+        })}
     }
 }
 

@@ -596,3 +596,39 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-ow-key { display: flex; flex-wrap: wrap; gap: var(--space-5); margin: var(--space-4) 0; padding: 0; list-style: none; color: var(--text-muted); font-size: var(--text-sm-size); }
 .app-ow-key li { display: inline-flex; align-items: center; gap: var(--space-2); }
 .app-chan-name .k-icon { margin-left: var(--space-2); vertical-align: middle; }
+
+/* Invitations, suppression du serveur, exclusion temporaire (S24) */
+.app-copy-buffer { position: fixed; top: 0; left: 0; width: var(--space-1); height: var(--space-1); opacity: 0; pointer-events: none; }
+.app-invite-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: end; margin: var(--space-4) 0; }
+.app-invite-form .k-btn { grid-column: 1 / -1; justify-self: start; }
+.app-invite { flex-wrap: wrap; }
+.app-invite > div:first-child { flex: 1 1 12rem; min-width: 0; }
+.app-invite > .app-row-actions { flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.app-code { font-family: var(--font-mono); font-size: var(--text-sm-size); color: var(--text-strong); overflow-wrap: anywhere; }
+/* Une invitation morte : plus discrète, par la couleur (le texte « Expirée » ou « Épuisée » dit le reste). */
+.app-invite[data-dead] { background: var(--surface); }
+.app-invite[data-dead] .app-code, .app-invite[data-dead] small { color: var(--text-muted); }
+.app-copied { min-width: 0; color: var(--text-secondary); font-size: var(--text-sm-size); }
+.app-danger { display: grid; justify-items: start; gap: var(--space-4); margin-top: var(--space-9); padding: var(--space-5);
+  border: 1px solid var(--danger); border-radius: var(--radius-lg); }
+.app-danger h3 { margin: 0; color: var(--danger); font-size: var(--text-lg-size); }
+.app-danger p { margin: 0; }
+.app-dialog-tall { max-height: calc(100dvh - var(--space-8)); overflow-y: auto; }
+.app-dialog-tall p { margin: 0; }
+.app-gone { margin: var(--space-3) 0; padding-left: var(--space-7); }
+.app-wrap { overflow-wrap: anywhere; }
+.app-radios { min-width: 0; margin: 0; padding: 0; border: 0; }
+.app-radios legend { padding: 0; margin-bottom: var(--space-3); }
+.app-radio-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.app-radio { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-input); border-radius: var(--radius-md); color: var(--text-strong); cursor: pointer; }
+.app-radio input { flex: none; width: var(--size-icon); height: var(--size-icon); margin: 0; accent-color: var(--accent); }
+.app-radio:has(input:checked) { border-color: var(--accent-text); background: var(--accent-soft); }
+.app-radio:has(input:focus-visible) { outline: var(--space-1) solid var(--accent-text); outline-offset: var(--space-1); }
+.app-timeout, .k-dm .app-timeout { display: flex; align-items: center; gap: var(--space-2); color: var(--warning); font-size: var(--text-xs-size); }
+.app-slow[data-timeout] { flex-wrap: wrap; color: var(--warning); }
+.app-slow-more { color: var(--text-muted); }
+.k-composer textarea:disabled { cursor: not-allowed; }
+@media (max-width: 639px) {
+  .app-invite-form, .app-radio-grid { grid-template-columns: minmax(0, 1fr); }
+}

@@ -320,10 +320,15 @@ test('S22-N1 hiérarchie : un modérateur ne touche ni au propriétaire ni à un
     expect(res.status(), path).toBe(403);
     expect((await res.json()).code).toBe('hierarchy');
   }
-  // Un simple membre n'a accès à aucune section des réglages.
+  // Un simple membre n'a accès à aucune section d'administration : seulement à ses invitations.
   const plain = await user('simple');
   await invite(api, owner, cid, plain);
   await plain.page.goto(`/guilds/${gid}/settings`);
-  await expect(plain.page.getByText('Tes rôles ne te donnent accès à aucun réglage de ce serveur.')).toBeVisible();
+  await expect(plain.page.getByRole('dialog', { name: 'Paramètres du serveur' }).getByRole('link')).toHaveText(['Invitations']);
   expect((await (await api(plain.token)).get(`${API}/guilds/${gid}/bans`)).status()).toBe(403);
+  // Sans « Créer des invitations » (1 << 27) retiré à @everyone, il n'a plus rien à régler.
+  const everyone = (await (await http.get(`${API}/guilds/${gid}`)).json()).roles.find((r: { id: string }) => r.id === gid);
+  expect((await http.patch(`${API}/guilds/${gid}/roles/${gid}`, { data: { permissions: everyone.permissions & ~(1 << 27) } })).status()).toBe(200);
+  await plain.page.goto(`/guilds/${gid}/settings`);
+  await expect(plain.page.getByText('Tes rôles ne te donnent accès à aucun réglage de ce serveur.')).toBeVisible();
 });
