@@ -901,7 +901,7 @@ fn Invites(guild: Id) -> impl IntoView {
     view! {
         <p class="app-hint">
             {move || if manage.get() {
-                "Toutes les invitations du serveur, avec celles qui ne servent plus depuis une semaine ou moins. Une invitation révoquée cesse de marcher aussitôt."
+                "Les invitations expirées ou épuisées restent listées une semaine. Une invitation révoquée cesse de marcher aussitôt."
             } else {
                 "Tu ne vois que les invitations que tu as créées. Une invitation révoquée cesse de marcher aussitôt."
             }}
