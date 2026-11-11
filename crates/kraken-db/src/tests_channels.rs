@@ -815,3 +815,113 @@ async fn a_channel_never_becomes_more_open_by_leaving_its_category(pool: PgPool)
     assert!(!sees(&db, c.id, plain.id).await);
     assert!(sees(&db, c.id, own.id).await);
 }
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn removing_an_overwrite_with_the_wrong_kind_never_skips_the_hierarchy(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, mgr, peer, boss, small) = (
+        user(&db, "lou").await,
+        user(&db, "max").await,
+        user(&db, "pair").await,
+        user(&db, "chef").await,
+        user(&db, "eve").await,
+    );
+    let g = guild_with(&db, &own, &[&mgr, &peer, &boss, &small]).await;
+    let (gid, general) = (g.guild.id, general(&g));
+    // Haut > Gestionnaires > Petit ; « Gestionnaires » gère les salons mais pas les messages.
+    let top = db.create_role(gid, own.id, &role("Haut", perms::ALL & !perms::ADMINISTRATOR)).await.unwrap();
+    let managers = db
+        .create_role(
+            gid,
+            own.id,
+            &role("Gestionnaires", perms::MANAGE_CHANNELS | perms::VIEW_CHANNEL | perms::SEND_MESSAGES),
+        )
+        .await
+        .unwrap();
+    let low = db.create_role(gid, own.id, &role("Petit", 0)).await.unwrap();
+    db.set_member_role(gid, own.id, boss.id, top.id, true).await.unwrap();
+    for u in [&mgr, &peer] {
+        db.set_member_role(gid, own.id, u.id, managers.id, true).await.unwrap();
+    }
+    let (role_ov, member_ov) = (
+        |deny| SetOverwrite { kind: OverwriteKind::Role, allow: 0, deny },
+        |deny| SetOverwrite { kind: OverwriteKind::Member, allow: 0, deny },
+    );
+    // Posé par le propriétaire : un rôle plus haut, un membre plus haut, un pair, `@everyone` qui
+    // porte un droit que le gestionnaire n'a pas, et un rôle plus bas (que lui peut toucher).
+    db.set_overwrite(general, own.id, top.id, &role_ov(perms::SEND_MESSAGES)).await.unwrap();
+    db.set_overwrite(general, own.id, boss.id, &member_ov(perms::EMBED_LINKS)).await.unwrap();
+    db.set_overwrite(general, own.id, peer.id, &member_ov(perms::ADD_REACTIONS)).await.unwrap();
+    let everyone = SetOverwrite { kind: OverwriteKind::Role, allow: perms::MANAGE_MESSAGES, deny: 0 };
+    db.set_overwrite(general, own.id, gid, &everyone).await.unwrap();
+    db.set_overwrite(general, own.id, low.id, &role_ov(perms::EMBED_LINKS)).await.unwrap();
+    let targets = || {
+        let db = db.clone();
+        async move {
+            let mut t: Vec<Id> =
+                db.channel_overwrites(general, own.id).await.unwrap().iter().map(|o| o.target_id).collect();
+            t.sort_unstable();
+            t
+        }
+    };
+    let all = targets().await;
+    assert_eq!(all.len(), 5);
+
+    // Vider la surcharge en nommant le mauvais genre : même refus qu'avec le bon, la ligne reste.
+    let (as_member, as_role) = (member_ov(0), role_ov(0));
+    let cases = [
+        (top.id, as_member, DbError::Forbidden("hierarchy"), "rôle plus haut, donné pour un membre"),
+        (boss.id, as_role, DbError::Forbidden("hierarchy"), "membre plus haut, donné pour un rôle"),
+        (peer.id, as_role, DbError::Forbidden("hierarchy"), "pair, donné pour un rôle"),
+        (gid, as_member, DbError::Forbidden("perm"), "@everyone avec un droit qu'on n'a pas, donné pour un membre"),
+        (top.id, as_role, DbError::Forbidden("hierarchy"), "le bon genre"),
+        (gid, as_role, DbError::Forbidden("perm"), "le bon genre"),
+    ];
+    for (target, req, err, what) in cases {
+        assert_eq!(db.set_overwrite(general, mgr.id, target, &req).await.map(|_| ()), Err(err), "{what}");
+        assert_eq!(targets().await, all, "la ligne reste : {what}");
+    }
+    assert_eq!(db.remove_overwrite(general, mgr.id, top.id).await.map(|_| ()), Err(DbError::Forbidden("hierarchy")));
+    assert_eq!(db.remove_overwrite(general, mgr.id, boss.id).await.map(|_| ()), Err(DbError::Forbidden("hierarchy")));
+    assert_eq!(targets().await, all);
+
+    // Modifier (et non vider) avec le mauvais genre : refusé, rien ne change.
+    let wrong = SetOverwrite { kind: OverwriteKind::Member, allow: 0, deny: perms::ADD_REACTIONS };
+    assert_eq!(
+        db.set_overwrite(general, mgr.id, low.id, &wrong).await.map(|_| ()),
+        Err(DbError::Invalid("overwrite_kind"))
+    );
+    assert_eq!(
+        db.set_overwrite(general, own.id, top.id, &wrong).await.map(|_| ()),
+        Err(DbError::Invalid("overwrite_kind"))
+    );
+    let rows = db.channel_overwrites(general, own.id).await.unwrap();
+    let kept = rows.iter().find(|o| o.target_id == low.id).unwrap();
+    assert_eq!((kept.kind, kept.deny), (OverwriteKind::Role, perms::EMBED_LINKS));
+    assert_eq!(rows.iter().find(|o| o.target_id == top.id).unwrap().kind, OverwriteKind::Role);
+
+    // Ce qu'il peut toucher se vide, même avec le mauvais genre (c'est celui de la ligne qui compte).
+    let list = db.set_overwrite(general, mgr.id, low.id, &as_member).await.unwrap();
+    assert!(list.iter().all(|o| o.target_id != low.id));
+    assert_eq!(targets().await.len(), 4);
+
+    // Une vraie orpheline (ni rôle ni membre) part toujours, avec n'importe quel genre.
+    let (dead_role, dead_member) = (Id::from_u128(0xdead01), Id::from_u128(0xdead02));
+    for (target, kind) in [(dead_role, "role"), (dead_member, "member")] {
+        sqlx::query(
+            "insert into permission_overwrites (channel_id, target_id, target_kind, allow, deny) values ($1, $2, $3, $4, 0)",
+        )
+        .bind(general)
+        .bind(target)
+        .bind(kind)
+        .bind(perms::MANAGE_MESSAGES as i64)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    assert_eq!(targets().await.len(), 6);
+    db.set_overwrite(general, mgr.id, dead_role, &as_member).await.unwrap();
+    db.set_overwrite(general, mgr.id, dead_member, &as_role).await.unwrap();
+    assert_eq!(targets().await.len(), 4);
+    assert!(targets().await.iter().all(|t| *t != dead_role && *t != dead_member));
+}

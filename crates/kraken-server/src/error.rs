@@ -75,6 +75,9 @@ impl From<DbError> for AppError {
             ),
             DbError::Invalid("parent_id") => Self::invalid("Cette catégorie n'existe pas ou n'est pas visible."),
             DbError::Invalid("overwrite") => Self::invalid("Un droit ne peut pas être à la fois autorisé et refusé."),
+            DbError::Invalid("overwrite_kind") => {
+                Self::invalid("Ce réglage existe déjà pour un autre genre de cible (rôle ou membre).")
+            }
             DbError::Invalid("overwrites") => {
                 Self::invalid(format!("{MAX_OVERWRITES} réglages de droits au plus par salon."))
             }

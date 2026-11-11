@@ -106,6 +106,25 @@ async fn overwrite_of(conn: &mut PgConnection, cid: Id, target: Id) -> Result<Op
     })
 }
 
+/// La ligne telle qu'elle est en base : son genre (rôle ou membre) fait foi, jamais celui d'une requête.
+async fn overwrite_row(conn: &mut PgConnection, cid: Id, target: Id) -> Result<Option<(OverwriteKind, u64, u64)>> {
+    let r = sqlx::query(
+        "select target_kind, allow, deny from permission_overwrites where channel_id = $1 and target_id = $2",
+    )
+    .bind(cid)
+    .bind(target)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(match r {
+        Some(r) => Some((
+            if r.try_get::<&str, _>("target_kind")? == "role" { OverwriteKind::Role } else { OverwriteKind::Member },
+            r.try_get::<i64, _>("allow")? as u64,
+            r.try_get::<i64, _>("deny")? as u64,
+        )),
+        None => None,
+    })
+}
+
 /// Pose la surcharge ; `allow` et `deny` vides la retirent.
 async fn write_overwrite(
     conn: &mut PgConnection,
@@ -115,24 +134,27 @@ async fn write_overwrite(
     allow: u64,
     deny: u64,
 ) -> Result<()> {
+    let kind = match kind {
+        OverwriteKind::Role => "role",
+        OverwriteKind::Member => "member",
+    };
     if allow == 0 && deny == 0 {
-        sqlx::query("delete from permission_overwrites where channel_id = $1 and target_id = $2")
+        sqlx::query("delete from permission_overwrites where channel_id = $1 and target_id = $2 and target_kind = $3")
             .bind(cid)
             .bind(target)
+            .bind(kind)
             .execute(&mut *conn)
             .await?;
         return Ok(());
     }
     sqlx::query(
         "insert into permission_overwrites (channel_id, target_id, target_kind, allow, deny) values ($1, $2, $3, $4, $5)
-         on conflict (channel_id, target_id) do update set allow = $4, deny = $5, updated_at = now()",
+         on conflict (channel_id, target_id) do update set allow = $4, deny = $5, updated_at = now()
+         where permission_overwrites.target_kind = $3",
     )
     .bind(cid)
     .bind(target)
-    .bind(match kind {
-        OverwriteKind::Role => "role",
-        OverwriteKind::Member => "member",
-    })
+    .bind(kind)
     .bind(allow as i64)
     .bind(deny as i64)
     .execute(&mut *conn)
@@ -599,41 +621,49 @@ impl Db {
         let c = row_of(&mut tx, gid, cid).await?;
         manager(&mut tx, &c, cid, by).await?;
         let me = standing(&mut tx, gid, owner, by).await?.ok_or(DbError::NotFound)?;
-        let before = overwrite_of(&mut tx, cid, target).await?;
+        let stored = overwrite_row(&mut tx, cid, target).await?;
+        let removing = req.allow == 0 && req.deny == 0;
+        // Le genre de la ligne en base fait foi : pour la retirer, on ne regarde pas celui de la
+        // requête (sinon un « membre » à la place d'un « rôle » esquiverait la hiérarchie) ; pour la
+        // modifier, les deux doivent concorder.
+        let kind = match stored {
+            Some((k, ..)) if removing => k,
+            Some((k, ..)) if k != req.kind => return Err(DbError::Invalid("overwrite_kind")),
+            _ => req.kind,
+        };
+        let before = stored.map(|(_, allow, deny)| (allow, deny));
         let (old_allow, old_deny) = before.unwrap_or((0, 0));
+        let position: Option<i32> = sqlx::query_scalar("select position from roles where id = $1 and guild_id = $2")
+            .bind(target)
+            .bind(gid)
+            .fetch_optional(&mut *tx)
+            .await?;
+        let member = standing(&mut tx, gid, owner, target).await?;
         // Une surcharge dont la cible a disparu (rôle supprimé, membre parti) doit pouvoir être
-        // retirée : il suffit de gérer le salon, rien à comparer en rang ni en droits.
-        let orphan = before.is_some() && req.allow == 0 && req.deny == 0;
-        let mut live = true;
-        match req.kind {
-            OverwriteKind::Role => {
-                let position: Option<i32> =
-                    sqlx::query_scalar("select position from roles where id = $1 and guild_id = $2")
-                        .bind(target)
-                        .bind(gid)
-                        .fetch_optional(&mut *tx)
-                        .await?;
-                match position {
-                    Some(position) => {
-                        if target != gid {
-                            me.over_role(position)?;
-                        }
+        // retirée : il suffit de gérer le salon, rien à comparer en rang ni en droits. Orpheline
+        // seulement si la cible n'est ni un rôle de ce serveur ni un de ses membres.
+        let orphan = removing && before.is_some() && position.is_none() && member.is_none();
+        match kind {
+            OverwriteKind::Role => match position {
+                Some(position) => {
+                    if target != gid {
+                        me.over_role(position)?;
                     }
-                    None if orphan => live = false,
-                    None => return Err(DbError::NotFound),
                 }
-            }
-            OverwriteKind::Member => match standing(&mut tx, gid, owner, target).await? {
+                None if orphan => {}
+                None => return Err(DbError::NotFound),
+            },
+            OverwriteKind::Member => match member {
                 Some(who) => {
                     if target != by {
                         me.over(&who)?;
                     }
                 }
-                None if orphan => live = false,
+                None if orphan => {}
                 None => return Err(DbError::NotFound),
             },
         }
-        if live {
+        if !orphan {
             grantable(&me, (req.allow ^ old_allow) | (req.deny ^ old_deny))?;
         }
         if before.is_none() && (req.allow | req.deny) != 0 {
@@ -645,7 +675,7 @@ impl Db {
                 return Err(DbError::Invalid("overwrites"));
             }
         }
-        write_overwrite(&mut tx, cid, target, req.kind, req.allow, req.deny).await?;
+        write_overwrite(&mut tx, cid, target, kind, req.allow, req.deny).await?;
         keeps_access(&mut tx, &c, cid, by).await?;
         audit_changes(
             &mut tx,

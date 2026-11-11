@@ -571,3 +571,92 @@ async fn a_private_category_going_away_or_a_channel_leaving_it_opens_nothing(poo
     let names: Vec<&str> = st["channels"].as_array().unwrap().iter().filter_map(|c| c["name"].as_str()).collect();
     assert!(!names.contains(&"salle") && !names.contains(&"bureau"), "{names:?}");
 }
+
+/// Combien de surcharges ce salon a, vu par `who`.
+async fn overwrite_count(who: &Who, cid: Id) -> usize {
+    who.call(Method::GET, &format!("/channels/{cid}/permissions"), None).await.1.as_array().unwrap().len()
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn a_wrong_kind_in_the_body_cannot_dodge_the_hierarchy_when_removing(pool: PgPool) {
+    let base = spawn(pool.clone(), 1000).await;
+    let (own, mid, boss) = (Who::new(&base, "own").await, Who::new(&base, "mid").await, Who::new(&base, "boss").await);
+    let g = own.guild().await;
+    let (gid, general) = (g.guild.id, general(&g));
+    assert_eq!(mid.join(&g, &own).await.0, 200);
+    assert_eq!(boss.join(&g, &own).await.0, 200);
+    // « Haut » est créé avant « Bâtisseurs » : il est au-dessus.
+    let top = own.role(gid, "Haut", perms::MANAGE_CHANNELS | perms::VIEW_CHANNEL).await;
+    let builders = own.role(gid, "Bâtisseurs", perms::MANAGE_CHANNELS).await;
+    let small = own.role(gid, "Petit", 0).await;
+    assert_eq!(own.give(gid, &boss, &top).await, 200);
+    assert_eq!(own.give(gid, &mid, &builders).await, 200);
+    // Posé par le propriétaire : le rôle plus haut, son membre, et `@everyone` avec un droit que « Bâtisseurs » n'a pas.
+    for (target, kind, allow, deny) in [
+        (top.id, "role", 0, perms::SEND_MESSAGES),
+        (boss.user.id, "member", 0, perms::EMBED_LINKS),
+        (gid, "role", perms::MANAGE_MESSAGES, 0),
+        (small.id, "role", 0, perms::EMBED_LINKS),
+    ] {
+        let (s, v) = own
+            .call(
+                Method::PUT,
+                &format!("/channels/{general}/permissions/{target}"),
+                Some(json!({ "kind": kind, "allow": allow, "deny": deny })),
+            )
+            .await;
+        assert_eq!(s, 200, "{v}");
+    }
+    assert_eq!(overwrite_count(&own, general).await, 4);
+
+    // Vider la surcharge avec le genre inverse : 403 comme avec le bon, et la ligne reste.
+    for (target, kind) in [(top.id, "member"), (boss.user.id, "role"), (gid, "member"), (top.id, "role"), (gid, "role")]
+    {
+        let (s, v) = mid
+            .call(
+                Method::PUT,
+                &format!("/channels/{general}/permissions/{target}"),
+                Some(json!({ "kind": kind, "allow": 0, "deny": 0 })),
+            )
+            .await;
+        assert_eq!(s, 403, "{target} {kind} : {v}");
+        assert_eq!(overwrite_count(&own, general).await, 4, "la ligne reste : {target} {kind}");
+    }
+    for target in [top.id, boss.user.id, gid] {
+        let (s, _) = mid.call(Method::DELETE, &format!("/channels/{general}/permissions/{target}"), None).await;
+        assert_eq!(s, 403);
+    }
+    // Changer une surcharge en nommant un autre genre : 400, rien ne bouge.
+    let (s, v) = mid
+        .call(
+            Method::PUT,
+            &format!("/channels/{general}/permissions/{}", small.id),
+            Some(json!({ "kind": "member", "allow": 0, "deny": perms::ADD_REACTIONS })),
+        )
+        .await;
+    assert_eq!((s.as_u16(), code(&v)), (400, "invalid"), "{v}");
+    assert_eq!(overwrite_count(&own, general).await, 4);
+
+    // Ce qu'il a le droit de toucher part, et une vraie orpheline aussi.
+    assert_eq!(mid.call(Method::DELETE, &format!("/channels/{general}/permissions/{}", small.id), None).await.0, 200);
+    let ghost = Id::from_u128(0xdead01);
+    sqlx::query(
+        "insert into permission_overwrites (channel_id, target_id, target_kind, allow, deny) values ($1, $2, 'role', $3, 0)",
+    )
+    .bind(general)
+    .bind(ghost)
+    .bind(perms::MANAGE_MESSAGES as i64)
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(overwrite_count(&own, general).await, 4);
+    let (s, v) = mid
+        .call(
+            Method::PUT,
+            &format!("/channels/{general}/permissions/{ghost}"),
+            Some(json!({ "kind": "member", "allow": 0, "deny": 0 })),
+        )
+        .await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(overwrite_count(&own, general).await, 3);
+}
