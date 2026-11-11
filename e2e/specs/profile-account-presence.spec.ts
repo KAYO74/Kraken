@@ -2,7 +2,7 @@
 // mot de passe) et présence (S04 : statut choisi, inactif, ne pas déranger, invisible).
 import { test, expect, a11y, createGuild, say, messages, watch, PASSWORD, API, unique, type User } from '../fixtures';
 import { png, animatedGif } from '../images';
-import type { APIRequestContext, BrowserContext, Page } from '@playwright/test';
+import type { APIRequestContext, BrowserContext, Locator, Page } from '@playwright/test';
 
 // Un appel qui sonne a besoin du micro factice de Chromium (voir calls.spec.ts).
 test.use({ launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] } });
@@ -50,6 +50,32 @@ async function friendRow(page: Page, who: User) {
   return page.getByRole('listitem').filter({ hasText: `@${who.name}` });
 }
 
+/** Seul le champ mis en cause porte aria-invalid, et l'alerte lui est reliée (aria-describedby). */
+async function blames(form: Locator, blamed: string, fields: string[]) {
+  const alert = form.getByRole('alert');
+  await expect(alert).toBeVisible();
+  const message = (await alert.textContent()) ?? '';
+  for (const label of fields) {
+    const field = form.getByLabel(label, { exact: true });
+    if (label === blamed) {
+      await expect(field).toHaveAttribute('aria-invalid', 'true');
+      await expect(field).toHaveAccessibleDescription(new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    } else {
+      await expect(field).not.toHaveAttribute('aria-invalid', 'true');
+      await expect(field).not.toHaveAccessibleDescription(new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    }
+  }
+}
+
+/** La barre d'actions de la carte ne colle ni aux bords ni au contenu : 16 px de marge au moins. */
+async function actionsBreathe(card: Locator) {
+  const pad = await card.locator('.app-card-actions').evaluate((el) => {
+    const c = getComputedStyle(el);
+    return [c.paddingTop, c.paddingRight, c.paddingBottom, c.paddingLeft].map(parseFloat);
+  });
+  expect(pad.every((v) => v >= 16), `marges de la barre d'actions : ${pad.join(' ')}`).toBe(true);
+}
+
 // ───────── S20 : profil ─────────
 
 test('S20-H1 bio et pronoms : compteur, aperçu en direct, enregistrés, bornés', async ({ user, api }) => {
@@ -78,6 +104,13 @@ test('S20-H1 bio et pronoms : compteur, aperçu en direct, enregistrés, bornés
   await page.reload();
   await expect(page.getByLabel('À propos de toi')).toHaveValue('Plongeuse de nuit.\nSans lampe.');
   await expect(page.getByLabel('Pronoms')).toHaveValue('elle/elles');
+  // L'aperçu dit le vrai statut dès le rechargement (la fiche se remplit après le READY), pas « Hors ligne ».
+  const status = page.getByRole('region', { name: 'Aperçu de ta carte' }).locator('.app-card-status');
+  await expect(status).toHaveText('En ligne');
+  expect((await (await api(a.token)).put(`${API}/users/@me/presence`, { data: { presence: 'dnd' } })).status()).toBe(200);
+  await page.reload();
+  await expect(page.getByLabel('Pronoms')).toHaveValue('elle/elles');
+  await expect(status).toHaveText('Ne pas déranger');
 
   // Les bornes : 190 caractères de bio, 40 de pronoms, coupés dans le champ.
   await page.getByLabel('À propos de toi').fill('x'.repeat(250));
@@ -189,6 +222,7 @@ test('S20-H3 carte de profil : depuis la liste des membres et depuis un message,
   await expect(card.getByRole('button', { name: 'Envoyer un message' })).toBeVisible();
   await expect(card.getByRole('button', { name: 'Ajouter en ami' })).toBeVisible();
   await expect(card.getByRole('button', { name: 'Bloquer', exact: true })).toBeVisible();
+  await actionsBreathe(card);
   await a11y(b.page);
   // Échap referme la carte et rend le focus à ce qui l'a ouverte.
   await b.page.keyboard.press('Escape');
@@ -265,10 +299,14 @@ test('S06-H1 changer de pseudo : mot de passe demandé, en direct chez les amis,
     await form.getByLabel('Mot de passe actuel').fill(password);
     await form.getByRole('button', { name: 'Changer le pseudo' }).click();
   };
+  const pseudoFields = ['Nouveau pseudo', 'Mot de passe actuel'];
   await change(unique('nouv'), 'pas-le-bon-mot');
   await expect(form.getByRole('alert')).toHaveText('Mot de passe incorrect.');
+  await blames(form, 'Mot de passe actuel', pseudoFields);
+  await a11y(a.page); // l'erreur affichée, aria-describedby et aria-invalid compris
   await change(b.name, PASSWORD);
   await expect(form.getByRole('alert')).toHaveText('Ce pseudo est déjà pris.');
+  await blames(form, 'Nouveau pseudo', pseudoFields);
   expect((await me(api, a)).username).toBe(a.name);
 
   const first = unique('nouv');
@@ -285,6 +323,7 @@ test('S06-H1 changer de pseudo : mot de passe demandé, en direct chez les amis,
   await expect(form.getByRole('status')).toContainText('Ton pseudo est maintenant');
   await change(unique('nouv'), PASSWORD);
   await expect(form.getByRole('alert')).toContainText('Tu as déjà changé ton pseudo 2 fois en une heure. Réessaie dans');
+  await blames(form, 'Nouveau pseudo', pseudoFields);
 });
 
 test('S06-H2 changer d’adresse e-mail : mot de passe demandé, adresse déjà prise refusée', async ({ user, api, allow }) => {
@@ -300,12 +339,16 @@ test('S06-H2 changer d’adresse e-mail : mot de passe demandé, adresse déjà 
     await form.getByRole('button', { name: "Changer l'adresse" }).click();
   };
   const fresh = `${unique('nouvelle')}@example.org`;
+  const mailFields = ['Nouvelle adresse e-mail', 'Mot de passe actuel'];
   await change(fresh, 'pas-le-bon-mot');
   await expect(form.getByRole('alert')).toHaveText('Mot de passe incorrect.');
+  await blames(form, 'Mot de passe actuel', mailFields);
   await change(b.email, PASSWORD);
   await expect(form.getByRole('alert')).toHaveText('Un compte existe déjà avec cette adresse.');
+  await blames(form, 'Nouvelle adresse e-mail', mailFields);
   await change(a.email.toUpperCase(), PASSWORD);
   await expect(form.getByRole('alert')).toHaveText("C'est déjà ton adresse e-mail.");
+  await blames(form, 'Nouvelle adresse e-mail', mailFields);
 
   // Sans e-mail sur l'instance, la nouvelle adresse remplace l'ancienne tout de suite.
   await change(fresh, PASSWORD);
@@ -339,10 +382,13 @@ test('S06-H3 changer de mot de passe : les autres appareils sont déconnectés, 
     await form.getByRole('button', { name: 'Changer le mot de passe' }).click();
   };
   const next = 'un-autre-mot-de-passe';
+  const passFields = ['Mot de passe actuel', 'Nouveau mot de passe'];
   await change('pas-le-bon-mot', next);
   await expect(form.getByRole('alert')).toHaveText('Mot de passe incorrect.');
+  await blames(form, 'Mot de passe actuel', passFields);
   await change(PASSWORD, PASSWORD);
   await expect(form.getByRole('alert')).toHaveText("Choisis un mot de passe différent de l'actuel.");
+  await blames(form, 'Nouveau mot de passe', passFields);
   await change(PASSWORD, next);
   await expect(form.getByRole('status')).toHaveText('Mot de passe changé. Tes autres appareils ont été déconnectés.');
 
@@ -417,7 +463,13 @@ test('S04-H1 choisir son statut : visible des amis avec forme et mot, invisible 
   await b.page.getByRole('link', { name: new RegExp(`^${a.name}`) }).first().click();
   await expect(b.page.getByRole('navigation', { name: 'Messages privés' }).locator(`[aria-label="${a.name}, ne pas déranger"]`)).toBeVisible();
   await openGuild(b, 'Aube');
-  await expect(members(b.page).locator(`[aria-label="${a.name}, ne pas déranger"]`)).toBeVisible();
+  const avatar = members(b.page).locator(`[aria-label="${a.name}, ne pas déranger"]`);
+  await expect(avatar).toBeVisible();
+  // Sur l'avatar de 32 px de la liste, la pastille sort de 3 px au moins : elle ne mord pas sur les initiales.
+  const [face, dot] = [(await avatar.boundingBox())!, (await avatar.locator('i.k-presence').boundingBox())!];
+  expect(face.width).toBe(32);
+  expect(dot.x + dot.width - (face.x + face.width)).toBeGreaterThanOrEqual(3);
+  expect(dot.y + dot.height - (face.y + face.height)).toBeGreaterThanOrEqual(3);
   expect((await me(api, a)).presence ?? null).toBeNull(); // le choix n'est pas dans la fiche publique
 
   // Invisible : a garde son choix et son mot, b le voit hors ligne ; le choix survit au rechargement.
@@ -595,6 +647,7 @@ test.describe('largeur mobile', () => {
     await messages(b.page).filter({ hasText: 'Salut de la crique' }).getByRole('button', { name: a.name }).click();
     const card = b.page.getByRole('dialog', { name: `Profil de ${a.name}` });
     await expect(card).toBeVisible();
+    await actionsBreathe(card);
     const box = (await card.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);

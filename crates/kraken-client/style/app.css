@@ -653,6 +653,8 @@ i.k-presence--dnd::after { inset: 37.5% 25%; border-radius: var(--radius-pill); 
 i.k-presence--offline::before { border: calc(var(--dot) / 8) solid var(--status-offline); }
 i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--status-offline); }
 .k-avatar--lg > i.k-presence, .k-avatar--xl > i.k-presence { --dot: var(--space-7); right: var(--space-1); bottom: var(--space-1); }
+/* Sur un petit avatar (32 px de la liste des membres) la pastille de 16 px mordrait sur les initiales : elle sort davantage. */
+.k-avatar--sm > i.k-presence, .k-avatar--md > i.k-presence { right: calc(-1 * var(--space-2)); bottom: calc(-1 * var(--space-2)); }
 @media (forced-colors: active) { i.k-presence::before, i.k-presence::after { forced-color-adjust: none; } }
 /* La même pastille dans une ligne de texte (menu du statut, carte de profil). */
 .app-dot-inline { flex: none; display: inline-block; width: var(--space-5); height: var(--space-5); vertical-align: middle; }
@@ -713,7 +715,9 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 .app-chip { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-3); border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill); font-size: var(--text-sm-size); }
 .app-chip[data-role-color] { color: var(--text); }
-.app-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-5) var(--space-7); background: var(--surface); }
+.app-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); background: var(--surface); }
+/* `.app-card > div` (plus haut) remet les marges à zéro : la barre d'actions les reprend à parité de spécificité. */
+.app-card > .app-card-actions { padding: var(--space-5) var(--space-7); }
 .app-card-note { margin: 0; padding: 0 var(--space-7) var(--space-5); background: var(--surface); font-size: var(--text-sm-size); color: var(--text-secondary); }
 .app-card-close { position: absolute; top: var(--space-3); right: var(--space-3); z-index: 1; border: 1px solid var(--border); background: var(--surface-raised); }
 
@@ -745,7 +749,7 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 .app-acct-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
 .app-acct-actions > p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 639px) {
-  .app-card > .app-card-body, .app-card-actions { padding-left: var(--space-5); padding-right: var(--space-5); }
+  .app-card > .app-card-body, .app-card > .app-card-actions { padding-left: var(--space-5); padding-right: var(--space-5); }
   .app-card-note { padding-left: var(--space-5); padding-right: var(--space-5); }
   .app-card-actions > .k-btn { flex: 1 1 auto; justify-content: center; }
 }

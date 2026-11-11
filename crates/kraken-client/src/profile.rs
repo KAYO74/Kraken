@@ -63,8 +63,10 @@ fn live_user(s: Store, t: &ProfileTarget) -> User {
 #[component]
 fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: &'static str) -> impl IntoView {
     let s = store();
-    let id = user.get_untracked().id;
-    let dot = Signal::derive(move || s.dot_of(id));
+    // L'identifiant se lit à chaque fois : dans l'aperçu des réglages, la fiche est d'abord vide
+    // (le READY n'est pas encore arrivé) et ne prend le vrai identifiant, donc le vrai statut, qu'ensuite.
+    let id = move || user.with(|u| u.id);
+    let dot = Signal::derive(move || s.dot_of(id()));
     // L'avatar ne se redessine pas à chaque lettre tapée dans la bio de l'aperçu.
     let face = Memo::new(move |_| {
         let mut u = user.get();
@@ -81,7 +83,7 @@ fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: 
         guild.and_then(|g| {
             s.guilds.with(|gs| {
                 let state = gs.iter().find(|x| x.guild.id == g)?;
-                let m = state.members.iter().find(|m| m.user.id == id)?;
+                let m = state.members.iter().find(|m| m.user.id == id())?;
                 let mut roles: Vec<_> =
                     state.roles.iter().filter(|r| r.id != g && m.roles.contains(&r.id)).cloned().collect();
                 roles.sort_by_key(|r| std::cmp::Reverse(r.position));

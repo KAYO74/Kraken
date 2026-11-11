@@ -32,6 +32,23 @@ const THEMES: &[(&str, &str, &str)] = &[
     ("auto", "Automatique", "Suit le réglage clair ou sombre de ton système."),
 ];
 
+/// Le champ d'un formulaire du compte qu'une réponse d'erreur met en cause : la nouvelle valeur
+/// (pseudo, adresse, nouveau mot de passe) ou le mot de passe actuel. Une erreur sans champ
+/// (réseau, serveur) n'en marque aucun : l'alerte seule la dit.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Culprit {
+    Value,
+    Password,
+}
+
+fn culprit_of(code: &str) -> Option<Culprit> {
+    match code {
+        "bad_password" => Some(Culprit::Password),
+        "invalid" | "unchanged" | "conflict" | "username_cooldown" | "same_password" => Some(Culprit::Value),
+        _ => None,
+    }
+}
+
 fn set_theme(t: &str) {
     if let Some(el) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.document_element()) {
         let _ = el.set_attribute("data-theme", t);
@@ -178,6 +195,7 @@ fn UsernameForm() -> impl IntoView {
     let name = RwSignal::new(String::new());
     let password = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
+    let culprit = RwSignal::new(None::<Culprit>);
     let note = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
     let current = move || s.me.get().map(|u| u.username).unwrap_or_default();
@@ -188,6 +206,7 @@ fn UsernameForm() -> impl IntoView {
         }
         busy.set(true);
         error.set(None);
+        culprit.set(None);
         note.set(None);
         spawn_local(async move {
             match crate::api::change_username(name.get_untracked().trim(), &password.get_untracked()).await {
@@ -198,6 +217,7 @@ fn UsernameForm() -> impl IntoView {
                     password.try_set(String::new());
                 }
                 Err(e) => {
+                    culprit.try_set(culprit_of(&e.code));
                     error.try_set(Some(e.message));
                 }
             }
@@ -214,15 +234,18 @@ fn UsernameForm() -> impl IntoView {
             )}</p>
             <label class="k-field"><span class="k-label">"Nouveau pseudo"</span>
                 <input class="k-input" name="new-username" autocomplete="off" autocapitalize="none" spellcheck="false" required
-                    minlength="2" maxlength="32" pattern="[a-zA-Z0-9_.]+" bind:value=name aria-describedby="acct-username-h"
-                    aria-invalid=move || error.get().is_some().then_some("true")/></label>
+                    minlength="2" maxlength="32" pattern="[a-zA-Z0-9_.]+" bind:value=name
+                    aria-describedby=move || if culprit.get() == Some(Culprit::Value) { "acct-username-h acct-username-err" } else { "acct-username-h" }
+                    aria-invalid=move || (culprit.get() == Some(Culprit::Value)).then_some("true")/></label>
             <label class="k-field"><span class="k-label">"Mot de passe actuel"</span>
-                <input class="k-input" type="password" name="username-password" autocomplete="current-password" required bind:value=password/></label>
+                <input class="k-input" type="password" name="username-password" autocomplete="current-password" required bind:value=password
+                    aria-describedby=move || (culprit.get() == Some(Culprit::Password)).then_some("acct-username-err")
+                    aria-invalid=move || (culprit.get() == Some(Culprit::Password)).then_some("true")/></label>
             <div class="app-acct-actions">
                 <button class="k-btn k-btn--primary" type="submit" disabled=move || busy.get() aria-busy=move || busy.get().to_string()>"Changer le pseudo"</button>
                 <Show when=move || note.get().is_some()><p class="app-hint" role="status">{move || note.get()}</p></Show>
             </div>
-            <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+            <Show when=move || error.get().is_some()><p id="acct-username-err" class="k-error" role="alert">{move || error.get()}</p></Show>
         </form>
     }
 }
@@ -240,6 +263,7 @@ fn EmailForm() -> impl IntoView {
     let email = RwSignal::new(String::new());
     let password = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
+    let culprit = RwSignal::new(None::<Culprit>);
     let note = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
     let submit = move |e: leptos::ev::SubmitEvent| {
@@ -249,6 +273,7 @@ fn EmailForm() -> impl IntoView {
         }
         busy.set(true);
         error.set(None);
+        culprit.set(None);
         note.set(None);
         spawn_local(async move {
             match crate::api::change_email(email.get_untracked().trim(), &password.get_untracked()).await {
@@ -264,6 +289,7 @@ fn EmailForm() -> impl IntoView {
                     password.try_set(String::new());
                 }
                 Err(e) => {
+                    culprit.try_set(culprit_of(&e.code));
                     error.try_set(Some(e.message));
                 }
             }
@@ -293,14 +319,17 @@ fn EmailForm() -> impl IntoView {
             </Show>
             <label class="k-field"><span class="k-label">"Nouvelle adresse e-mail"</span>
                 <input class="k-input" type="email" name="new-email" autocomplete="email" required maxlength="254" bind:value=email
-                    aria-describedby="acct-email-h" aria-invalid=move || error.get().is_some().then_some("true")/></label>
+                    aria-describedby=move || if culprit.get() == Some(Culprit::Value) { "acct-email-h acct-email-err" } else { "acct-email-h" }
+                    aria-invalid=move || (culprit.get() == Some(Culprit::Value)).then_some("true")/></label>
             <label class="k-field"><span class="k-label">"Mot de passe actuel"</span>
-                <input class="k-input" type="password" name="email-password" autocomplete="current-password" required bind:value=password/></label>
+                <input class="k-input" type="password" name="email-password" autocomplete="current-password" required bind:value=password
+                    aria-describedby=move || (culprit.get() == Some(Culprit::Password)).then_some("acct-email-err")
+                    aria-invalid=move || (culprit.get() == Some(Culprit::Password)).then_some("true")/></label>
             <div class="app-acct-actions">
                 <button class="k-btn k-btn--primary" type="submit" disabled=move || busy.get() aria-busy=move || busy.get().to_string()>"Changer l'adresse"</button>
                 <Show when=move || note.get().is_some()><p class="app-hint" role="status">{move || note.get()}</p></Show>
             </div>
-            <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+            <Show when=move || error.get().is_some()><p id="acct-email-err" class="k-error" role="alert">{move || error.get()}</p></Show>
         </form>
     }
 }
@@ -312,6 +341,7 @@ fn PasswordForm() -> impl IntoView {
     let current = RwSignal::new(String::new());
     let new = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
+    let culprit = RwSignal::new(None::<Culprit>);
     let note = RwSignal::new(None::<&'static str>);
     let busy = RwSignal::new(false);
     let submit = move |e: leptos::ev::SubmitEvent| {
@@ -321,6 +351,7 @@ fn PasswordForm() -> impl IntoView {
         }
         busy.set(true);
         error.set(None);
+        culprit.set(None);
         note.set(None);
         spawn_local(async move {
             match crate::api::change_password(&current.get_untracked(), &new.get_untracked()).await {
@@ -330,6 +361,7 @@ fn PasswordForm() -> impl IntoView {
                     new.try_set(String::new());
                 }
                 Err(e) => {
+                    culprit.try_set(culprit_of(&e.code));
                     error.try_set(Some(e.message));
                 }
             }
@@ -341,15 +373,19 @@ fn PasswordForm() -> impl IntoView {
             <h3 id="acct-password-t" class="app-acct-title">"Mot de passe"</h3>
             <p id="acct-password-h" class="app-hint">"8 caractères au moins. Tes autres appareils seront déconnectés ; celui-ci reste ouvert."</p>
             <label class="k-field"><span class="k-label">"Mot de passe actuel"</span>
-                <input class="k-input" type="password" name="old-password" autocomplete="current-password" required bind:value=current/></label>
+                <input class="k-input" type="password" name="old-password" autocomplete="current-password" required bind:value=current
+                    aria-describedby=move || (culprit.get() == Some(Culprit::Password)).then_some("acct-password-err")
+                    aria-invalid=move || (culprit.get() == Some(Culprit::Password)).then_some("true")/></label>
             <label class="k-field"><span class="k-label">"Nouveau mot de passe"</span>
                 <input class="k-input" type="password" name="new-password" autocomplete="new-password" required minlength="8"
-                    bind:value=new aria-describedby="acct-password-h" aria-invalid=move || error.get().is_some().then_some("true")/></label>
+                    bind:value=new
+                    aria-describedby=move || if culprit.get() == Some(Culprit::Value) { "acct-password-h acct-password-err" } else { "acct-password-h" }
+                    aria-invalid=move || (culprit.get() == Some(Culprit::Value)).then_some("true")/></label>
             <div class="app-acct-actions">
                 <button class="k-btn k-btn--primary" type="submit" disabled=move || busy.get() aria-busy=move || busy.get().to_string()>"Changer le mot de passe"</button>
                 <Show when=move || note.get().is_some()><p class="app-hint" role="status">{move || note.get()}</p></Show>
             </div>
-            <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+            <Show when=move || error.get().is_some()><p id="acct-password-err" class="k-error" role="alert">{move || error.get()}</p></Show>
         </form>
     }
 }
