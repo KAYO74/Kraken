@@ -48,7 +48,7 @@ pub async fn join(
         None => (None, state.db.call_access(cid, uid).await?.1),
     };
     if p & perms::CONNECT == 0 {
-        return Err(AppError::forbidden());
+        return Err(crate::api::denied(&state, uid, cid, perms::CONNECT).await);
     }
     let Some(sfu) = state.voice.clone() else { return Err(unavailable()) };
     if req.sdp.len() > 64 * 1024 {

@@ -7,9 +7,19 @@ use kraken_core::perms;
 use kraken_proto::*;
 use sqlx::{Postgres, Row, Transaction};
 
+use crate::perm::timed_out_rights;
 use crate::{Db, DbError, ROLE_COLS, Result, role_from, user_cols, user_from};
 
 pub(crate) type Tx<'a> = Transaction<'a, Postgres>;
+
+/// Ce qu'il reste à faire après la suppression d'un serveur.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeletedGuild {
+    /// Ses membres au moment de la suppression, à prévenir.
+    pub members: Vec<Id>,
+    /// Chemins (sous le dossier de données) des fichiers à effacer.
+    pub files: Vec<String>,
+}
 
 /// Où en est quelqu'un dans un serveur : propriétaire ou non, droits, rang.
 pub(crate) struct Standing {
@@ -48,14 +58,15 @@ pub(crate) async fn lock(tx: &mut Tx<'_>, gid: Id) -> Result<Id> {
 
 /// `None` si ce n'est pas un membre.
 pub(crate) async fn standing(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id) -> Result<Option<Standing>> {
-    let member: bool = sqlx::query_scalar("select exists(select 1 from members where guild_id = $1 and user_id = $2)")
-        .bind(gid)
-        .bind(uid)
-        .fetch_one(&mut **tx)
-        .await?;
-    if !member {
-        return Ok(None);
-    }
+    // Membre ou non, et exclu en ce moment ou non (l'heure de la base fait foi).
+    let timed_out: Option<bool> = sqlx::query_scalar(
+        "select coalesce(timeout_until > now(), false) from members where guild_id = $1 and user_id = $2",
+    )
+    .bind(gid)
+    .bind(uid)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(timed_out) = timed_out else { return Ok(None) };
     let rows = sqlx::query(
         "select r.id, r.position, r.permissions from roles r where r.guild_id = $1
            and (r.id = $1 or r.id in (select role_id from member_roles where guild_id = $1 and user_id = $2))",
@@ -75,9 +86,11 @@ pub(crate) async fn standing(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id) -> Re
         }
     }
     let is_owner = owner == uid;
+    let base = perms::base(is_owner, everyone, held);
     Ok(Some(Standing {
         is_owner,
-        base: perms::base(is_owner, everyone, held),
+        // Exclu : plus que voir et lire, donc plus aucun droit de modérer ni de gérer.
+        base: if timed_out { timed_out_rights(base) } else { base },
         top: perms::top_position(is_owner, positions),
     }))
 }
@@ -99,6 +112,17 @@ async fn forget_member_overwrites(tx: &mut Tx<'_>, gid: Id, uid: Id) -> Result<(
     .bind(uid)
     .execute(&mut **tx)
     .await?;
+    Ok(())
+}
+
+/// Un renvoi ou un bannissement est une sanction qui en remplace une autre : l'exclusion gardée
+/// à un départ précédent ne suit pas la personne si elle revient.
+async fn forget_retained_timeout(tx: &mut Tx<'_>, gid: Id, uid: Id) -> Result<()> {
+    sqlx::query("delete from member_timeouts where guild_id = $1 and user_id = $2")
+        .bind(gid)
+        .bind(uid)
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }
 
@@ -406,6 +430,7 @@ impl Db {
             .execute(&mut *tx)
             .await?;
         forget_member_overwrites(&mut tx, gid, uid).await?;
+        forget_retained_timeout(&mut tx, gid, uid).await?;
         audit(&mut tx, gid, by, "member_kick", Some(uid), reason.as_deref()).await?;
         tx.commit().await?;
         Ok(())
@@ -446,6 +471,7 @@ impl Db {
             .execute(&mut *tx)
             .await?;
         forget_member_overwrites(&mut tx, gid, uid).await?;
+        forget_retained_timeout(&mut tx, gid, uid).await?;
         sqlx::query(
             "insert into bans (guild_id, user_id, moderator_id, reason) values ($1, $2, $3, $4)
              on conflict (guild_id, user_id) do update set moderator_id = $3, reason = $4, created_at = now()",
@@ -544,6 +570,140 @@ impl Db {
         Ok(())
     }
 
+    // ───────── exclusion temporaire ─────────
+
+    /// Exclut temporairement un membre (`seconds` : de 60 s à 28 jours) : il continue de voir et
+    /// de lire, mais ne peut plus écrire, réagir, envoyer de fichier ni parler. La fin se lit
+    /// par comparaison avec l'heure de la base, aucune tâche n'est nécessaire. Droit « Exclure
+    /// temporairement », et la hiérarchie des exclusions : pas soi-même, pas le propriétaire,
+    /// pas un administrateur, pas un rang égal ou supérieur.
+    pub async fn timeout_member(&self, gid: Id, by: Id, uid: Id, seconds: u32, reason: Option<&str>) -> Result<Member> {
+        let reason = clean_reason(reason)?;
+        if !(MIN_TIMEOUT_S..=MAX_TIMEOUT_S).contains(&seconds) {
+            return Err(DbError::Invalid("timeout_seconds"));
+        }
+        let mut tx = self.pool.begin().await?;
+        let owner = lock(&mut tx, gid).await?;
+        let me = actor(&mut tx, gid, owner, by, perms::TIMEOUT).await?;
+        if by == uid {
+            return Err(DbError::Invalid("self_target"));
+        }
+        let target = standing(&mut tx, gid, owner, uid).await?.ok_or(DbError::NotFound)?;
+        me.over(&target)?;
+        if target.base & perms::ADMINISTRATOR != 0 {
+            return Err(DbError::Forbidden("admin_target"));
+        }
+        sqlx::query(
+            "update members set timeout_until = now() + make_interval(secs => $3), updated_at = now()
+             where guild_id = $1 and user_id = $2",
+        )
+        .bind(gid)
+        .bind(uid)
+        .bind(seconds as i32)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "insert into audit_log (guild_id, actor_id, action, target_id, reason, changes) values ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(gid)
+        .bind(by)
+        .bind("member_timeout")
+        .bind(uid)
+        .bind(reason.as_deref())
+        .bind(sqlx::types::Json(serde_json::json!({ "seconds": seconds })))
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        self.members_of(gid, Some(uid)).await?.pop().ok_or(DbError::NotFound)
+    }
+
+    /// Lève l'exclusion temporaire d'un membre (mêmes droits et même hiérarchie que pour la poser).
+    pub async fn remove_timeout(&self, gid: Id, by: Id, uid: Id) -> Result<Member> {
+        let mut tx = self.pool.begin().await?;
+        let owner = lock(&mut tx, gid).await?;
+        let me = actor(&mut tx, gid, owner, by, perms::TIMEOUT).await?;
+        if by == uid {
+            return Err(DbError::Invalid("self_target"));
+        }
+        let target = standing(&mut tx, gid, owner, uid).await?.ok_or(DbError::NotFound)?;
+        me.over(&target)?;
+        let lifted = sqlx::query(
+            "update members set timeout_until = null, updated_at = now()
+             where guild_id = $1 and user_id = $2 and timeout_until > now()",
+        )
+        .bind(gid)
+        .bind(uid)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        if lifted > 0 {
+            audit(&mut tx, gid, by, "member_timeout_remove", Some(uid), None).await?;
+        }
+        tx.commit().await?;
+        self.members_of(gid, Some(uid)).await?.pop().ok_or(DbError::NotFound)
+    }
+
+    /// Jusqu'à quand (ms Unix) ce membre est exclu dans le serveur de ce salon ; `None` s'il ne
+    /// l'est pas (ou plus).
+    pub async fn channel_timeout(&self, uid: Id, cid: Id) -> Result<Option<i64>> {
+        Ok(sqlx::query_scalar(
+            "select (extract(epoch from m.timeout_until) * 1000)::int8
+             from channels c join members m on m.guild_id = c.guild_id
+             where c.id = $1 and m.user_id = $2 and m.timeout_until > now()",
+        )
+        .bind(cid)
+        .bind(uid)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    // ───────── suppression du serveur ─────────
+
+    /// Supprime le serveur, avec tout ce qu'il contient (salons, messages, rôles, invitations,
+    /// pièces jointes…). Réservé au propriétaire, qui doit retaper le nom du serveur. Rend les
+    /// membres d'alors (à prévenir) et les chemins des fichiers à effacer du disque.
+    pub async fn delete_guild(&self, gid: Id, by: Id, name: &str) -> Result<DeletedGuild> {
+        let mut tx = self.pool.begin().await?;
+        let owner = lock(&mut tx, gid).await?;
+        let me = standing(&mut tx, gid, owner, by).await?.ok_or(DbError::NotFound)?;
+        if !me.is_owner {
+            return Err(DbError::Forbidden("owner_only"));
+        }
+        let actual: String =
+            sqlx::query_scalar("select name from guilds where id = $1").bind(gid).fetch_one(&mut *tx).await?;
+        if name.trim() != actual {
+            return Err(DbError::Invalid("name_mismatch"));
+        }
+        let members: Vec<Id> = sqlx::query_scalar("select user_id from members where guild_id = $1 order by joined_at")
+            .bind(gid)
+            .fetch_all(&mut *tx)
+            .await?;
+        let mut files = Vec::new();
+        for r in sqlx::query(
+            "select a.storage_key, a.preview from attachments a join channels c on c.id = a.channel_id where c.guild_id = $1",
+        )
+        .bind(gid)
+        .fetch_all(&mut *tx)
+        .await?
+        {
+            files.extend(crate::attachment_paths(r.try_get("storage_key")?, r.try_get("preview")?));
+        }
+        let embeds: Vec<sqlx::types::Json<Vec<Embed>>> = sqlx::query_scalar(
+            "select m.embeds from messages m join channels c on c.id = m.channel_id
+             where c.guild_id = $1 and m.embeds <> '[]'::jsonb",
+        )
+        .bind(gid)
+        .fetch_all(&mut *tx)
+        .await?;
+        for e in embeds {
+            files.extend(crate::embed_paths(&e.0));
+        }
+        // Tout le reste part en cascade (salons et leurs messages, rôles, invitations, journal…).
+        sqlx::query("delete from guilds where id = $1").bind(gid).execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(DeletedGuild { members, files })
+    }
+
     /// Quitte le serveur. Le propriétaire doit d'abord transférer la propriété.
     pub async fn leave_guild(&self, gid: Id, uid: Id) -> Result<()> {
         let mut tx = self.pool.begin().await?;
@@ -551,6 +711,22 @@ impl Db {
         if owner == uid {
             return Err(DbError::Forbidden("owner_leave"));
         }
+        // Partir ne lève pas l'exclusion : on garde son échéance pour le retour par invitation
+        // (et on laisse tomber au passage celles qui sont déjà finies).
+        sqlx::query("delete from member_timeouts where guild_id = $1 and until <= now()")
+            .bind(gid)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "insert into member_timeouts (guild_id, user_id, until)
+             select guild_id, user_id, timeout_until from members
+             where guild_id = $1 and user_id = $2 and timeout_until > now()
+             on conflict (guild_id, user_id) do update set until = excluded.until",
+        )
+        .bind(gid)
+        .bind(uid)
+        .execute(&mut *tx)
+        .await?;
         let done = sqlx::query("delete from members where guild_id = $1 and user_id = $2")
             .bind(gid)
             .bind(uid)

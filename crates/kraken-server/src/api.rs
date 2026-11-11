@@ -25,9 +25,20 @@ pub(crate) async fn channel_perms(state: &AppState, uid: Id, cid: Id, need: u64)
         return Err(AppError::not_found()); // ne pas révéler l'existence du salon
     }
     if p & need != need {
-        return Err(AppError::forbidden());
+        return Err(denied(state, uid, cid, need & !p).await);
     }
     Ok(p)
+}
+
+/// Le refus pour des droits qui manquent : « exclu temporairement » (avec la fin de l'exclusion)
+/// si c'est elle qui les retire, sinon un simple 403.
+pub(crate) async fn denied(state: &AppState, uid: Id, cid: Id, missing: u64) -> AppError {
+    if missing & !(perms::VIEW_CHANNEL | perms::READ_HISTORY) != 0
+        && let Ok(Some(until)) = state.db.channel_timeout(uid, cid).await
+    {
+        return AppError::timed_out(until);
+    }
+    AppError::forbidden()
 }
 
 /// Réactions ajoutées ou retirées par minute et par client.
@@ -136,6 +147,13 @@ pub async fn edit_message(
     Json(req): Json<EditMessage>,
 ) -> ApiResult<Json<Message>> {
     let p = channel_perms(&state, auth.user.id, cid, perms::READ_HISTORY).await?;
+    // Exclu temporairement : il relit ses anciens messages, il ne les réécrit pas (en supprimer
+    // un de lui reste permis : c'est retirer, pas dire). Un administrateur n'est jamais exclu.
+    if p & perms::SEND_MESSAGES == 0
+        && let Some(until) = state.db.channel_timeout(auth.user.id, cid).await?
+    {
+        return Err(AppError::timed_out(until));
+    }
     let before = state.db.message(mid).await?;
     let m = state.db.edit_message(cid, mid, auth.user.id, &req.content, p & perms::MENTION_EVERYONE != 0).await?;
     if before.as_ref() != Some(&m) {
@@ -221,23 +239,60 @@ pub async fn create_invite(
 ) -> ApiResult<(StatusCode, Json<Invite>)> {
     let c = require_channel(&state, auth.user.id, cid, perms::CREATE_INVITE).await?;
     let gid = c.guild_id.ok_or_else(|| AppError::invalid("Pas d'invitation pour un MP."))?;
-    if req.max_age.is_some_and(|a| a > 60 * 60 * 24 * 30) || req.max_uses.is_some_and(|u| u > 1000) {
-        return Err(AppError::invalid("Durée de 30 jours et 1000 usages au plus."));
+    let max_uses = req.max_uses.unwrap_or(0);
+    if req.reuse
+        && max_uses == 0
+        && req.max_age.is_none()
+        && let Some(inv) = state.db.reusable_invite(gid, cid, auth.user.id).await?
+    {
+        return Ok((StatusCode::OK, Json(inv)));
     }
-    let inv = state.db.create_invite(gid, Some(cid), auth.user.id, req.max_uses.unwrap_or(0), req.max_age).await?;
+    let inv = state.db.create_invite(gid, Some(cid), auth.user.id, max_uses, req.max_age).await?;
     Ok((StatusCode::CREATED, Json(inv)))
 }
 
-/// Aperçu public, sans session.
+/// Une invitation inconnue ou révoquée : le code dit laquelle des deux situations, pour la page d'arrivée.
+fn dead_invite(e: kraken_db::DbError) -> AppError {
+    match e {
+        kraken_db::DbError::NotFound => AppError::invite_unknown(),
+        e => e.into(),
+    }
+}
+
+/// Aperçu public, sans session. Inconnue ou révoquée, périmée, épuisée : 404, avec un code
+/// (`invite_unknown`, `invite_expired`, `invite_exhausted`) que la page d'invitation traduit.
 pub async fn invite(State(state): State<AppState>, Path(code): Path<String>) -> ApiResult<Json<Invite>> {
+    if code.len() > 16 || !code.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return Err(AppError::invite_unknown());
+    }
+    state.db.invite_checked(&code).await.map(Json).map_err(dead_invite)
+}
+
+/// `GET /guilds/{id}/invites` : les invitations du serveur (toutes avec « Gérer le serveur »,
+/// les siennes avec « Créer une invitation »), les périmées ou épuisées récentes en dernier.
+pub async fn guild_invites(
+    State(state): State<AppState>,
+    auth: Auth,
+    Path(gid): Path<Id>,
+) -> ApiResult<Json<Vec<GuildInvite>>> {
+    Ok(Json(state.db.guild_invites(gid, auth.user.id).await?))
+}
+
+/// `DELETE /invites/{code}` : révoquer une invitation (« Gérer le serveur », ou celui qui l'a créée).
+pub async fn revoke_invite(
+    State(state): State<AppState>,
+    auth: Auth,
+    Path(code): Path<String>,
+) -> ApiResult<StatusCode> {
     if code.len() > 16 || !code.bytes().all(|b| b.is_ascii_alphanumeric()) {
         return Err(AppError::not_found());
     }
-    state.db.invite(&code).await?.map(Json).ok_or_else(AppError::not_found)
+    state.db.revoke_invite(&code, auth.user.id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn join(State(state): State<AppState>, auth: Auth, Path(code): Path<String>) -> ApiResult<Json<GuildState>> {
-    let (g, new) = state.db.use_invite(&code, auth.user.id).await?;
+    let (g, new) = state.db.use_invite(&code, auth.user.id).await.map_err(dead_invite)?;
     let g = state.with_voice(g);
     if let Some(member) = new {
         let others: Vec<Id> = g.members.iter().map(|m| m.user.id).filter(|u| *u != auth.user.id).collect();

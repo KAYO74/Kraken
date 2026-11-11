@@ -1,6 +1,6 @@
 //! S28 connexion et inscription ; page d'invitation (F06).
 
-use kraken_proto::Invite;
+use kraken_proto::{ApiError, Invite};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::NavigateOptions;
@@ -149,17 +149,27 @@ pub fn Register() -> impl IntoView {
     }
 }
 
+/// Ce qu'on dit d'un lien d'invitation qui ne marche pas : le serveur sait pourquoi quand il le
+/// connaît (expiré, épuisé, révoqué) ; sinon, une phrase qui couvre le reste.
+fn dead_invite(e: ApiError) -> String {
+    match e.code.as_str() {
+        "invite_expired" | "invite_exhausted" | "invite_unknown" => e.message,
+        _ => "Ce lien n'existe pas ou n'est plus valable. Demande-en un nouveau.".into(),
+    }
+}
+
 #[component]
 pub fn InvitePage() -> impl IntoView {
     let s = store();
     let params = use_params_map();
     let code = move || params.read().get("code").unwrap_or_default();
+    // Un lien mort dit pourquoi : expiré, épuisé, ou révoqué (ou jamais existé).
     let invite = RwSignal::new(None::<Result<Invite, String>>);
     let busy = RwSignal::new(false);
     let error = RwSignal::new(None::<String>);
     Effect::new(move || {
         let c = code();
-        spawn_local(async move { invite.set(Some(crate::api::invite(&c).await.map_err(|e| e.message))) });
+        spawn_local(async move { invite.set(Some(crate::api::invite(&c).await.map_err(dead_invite))) });
     });
     let navigate = use_navigate();
     let join = move |_| {
@@ -175,6 +185,8 @@ pub fn InvitePage() -> impl IntoView {
                     s.upsert_guild(g);
                     navigate(&to, Default::default());
                 }
+                // Le lien est mort entre l'affichage de la page et le clic : la page le dit.
+                Err(e) if e.code.starts_with("invite_") => _ = invite.try_set(Some(Err(dead_invite(e)))),
                 Err(e) => _ = error.try_set(Some(e.message)),
             }
             // La page a pu être quittée pendant l'adhésion.
@@ -187,10 +199,10 @@ pub fn InvitePage() -> impl IntoView {
             <div class="k-dialog app-auth-card">
                 {move || match invite.get() {
                     None => view! { <div class="app-form" aria-busy="true"><div class="k-skeleton app-skel-block"></div></div> }.into_any(),
-                    Some(Err(_)) => view! {
+                    Some(Err(why)) => view! {
                         <header><h1>"Invitation invalide"</h1></header>
-                        <div><p>"Ce lien a expiré, a atteint sa limite ou n'a jamais existé. Demande-en un nouveau."</p></div>
-                        <footer><a class="k-btn" href="/channels/@me">"Retour à l'accueil"</a></footer>
+                        <div><p>{why}</p></div>
+                        <footer><a class="k-btn k-btn--primary" href="/channels/@me">"Retour à l'accueil"</a></footer>
                     }.into_any(),
                     Some(Ok(i)) => { let join = join.clone(); view! {
                         <header class="app-invite-head">

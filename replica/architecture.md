@@ -96,12 +96,14 @@ REST sous `/api/v1`, JSON, jeton `Authorization: Session <t>` (ou `Bot <t>`). Qu
 | PATCH /guilds/{id}/members/@me | profil par serveur | membre | nick, avatar, bio | membre | F08 |
 | DELETE /guilds/{id}/members/{uid} | expulser (ou quitter si @me) | KICK | reason | 204 | S22 |
 | PUT/DELETE /guilds/{id}/bans/{uid} | bannir, débannir | BAN | reason, purge_s | 204 | S22 |
-| POST /channels/{id}/invites, GET /guilds/{id}/invites | créer, lister | CREATE_INVITE / MANAGE_GUILD | max_age, max_uses | invite | F05 |
+| POST /channels/{id}/invites, GET /guilds/{id}/invites | créer (400 `invite_limit` au-delà de 50 actives par personne et par serveur), lister (200 lignes au plus, les actives d'abord) | CREATE_INVITE / MANAGE_GUILD | max_age, max_uses | invite | F05 |
 | GET /invites/{code} | aperçu | anon | — | serveur, nb membres | F06 |
-| POST /invites/{code} | rejoindre | user non banni | — | guild | F06 |
+| POST /invites/{code} | rejoindre (une exclusion temporaire gardée à un départ est rétablie, à la même échéance) | user non banni | — | guild | F06 |
+| DELETE /invites/{code} | révoquer (suppression ; la trace reste dans `audit_log`) | créateur / MANAGE_GUILD | — | 204 | F06 |
+| PUT/DELETE /guilds/{id}/members/{uid}/timeout | exclusion temporaire (60 s à 28 j), la lever ; 403 `timed_out` sur écrire, modifier ses messages, réagir, joindre, parler ; un exclu non administrateur n'a plus que voir et lire, donc plus aucun droit de modérer, gérer ou inviter (403) ; quitter ne la lève pas (table `member_timeouts`, rétablie au retour par invitation, effacée par un renvoi ou un bannissement) | TIMEOUT (sous son rang) | seconds, reason | membre | S22 |
 | GET /channels/{id}/messages?before=&after=&limit= | historique | VIEW_CHANNEL+READ_HISTORY | — | messages | F01 |
 | POST /channels/{id}/messages | envoyer (mode lent, AutoMod, mentions) | SEND_MESSAGES | content, nonce, reply_to, attachment_ids, sticker_ids | message | F01 |
-| PATCH/DELETE /channels/{id}/messages/{mid} | modifier (auteur), supprimer (auteur ou MANAGE_MESSAGES) | — | content | message | F10 |
+| PATCH/DELETE /channels/{id}/messages/{mid} | modifier (auteur, sauf exclu temporairement : 403 `timed_out`), supprimer (auteur, même exclu, ou MANAGE_MESSAGES) | — | content | message | F10 |
 | PUT/DELETE /channels/{id}/pins/{mid} | épingler | MANAGE_MESSAGES | — | 204 | F10 |
 | PUT/DELETE /channels/{id}/messages/{mid}/reactions/{emoji}/@me | réagir, super réaction | ADD_REACTIONS | burst | 204 | F10 |
 | POST /channels/{id}/messages/{mid}/threads, POST /channels/{id}/threads | fil depuis un message, post de forum | CREATE_THREADS | name, tags | channel | F10, S24 |

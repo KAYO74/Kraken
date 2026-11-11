@@ -260,6 +260,20 @@ impl Store {
         })
     }
 
+    /// Jusqu'à quand je suis exclu temporairement de ce serveur (ms Unix, suivi). La date peut
+    /// être passée : voir [`crate::ui::still`] pour ne garder que l'exclusion en cours.
+    pub fn my_timeout(&self, guild: Id) -> Option<i64> {
+        let me = self.me.with(|m| m.as_ref().map(|m| m.id))?;
+        self.member_timeout(guild, me)
+    }
+
+    /// Pareil pour n'importe quel membre.
+    pub fn member_timeout(&self, guild: Id, uid: Id) -> Option<i64> {
+        self.guilds.with(|gs| {
+            gs.iter().find(|g| g.guild.id == guild)?.members.iter().find(|m| m.user.id == uid)?.timeout_until
+        })
+    }
+
     /// Rang le plus haut d'un membre (suivi) : position de son rôle le plus élevé ; le
     /// propriétaire est au-dessus de tout.
     pub fn top_of(&self, guild: Id, uid: Id) -> i32 {
@@ -430,6 +444,19 @@ impl Store {
 
     /// Salon de serveur supprimé, ou devenu invisible pour moi : il quitte la liste, avec ceux qui
     /// y parlaient et ce qu'on en savait.
+    /// Le serveur n'est plus à moi (quitté, exclu, banni, supprimé) : il quitte ma liste, et la
+    /// coquille ramène à l'accueil si c'était celui qu'elle affichait.
+    pub fn remove_guild(&self, guild_id: Id) {
+        // Plus de salon vocal où être : le serveur n'est plus là pour l'annoncer.
+        if self.voice.room.get_untracked().is_some_and(|r| r.guild == Some(guild_id)) {
+            self.voice.hang_up();
+        }
+        self.guilds.update(|gs| gs.retain(|g| g.guild.id != guild_id));
+        self.bans.update(|b| {
+            b.remove(&guild_id);
+        });
+    }
+
     pub fn remove_channel(&self, id: Id) {
         self.guilds.update(|gs| {
             for g in gs.iter_mut().filter(|g| g.channels.iter().any(|c| c.id == id)) {
@@ -527,13 +554,11 @@ impl Store {
                     *m = member;
                 }
             }),
+            Event::GuildDelete { guild_id } => self.remove_guild(guild_id),
             Event::GuildMemberRemove { guild_id, user_id } => {
                 if self.my_id() == Some(user_id) {
                     // Parti, exclu ou banni : le serveur disparaît de ma liste (la coquille quitte son écran).
-                    self.guilds.update(|gs| gs.retain(|g| g.guild.id != guild_id));
-                    self.bans.update(|b| {
-                        b.remove(&guild_id);
-                    });
+                    self.remove_guild(guild_id);
                 } else {
                     self.in_guild(guild_id, |g| g.members.retain(|m| m.user.id != user_id));
                 }

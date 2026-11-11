@@ -1,7 +1,7 @@
 //! Chargement de ce qu'il faut pour calculer des droits dans un serveur, puis calcul en
 //! mémoire avec `kraken-core` (une requête par table, pas une par salon).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use kraken_core::perms::{self, Overwrite, Target};
 use kraken_proto::Id;
@@ -21,12 +21,21 @@ pub(crate) const DM: u64 = perms::VIEW_CHANNEL
     | perms::VIDEO
     | perms::STREAM;
 
+/// Ce qu'il reste à un membre exclu temporairement : voir et lire, rien d'autre (ni écrire,
+/// ni réagir, ni parler, ni modérer, ni gérer, ni inviter). Les administrateurs et le
+/// propriétaire, dont les droits comprennent `ADMINISTRATOR`, ne sont jamais bridés.
+pub(crate) fn timed_out_rights(rights: u64) -> u64 {
+    if rights & perms::ADMINISTRATOR != 0 { rights } else { rights & (perms::VIEW_CHANNEL | perms::READ_HISTORY) }
+}
+
 pub(crate) struct Ctx {
     gid: Id,
     owner: Id,
     role_perms: HashMap<Id, u64>,
     /// Membres chargés (un seul ou tous) et leurs rôles.
     members: HashMap<Id, Vec<Id>>,
+    /// Parmi eux, ceux qui sont exclus temporairement en ce moment.
+    timed_out: HashSet<Id>,
     overwrites: HashMap<Id, Vec<Overwrite>>,
 }
 
@@ -53,18 +62,25 @@ impl Ctx {
             .iter()
             .map(|r| Ok((r.try_get("id")?, r.try_get::<i64, _>("permissions")? as u64)))
             .collect::<sqlx::Result<_>>()?;
-        let members = sqlx::query(
-            "select m.user_id, coalesce(array_agg(mr.role_id) filter (where mr.role_id is not null), '{}') as roles
+        let rows = sqlx::query(
+            "select m.user_id, coalesce(array_agg(mr.role_id) filter (where mr.role_id is not null), '{}') as roles,
+                    coalesce(bool_or(m.timeout_until > now()), false) as timed_out
              from members m left join member_roles mr on mr.guild_id = m.guild_id and mr.user_id = m.user_id
              where m.guild_id = $1 and ($2::uuid is null or m.user_id = $2) group by m.user_id",
         )
         .bind(gid)
         .bind(only)
         .fetch_all(&mut *conn)
-        .await?
-        .iter()
-        .map(|r| Ok((r.try_get("user_id")?, r.try_get("roles")?)))
-        .collect::<sqlx::Result<_>>()?;
+        .await?;
+        let mut members = HashMap::new();
+        let mut timed_out = HashSet::new();
+        for r in &rows {
+            let uid: Id = r.try_get("user_id")?;
+            members.insert(uid, r.try_get("roles")?);
+            if r.try_get::<bool, _>("timed_out")? {
+                timed_out.insert(uid);
+            }
+        }
         let mut overwrites: HashMap<Id, Vec<Overwrite>> = HashMap::new();
         for r in sqlx::query(
             "select po.channel_id, po.target_id, po.target_kind, po.allow, po.deny
@@ -86,7 +102,7 @@ impl Ctx {
                 deny: r.try_get::<i64, _>("deny")? as u64,
             });
         }
-        Ok(Some(Self { gid, owner, role_perms, members, overwrites }))
+        Ok(Some(Self { gid, owner, role_perms, members, timed_out, overwrites }))
     }
 
     /// Un membre qui n'a que `@everyone` ne voit pas ce salon (le sien ou celui de sa catégorie).
@@ -110,8 +126,17 @@ impl Ctx {
         self.members.keys().copied()
     }
 
-    /// Droits au niveau du serveur ; 0 pour un non-membre.
+    /// Droits au niveau du serveur ; 0 pour un non-membre. Un membre exclu temporairement n'a
+    /// plus que de quoi voir et lire (voir [`timed_out_rights`]) : il ne modère plus, ne gère
+    /// plus, n'invite plus, tant que dure l'exclusion.
     pub fn base(&self, uid: Id) -> u64 {
+        let raw = self.raw_base(uid);
+        if self.timed_out.contains(&uid) { timed_out_rights(raw) } else { raw }
+    }
+
+    /// Droits du serveur sans le bridage de l'exclusion : sert de point de départ aux salons
+    /// (les surcharges s'appliquent avant le bridage, pas après).
+    fn raw_base(&self, uid: Id) -> u64 {
         let Some(roles) = self.members.get(&uid) else { return 0 };
         let role = |id: &Id| self.role_perms.get(id).copied().unwrap_or(0);
         perms::base(self.owner == uid, role(&self.gid), roles.iter().map(role))
@@ -119,12 +144,19 @@ impl Ctx {
 
     /// Droits dans un salon : surcharges de la catégorie, puis du salon.
     pub fn channel(&self, uid: Id, cid: Id, parent: Option<Id>) -> u64 {
-        let base = self.base(uid);
+        let base = self.raw_base(uid);
         if base == 0 {
             return 0;
         }
         let (above, own) = self.layers(cid, parent);
         let roles = self.members.get(&uid).map(Vec::as_slice).unwrap_or(&[]);
-        perms::in_layers(base, self.gid, uid, roles, &[above, own])
+        let p = perms::in_layers(base, self.gid, uid, roles, &[above, own]);
+        // Exclu temporairement : il voit et lit, rien de plus (ni écrire, ni réagir, ni envoyer
+        // de fichier, ni parler). Le propriétaire et les administrateurs ne le sont jamais.
+        if self.timed_out.contains(&uid) && base & perms::ADMINISTRATOR == 0 {
+            p & (perms::VIEW_CHANNEL | perms::READ_HISTORY)
+        } else {
+            p
+        }
     }
 }

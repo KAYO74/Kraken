@@ -227,6 +227,9 @@ pub struct Member {
     pub nick: Option<String>,
     pub roles: Vec<Id>,
     pub joined_at: i64,
+    /// Exclusion temporaire : jusqu'à quand (ms Unix) ; `None` s'il n'y en a pas ou si elle est finie.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_until: Option<i64>,
 }
 
 /// Un serveur avec ce qu'il faut pour l'afficher (READY, GUILD_CREATE).
@@ -263,6 +266,19 @@ pub const MAX_TOPIC: usize = 1024;
 pub const SLOWMODE_STEPS: [u32; 8] = [0, 5, 10, 30, 60, 300, 900, 3600];
 /// Au plus ce nombre de surcharges de droits par salon.
 pub const MAX_OVERWRITES: usize = 100;
+/// Une invitation dure 7 jours au plus (ou n'expire jamais), en secondes.
+pub const MAX_INVITE_AGE_S: u32 = 7 * 24 * 3600;
+/// Une invitation sert 1000 fois au plus (0 : autant qu'on veut).
+pub const MAX_INVITE_USES: u32 = 1000;
+/// Jours pendant lesquels une invitation expirée ou épuisée reste dans la liste du serveur.
+pub const INVITE_KEEP_DAYS: i32 = 7;
+/// Au plus ce nombre d'invitations actives (ni expirées, ni épuisées) par personne et par serveur.
+pub const MAX_INVITES_PER_MEMBER: usize = 50;
+/// La liste des invitations d'un serveur ne rend jamais plus de lignes que cela (les actives d'abord).
+pub const MAX_INVITE_ROWS: usize = 200;
+/// Une exclusion temporaire dure de 60 secondes à 28 jours.
+pub const MIN_TIMEOUT_S: u32 = 60;
+pub const MAX_TIMEOUT_S: u32 = 28 * 24 * 3600;
 
 /// `PUT /channels/{id}/position` : place le salon dans ce parent (`None` : hors catégorie ; une
 /// catégorie n'a jamais de parent), à ce rang (0 : en premier) parmi les salons que l'on voit
@@ -450,6 +466,10 @@ pub struct CreateInvite {
     pub max_age: Option<u32>,
     /// 0 ou `None` : illimité.
     pub max_uses: Option<u32>,
+    /// Sans fin et sans limite : reprendre celle que la personne a déjà dans ce salon plutôt
+    /// que d'en créer une de plus (le bouton « Inviter » du rail, pour ne pas remplir le plafond).
+    #[serde(default)]
+    pub reuse: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -461,6 +481,45 @@ pub struct Invite {
     pub uses: u32,
     pub max_uses: u32,
     pub expires_at: Option<i64>,
+}
+
+/// Où en est une invitation : encore valable, trop vieille ou déjà utilisée autant que permis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InviteState {
+    Active,
+    Expired,
+    Exhausted,
+}
+
+/// Une ligne de la liste des invitations d'un serveur (`GET /guilds/{id}/invites`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GuildInvite {
+    pub code: String,
+    pub channel_id: Option<Id>,
+    pub channel_name: Option<String>,
+    /// Qui l'a créée ; `None` si son compte n'existe plus.
+    pub inviter: Option<User>,
+    pub uses: u32,
+    /// 0 : illimité.
+    pub max_uses: u32,
+    pub created_at: i64,
+    pub expires_at: Option<i64>,
+    pub state: InviteState,
+}
+
+/// `DELETE /guilds/{id}` : le nom du serveur, retapé pour confirmer.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct DeleteGuild {
+    pub name: String,
+}
+
+/// `PUT /guilds/{id}/members/{uid}/timeout`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TimeoutMember {
+    /// De [`MIN_TIMEOUT_S`] à [`MAX_TIMEOUT_S`].
+    pub seconds: u32,
+    pub reason: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -612,6 +671,9 @@ pub struct SetNotify {
 pub struct ApiError {
     pub code: String,
     pub message: String,
+    /// Avec le code `timed_out` : jusqu'à quand (ms Unix) la personne est exclue.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_until: Option<i64>,
 }
 
 // ───────────── salons vocaux ─────────────
@@ -933,6 +995,10 @@ pub enum Event {
         user_id: Id,
     },
     GuildCreate(Box<GuildState>),
+    /// Le serveur n'existe plus : son propriétaire l'a supprimé.
+    GuildDelete {
+        guild_id: Id,
+    },
     MemberAdd {
         guild_id: Id,
         member: Member,

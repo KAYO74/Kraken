@@ -3,8 +3,8 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use kraken_db::DbError;
 use kraken_proto::{
-    ApiError, MAX_CHANNEL_NAME, MAX_CHANNELS, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_OVERWRITES, MAX_PURGE_HOURS,
-    MAX_REASON, MAX_ROLES, MAX_TOPIC,
+    ApiError, MAX_CHANNEL_NAME, MAX_CHANNELS, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_INVITE_USES,
+    MAX_INVITES_PER_MEMBER, MAX_OVERWRITES, MAX_PURGE_HOURS, MAX_REASON, MAX_ROLES, MAX_TOPIC,
 };
 
 /// Erreur d'API : un code stable que le client traduit, et un message de secours.
@@ -25,6 +25,15 @@ impl AppError {
     }
     pub fn not_found() -> Self {
         Self(StatusCode::NOT_FOUND, "not_found", "Introuvable.".into())
+    }
+    /// Invitation inconnue (jamais créée, ou révoquée).
+    pub fn invite_unknown() -> Self {
+        Self(StatusCode::NOT_FOUND, "invite_unknown", "Cette invitation n'existe pas ou a été révoquée.".into())
+    }
+    /// Exclu temporairement jusqu'à `until` (ms Unix) : lire reste permis, pas le reste. Le
+    /// texte du message porte la fin ; `into_response` la met aussi dans le champ `timeout_until`.
+    pub fn timed_out(until: i64) -> Self {
+        Self(StatusCode::FORBIDDEN, "timed_out", until.to_string())
     }
 }
 
@@ -75,6 +84,33 @@ impl From<DbError> for AppError {
             ),
             DbError::Invalid("parent_id") => Self::invalid("Cette catégorie n'existe pas ou n'est pas visible."),
             DbError::Invalid("overwrite") => Self::invalid("Un droit ne peut pas être à la fois autorisé et refusé."),
+            DbError::Gone("expired") => Self(
+                StatusCode::NOT_FOUND,
+                "invite_expired",
+                "Cette invitation a expiré. Demande-en une nouvelle.".into(),
+            ),
+            DbError::Gone(_) => Self(
+                StatusCode::NOT_FOUND,
+                "invite_exhausted",
+                "Cette invitation a déjà servi autant de fois que permis. Demande-en une nouvelle.".into(),
+            ),
+            DbError::Invalid("invite_limit") => Self(
+                StatusCode::BAD_REQUEST,
+                "invite_limit",
+                format!("Tu as déjà {MAX_INVITES_PER_MEMBER} invitations actives. Révoque-en une."),
+            ),
+            DbError::Invalid("invite_age") => Self::invalid("Une invitation dure 7 jours au plus, ou n'expire jamais."),
+            DbError::Invalid("invite_uses") => {
+                Self::invalid(format!("Une invitation sert {MAX_INVITE_USES} fois au plus (0 : sans limite)."))
+            }
+            DbError::Invalid("name_mismatch") => Self(
+                StatusCode::BAD_REQUEST,
+                "name_mismatch",
+                "Le nom retapé ne correspond pas à celui du serveur.".into(),
+            ),
+            DbError::Invalid("timeout_seconds") => {
+                Self::invalid("Une exclusion temporaire dure de 1 minute à 28 jours.")
+            }
             DbError::Invalid("overwrite_kind") => {
                 Self::invalid("Ce réglage existe déjà pour un autre genre de cible (rôle ou membre).")
             }
@@ -110,6 +146,11 @@ impl From<DbError> for AppError {
             DbError::Forbidden("owner_only") => {
                 Self(StatusCode::FORBIDDEN, "forbidden", "Seul le propriétaire peut faire ça.".into())
             }
+            DbError::Forbidden("admin_target") => Self(
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                "Un administrateur ne peut pas être exclu temporairement.".into(),
+            ),
             DbError::Forbidden("lockout") => Self(
                 StatusCode::FORBIDDEN,
                 "lockout",
@@ -183,7 +224,16 @@ impl IntoResponse for AppError {
         let wait = (self.1 == "slowmode")
             .then(|| self.2.split(|c: char| !c.is_ascii_digit()).find_map(|d| d.parse::<u32>().ok()))
             .flatten();
-        let mut res = (self.0, Json(ApiError { code: self.1.into(), message: self.2 })).into_response();
+        // `timed_out` : la fin de l'exclusion voyage dans le message jusqu'ici, où elle devient un champ.
+        let (message, timeout_until) = match (self.1, self.2.parse::<i64>()) {
+            ("timed_out", Ok(until)) => (
+                "Tu es exclu temporairement : tu peux lire, mais pas écrire, réagir, envoyer de fichier ni parler."
+                    .to_string(),
+                Some(until),
+            ),
+            _ => (self.2, None),
+        };
+        let mut res = (self.0, Json(ApiError { code: self.1.into(), message, timeout_until })).into_response();
         if let Some(n) = wait {
             res.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from(n));
         }

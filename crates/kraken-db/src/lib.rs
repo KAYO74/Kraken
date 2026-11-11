@@ -7,6 +7,7 @@
 mod calls;
 mod channels;
 mod files;
+mod invites;
 mod jobs;
 mod moderation;
 mod perm;
@@ -16,7 +17,6 @@ mod social;
 
 use kraken_core::perms;
 use kraken_proto::*;
-use rand::Rng;
 use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
 use sqlx::types::Json;
 use sqlx::{Postgres, Row, Transaction};
@@ -24,6 +24,7 @@ use sqlx::{Postgres, Row, Transaction};
 pub use channels::clean_channel_name;
 pub use files::{NewAttachment, StoredAttachment, attachment_paths, embed_paths};
 pub use jobs::Job;
+pub use moderation::DeletedGuild;
 pub use social::Notices;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,10 +38,31 @@ pub enum DbError {
     Forbidden(&'static str),
     /// Mode lent : encore tant de secondes avant le prochain message.
     Slowmode(u32),
+    /// Une invitation qui existe mais ne sert plus : `"expired"` ou `"exhausted"`.
+    Gone(&'static str),
     Internal(String),
 }
 
 pub type Result<T> = std::result::Result<T, DbError>;
+
+/// Clés étrangères qui disent « le salon (ou le serveur) sur lequel on écrit n'existe plus ».
+const VANISHED_TARGETS: &[&str] = &[
+    "messages_channel_id_fkey",
+    "read_states_channel_id_fkey",
+    "slowmode_marks_channel_id_fkey",
+    "attachments_channel_id_fkey",
+    "permission_overwrites_channel_id_fkey",
+    "notification_overrides_channel_id_fkey",
+    "notification_overrides_guild_id_fkey",
+    "invites_channel_id_fkey",
+    "invites_guild_id_fkey",
+    "members_guild_id_fkey",
+    "member_timeouts_guild_id_fkey",
+    "roles_guild_id_fkey",
+    "channels_guild_id_fkey",
+    "bans_guild_id_fkey",
+    "audit_log_guild_id_fkey",
+];
 
 impl From<sqlx::Error> for DbError {
     fn from(e: sqlx::Error) -> Self {
@@ -60,6 +82,11 @@ impl From<sqlx::Error> for DbError {
                 }
                 // Contrainte, texte trop long, caractère nul ou inencodable.
                 Some("23514" | "22001" | "22021" | "22P05") => return Self::Invalid("value"),
+                // Le salon ou le serveur visé a été supprimé entre la vérification et l'écriture
+                // (envoi pendant la suppression du salon, par exemple) : il n'existe plus. Seules
+                // les clés vers le salon ou le serveur visé comptent ; toute autre clé étrangère
+                // reste une erreur du serveur, pour ne pas cacher un vrai défaut.
+                Some("23503") if VANISHED_TARGETS.contains(&c) => return Self::NotFound,
                 _ => {}
             }
         }
@@ -661,11 +688,12 @@ impl Db {
     async fn members_of(&self, gid: Id, only: Option<Id>) -> Result<Vec<Member>> {
         let rows = sqlx::query(&format!(
             "select {}, m.nick, (extract(epoch from m.joined_at) * 1000)::int8 as joined_ms,
+                    case when m.timeout_until > now() then (extract(epoch from m.timeout_until) * 1000)::int8 end as timeout_ms,
                     coalesce(array_agg(mr.role_id) filter (where mr.role_id is not null), '{{}}') as roles
              from members m join users u on u.id = m.user_id
              left join member_roles mr on mr.guild_id = m.guild_id and mr.user_id = m.user_id
              where m.guild_id = $1 and ($2::uuid is null or m.user_id = $2)
-             group by u.id, m.nick, m.joined_at order by m.joined_at",
+             group by u.id, m.nick, m.joined_at, m.timeout_until order by m.joined_at",
             user_cols("u")
         ))
         .bind(gid)
@@ -679,6 +707,7 @@ impl Db {
                     nick: r.try_get("nick")?,
                     roles: r.try_get("roles")?,
                     joined_at: r.try_get("joined_ms")?,
+                    timeout_until: r.try_get("timeout_ms")?,
                 })
             })
             .collect::<sqlx::Result<_>>()
@@ -1115,104 +1144,6 @@ impl Db {
             > 0)
     }
 
-    // ───────── invitations ─────────
-
-    pub async fn create_invite(
-        &self,
-        gid: Id,
-        cid: Option<Id>,
-        inviter: Id,
-        max_uses: u32,
-        max_age_s: Option<u32>,
-    ) -> Result<Invite> {
-        let code: String = rand::rng().sample_iter(rand::distr::Alphanumeric).take(8).map(char::from).collect();
-        sqlx::query(
-            "insert into invites (code, guild_id, channel_id, inviter_id, max_uses, expires_at)
-             values ($1, $2, $3, $4, $5, case when $6::int > 0 then now() + make_interval(secs => $6) end)",
-        )
-        .bind(&code)
-        .bind(gid)
-        .bind(cid)
-        .bind(inviter)
-        .bind(max_uses as i32)
-        .bind(max_age_s.map(|a| a as i32))
-        .execute(&self.pool)
-        .await?;
-        self.invite(&code).await?.ok_or(DbError::NotFound)
-    }
-
-    /// Aperçu ; `None` si inconnue, expirée ou épuisée.
-    pub async fn invite(&self, code: &str) -> Result<Option<Invite>> {
-        let r = sqlx::query(
-            "select i.code, i.channel_id, i.uses, i.max_uses, (extract(epoch from i.expires_at) * 1000)::int8 as exp_ms,
-                    g.id, g.name, g.icon_key, g.owner_id,
-                    (select count(*) from members m where m.guild_id = g.id)::int4 as member_count
-             from invites i join guilds g on g.id = i.guild_id
-             where i.code = $1 and (i.expires_at is null or i.expires_at > now()) and (i.max_uses = 0 or i.uses < i.max_uses)",
-        )
-        .bind(code)
-        .fetch_optional(&self.pool)
-        .await?;
-        let Some(r) = r else { return Ok(None) };
-        Ok(Some(Invite {
-            code: r.try_get("code")?,
-            guild: Guild {
-                id: r.try_get("id")?,
-                name: r.try_get("name")?,
-                icon: r.try_get("icon_key")?,
-                owner_id: r.try_get("owner_id")?,
-            },
-            channel_id: r.try_get("channel_id")?,
-            member_count: r.try_get::<i32, _>("member_count")? as u32,
-            uses: r.try_get::<i32, _>("uses")? as u32,
-            max_uses: r.try_get::<i32, _>("max_uses")? as u32,
-            expires_at: r.try_get("exp_ms")?,
-        }))
-    }
-
-    /// Rejoint le serveur. Le compteur d'usages ne bouge pas pour un membre déjà présent ;
-    /// l'incrément est conditionnel, donc deux adhésions simultanées ne dépassent pas
-    /// `max_uses`. Rend l'état du serveur et le nouveau membre (`None` s'il l'était déjà).
-    pub async fn use_invite(&self, code: &str, uid: Id) -> Result<(GuildState, Option<Member>)> {
-        let mut tx = self.pool.begin().await?;
-        let gid: Id = sqlx::query_scalar("select guild_id from invites where code = $1")
-            .bind(code)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or(DbError::NotFound)?;
-        let banned: bool = sqlx::query_scalar("select exists(select 1 from bans where guild_id = $1 and user_id = $2)")
-            .bind(gid)
-            .bind(uid)
-            .fetch_one(&mut *tx)
-            .await?;
-        if banned {
-            return Err(DbError::Forbidden("banned"));
-        }
-        // Adhésion d'abord : une seconde en parallèle attend la première, puis ne fait rien.
-        let already = sqlx::query("insert into members (guild_id, user_id) values ($1, $2) on conflict do nothing")
-            .bind(gid)
-            .bind(uid)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected()
-            == 0;
-        if !already {
-            sqlx::query(
-                "update invites set uses = uses + 1 where code = $1
-                   and (max_uses = 0 or uses < max_uses) and (expires_at is null or expires_at > now())
-                 returning guild_id",
-            )
-            .bind(code)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or(DbError::NotFound)?;
-        }
-        tx.commit().await?;
-        let state = self.guild_state(gid, uid).await?.ok_or(DbError::NotFound)?;
-        let new = if already { None } else { state.members.iter().find(|m| m.user.id == uid).cloned() };
-        Ok((state, new))
-    }
-
     // ───────── social ─────────
 
     pub async fn relationships(&self, uid: Id) -> Result<Vec<Relationship>> {
@@ -1264,3 +1195,6 @@ pub(crate) async fn insert_channel(
 mod tests;
 #[cfg(test)]
 mod tests_channels;
+
+#[cfg(test)]
+mod tests_guild;
