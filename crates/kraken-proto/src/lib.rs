@@ -272,6 +272,10 @@ pub const MAX_INVITE_AGE_S: u32 = 7 * 24 * 3600;
 pub const MAX_INVITE_USES: u32 = 1000;
 /// Jours pendant lesquels une invitation expirée ou épuisée reste dans la liste du serveur.
 pub const INVITE_KEEP_DAYS: i32 = 7;
+/// Au plus ce nombre d'invitations actives (ni expirées, ni épuisées) par personne et par serveur.
+pub const MAX_INVITES_PER_MEMBER: usize = 50;
+/// La liste des invitations d'un serveur ne rend jamais plus de lignes que cela (les actives d'abord).
+pub const MAX_INVITE_ROWS: usize = 200;
 /// Une exclusion temporaire dure de 60 secondes à 28 jours.
 pub const MIN_TIMEOUT_S: u32 = 60;
 pub const MAX_TIMEOUT_S: u32 = 28 * 24 * 3600;
@@ -462,6 +466,10 @@ pub struct CreateInvite {
     pub max_age: Option<u32>,
     /// 0 ou `None` : illimité.
     pub max_uses: Option<u32>,
+    /// Sans fin et sans limite : reprendre celle que la personne a déjà dans ce salon plutôt
+    /// que d'en créer une de plus (le bouton « Inviter » du rail, pour ne pas remplir le plafond).
+    #[serde(default)]
+    pub reuse: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

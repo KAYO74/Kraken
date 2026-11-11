@@ -45,6 +45,25 @@ pub enum DbError {
 
 pub type Result<T> = std::result::Result<T, DbError>;
 
+/// Clés étrangères qui disent « le salon (ou le serveur) sur lequel on écrit n'existe plus ».
+const VANISHED_TARGETS: &[&str] = &[
+    "messages_channel_id_fkey",
+    "read_states_channel_id_fkey",
+    "slowmode_marks_channel_id_fkey",
+    "attachments_channel_id_fkey",
+    "permission_overwrites_channel_id_fkey",
+    "notification_overrides_channel_id_fkey",
+    "notification_overrides_guild_id_fkey",
+    "invites_channel_id_fkey",
+    "invites_guild_id_fkey",
+    "members_guild_id_fkey",
+    "member_timeouts_guild_id_fkey",
+    "roles_guild_id_fkey",
+    "channels_guild_id_fkey",
+    "bans_guild_id_fkey",
+    "audit_log_guild_id_fkey",
+];
+
 impl From<sqlx::Error> for DbError {
     fn from(e: sqlx::Error) -> Self {
         if let Some(db) = e.as_database_error() {
@@ -63,6 +82,11 @@ impl From<sqlx::Error> for DbError {
                 }
                 // Contrainte, texte trop long, caractère nul ou inencodable.
                 Some("23514" | "22001" | "22021" | "22P05") => return Self::Invalid("value"),
+                // Le salon ou le serveur visé a été supprimé entre la vérification et l'écriture
+                // (envoi pendant la suppression du salon, par exemple) : il n'existe plus. Seules
+                // les clés vers le salon ou le serveur visé comptent ; toute autre clé étrangère
+                // reste une erreur du serveur, pour ne pas cacher un vrai défaut.
+                Some("23503") if VANISHED_TARGETS.contains(&c) => return Self::NotFound,
                 _ => {}
             }
         }

@@ -7,6 +7,7 @@ use kraken_core::perms;
 use kraken_proto::*;
 use sqlx::{Postgres, Row, Transaction};
 
+use crate::perm::timed_out_rights;
 use crate::{Db, DbError, ROLE_COLS, Result, role_from, user_cols, user_from};
 
 pub(crate) type Tx<'a> = Transaction<'a, Postgres>;
@@ -57,14 +58,15 @@ pub(crate) async fn lock(tx: &mut Tx<'_>, gid: Id) -> Result<Id> {
 
 /// `None` si ce n'est pas un membre.
 pub(crate) async fn standing(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id) -> Result<Option<Standing>> {
-    let member: bool = sqlx::query_scalar("select exists(select 1 from members where guild_id = $1 and user_id = $2)")
-        .bind(gid)
-        .bind(uid)
-        .fetch_one(&mut **tx)
-        .await?;
-    if !member {
-        return Ok(None);
-    }
+    // Membre ou non, et exclu en ce moment ou non (l'heure de la base fait foi).
+    let timed_out: Option<bool> = sqlx::query_scalar(
+        "select coalesce(timeout_until > now(), false) from members where guild_id = $1 and user_id = $2",
+    )
+    .bind(gid)
+    .bind(uid)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(timed_out) = timed_out else { return Ok(None) };
     let rows = sqlx::query(
         "select r.id, r.position, r.permissions from roles r where r.guild_id = $1
            and (r.id = $1 or r.id in (select role_id from member_roles where guild_id = $1 and user_id = $2))",
@@ -84,9 +86,11 @@ pub(crate) async fn standing(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id) -> Re
         }
     }
     let is_owner = owner == uid;
+    let base = perms::base(is_owner, everyone, held);
     Ok(Some(Standing {
         is_owner,
-        base: perms::base(is_owner, everyone, held),
+        // Exclu : plus que voir et lire, donc plus aucun droit de modérer ni de gérer.
+        base: if timed_out { timed_out_rights(base) } else { base },
         top: perms::top_position(is_owner, positions),
     }))
 }
@@ -108,6 +112,17 @@ async fn forget_member_overwrites(tx: &mut Tx<'_>, gid: Id, uid: Id) -> Result<(
     .bind(uid)
     .execute(&mut **tx)
     .await?;
+    Ok(())
+}
+
+/// Un renvoi ou un bannissement est une sanction qui en remplace une autre : l'exclusion gardée
+/// à un départ précédent ne suit pas la personne si elle revient.
+async fn forget_retained_timeout(tx: &mut Tx<'_>, gid: Id, uid: Id) -> Result<()> {
+    sqlx::query("delete from member_timeouts where guild_id = $1 and user_id = $2")
+        .bind(gid)
+        .bind(uid)
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }
 
@@ -415,6 +430,7 @@ impl Db {
             .execute(&mut *tx)
             .await?;
         forget_member_overwrites(&mut tx, gid, uid).await?;
+        forget_retained_timeout(&mut tx, gid, uid).await?;
         audit(&mut tx, gid, by, "member_kick", Some(uid), reason.as_deref()).await?;
         tx.commit().await?;
         Ok(())
@@ -455,6 +471,7 @@ impl Db {
             .execute(&mut *tx)
             .await?;
         forget_member_overwrites(&mut tx, gid, uid).await?;
+        forget_retained_timeout(&mut tx, gid, uid).await?;
         sqlx::query(
             "insert into bans (guild_id, user_id, moderator_id, reason) values ($1, $2, $3, $4)
              on conflict (guild_id, user_id) do update set moderator_id = $3, reason = $4, created_at = now()",
@@ -694,6 +711,22 @@ impl Db {
         if owner == uid {
             return Err(DbError::Forbidden("owner_leave"));
         }
+        // Partir ne lève pas l'exclusion : on garde son échéance pour le retour par invitation
+        // (et on laisse tomber au passage celles qui sont déjà finies).
+        sqlx::query("delete from member_timeouts where guild_id = $1 and until <= now()")
+            .bind(gid)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "insert into member_timeouts (guild_id, user_id, until)
+             select guild_id, user_id, timeout_until from members
+             where guild_id = $1 and user_id = $2 and timeout_until > now()
+             on conflict (guild_id, user_id) do update set until = excluded.until",
+        )
+        .bind(gid)
+        .bind(uid)
+        .execute(&mut *tx)
+        .await?;
         let done = sqlx::query("delete from members where guild_id = $1 and user_id = $2")
             .bind(gid)
             .bind(uid)

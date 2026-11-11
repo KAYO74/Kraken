@@ -21,6 +21,13 @@ pub(crate) const DM: u64 = perms::VIEW_CHANNEL
     | perms::VIDEO
     | perms::STREAM;
 
+/// Ce qu'il reste à un membre exclu temporairement : voir et lire, rien d'autre (ni écrire,
+/// ni réagir, ni parler, ni modérer, ni gérer, ni inviter). Les administrateurs et le
+/// propriétaire, dont les droits comprennent `ADMINISTRATOR`, ne sont jamais bridés.
+pub(crate) fn timed_out_rights(rights: u64) -> u64 {
+    if rights & perms::ADMINISTRATOR != 0 { rights } else { rights & (perms::VIEW_CHANNEL | perms::READ_HISTORY) }
+}
+
 pub(crate) struct Ctx {
     gid: Id,
     owner: Id,
@@ -119,8 +126,17 @@ impl Ctx {
         self.members.keys().copied()
     }
 
-    /// Droits au niveau du serveur ; 0 pour un non-membre.
+    /// Droits au niveau du serveur ; 0 pour un non-membre. Un membre exclu temporairement n'a
+    /// plus que de quoi voir et lire (voir [`timed_out_rights`]) : il ne modère plus, ne gère
+    /// plus, n'invite plus, tant que dure l'exclusion.
     pub fn base(&self, uid: Id) -> u64 {
+        let raw = self.raw_base(uid);
+        if self.timed_out.contains(&uid) { timed_out_rights(raw) } else { raw }
+    }
+
+    /// Droits du serveur sans le bridage de l'exclusion : sert de point de départ aux salons
+    /// (les surcharges s'appliquent avant le bridage, pas après).
+    fn raw_base(&self, uid: Id) -> u64 {
         let Some(roles) = self.members.get(&uid) else { return 0 };
         let role = |id: &Id| self.role_perms.get(id).copied().unwrap_or(0);
         perms::base(self.owner == uid, role(&self.gid), roles.iter().map(role))
@@ -128,7 +144,7 @@ impl Ctx {
 
     /// Droits dans un salon : surcharges de la catégorie, puis du salon.
     pub fn channel(&self, uid: Id, cid: Id, parent: Option<Id>) -> u64 {
-        let base = self.base(uid);
+        let base = self.raw_base(uid);
         if base == 0 {
             return 0;
         }

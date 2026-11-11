@@ -15,7 +15,9 @@ use crate::{Db, DbError, Result, user_cols, user_from};
 impl Db {
     /// Crée une invitation. `max_age_s` : `None` (ou 0) pour qu'elle n'expire jamais, sinon
     /// 7 jours au plus ; `max_uses` : 0 pour autant d'usages que l'on veut, sinon 1000 au plus.
-    /// Les invitations expirées ou épuisées depuis plus de [`INVITE_KEEP_DAYS`] jours partent.
+    /// Au plus [`MAX_INVITES_PER_MEMBER`] invitations actives par personne et par serveur
+    /// (`Invalid("invite_limit")` au-delà). Les invitations expirées ou épuisées depuis plus de
+    /// [`INVITE_KEEP_DAYS`] jours partent.
     pub async fn create_invite(
         &self,
         gid: Id,
@@ -41,6 +43,25 @@ impl Db {
         .bind(INVITE_KEEP_DAYS)
         .execute(&mut *tx)
         .await?;
+        // Plafond : MAX_INVITES_PER_MEMBER invitations actives par personne et par serveur. Le
+        // verrou (levé à la fin de la transaction) fait passer deux demandes simultanées l'une
+        // après l'autre, sinon elles compteraient toutes deux avant que l'autre n'écrive.
+        sqlx::query("select pg_advisory_xact_lock(hashtextextended('invites:' || $1::text || ':' || $2::text, 0))")
+            .bind(gid)
+            .bind(inviter)
+            .execute(&mut *tx)
+            .await?;
+        let active: i64 = sqlx::query_scalar(
+            "select count(*) from invites where guild_id = $1 and inviter_id = $2
+               and (expires_at is null or expires_at > now()) and (max_uses = 0 or uses < max_uses)",
+        )
+        .bind(gid)
+        .bind(inviter)
+        .fetch_one(&mut *tx)
+        .await?;
+        if active >= MAX_INVITES_PER_MEMBER as i64 {
+            return Err(DbError::Invalid("invite_limit"));
+        }
         sqlx::query(
             "insert into invites (code, guild_id, channel_id, inviter_id, max_uses, expires_at)
              values ($1, $2, $3, $4, $5, case when $6::int > 0 then now() + make_interval(secs => $6) end)",
@@ -64,6 +85,23 @@ impl Db {
         .await?;
         tx.commit().await?;
         self.invite(&code).await?.ok_or(DbError::NotFound)
+    }
+
+    /// L'invitation sans fin ni limite que `inviter` a déjà dans ce salon, la plus récente.
+    pub async fn reusable_invite(&self, gid: Id, cid: Id, inviter: Id) -> Result<Option<Invite>> {
+        let code: Option<String> = sqlx::query_scalar(
+            "select code from invites where guild_id = $1 and channel_id = $2 and inviter_id = $3
+               and expires_at is null and max_uses = 0 order by created_at desc limit 1",
+        )
+        .bind(gid)
+        .bind(cid)
+        .bind(inviter)
+        .fetch_optional(&self.pool)
+        .await?;
+        match code {
+            Some(c) => self.invite(&c).await,
+            None => Ok(None),
+        }
     }
 
     /// Aperçu ; `None` si inconnue, expirée ou épuisée.
@@ -158,6 +196,23 @@ impl Db {
                 drop(tx);
                 return Err(self.why_dead(code).await?);
             }
+            // Parti pendant une exclusion : on la retrouve, à la même échéance (ou plus rien
+            // si elle a fini entre-temps). La ligne gardée est consommée dans tous les cas.
+            sqlx::query(
+                "update members m set timeout_until = t.until, updated_at = now()
+                 from member_timeouts t
+                 where m.guild_id = $1 and m.user_id = $2 and t.guild_id = m.guild_id and t.user_id = m.user_id
+                   and t.until > now()",
+            )
+            .bind(gid)
+            .bind(uid)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query("delete from member_timeouts where guild_id = $1 and user_id = $2")
+                .bind(gid)
+                .bind(uid)
+                .execute(&mut *tx)
+                .await?;
         }
         tx.commit().await?;
         let state = self.guild_state(gid, uid).await?.ok_or(DbError::NotFound)?;
@@ -165,9 +220,10 @@ impl Db {
         Ok((state, new))
     }
 
-    /// Les invitations du serveur : celles qui servent encore, puis celles qui ont cessé de
-    /// servir depuis moins de [`INVITE_KEEP_DAYS`] jours. Avec « Gérer le serveur », toutes ;
-    /// avec seulement « Créer une invitation », les siennes. Sinon 403 ; 404 hors du serveur.
+    /// Les invitations du serveur (au plus [`MAX_INVITE_ROWS`]) : celles qui servent encore, puis
+    /// celles qui ont cessé de servir depuis moins de [`INVITE_KEEP_DAYS`] jours. Avec « Gérer le
+    /// serveur », toutes ; avec seulement « Créer une invitation », les siennes. Sinon 403 ; 404
+    /// hors du serveur. Un membre exclu temporairement n'a plus aucun de ces droits.
     pub async fn guild_invites(&self, gid: Id, by: Id) -> Result<Vec<GuildInvite>> {
         let ctx = Ctx::load(&self.pool, gid, Some(by)).await?.filter(|c| c.is_member(by)).ok_or(DbError::NotFound)?;
         let base = ctx.base(by);
@@ -194,13 +250,15 @@ impl Db {
                        and i.updated_at > now() - make_interval(days => $4)))
              order by (case when i.expires_at is not null and i.expires_at <= now() then 1
                             when i.max_uses > 0 and i.uses >= i.max_uses then 1 else 0 end),
-                      i.created_at desc, i.code",
+                      i.created_at desc, i.code
+             limit $5",
             user_cols("u")
         ))
         .bind(gid)
         .bind(all)
         .bind(by)
         .bind(INVITE_KEEP_DAYS)
+        .bind(MAX_INVITE_ROWS as i64)
         .fetch_all(&self.pool)
         .await?;
         rows.iter()

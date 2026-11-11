@@ -147,6 +147,13 @@ pub async fn edit_message(
     Json(req): Json<EditMessage>,
 ) -> ApiResult<Json<Message>> {
     let p = channel_perms(&state, auth.user.id, cid, perms::READ_HISTORY).await?;
+    // Exclu temporairement : il relit ses anciens messages, il ne les réécrit pas (en supprimer
+    // un de lui reste permis : c'est retirer, pas dire). Un administrateur n'est jamais exclu.
+    if p & perms::SEND_MESSAGES == 0
+        && let Some(until) = state.db.channel_timeout(auth.user.id, cid).await?
+    {
+        return Err(AppError::timed_out(until));
+    }
     let before = state.db.message(mid).await?;
     let m = state.db.edit_message(cid, mid, auth.user.id, &req.content, p & perms::MENTION_EVERYONE != 0).await?;
     if before.as_ref() != Some(&m) {
@@ -232,7 +239,15 @@ pub async fn create_invite(
 ) -> ApiResult<(StatusCode, Json<Invite>)> {
     let c = require_channel(&state, auth.user.id, cid, perms::CREATE_INVITE).await?;
     let gid = c.guild_id.ok_or_else(|| AppError::invalid("Pas d'invitation pour un MP."))?;
-    let inv = state.db.create_invite(gid, Some(cid), auth.user.id, req.max_uses.unwrap_or(0), req.max_age).await?;
+    let max_uses = req.max_uses.unwrap_or(0);
+    if req.reuse
+        && max_uses == 0
+        && req.max_age.is_none()
+        && let Some(inv) = state.db.reusable_invite(gid, cid, auth.user.id).await?
+    {
+        return Ok((StatusCode::OK, Json(inv)));
+    }
+    let inv = state.db.create_invite(gid, Some(cid), auth.user.id, max_uses, req.max_age).await?;
     Ok((StatusCode::CREATED, Json(inv)))
 }
 

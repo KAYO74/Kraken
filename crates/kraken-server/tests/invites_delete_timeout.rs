@@ -231,6 +231,16 @@ async fn invites_are_validated_listed_revoked_and_say_why_they_are_dead(pool: Pg
     assert_eq!(s, 201);
     assert!(forever["expires_at"].is_null() && forever["max_uses"] == 5);
 
+    // Le bouton « Inviter » du rail reprend l'invitation sans fin déjà faite (200, même code).
+    let (s, first) = own.invite(cid, json!({ "reuse": true })).await;
+    assert!(s == StatusCode::OK || s == StatusCode::CREATED, "{first}");
+    let (s, again) = own.invite(cid, json!({ "reuse": true })).await;
+    assert_eq!(s, 200, "{again}");
+    assert_eq!(first["code"], again["code"]);
+    let (s, plain) = own.invite(cid, json!({})).await;
+    assert_eq!(s, 201);
+    assert_ne!(plain["code"], first["code"]);
+
     // Chacun crée la sienne ; le gérant voit tout, le simple membre seulement les siennes.
     let (_, mine) = mid.invite(cid, json!({ "max_uses": 10 })).await;
     let (s, all) = own.call(Method::GET, &format!("/guilds/{gid}/invites"), None).await;
@@ -529,4 +539,242 @@ async fn timing_out_someone_in_voice_disconnects_them(pool: PgPool) {
 /// Maintenant, en millisecondes Unix.
 fn chrono_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn a_timed_out_moderator_has_no_power_left_until_it_ends(pool: PgPool) {
+    let base = spawn(pool.clone()).await;
+    let own = Who::new(&base, "own").await;
+    let mb = Who::new(&base, "mb").await;
+    let low = Who::new(&base, "low").await;
+    let adm = Who::new(&base, "adm").await;
+    let g = own.guild().await;
+    let (gid, cid) = (g.guild.id, general(&g));
+    for w in [&mb, &low, &adm] {
+        w.join(&g, &own).await;
+    }
+    let every_power = perms::TIMEOUT
+        | perms::KICK
+        | perms::BAN
+        | perms::MANAGE_ROLES
+        | perms::MANAGE_CHANNELS
+        | perms::MANAGE_GUILD
+        | perms::CREATE_INVITE
+        | perms::MANAGE_MESSAGES;
+    let mods = own.role(gid, "Modération", every_power).await;
+    let admins = own.role(gid, "Admins", perms::ADMINISTRATOR).await;
+    own.give(gid, &mb, &mods).await;
+    own.give(gid, &adm, &admins).await;
+    let (s, old) = mb.say(cid, "mon ancien message").await;
+    assert_eq!(s, 201);
+    let (s, other) = mb.say(cid, "un autre à moi").await;
+    assert_eq!(s, 201);
+    let (old, other) = (old["id"].as_str().unwrap().to_string(), other["id"].as_str().unwrap().to_string());
+    let (s, theirs) = own.invite(cid, json!({})).await;
+    assert_eq!(s, 201);
+
+    // Avant : il modère.
+    let (s, v) = mb.timeout(gid, &low, 60).await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(mb.call(Method::DELETE, &format!("/guilds/{gid}/members/{}/timeout", low.user.id), None).await.0, 200);
+
+    let (s, v) = own.timeout(gid, &mb, 600).await;
+    assert_eq!(s, 200, "{v}");
+    let until = serde_json::from_value::<Member>(v).unwrap().timeout_until.unwrap();
+
+    // Exclu : 403 partout, personne n'est touché.
+    let forbidden = |(s, v): (StatusCode, Value)| assert_eq!((s.as_u16(), code(&v)), (403, "forbidden"), "{v}");
+    let guild = |path: &str| format!("/guilds/{gid}{path}");
+    forbidden(mb.call(Method::DELETE, &guild(&format!("/members/{}", low.user.id)), None).await);
+    forbidden(mb.call(Method::PUT, &guild(&format!("/bans/{}", low.user.id)), Some(json!({}))).await);
+    forbidden(mb.timeout(gid, &low, 60).await);
+    forbidden(mb.call(Method::DELETE, &guild(&format!("/members/{}/timeout", mb.user.id)), None).await);
+    forbidden(mb.call(Method::POST, &guild("/roles"), Some(json!({ "name": "Neuf", "permissions": 0 }))).await);
+    forbidden(mb.call(Method::PUT, &guild(&format!("/members/{}/roles/{}", low.user.id, mods.id)), None).await);
+    forbidden(mb.call(Method::GET, &guild("/bans"), None).await);
+    forbidden(mb.call(Method::GET, &guild("/invites"), None).await);
+    forbidden(mb.call(Method::DELETE, &format!("/invites/{}", code(&theirs)), None).await);
+    forbidden(mb.call(Method::POST, &guild("/channels"), Some(json!({ "name": "neuf", "kind": "text" }))).await);
+    forbidden(mb.call(Method::DELETE, &format!("/channels/{cid}"), None).await);
+    // Inviter : l'exclusion est dite, avec sa fin.
+    let (s, v) = mb.invite(cid, json!({})).await;
+    assert_eq!((s.as_u16(), code(&v)), (403, "timed_out"), "{v}");
+    assert_eq!(v["timeout_until"].as_i64(), Some(until));
+    let state: GuildState = serde_json::from_value(own.call(Method::GET, &guild(""), None).await.1).unwrap();
+    assert_eq!(state.members.len(), 4);
+    assert_eq!(own.call(Method::GET, &guild("/bans"), None).await.1.as_array().unwrap().len(), 0);
+    // Trois invitations pour les arrivées, plus `theirs` : celle du modérateur exclu n'a pas été créée.
+    assert_eq!(own.call(Method::GET, &guild("/invites"), None).await.1.as_array().unwrap().len(), 4);
+
+    // Modifier ses anciens messages : 403 `timed_out` ; supprimer les siens reste permis.
+    let (s, v) =
+        mb.call(Method::PATCH, &format!("/channels/{cid}/messages/{old}"), Some(json!({ "content": "réécrit" }))).await;
+    assert_eq!((s.as_u16(), code(&v)), (403, "timed_out"), "{v}");
+    assert_eq!(v["timeout_until"].as_i64(), Some(until));
+    let history = mb.call(Method::GET, &format!("/channels/{cid}/messages"), None).await.1;
+    let text = |id: &str| {
+        history.as_array().unwrap().iter().find(|m| m["id"] == id).map(|m| m["content"].as_str().unwrap().to_string())
+    };
+    assert_eq!(text(&old).as_deref(), Some("mon ancien message"), "le texte n'a pas changé");
+    assert_eq!(
+        mb.call(Method::DELETE, &format!("/channels/{cid}/messages/{other}"), None).await.0.as_u16(),
+        204,
+        "retirer son propre message reste permis"
+    );
+
+    // Le propriétaire et un administrateur gardent tout, même avec une exclusion en base.
+    sqlx::query("update members set timeout_until = now() + interval '1 hour' where user_id = any($1)")
+        .bind([adm.user.id, own.user.id])
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (s, mine) = adm.say(cid, "à moi").await;
+    assert_eq!(s, 201);
+    let (s, v) = adm
+        .call(
+            Method::PATCH,
+            &format!("/channels/{cid}/messages/{}", mine["id"].as_str().unwrap()),
+            Some(json!({ "content": "à moi, corrigé" })),
+        )
+        .await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(
+        own.call(Method::PATCH, &format!("/channels/{cid}/messages/{old}"), Some(json!({ "content": "x" }))).await.1["code"],
+        "forbidden",
+        "pas le sien : refusé, mais pas pour une exclusion"
+    );
+    assert_eq!(adm.timeout(gid, &low, 60).await.0, 200);
+
+    // Fini : il retrouve ses pouvoirs et peut expulser.
+    sqlx::query("update members set timeout_until = now() - interval '1 second' where user_id = $1")
+        .bind(mb.user.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (s, v) =
+        mb.call(Method::PATCH, &format!("/channels/{cid}/messages/{old}"), Some(json!({ "content": "réécrit" }))).await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(mb.call(Method::DELETE, &guild(&format!("/members/{}", low.user.id)), None).await.0.as_u16(), 204);
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn leaving_a_server_does_not_lift_the_exclusion(pool: PgPool) {
+    let base = spawn(pool.clone()).await;
+    let own = Who::new(&base, "own").await;
+    let low = Who::new(&base, "low").await;
+    let g = own.guild().await;
+    let (gid, cid) = (g.guild.id, general(&g));
+    low.join(&g, &own).await;
+    let (s, v) = own.timeout(gid, &low, 600).await;
+    assert_eq!(s, 200, "{v}");
+    let until = serde_json::from_value::<Member>(v).unwrap().timeout_until.unwrap();
+
+    // Il part, il revient par une invitation toute neuve : même exclusion, même fin.
+    assert_eq!(low.call(Method::DELETE, &format!("/guilds/{gid}/members/@me"), None).await.0.as_u16(), 204);
+    let mut own_gw = own.gateway().await;
+    let (s, inv) = own.invite(cid, json!({})).await;
+    assert_eq!(s, 201);
+    let (s, back) = low.use_code(code(&inv)).await;
+    assert_eq!(s, 200, "{back}");
+    let back: GuildState = serde_json::from_value(back).unwrap();
+    assert_eq!(back.members.iter().find(|m| m.user.id == low.user.id).unwrap().timeout_until, Some(until));
+    let added = own_gw
+        .until(|e| match e {
+            Event::MemberAdd { member, .. } if member.user.id == low.user.id => Some(member.clone()),
+            _ => None,
+        })
+        .await;
+    assert_eq!(added.timeout_until, Some(until), "les autres le voient exclu");
+    let (s, v) = low.say(cid, "pas si vite").await;
+    assert_eq!((s.as_u16(), code(&v)), (403, "timed_out"), "{v}");
+    assert_eq!(v["timeout_until"].as_i64(), Some(until));
+    assert_eq!(low.call(Method::GET, &format!("/channels/{cid}/messages"), None).await.0, 200, "lire reste permis");
+
+    // Une fois l'exclusion finie, partir puis revenir ne rend rien d'autre.
+    sqlx::query("update members set timeout_until = now() - interval '1 second' where user_id = $1")
+        .bind(low.user.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(low.say(cid, "terminé").await.0, 201);
+    assert_eq!(low.call(Method::DELETE, &format!("/guilds/{gid}/members/@me"), None).await.0.as_u16(), 204);
+    low.join(&g, &own).await;
+    assert_eq!(low.say(cid, "libre").await.0, 201);
+
+    // Renvoyé : c'est une sanction qui remplace l'exclusion.
+    assert_eq!(own.timeout(gid, &low, 600).await.0, 200);
+    assert_eq!(own.call(Method::DELETE, &format!("/guilds/{gid}/members/{}", low.user.id), None).await.0.as_u16(), 204);
+    low.join(&g, &own).await;
+    assert_eq!(low.say(cid, "revenu").await.0, 201);
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn sending_while_a_channel_is_being_deleted_is_a_404_not_a_500(pool: PgPool) {
+    let (base, state) = spawn_with_state(pool.clone()).await;
+    let own = Who::new(&base, "own").await;
+    let low = Who::new(&base, "low").await;
+    let g = own.guild().await;
+    let gid = g.guild.id;
+    low.join(&g, &own).await;
+    let (s, doomed) = own
+        .call(Method::POST, &format!("/guilds/{gid}/channels"), Some(json!({ "name": "bientot", "kind": "text" })))
+        .await;
+    assert_eq!(s, 201, "{doomed}");
+    let doomed: Id = doomed["id"].as_str().unwrap().parse().unwrap();
+
+    // La suppression est en cours (pas validée) : l'envoi passe les vérifications, puis attend.
+    let mut tx = state.db.pool.begin().await.unwrap();
+    sqlx::query("delete from channels where id = $1").bind(doomed).execute(&mut *tx).await.unwrap();
+    let sender = tokio::spawn(async move { low.say(doomed, "trop tard").await });
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert!(!sender.is_finished(), "l'envoi doit attendre la suppression");
+    tx.commit().await.unwrap();
+    let (s, v) = sender.await.unwrap();
+    assert_eq!((s.as_u16(), code(&v)), (404, "not_found"), "{v}");
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn fifty_active_invitations_per_person_and_a_list_of_two_hundred_at_most(pool: PgPool) {
+    let base = spawn(pool.clone()).await;
+    let own = Who::new(&base, "own").await;
+    let sam = Who::new(&base, "sam").await;
+    let g = own.guild().await;
+    let (gid, cid) = (g.guild.id, general(&g));
+    sam.join(&g, &own).await;
+
+    let mut codes = Vec::new();
+    for _ in 0..MAX_INVITES_PER_MEMBER {
+        let (s, v) = sam.invite(cid, json!({})).await;
+        assert_eq!(s, 201, "{v}");
+        codes.push(code(&v).to_string());
+    }
+    let (s, v) = sam.invite(cid, json!({})).await;
+    assert_eq!((s.as_u16(), code(&v)), (400, "invite_limit"), "{v}");
+    assert_eq!(v["message"], "Tu as déjà 50 invitations actives. Révoque-en une.");
+    // Pas pour les autres, et la liste ne bouge pas.
+    assert_eq!(own.invite(cid, json!({})).await.0, 201);
+    let (s, list) = sam.call(Method::GET, &format!("/guilds/{gid}/invites"), None).await;
+    assert_eq!(s, 200);
+    assert_eq!(rows(&list).len(), MAX_INVITES_PER_MEMBER);
+    // En révoquer une en libère une.
+    assert_eq!(sam.call(Method::DELETE, &format!("/invites/{}", codes[0]), None).await.0.as_u16(), 204);
+    assert_eq!(sam.invite(cid, json!({})).await.0, 201);
+    assert_eq!(sam.invite(cid, json!({})).await.0, 400);
+
+    // La liste du gestionnaire s'arrête à 200 lignes, les vivantes d'abord.
+    sqlx::query(
+        "insert into invites (code, guild_id, channel_id, inviter_id)
+         select 'extra' || lpad(n::text, 4, '0'), $1, $2, $3 from generate_series(1, 260) n",
+    )
+    .bind(gid)
+    .bind(cid)
+    .bind(own.user.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (s, list) = own.call(Method::GET, &format!("/guilds/{gid}/invites"), None).await;
+    assert_eq!(s, 200);
+    let list = rows(&list);
+    assert_eq!(list.len(), MAX_INVITE_ROWS);
+    assert!(list.iter().all(|i| i.state == InviteState::Active));
 }

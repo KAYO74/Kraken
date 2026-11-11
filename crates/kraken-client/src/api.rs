@@ -226,7 +226,12 @@ pub async fn react(channel: Id, id: Id, emoji: &str, on: bool) -> ApiResult<()> 
 }
 
 pub async fn create_invite(channel: Id) -> ApiResult<Invite> {
-    call(Method::POST, &format!("/channels/{channel}/invites"), Some(CreateInvite::default())).await
+    call(
+        Method::POST,
+        &format!("/channels/{channel}/invites"),
+        Some(CreateInvite { reuse: true, ..Default::default() }),
+    )
+    .await
 }
 
 /// Une invitation avec ses réglages (durée, nombre d'usages).

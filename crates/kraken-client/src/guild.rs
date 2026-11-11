@@ -851,7 +851,7 @@ fn Invites(guild: Id) -> impl IntoView {
         busy.set(true);
         error.set(None);
         spawn_local(async move {
-            match crate::api::create_invite_with(channel, &CreateInvite { max_age, max_uses }).await {
+            match crate::api::create_invite_with(channel, &CreateInvite { max_age, max_uses, reuse: false }).await {
                 Ok(i) => {
                     said.try_set(format!("Invitation {} créée.", i.code));
                     load();

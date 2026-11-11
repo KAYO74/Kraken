@@ -1,7 +1,10 @@
 //! Invitations (validation, liste, révocation, périmées et épuisées), suppression d'un serveur
 //! et exclusion temporaire.
 
-use kraken_proto::{ChannelKind, CreateRole, EditRole, InviteState, MAX_INVITE_AGE_S, MAX_INVITE_USES};
+use kraken_proto::{
+    ChannelKind, CreateRole, EditRole, InviteState, MAX_INVITE_AGE_S, MAX_INVITE_ROWS, MAX_INVITE_USES,
+    MAX_INVITES_PER_MEMBER,
+};
 use sqlx::PgPool;
 
 use super::*;
@@ -417,4 +420,390 @@ async fn timing_out_follows_the_rights_and_the_hierarchy(pool: PgPool) {
     for u in [&admin, &own] {
         assert_ne!(db.channel_perms(u.id, general).await.unwrap() & perms::SEND_MESSAGES, 0);
     }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_timed_out_moderator_loses_every_server_power_until_it_ends(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, mb, adm, low, other) = (
+        user(&db, "lou").await,
+        user(&db, "max").await,
+        user(&db, "ada").await,
+        user(&db, "eve").await,
+        user(&db, "sam").await,
+    );
+    let (g, general) = guild_with(&db, &own, &[&mb, &adm, &low, &other]).await;
+    let gid = g.guild.id;
+    // Un modérateur bien équipé, plus un administrateur ; tous deux sous le propriétaire.
+    let everything = perms::TIMEOUT
+        | perms::KICK
+        | perms::BAN
+        | perms::MANAGE_ROLES
+        | perms::MANAGE_CHANNELS
+        | perms::MANAGE_GUILD
+        | perms::CREATE_INVITE
+        | perms::VIEW_AUDIT_LOG;
+    let mods = db.create_role(gid, own.id, &role("Modos", everything)).await.unwrap();
+    let admins = db.create_role(gid, own.id, &role("Admins", perms::ADMINISTRATOR)).await.unwrap();
+    db.set_member_role(gid, own.id, mb.id, mods.id, true).await.unwrap();
+    db.set_member_role(gid, own.id, adm.id, admins.id, true).await.unwrap();
+    let theirs = db.create_invite(gid, Some(general), other.id, 0, None).await.unwrap();
+
+    let free = db.guild_perms(mb.id, gid).await.unwrap();
+    assert_eq!(free & everything, everything);
+
+    // Exclu : voir et lire, pas un droit de plus au niveau du serveur.
+    db.timeout_member(gid, own.id, mb.id, 3600, None).await.unwrap();
+    assert_eq!(db.guild_perms(mb.id, gid).await.unwrap(), perms::VIEW_CHANNEL | perms::READ_HISTORY);
+    macro_rules! denied {
+        ($call:expr) => {
+            assert_eq!($call.map(|_| ()), Err(DbError::Forbidden("perm")), "{}", stringify!($call))
+        };
+    }
+    denied!(db.kick_member(gid, mb.id, low.id, None).await);
+    denied!(db.ban_member(gid, mb.id, low.id, &BanMember { reason: None, delete_hours: None }).await);
+    denied!(db.timeout_member(gid, mb.id, low.id, 600, None).await);
+    denied!(db.remove_timeout(gid, mb.id, mb.id).await);
+    denied!(db.create_role(gid, mb.id, &role("Neuf", 0)).await);
+    denied!(db.edit_role(gid, mods.id, mb.id, &EditRole { name: Some("X".into()), ..Default::default() }).await);
+    denied!(db.delete_role(gid, mods.id, mb.id).await);
+    denied!(db.reorder_roles(gid, mb.id, &[mods.id]).await);
+    denied!(db.set_member_role(gid, mb.id, low.id, mods.id, true).await);
+    denied!(db.unban(gid, mb.id, low.id).await);
+    denied!(db.bans(gid, mb.id).await);
+    denied!(db.guild_invites(gid, mb.id).await);
+    denied!(db.revoke_invite(&theirs.code, mb.id).await);
+    let new_channel = CreateChannel { name: "neuf".into(), kind: ChannelKind::Text, parent_id: None };
+    denied!(db.create_channel(gid, mb.id, &new_channel).await);
+    denied!(db.delete_channel(general, mb.id).await);
+    assert!(!db.members_with(gid, perms::BAN).await.unwrap().contains(&mb.id));
+    // Personne n'a été touché, rien n'a été journalisé.
+    assert_eq!(count(&db, "bans", gid).await, 0);
+    assert_eq!(audit(&db, "member_kick").await, 0);
+    assert_eq!(db.guild_state(gid, own.id).await.unwrap().unwrap().members.len(), 5);
+
+    // Le propriétaire et un administrateur ne sont jamais bridés, même avec une ligne en base.
+    sqlx::query("update members set timeout_until = now() + interval '1 hour' where user_id = any($1)")
+        .bind([adm.id, own.id])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(db.guild_perms(own.id, gid).await.unwrap(), perms::ALL);
+    assert_eq!(db.guild_perms(adm.id, gid).await.unwrap(), perms::ALL);
+    db.timeout_member(gid, adm.id, low.id, 600, None).await.unwrap();
+    db.kick_member(gid, own.id, low.id, None).await.unwrap();
+
+    // La fin se lit sur l'horloge de la base : tout revient sans rien faire d'autre.
+    sqlx::query("update members set timeout_until = now() - interval '1 second' where user_id = $1")
+        .bind(mb.id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(db.guild_perms(mb.id, gid).await.unwrap(), free);
+    db.kick_member(gid, mb.id, other.id, None).await.unwrap();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn leaving_and_coming_back_keeps_the_exclusion_until_it_ends(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, modo, sam, eve, zoe) = (
+        user(&db, "lou").await,
+        user(&db, "max").await,
+        user(&db, "sam").await,
+        user(&db, "eve").await,
+        user(&db, "zoe").await,
+    );
+    let (g, general) = guild_with(&db, &own, &[&modo, &sam, &eve, &zoe]).await;
+    let gid = g.guild.id;
+    let mods = db.create_role(gid, own.id, &role("Modos", perms::TIMEOUT | perms::KICK | perms::BAN)).await.unwrap();
+    db.set_member_role(gid, own.id, modo.id, mods.id, true).await.unwrap();
+    let inv = db.create_invite(gid, Some(general), own.id, 0, None).await.unwrap();
+    let deadline = |uid: Id| {
+        let db = db.clone();
+        async move {
+            let s = db.guild_state(gid, own.id).await.unwrap().unwrap();
+            s.members.iter().find(|m| m.user.id == uid).map(|m| m.timeout_until)
+        }
+    };
+
+    // Départ volontaire pendant l'exclusion, puis retour par invitation : toujours exclu, à la même échéance.
+    let until = db.timeout_member(gid, modo.id, sam.id, 3600, None).await.unwrap().timeout_until.unwrap();
+    db.leave_guild(gid, sam.id).await.unwrap();
+    assert_eq!(deadline(sam.id).await, None, "parti");
+    let (state, new) = db.use_invite(&inv.code, sam.id).await.unwrap();
+    assert_eq!(new.unwrap().timeout_until, Some(until));
+    assert!(state.members.iter().any(|m| m.user.id == sam.id && m.timeout_until == Some(until)));
+    assert_eq!(db.channel_perms(sam.id, general).await.unwrap(), perms::VIEW_CHANNEL | perms::READ_HISTORY);
+    assert!(db.channel_timeout(sam.id, general).await.unwrap().is_some());
+    // La ligne gardée est consommée : un second départ la réécrit, rien ne s'accumule.
+    assert_eq!(count(&db, "member_timeouts", gid).await, 0);
+    db.leave_guild(gid, sam.id).await.unwrap();
+    assert_eq!(count(&db, "member_timeouts", gid).await, 1);
+    db.leave_guild(gid, sam.id).await.unwrap_err();
+    assert_eq!(count(&db, "member_timeouts", gid).await, 1);
+
+    // Exclusion terminée entre-temps : retour libre, plus rien de gardé.
+    sqlx::query("update member_timeouts set until = now() - interval '1 second' where user_id = $1")
+        .bind(sam.id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let (_, new) = db.use_invite(&inv.code, sam.id).await.unwrap();
+    assert_eq!(new.unwrap().timeout_until, None);
+    assert_eq!(count(&db, "member_timeouts", gid).await, 0);
+    assert_ne!(db.channel_perms(sam.id, general).await.unwrap() & perms::SEND_MESSAGES, 0);
+
+    // Un départ sans exclusion ne laisse rien.
+    db.leave_guild(gid, sam.id).await.unwrap();
+    assert_eq!(count(&db, "member_timeouts", gid).await, 0);
+    db.use_invite(&inv.code, sam.id).await.unwrap();
+
+    // Un renvoi ou un bannissement est une sanction : ils lèvent l'exclusion gardée.
+    db.timeout_member(gid, modo.id, eve.id, 3600, None).await.unwrap();
+    db.kick_member(gid, modo.id, eve.id, None).await.unwrap();
+    let (_, new) = db.use_invite(&inv.code, eve.id).await.unwrap();
+    assert_eq!(new.unwrap().timeout_until, None, "renvoyé puis revenu : libre");
+    db.timeout_member(gid, modo.id, zoe.id, 3600, None).await.unwrap();
+    db.leave_guild(gid, zoe.id).await.unwrap();
+    assert_eq!(count(&db, "member_timeouts", gid).await, 1);
+    db.ban_member(gid, modo.id, zoe.id, &BanMember { reason: None, delete_hours: None }).await.unwrap();
+    assert_eq!(count(&db, "member_timeouts", gid).await, 0, "le bannissement efface ce qui était gardé");
+    db.unban(gid, modo.id, zoe.id).await.unwrap();
+    let (_, new) = db.use_invite(&inv.code, zoe.id).await.unwrap();
+    assert_eq!(new.unwrap().timeout_until, None);
+
+    // Une invitation morte ne rend rien et ne consomme rien : l'exclusion gardée reste.
+    let dead = db.create_invite(gid, Some(general), own.id, 1, None).await.unwrap();
+    db.use_invite(&dead.code, user(&db, "ned").await.id).await.unwrap();
+    db.timeout_member(gid, modo.id, sam.id, 3600, None).await.unwrap();
+    db.leave_guild(gid, sam.id).await.unwrap();
+    assert!(db.use_invite(&dead.code, sam.id).await.is_err());
+    assert_eq!(count(&db, "member_timeouts", gid).await, 1);
+    // La suppression du serveur emporte aussi ce qui était gardé.
+    db.delete_guild(gid, own.id, "Abysse").await.unwrap();
+    let left: i64 = sqlx::query_scalar("select count(*) from member_timeouts").fetch_one(&db.pool).await.unwrap();
+    assert_eq!(left, 0);
+}
+
+// ───────── cible disparue : 404, pas 500 ─────────
+
+/// L'erreur de base que donne `sql` (une violation de clé étrangère, ici), passée par la
+/// conversion qu'utilise tout le reste du code.
+async fn db_error(db: &Db, sql: &str, binds: &[Id]) -> DbError {
+    let mut q = sqlx::query(sql);
+    for b in binds {
+        q = q.bind(*b);
+    }
+    DbError::from(q.execute(&db.pool).await.unwrap_err())
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_write_aimed_at_a_vanished_channel_or_guild_is_not_found_but_other_keys_stay_errors(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, sam) = (user(&db, "lou").await, user(&db, "sam").await);
+    let (g, general) = guild_with(&db, &own, &[&sam]).await;
+    let (gid, gone) = (g.guild.id, Id::from_u128(0x0123_4567_89ab_cdef_0123_4567_89ab_cdef));
+    // Le salon ou le serveur visé n'existe plus (supprimé entre la vérification et l'écriture).
+    let vanished = [
+        ("insert into messages (channel_id, author_id, content) values ($1, $2, 'x')", vec![gone, sam.id]),
+        ("insert into read_states (user_id, channel_id) values ($2, $1)", vec![gone, sam.id]),
+        ("insert into slowmode_marks (channel_id, user_id) values ($1, $2)", vec![gone, sam.id]),
+        (
+            "insert into permission_overwrites (channel_id, target_id, target_kind, allow, deny) values ($1, $2, 'member', 0, 0)",
+            vec![gone, sam.id],
+        ),
+        ("insert into invites (code, guild_id, inviter_id) select 'abcdefgh', $1, $2", vec![gone, sam.id]),
+        ("insert into members (guild_id, user_id) values ($1, $2)", vec![gone, sam.id]),
+        ("insert into roles (guild_id, name, position, permissions) values ($1, 'r', 1, 0)", vec![gone]),
+    ];
+    for (sql, binds) in &vanished {
+        assert_eq!(db_error(&db, sql, binds).await, DbError::NotFound, "{sql}");
+    }
+    // Les autres clés étrangères ne sont pas masquées : ce sont des défauts, pas une cible disparue.
+    let broken = [
+        ("insert into messages (channel_id, author_id, content) values ($1, $2, 'x')", vec![general, gone]),
+        (
+            "insert into messages (channel_id, author_id, content, reply_to_id) values ($1, $2, 'x', $3)",
+            vec![general, sam.id, gone],
+        ),
+        ("insert into read_states (user_id, channel_id) values ($1, $2)", vec![gone, general]),
+        ("insert into members (guild_id, user_id) values ($1, $2)", vec![gid, gone]),
+        ("update guilds set system_channel_id = $2 where id = $1", vec![gid, gone]),
+        ("update channels set parent_id = $2 where id = $1", vec![general, gone]),
+    ];
+    for (sql, binds) in &broken {
+        assert!(matches!(db_error(&db, sql, binds).await, DbError::Internal(_)), "{sql}");
+    }
+    // Une unicité reste une unicité.
+    assert_eq!(
+        db_error(&db, "insert into members (guild_id, user_id) values ($1, $2)", &[gid, sam.id]).await,
+        DbError::Conflict("unique")
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn sending_while_the_channel_is_deleted_says_not_found(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, sam) = (user(&db, "lou").await, user(&db, "sam").await);
+    let (g, _) = guild_with(&db, &own, &[&sam]).await;
+    let doomed = db
+        .create_channel(
+            g.guild.id,
+            own.id,
+            &CreateChannel { name: "bientot".into(), kind: ChannelKind::Text, parent_id: None },
+        )
+        .await
+        .unwrap()
+        .id;
+    // La suppression a eu lieu mais n'est pas encore validée : l'envoi passe la vérification du
+    // salon, puis attend la clé étrangère... et la trouve supprimée.
+    let mut tx = db.pool.begin().await.unwrap();
+    sqlx::query("delete from channels where id = $1").bind(doomed).execute(&mut *tx).await.unwrap();
+    let sender = {
+        let db = db.clone();
+        tokio::spawn(async move { db.create_message(doomed, sam.id, "trop tard", None).await.map(|_| ()) })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    assert!(!sender.is_finished(), "l'envoi doit attendre la suppression");
+    tx.commit().await.unwrap();
+    assert_eq!(sender.await.unwrap(), Err(DbError::NotFound));
+    // Pareil pour l'accusé de lecture d'un salon qui vient de disparaître.
+    let m = db
+        .create_message(g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id, sam.id, "ok", None)
+        .await
+        .unwrap()
+        .0;
+    let mut gone = m.clone();
+    gone.channel_id = doomed;
+    assert_eq!(db.record_message(&gone, Some(g.guild.id), &[own.id]).await, Err(DbError::NotFound));
+}
+
+// ───────── plafond d'invitations ─────────
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_person_holds_fifty_active_invitations_per_server_at_most(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, sam) = (user(&db, "lou").await, user(&db, "sam").await);
+    let (g, general) = guild_with(&db, &own, &[&sam]).await;
+    let gid = g.guild.id;
+    let other = db.create_guild(sam.id, "Ailleurs").await.unwrap();
+    let elsewhere = other.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
+    let make = |who: Id| {
+        let db = db.clone();
+        async move { db.create_invite(gid, Some(general), who, 0, None).await.map(|i| i.code) }
+    };
+
+    // « guild_with » a déjà donné une invitation au propriétaire ; sam monte jusqu'au plafond.
+    let mut codes = Vec::new();
+    for _ in 0..MAX_INVITES_PER_MEMBER {
+        codes.push(make(sam.id).await.unwrap());
+    }
+    assert_eq!(make(sam.id).await, Err(DbError::Invalid("invite_limit")));
+    assert_eq!(
+        audit(&db, "invite_create").await as usize,
+        1 + MAX_INVITES_PER_MEMBER,
+        "la refusée n'est pas journalisée"
+    );
+    // Le plafond est par personne et par serveur.
+    make(own.id).await.unwrap();
+    db.create_invite(other.guild.id, Some(elsewhere), sam.id, 0, None).await.unwrap();
+
+    // Révoquer en libère une ; une périmée ou une épuisée ne compte plus.
+    db.revoke_invite(&codes[0], sam.id).await.unwrap();
+    codes.push(make(sam.id).await.unwrap());
+    assert_eq!(make(sam.id).await, Err(DbError::Invalid("invite_limit")));
+    sqlx::query("update invites set expires_at = now() - interval '1 minute' where code = $1")
+        .bind(&codes[1])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    codes.push(make(sam.id).await.unwrap());
+    assert_eq!(make(sam.id).await, Err(DbError::Invalid("invite_limit")));
+    sqlx::query("update invites set max_uses = 1, uses = 1 where code = $1")
+        .bind(&codes[2])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    codes.push(make(sam.id).await.unwrap());
+    assert_eq!(make(sam.id).await, Err(DbError::Invalid("invite_limit")));
+    // Une invitation limitée dans le temps ou en usages compte tant qu'elle sert.
+    db.revoke_invite(&codes[3], sam.id).await.unwrap();
+    db.create_invite(gid, Some(general), sam.id, 5, Some(3600)).await.unwrap();
+    assert_eq!(make(sam.id).await, Err(DbError::Invalid("invite_limit")));
+
+    // Deux demandes à la fois au pied du plafond : une seule passe.
+    db.revoke_invite(&codes[4], sam.id).await.unwrap();
+    db.revoke_invite(&codes[5], sam.id).await.unwrap();
+    let racers: Vec<_> = (0..6).map(|_| tokio::spawn(make(sam.id))).collect();
+    let mut won = 0;
+    for r in racers {
+        match r.await.unwrap() {
+            Ok(_) => won += 1,
+            Err(e) => assert_eq!(e, DbError::Invalid("invite_limit")),
+        }
+    }
+    assert_eq!(won, 2, "il restait deux places");
+    let active: i64 = sqlx::query_scalar(
+        "select count(*) from invites where guild_id = $1 and inviter_id = $2
+           and (expires_at is null or expires_at > now()) and (max_uses = 0 or uses < max_uses)",
+    )
+    .bind(gid)
+    .bind(sam.id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(active as usize, MAX_INVITES_PER_MEMBER);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_invite_list_never_holds_more_than_two_hundred_rows_active_ones_first(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let own = user(&db, "lou").await;
+    let (g, general) = guild_with(&db, &own, &[]).await;
+    let gid = g.guild.id;
+    // 150 mortes (créées en premier, donc plus anciennes) puis 120 vivantes, posées directement.
+    sqlx::query(
+        "insert into invites (code, guild_id, channel_id, inviter_id, expires_at, created_at)
+         select 'dead' || lpad(n::text, 4, '0'), $1, $2, $3, now() - interval '1 hour', now() - interval '1 day' - make_interval(secs => n)
+         from generate_series(1, 150) n",
+    )
+    .bind(gid)
+    .bind(general)
+    .bind(own.id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "insert into invites (code, guild_id, channel_id, inviter_id, created_at)
+         select 'live' || lpad(n::text, 4, '0'), $1, $2, $3, now() - make_interval(secs => n) from generate_series(1, 120) n",
+    )
+    .bind(gid)
+    .bind(general)
+    .bind(own.id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    let list = db.guild_invites(gid, own.id).await.unwrap();
+    assert_eq!(list.len(), MAX_INVITE_ROWS);
+    // 121 vivantes (celle de guild_with comprise), puis les mortes les plus récentes.
+    let active = list.iter().filter(|i| i.state == InviteState::Active).count();
+    assert_eq!(active, 121);
+    assert!(list[..active].iter().all(|i| i.state == InviteState::Active));
+    assert!(list[active..].iter().all(|i| i.state != InviteState::Active));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_rail_invite_reuses_the_endless_one_instead_of_filling_the_cap(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, sam) = (user(&db, "lou").await, user(&db, "sam").await);
+    let (g, general) = guild_with(&db, &own, &[&sam]).await;
+    let gid = g.guild.id;
+    assert!(db.reusable_invite(gid, general, sam.id).await.unwrap().is_none());
+    let first = db.create_invite(gid, Some(general), sam.id, 0, None).await.unwrap();
+    assert_eq!(db.reusable_invite(gid, general, sam.id).await.unwrap().unwrap().code, first.code);
+    // Ni celle d'une autre personne, ni une invitation à durée ou à usages limités.
+    let eve = user(&db, "eve").await;
+    db.create_invite(gid, Some(general), eve.id, 5, None).await.unwrap();
+    db.create_invite(gid, Some(general), eve.id, 0, Some(3600)).await.unwrap();
+    assert!(db.reusable_invite(gid, general, eve.id).await.unwrap().is_none());
 }

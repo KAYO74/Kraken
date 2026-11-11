@@ -3,8 +3,8 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use kraken_db::DbError;
 use kraken_proto::{
-    ApiError, MAX_CHANNEL_NAME, MAX_CHANNELS, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_INVITE_USES, MAX_OVERWRITES,
-    MAX_PURGE_HOURS, MAX_REASON, MAX_ROLES, MAX_TOPIC,
+    ApiError, MAX_CHANNEL_NAME, MAX_CHANNELS, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_INVITE_USES,
+    MAX_INVITES_PER_MEMBER, MAX_OVERWRITES, MAX_PURGE_HOURS, MAX_REASON, MAX_ROLES, MAX_TOPIC,
 };
 
 /// Erreur d'API : un code stable que le client traduit, et un message de secours.
@@ -93,6 +93,11 @@ impl From<DbError> for AppError {
                 StatusCode::NOT_FOUND,
                 "invite_exhausted",
                 "Cette invitation a déjà servi autant de fois que permis. Demande-en une nouvelle.".into(),
+            ),
+            DbError::Invalid("invite_limit") => Self(
+                StatusCode::BAD_REQUEST,
+                "invite_limit",
+                format!("Tu as déjà {MAX_INVITES_PER_MEMBER} invitations actives. Révoque-en une."),
             ),
             DbError::Invalid("invite_age") => Self::invalid("Une invitation dure 7 jours au plus, ou n'expire jamais."),
             DbError::Invalid("invite_uses") => {

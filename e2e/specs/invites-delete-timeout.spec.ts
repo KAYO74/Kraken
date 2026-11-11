@@ -442,6 +442,38 @@ test('S22-N3 exclusion temporaire : ni soi-même, ni le propriétaire, ni un ran
   expect([up.status(), (await up.json()).code]).toEqual([403, 'timed_out']);
 });
 
+test('F06-N5 invitations : 50 actives au plus par personne, le formulaire dit d’en révoquer une ; en révoquer une libère une place', async ({ user, api, allow }) => {
+  allow.push(/status of 400/);
+  const owner = await user('chef');
+  const [, cid] = await createGuild(owner.page, 'Trop plein');
+  const ctx = await api(owner.token);
+  for (let i = 0; i < 50; i++) {
+    expect((await ctx.post(`${API}/channels/${cid}/invites`, { data: {} })).status()).toBe(201);
+  }
+  // L'API refuse la 51e avec un code stable et la phrase que l'écran montre.
+  const over = await ctx.post(`${API}/channels/${cid}/invites`, { data: {} });
+  expect([over.status(), (await over.json()).code]).toEqual([400, 'invite_limit']);
+
+  await owner.page.getByRole('link', { name: 'Paramètres du serveur' }).click();
+  await reglages(owner).getByRole('link', { name: 'Invitations' }).click();
+  await expect(invitations(owner)).toHaveCount(50);
+  await reglages(owner).getByRole('button', { name: 'Créer une invitation' }).click();
+  const alert = reglages(owner).getByRole('alert');
+  await expect(alert).toHaveText('Tu as déjà 50 invitations actives. Révoque-en une.');
+  await expect(invitations(owner)).toHaveCount(50);
+  await a11y(owner.page);
+
+  // Révoquer la plus récente libère une place : la création repasse.
+  const code = (await invitations(owner).first().locator('code').innerText()).trim();
+  await invitations(owner).first().getByRole('button', { name: `Plus d'actions pour l'invitation ${code}` }).click();
+  await owner.page.getByRole('button', { name: 'Révoquer' }).click();
+  await expect(reglages(owner).getByText(`Invitation ${code} révoquée.`)).toBeVisible();
+  await expect(invitations(owner)).toHaveCount(49);
+  await reglages(owner).getByRole('button', { name: 'Créer une invitation' }).click();
+  await expect(invitations(owner)).toHaveCount(50);
+  await expect(reglages(owner).getByRole('alert')).toHaveCount(0);
+});
+
 test.describe('largeur mobile', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
