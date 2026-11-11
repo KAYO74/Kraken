@@ -2,6 +2,7 @@
 //! (S03 ou salons), zone principale. Plus la création / l'adhésion à un serveur (S21).
 
 use kraken_proto::{Channel, ChannelKind, GuildState, Id};
+use leptos::portal::Portal;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::NavigateOptions;
@@ -327,8 +328,11 @@ fn HomeSidebar() -> impl IntoView {
                 }
             </For>
         </nav>
+        // Les fenêtres sortent de la barre latérale (voir `GuildSidebar`).
         <Show when=move || picking.get()>
-            <crate::social::PeoplePicker purpose=crate::social::PickFor::New(vec![]) close=Callback::new(move |()| picking.set(false))/>
+            <Portal>
+                <crate::social::PeoplePicker purpose=crate::social::PickFor::New(vec![]) close=Callback::new(move |()| picking.set(false))/>
+            </Portal>
         </Show>
     }
 }
@@ -484,13 +488,23 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                 }
             }}
         </nav>
+        // Les fenêtres sont montées hors de `.app-nav` : à 390 px, la barre latérale est un tiroir
+        // fixe, et tout ce qui est dedans passe sous la barre des serveurs.
         <Show when=move || invite_open.get()>
-            <InviteDialog guild=guild close=move || invite_open.set(false)/>
+            <Portal>
+                <InviteDialog guild=guild close=move || invite_open.set(false)/>
+            </Portal>
         </Show>
-        {move || leaving.get().map(|what| view! { <crate::social::ConfirmDialog what=what close=Callback::new(move |()| leaving.set(None))/> })}
+        {move || leaving.get().map(|what| view! {
+            <Portal>
+                <crate::social::ConfirmDialog what=what.clone() close=Callback::new(move |()| leaving.set(None))/>
+            </Portal>
+        })}
         {move || creating.get().map(|(kind, parent)| view! {
-            <crate::channels::CreateChannelDialog guild=guild kind=kind parent=parent go=true close=Callback::new(move |()| creating.set(None))
-                restore="button[aria-label=\"Plus d'actions pour ce serveur\"]"/>
+            <Portal>
+                <crate::channels::CreateChannelDialog guild=guild kind=kind parent=parent go=true close=Callback::new(move |()| creating.set(None))
+                    restore="button[aria-label=\"Plus d'actions pour ce serveur\"]"/>
+            </Portal>
         })}
     }
 }

@@ -89,6 +89,19 @@ pub(crate) async fn actor(tx: &mut Tx<'_>, gid: Id, owner: Id, uid: Id, need: u6
     Ok(s)
 }
 
+/// Quelqu'un n'est plus membre : ses surcharges de droits dans les salons du serveur partent.
+async fn forget_member_overwrites(tx: &mut Tx<'_>, gid: Id, uid: Id) -> Result<()> {
+    sqlx::query(
+        "delete from permission_overwrites po using channels c
+         where po.channel_id = c.id and c.guild_id = $1 and po.target_id = $2 and po.target_kind = 'member'",
+    )
+    .bind(gid)
+    .bind(uid)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 pub(crate) async fn audit(
     tx: &mut Tx<'_>,
     gid: Id,
@@ -269,6 +282,11 @@ impl Db {
         let role = role_in(&mut tx, gid, rid).await?;
         me.over_role(role.position)?;
         sqlx::query("delete from roles where id = $1").bind(rid).execute(&mut *tx).await?;
+        // Ses surcharges de salons partent avec lui : sans rôle, elles ne serviraient plus à rien.
+        sqlx::query("delete from permission_overwrites where target_id = $1 and target_kind = 'role'")
+            .bind(rid)
+            .execute(&mut *tx)
+            .await?;
         sqlx::query("update roles set position = position - 1 where guild_id = $1 and id <> $1 and position > $2")
             .bind(gid)
             .bind(role.position)
@@ -387,6 +405,7 @@ impl Db {
             .bind(uid)
             .execute(&mut *tx)
             .await?;
+        forget_member_overwrites(&mut tx, gid, uid).await?;
         audit(&mut tx, gid, by, "member_kick", Some(uid), reason.as_deref()).await?;
         tx.commit().await?;
         Ok(())
@@ -426,6 +445,7 @@ impl Db {
             .bind(uid)
             .execute(&mut *tx)
             .await?;
+        forget_member_overwrites(&mut tx, gid, uid).await?;
         sqlx::query(
             "insert into bans (guild_id, user_id, moderator_id, reason) values ($1, $2, $3, $4)
              on conflict (guild_id, user_id) do update set moderator_id = $3, reason = $4, created_at = now()",
@@ -540,6 +560,7 @@ impl Db {
         if done == 0 {
             return Err(DbError::NotFound);
         }
+        forget_member_overwrites(&mut tx, gid, uid).await?;
         tx.commit().await?;
         Ok(())
     }

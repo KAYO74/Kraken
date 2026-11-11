@@ -685,7 +685,7 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>, drafts: Draft
             </div>
             <Show when=dirty>
                 <div class="app-savebar" role="region" aria-label="Modifications du rôle">
-                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/>"Modifications non enregistrées"</span>
+                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/><span class="app-bar-long">"Modifications non enregistrées"</span><span class="app-bar-short">"Non enregistré"</span></span>
                     <button type="button" class="k-btn k-btn--ghost" on:click=cancel>"Annuler"</button>
                     <button type="button" class="k-btn k-btn--primary" on:click=save aria-busy=move || busy.get().to_string()>"Enregistrer"</button>
                 </div>

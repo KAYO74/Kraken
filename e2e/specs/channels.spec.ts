@@ -2,7 +2,7 @@
 // clavier, supprimer, salons privés et droits par rôle et par membre. Tout se voit en direct chez
 // les autres membres.
 import { test, expect, a11y, createGuild, say, messages, API, type User } from '../fixtures';
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
 
 type Fixture = { user: (prefix?: string) => Promise<User>; api: (token?: string) => Promise<APIRequestContext> };
 
@@ -35,6 +35,7 @@ async function make(api: Fixture['api'], owner: User, gid: string, name: string,
 
 const sidebar = (p: Page) => p.getByRole('navigation', { name: 'Salons' });
 const settings = (p: Page) => p.getByRole('dialog', { name: 'Paramètres du salon' });
+const catSettings = (p: Page) => p.getByRole('dialog', { name: 'Paramètres de la catégorie' });
 
 test('S23-H1 créer un salon, un vocal et une catégorie : depuis « + », le menu du serveur et les réglages ; en direct chez les autres', async ({ user, api }) => {
   const owner = await user('chef');
@@ -335,6 +336,49 @@ test('S23-H4 salon privé : il disparaît en direct pour qui ne le voit plus, re
   await expect(sidebar(crew.page).getByRole('link', { name: 'secret' })).toBeVisible();
 });
 
+test('S23-H5 supprimer une catégorie privée : ses salons gardent les mêmes règles d’accès', async ({ user, api, allow }) => {
+  allow.push(/status of 404/);
+  const owner = await user('chef');
+  const crew = await user('mousse');
+  const [gid, cid] = await createGuild(owner.page, 'Cale');
+  await invite(api, owner, cid, crew);
+  const cabin = await make(api, owner, gid, 'Cabine', 'category');
+  const porthole = await make(api, owner, gid, 'hublot', 'text', cabin);
+  const asOwner = await api(owner.token);
+  expect((await asOwner.patch(`${API}/channels/${cabin}`, { data: { private: true } })).status()).toBe(200);
+  const open = await make(api, owner, gid, 'Pont', 'category');
+  await crew.page.getByRole('link', { name: 'Serveur Cale' }).click();
+  await expect(sidebar(crew.page).getByRole('link', { name: 'général', exact: true })).toBeVisible();
+  const asCrew = await api(crew.token);
+  expect((await asCrew.get(`${API}/channels/${porthole}/messages`)).status()).toBe(404);
+
+  // Une catégorie publique : la confirmation ne parle pas de règles d'accès.
+  await owner.page.goto(`/channels/${gid}/${open}/settings`);
+  await catSettings(owner.page).getByRole('button', { name: 'Supprimer la catégorie' }).click();
+  const publicAsk = owner.page.getByRole('alertdialog', { name: 'Supprimer la catégorie « Pont » ?' });
+  await expect(publicAsk).toContainText('ils sortent de la catégorie');
+  await expect(publicAsk).not.toContainText(/règles d.accès/);
+  await publicAsk.getByRole('button', { name: 'Annuler' }).click();
+
+  // La catégorie privée : la confirmation le dit, et le salon reste fermé à l'autre membre.
+  await owner.page.goto(`/channels/${gid}/${cabin}/settings`);
+  await catSettings(owner.page).getByRole('button', { name: 'Supprimer la catégorie' }).click();
+  const ask = owner.page.getByRole('alertdialog', { name: 'Supprimer la catégorie « Cabine » ?' });
+  await expect(ask).toContainText(/Ses salons gardent les mêmes règles d.accès\./);
+  await a11y(owner.page);
+  await ask.getByRole('button', { name: 'Supprimer la catégorie' }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(sidebar(owner.page).getByRole('button', { name: /Cabine/ })).toHaveCount(0);
+  // Chez le propriétaire, le salon est sorti de la catégorie, toujours privé (cadenas).
+  await expect(sidebar(owner.page).getByRole('link', { name: /salon privé hublot/ })).toBeVisible();
+  expect((await channels(api, owner, gid)).find((c) => c.id === porthole)).toMatchObject({ parent_id: null, private: true });
+  // L'autre membre ne le voit toujours pas, ni dans la liste, ni par l'API, ni son historique.
+  await expect(sidebar(crew.page).getByRole('link', { name: /hublot/ })).toHaveCount(0);
+  expect((await channels(api, crew, gid)).map((c) => c.name)).not.toContain('hublot');
+  expect((await asCrew.get(`${API}/channels/${porthole}/messages`)).status()).toBe(404);
+  expect((await asCrew.post(`${API}/channels/${porthole}/messages`, { data: { content: 'je rentre' } })).status()).toBe(404);
+});
+
 test('S23-N1 hiérarchie et accès : on ne donne que les droits qu’on a, on ne se retire pas l’accès, un membre ne gère rien', async ({ user, api, allow }) => {
   allow.push(/status of 40[34]/);
   const owner = await user('roi');
@@ -391,23 +435,48 @@ test('S23-N1 hiérarchie et accès : on ne donne que les droits qu’on a, on ne
   expect((await asMod.get(`${API}/channels/${cid}/messages`)).status()).toBe(200);
 });
 
+/** La fenêtre est entière dans l'écran et rien ne la recouvre : on touche chacun de ses coins et son titre. */
+async function fullyShown(dialog: Locator) {
+  await expect(dialog).toBeVisible();
+  const box = (await dialog.boundingBox())!;
+  const vw = dialog.page().viewportSize()!.width;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(vw);
+  const covered = await dialog.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const title = el.querySelector('h2, h3')!.getBoundingClientRect();
+    const pts: [number, number][] = [
+      [r.left + 4, r.top + 4], [r.right - 4, r.top + 4], [r.left + 4, r.bottom - 4], [r.right - 4, r.bottom - 4],
+      [title.left + 2, title.top + title.height / 2], [title.right - 2, title.top + title.height / 2],
+    ];
+    return pts.filter(([x, y]) => !el.contains(document.elementFromPoint(x, y))).length;
+  });
+  expect(covered, 'des éléments recouvrent la fenêtre').toBe(0);
+}
+
 test.describe('largeur mobile', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('S23-E1 à 390 px : créer un salon et le régler depuis le tiroir, sans défilement horizontal', async ({ user, api }) => {
-    const owner = await user('chef');
-    // Le rail des serveurs est dans le tiroir : le serveur est créé par l'API, puis ouvert.
-    const res = await (await api(owner.token)).post(`${API}/guilds`, { data: { name: 'Poche' } });
+  /** Un propriétaire sur son serveur, vu de téléphone : le rail est dans le tiroir, le serveur est donc créé par l'API. */
+  async function onPhone(f: Fixture, name: string) {
+    const owner = await f.user('chef');
+    const res = await (await f.api(owner.token)).post(`${API}/guilds`, { data: { name } });
     expect(res.status(), await res.text()).toBe(201);
     const g = await res.json();
     const first = g.channels.find((c: Chan) => c.kind === 'text');
     await owner.page.goto(`/channels/${g.guild.id}/${first.id}`);
     await expect(owner.page.getByRole('heading', { name: 'général', level: 1 })).toBeVisible();
+    return { owner, gid: g.guild.id as string, cid: first.id as string };
+  }
+
+  test('S23-E1 à 390 px : créer un salon et le régler depuis le tiroir, sans défilement horizontal', async ({ user, api }) => {
+    const { owner } = await onPhone({ user, api }, 'Poche');
     const noScroll = async () => expect(await owner.page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     await owner.page.getByRole('button', { name: 'Ouvrir la navigation' }).click();
     await sidebar(owner.page).getByRole('button', { name: 'Créer un salon' }).first().click();
     const dialog = owner.page.getByRole('dialog', { name: 'Créer un salon' });
     await expect(dialog.getByLabel('Nom du salon')).toBeFocused();
+    await fullyShown(dialog);
     await noScroll();
     await a11y(owner.page);
     await dialog.getByLabel('Nom du salon').fill('mobile');
@@ -425,5 +494,56 @@ test.describe('largeur mobile', () => {
     await expect(dlg.getByRole('radiogroup', { name: 'Voir les salons' })).toBeVisible();
     await noScroll();
     await a11y(owner.page);
+  });
+
+  test('S23-E2 à 390 px : les fenêtres du tiroir passent devant la barre des serveurs, cibles au doigt, barre d’enregistrement sur une ligne', async ({ user, api }) => {
+    const { owner, gid, cid } = await onPhone({ user, api }, 'Poche');
+    const page = owner.page;
+    const size = async (l: Locator) => (await l.boundingBox())!;
+
+    // Depuis le tiroir : « + » d'une catégorie, « Créer une catégorie », « Quitter le serveur », « Inviter ».
+    await page.getByRole('button', { name: 'Ouvrir la navigation' }).click();
+    const plus = sidebar(page).getByRole('button', { name: 'Créer un salon' }).first();
+    expect((await size(plus)).width).toBeGreaterThanOrEqual(35.5); // 36 px, à l'arrondi près
+    expect((await size(sidebar(page).getByRole('link', { name: 'Paramètres du salon' }).first())).height).toBeGreaterThanOrEqual(35.5);
+    const menu = page.getByRole('button', { name: "Plus d'actions pour ce serveur" });
+    await menu.click();
+    await page.getByRole('button', { name: 'Créer une catégorie' }).click();
+    const cat = page.getByRole('dialog', { name: 'Créer une catégorie' });
+    await fullyShown(cat);
+    await expect(cat.getByLabel('Nom de la catégorie')).toBeFocused();
+    await a11y(page);
+    await page.keyboard.press('Escape');
+    await expect(cat).toHaveCount(0);
+    await expect(menu).toBeFocused();
+
+    await menu.click();
+    await page.getByRole('button', { name: 'Quitter le serveur' }).click();
+    const leave = page.getByRole('alertdialog', { name: 'Quitter « Poche » ?' });
+    await fullyShown(leave);
+    await a11y(page);
+    await page.keyboard.press('Escape');
+    await expect(leave).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Inviter des amis' }).click();
+    await fullyShown(page.getByRole('dialog', { name: /Inviter/ }));
+    await page.keyboard.press('Escape');
+
+    // Réglages › Salons : monter, descendre et régler tiennent au doigt.
+    await page.goto(`/guilds/${gid}/settings/channels`);
+    const admin = page.getByRole('dialog', { name: 'Paramètres du serveur' });
+    for (const b of [admin.getByRole('button', { name: /^Monter/ }).nth(1), admin.getByRole('button', { name: /^Descendre/ }).first()]) {
+      const box = await size(b);
+      expect([box.width >= 35.5, box.height >= 35.5]).toEqual([true, true]);
+    }
+
+    // La barre « Non enregistré » reste sur une ligne, à côté des deux boutons.
+    await page.goto(`/channels/${gid}/${cid}/settings`);
+    await settings(page).getByLabel('Sujet du salon').fill('Un sujet');
+    const bar = settings(page).getByRole('region', { name: 'Modifications du salon' });
+    await expect(bar.getByText('Non enregistré', { exact: true })).toBeVisible();
+    await expect(bar.getByText('Modifications non enregistrées')).toBeHidden();
+    expect((await size(bar)).height).toBeLessThan(80);
+    await a11y(page);
   });
 });

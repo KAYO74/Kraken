@@ -609,3 +609,209 @@ async fn nobody_can_lock_themselves_out(pool: PgPool) {
     );
     let _ = (MAX_OVERWRITES, plain);
 }
+
+fn view(kind: OverwriteKind) -> SetOverwrite {
+    SetOverwrite { kind, allow: perms::VIEW_CHANNEL, deny: 0 }
+}
+
+/// Un salon fermé à `@everyone`, qu'un rôle rouvre : le modèle d'une catégorie « Staff ».
+async fn staff_category(db: &Db, g: &GuildState, own: &User, staff: &Role) -> Channel {
+    let gid = g.guild.id;
+    let cat = db
+        .create_channel(
+            gid,
+            own.id,
+            &CreateChannel { name: "Staff".into(), kind: ChannelKind::Category, parent_id: None },
+        )
+        .await
+        .unwrap();
+    db.edit_channel(cat.id, own.id, &EditChannel { private: Some(true), ..Default::default() }).await.unwrap();
+    db.set_overwrite(cat.id, own.id, staff.id, &view(OverwriteKind::Role)).await.unwrap();
+    cat
+}
+
+async fn sees(db: &Db, cid: Id, uid: Id) -> bool {
+    db.channel_audience(cid).await.unwrap().contains(&uid)
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn leaving_roles_and_members_take_their_overwrites_with_them(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, mgr, plain) = (user(&db, "lou").await, user(&db, "max").await, user(&db, "sam").await);
+    let (gone, kicked, banned) = (user(&db, "eve").await, user(&db, "kim").await, user(&db, "zoe").await);
+    let g = guild_with(&db, &own, &[&mgr, &plain, &gone, &kicked, &banned]).await;
+    let (gid, general) = (g.guild.id, general(&g));
+    let builders = db.create_role(gid, own.id, &role("Bâtisseurs", perms::MANAGE_CHANNELS)).await.unwrap();
+    db.set_member_role(gid, own.id, mgr.id, builders.id, true).await.unwrap();
+    let temp = db.create_role(gid, own.id, &role("Passager", 0)).await.unwrap();
+    let write = SetOverwrite { kind: OverwriteKind::Member, allow: perms::ADD_REACTIONS, deny: 0 };
+    db.set_overwrite(general, own.id, temp.id, &view(OverwriteKind::Role)).await.unwrap();
+    for u in [&gone, &kicked, &banned, &plain] {
+        db.set_overwrite(general, own.id, u.id, &write).await.unwrap();
+    }
+    let count = || {
+        let db = db.clone();
+        async move { db.channel_overwrites(general, own.id).await.unwrap().len() }
+    };
+    assert_eq!(count().await, 5);
+
+    // Le rôle supprimé emporte sa surcharge ; les autres surcharges restent.
+    db.delete_role(gid, temp.id, own.id).await.unwrap();
+    assert_eq!(count().await, 4);
+    // Partir, être exclu ou être banni : la surcharge du membre part aussi.
+    db.leave_guild(gid, gone.id).await.unwrap();
+    assert_eq!(count().await, 3);
+    db.kick_member(gid, own.id, kicked.id, None).await.unwrap();
+    assert_eq!(count().await, 2);
+    db.ban_member(gid, own.id, banned.id, &BanMember::default()).await.unwrap();
+    assert_eq!(count().await, 1);
+    let left = db.channel_overwrites(general, own.id).await.unwrap();
+    assert_eq!(left.iter().map(|o| o.target_id).collect::<Vec<_>>(), [plain.id], "celle d'un membre présent reste");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_orphan_overwrite_can_still_be_removed_by_a_manager(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, mgr, plain) = (user(&db, "lou").await, user(&db, "max").await, user(&db, "sam").await);
+    let g = guild_with(&db, &own, &[&mgr, &plain]).await;
+    let (gid, general) = (g.guild.id, general(&g));
+    let builders = db.create_role(gid, own.id, &role("Bâtisseurs", perms::MANAGE_CHANNELS)).await.unwrap();
+    db.set_member_role(gid, own.id, mgr.id, builders.id, true).await.unwrap();
+    // Des lignes laissées par une version qui ne nettoyait pas : un rôle et un membre qui n'existent plus.
+    // Elles portent un droit que le gestionnaire n'a pas (gérer les messages).
+    let (dead_role, dead_member) = (Id::from_u128(0xdead01), Id::from_u128(0xdead02));
+    for (target, kind) in [(dead_role, "role"), (dead_member, "member")] {
+        sqlx::query(
+            "insert into permission_overwrites (channel_id, target_id, target_kind, allow, deny) values ($1, $2, $3, $4, 0)",
+        )
+        .bind(general)
+        .bind(target)
+        .bind(kind)
+        .bind(perms::MANAGE_MESSAGES as i64)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    assert_eq!(db.channel_overwrites(general, mgr.id).await.unwrap().len(), 2);
+
+    // Un simple membre ne touche à rien ; poser une surcharge à un inconnu reste refusé.
+    assert_eq!(db.remove_overwrite(general, plain.id, dead_role).await.map(|_| ()), Err(DbError::Forbidden("perm")));
+    let set = SetOverwrite { kind: OverwriteKind::Role, allow: perms::ADD_REACTIONS, deny: 0 };
+    assert_eq!(
+        db.set_overwrite(general, own.id, Id::from_u128(0xdead03), &set).await.map(|_| ()),
+        Err(DbError::NotFound)
+    );
+    // Le gestionnaire les retire, par DELETE ou en vidant la surcharge, sans en avoir les droits.
+    let list = db.remove_overwrite(general, mgr.id, dead_role).await.unwrap();
+    assert_eq!(list.len(), 1);
+    let empty = SetOverwrite { kind: OverwriteKind::Member, allow: 0, deny: 0 };
+    let list = db.set_overwrite(general, mgr.id, dead_member, &empty).await.unwrap();
+    assert!(list.is_empty());
+    // Plus rien à retirer : 404, comme avant.
+    assert_eq!(db.remove_overwrite(general, mgr.id, dead_role).await.map(|_| ()), Err(DbError::NotFound));
+    assert_eq!(audit(&db, "overwrite_update").await, 2);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn deleting_a_private_category_keeps_its_channels_private(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, plain, vip) = (user(&db, "lou").await, user(&db, "sam").await, user(&db, "eve").await);
+    let g = guild_with(&db, &own, &[&plain, &vip]).await;
+    let gid = g.guild.id;
+    let staff = db.create_role(gid, own.id, &role("Staff", 0)).await.unwrap();
+    db.set_member_role(gid, own.id, vip.id, staff.id, true).await.unwrap();
+    let cat = staff_category(&db, &g, &own, &staff).await;
+    let bare = db.create_channel(gid, own.id, &text("réunion", Some(cat.id))).await.unwrap();
+    // Un salon qui a déjà une surcharge de `@everyone` (ici : personne n'y écrit) : la sienne
+    // s'ajoute à celle de la catégorie, elle ne la remplace pas.
+    let calm = db.create_channel(gid, own.id, &text("calme", Some(cat.id))).await.unwrap();
+    let mute = SetOverwrite { kind: OverwriteKind::Role, allow: 0, deny: perms::SEND_MESSAGES };
+    db.set_overwrite(calm.id, own.id, gid, &mute).await.unwrap();
+    let after_cat = db.create_channel(gid, own.id, &text("dernier", Some(cat.id))).await.unwrap();
+    for c in [&bare, &calm, &after_cat] {
+        assert!(!sees(&db, c.id, plain.id).await && sees(&db, c.id, vip.id).await && sees(&db, c.id, own.id).await);
+    }
+    assert_eq!(db.channel_perms(plain.id, bare.id).await.unwrap(), 0);
+
+    db.delete_channel(cat.id, own.id).await.unwrap();
+    for c in [&bare, &calm, &after_cat] {
+        let now = db.channel_view(c.id).await.unwrap().unwrap();
+        assert!(now.parent_id.is_none() && now.private, "{:?} reste privé", c.name);
+        assert!(!sees(&db, c.id, plain.id).await, "{:?} ne doit pas s'ouvrir à tous", c.name);
+        assert_eq!(db.channel_perms(plain.id, c.id).await.unwrap(), 0);
+        assert!(sees(&db, c.id, vip.id).await && sees(&db, c.id, own.id).await);
+        assert!(db.messages(c.id, None, 10).await.is_ok());
+    }
+    // Ce que chacun peut y faire n'a pas bougé non plus : la consigne du salon s'ajoute à la catégorie.
+    let calm_rules = db.channel_overwrites(calm.id, own.id).await.unwrap();
+    let everyone = calm_rules.iter().find(|o| o.target_id == gid).unwrap();
+    assert_eq!((everyone.allow, everyone.deny), (0, perms::VIEW_CHANNEL | perms::SEND_MESSAGES));
+    assert!(calm_rules.iter().any(|o| o.target_id == staff.id && o.allow == perms::VIEW_CHANNEL));
+    assert_eq!(db.channel_perms(vip.id, calm.id).await.unwrap() & perms::SEND_MESSAGES, 0);
+    assert_ne!(db.channel_perms(vip.id, bare.id).await.unwrap() & perms::SEND_MESSAGES, 0);
+    // Les places des catégories se resserrent.
+    assert_eq!(names(&db, gid, own.id, None, true).await, ["Salons textuels", "Salons vocaux"]);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn moving_a_channel_out_of_a_private_category_keeps_it_private(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, plain, vip) = (user(&db, "lou").await, user(&db, "sam").await, user(&db, "eve").await);
+    let g = guild_with(&db, &own, &[&plain, &vip]).await;
+    let (gid, voices) = (g.guild.id, category(&g, "Salons vocaux"));
+    let staff = db.create_role(gid, own.id, &role("Staff", 0)).await.unwrap();
+    db.set_member_role(gid, own.id, vip.id, staff.id, true).await.unwrap();
+    let cat = staff_category(&db, &g, &own, &staff).await;
+    let (a, b, c) = (
+        db.create_channel(gid, own.id, &text("a", Some(cat.id))).await.unwrap(),
+        db.create_channel(gid, own.id, &text("b", Some(cat.id))).await.unwrap(),
+        db.create_channel(gid, own.id, &text("c", Some(cat.id))).await.unwrap(),
+    );
+    // Sortir de la catégorie, puis passer dans une autre, publique : l'accès ne change pas.
+    db.move_channel(a.id, own.id, &MoveChannel { parent_id: None, index: 0 }).await.unwrap();
+    let changed = db.move_channel(b.id, own.id, &MoveChannel { parent_id: Some(voices), index: 0 }).await.unwrap();
+    for x in [&a, &b] {
+        assert!(db.channel_view(x.id).await.unwrap().unwrap().private);
+        assert!(!sees(&db, x.id, plain.id).await, "{:?} ne doit pas s'ouvrir à tous", x.name);
+        assert!(sees(&db, x.id, vip.id).await && sees(&db, x.id, own.id).await);
+    }
+    // Ceux qui restent dans la catégorie sont toujours cachés, et leurs places n'ont plus de trou.
+    assert!(!sees(&db, c.id, plain.id).await);
+    assert!(changed.contains(&c.id), "c a changé de place : {changed:?}");
+    assert_eq!(db.channel(c.id).await.unwrap().unwrap().position, 0);
+    assert_eq!(db.channel(b.id).await.unwrap().unwrap().position, 0);
+    assert_eq!(audit(&db, "channel_move").await, 2);
+
+    // Bouger dans la même catégorie ne recopie rien.
+    db.move_channel(c.id, own.id, &MoveChannel { parent_id: Some(cat.id), index: 0 }).await.unwrap();
+    assert_eq!(db.channel_overwrites(c.id, own.id).await.unwrap().len(), 0);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_channel_never_becomes_more_open_by_leaving_its_category(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, plain, vip) = (user(&db, "lou").await, user(&db, "sam").await, user(&db, "eve").await);
+    let g = guild_with(&db, &own, &[&plain, &vip]).await;
+    let gid = g.guild.id;
+    let staff = db.create_role(gid, own.id, &role("Staff", 0)).await.unwrap();
+    db.set_member_role(gid, own.id, vip.id, staff.id, true).await.unwrap();
+    // La catégorie rouvre le salon à « Staff » ; le salon, lui, se ferme à tous. Pris dans l'ordre
+    // (catégorie, puis salon), « Staff » ne le voit pas ; fondues en une seule couche, les deux
+    // règles l'ouvriraient : une interdiction à son nom referme l'écart.
+    let cat = db
+        .create_channel(
+            gid,
+            own.id,
+            &CreateChannel { name: "Mixte".into(), kind: ChannelKind::Category, parent_id: None },
+        )
+        .await
+        .unwrap();
+    db.set_overwrite(cat.id, own.id, staff.id, &view(OverwriteKind::Role)).await.unwrap();
+    let c = db.create_channel(gid, own.id, &text("fermé", Some(cat.id))).await.unwrap();
+    db.edit_channel(c.id, own.id, &EditChannel { private: Some(true), ..Default::default() }).await.unwrap();
+    assert!(!sees(&db, c.id, vip.id).await && !sees(&db, c.id, plain.id).await);
+    db.delete_channel(cat.id, own.id).await.unwrap();
+    assert!(!sees(&db, c.id, vip.id).await, "le rôle de la catégorie n'ouvre pas ce que le salon fermait");
+    assert!(!sees(&db, c.id, plain.id).await);
+    assert!(sees(&db, c.id, own.id).await);
+}

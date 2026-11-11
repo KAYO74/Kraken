@@ -360,7 +360,10 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
             match c.kind {
                 ChannelKind::Category => (
                     format!("Supprimer la catégorie « {name} » ?"),
-                    "Les salons qu'elle contient ne sont pas supprimés : ils sortent de la catégorie. Cette action est définitive.".to_string(),
+                    format!(
+                        "Les salons qu'elle contient ne sont pas supprimés : ils sortent de la catégorie.{} Cette action est définitive.",
+                        if c.private { " Ses salons gardent les mêmes règles d'accès." } else { "" }
+                    ),
                     "Supprimer la catégorie",
                 ),
                 ChannelKind::Voice | ChannelKind::Stage => (

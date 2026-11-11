@@ -324,6 +324,8 @@ button.app-reply:hover span { color: var(--text-strong); }
     transition: transform var(--motion-base) var(--motion-ease), visibility var(--motion-base); }
   /* Au-dessus de la barre latérale : la carte « Mon compte » déborde du rail. */
   .app-rail { left: 0; z-index: calc(var(--z-modal) + 1); }
+  /* Une fenêtre passe devant le tiroir et la barre des serveurs, jamais dessous. */
+  .k-scrim { z-index: calc(var(--z-modal) + 2); }
   .app-nav { left: var(--size-rail); width: min(var(--size-sidebar), 100vw - var(--size-rail)); }
   .app[data-drawer] .app-rail, .app[data-drawer] .app-nav { transform: none; visibility: visible; }
   .app[data-drawer] .app-scrim { display: block; position: fixed; inset: 0; z-index: var(--z-sticky); background: var(--shadow-scrim); }
@@ -534,6 +536,9 @@ button.app-reply:hover span { color: var(--text-strong); }
   border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-pop); }
 .app-savebar > span { display: inline-flex; align-items: center; gap: var(--space-3); flex: 1; min-width: 0; color: var(--text-strong); }
 .app-savebar > span .k-icon { color: var(--warning); }
+/* Étroit : « Non enregistré » tient sur une ligne, à côté des deux boutons. */
+.app-bar-short { display: none; }
+@media (max-width: 639px) { .app-bar-long { display: none; } .app-bar-short { display: inline; } }
 .app-list--col { grid-template-columns: minmax(0, 1fr); }
 .app-row .app-ban-reason { display: block; color: var(--text-muted); overflow-wrap: anywhere; }
 .app-list--col .app-row small { display: block; }
@@ -550,7 +555,11 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-row-act { flex: none; width: calc(var(--size-icon) + 2 * var(--space-2)); height: calc(var(--size-icon) + 2 * var(--space-2)); opacity: 0; }
 .app-chan:is(:hover, :focus-within) .app-row-act, .app-cat:is(:hover, :focus-within) .app-row-act, .app-row-act:focus-visible { opacity: 1; }
 .app-chan > .app-row-act { margin-right: var(--space-2); }
-@media (hover: none), (max-width: 639px) { .app-row-act { opacity: 1; } }
+@media (hover: none), (max-width: 639px) {
+  .app-row-act { opacity: 1; }
+  /* Au doigt : des cibles de 36 px au moins (28 px à la souris). */
+  .app-row-act, .app-chan-item .k-btn--icon { width: calc(var(--size-icon) + 2 * var(--space-3)); height: calc(var(--size-icon) + 2 * var(--space-3)); }
+}
 
 .app-textarea { height: auto; min-height: var(--size-header); padding: var(--space-3) var(--space-4); font: inherit; resize: vertical; }
 .app-chan-form { display: grid; gap: var(--space-5); }

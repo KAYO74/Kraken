@@ -162,6 +162,87 @@ async fn overwrites_in(conn: &mut PgConnection, cid: Id) -> Result<Vec<Permissio
         .map_err(Into::into)
 }
 
+/// Un salon qui quitte sa catégorie (ou dont la catégorie disparaît) garde l'accès qu'elle lui
+/// donnait : ses surcharges sont recopiées sur le salon, cible par cible. Pour une même cible,
+/// la décision du salon passe après celle de la catégorie, bit par bit, comme dans le calcul des
+/// droits. Si un cas tordu (une cible de la catégorie contre une autre du salon) élargissait
+/// encore les droits de quelqu'un, une interdiction à son nom referme l'écart : un salon ne
+/// devient jamais plus ouvert en changeant de place. Rend le nombre de surcharges recopiées.
+async fn keep_rules(tx: &mut Tx<'_>, gid: Id, from: Id, kids: &[Id]) -> Result<u64> {
+    let has: bool = sqlx::query_scalar("select exists(select 1 from permission_overwrites where channel_id = $1)")
+        .bind(from)
+        .fetch_one(&mut **tx)
+        .await?;
+    if !has || kids.is_empty() {
+        return Ok(0);
+    }
+    let before = Ctx::load_on(tx, gid, None).await?.ok_or(DbError::NotFound)?;
+    let mut copied = 0;
+    for kid in kids {
+        copied += sqlx::query(
+            "insert into permission_overwrites (channel_id, target_id, target_kind, allow, deny)
+             select $1, target_id, target_kind, allow, deny from permission_overwrites where channel_id = $2
+             on conflict (channel_id, target_id) do update set
+               allow = permission_overwrites.allow | (excluded.allow & ~permission_overwrites.deny),
+               deny = permission_overwrites.deny | (excluded.deny & ~permission_overwrites.allow),
+               updated_at = now()",
+        )
+        .bind(kid)
+        .bind(from)
+        .execute(&mut **tx)
+        .await?
+        .rows_affected();
+    }
+    let after = Ctx::load_on(tx, gid, None).await?.ok_or(DbError::NotFound)?;
+    for kid in kids {
+        for u in before.member_ids() {
+            let wider = after.channel(u, *kid, None) & !before.channel(u, *kid, Some(from)) & perms::CHANNEL_SCOPE;
+            if wider != 0 {
+                sqlx::query(
+                    "insert into permission_overwrites (channel_id, target_id, target_kind, allow, deny)
+                     values ($1, $2, 'member', 0, $3)
+                     on conflict (channel_id, target_id) do update set
+                       deny = permission_overwrites.deny | $3, allow = permission_overwrites.allow & ~$3,
+                       updated_at = now()",
+                )
+                .bind(kid)
+                .bind(u)
+                .bind(wider as i64)
+                .execute(&mut **tx)
+                .await?;
+            }
+        }
+    }
+    Ok(copied)
+}
+
+/// Resserre les places d'un groupe (les enfants d'une catégorie, les catégories, ou les salons
+/// sans catégorie) : 0, 1, 2… sans trou. Rend les salons dont la place a changé.
+async fn compact(tx: &mut Tx<'_>, gid: Id, parent: Option<Id>, categories: bool) -> Result<Vec<Id>> {
+    let rows: Vec<(Id, i32)> = sqlx::query_as(
+        "select id, position from channels
+         where guild_id = $1 and parent_id is not distinct from $2 and (kind = 'category') = $3
+         order by position, id",
+    )
+    .bind(gid)
+    .bind(parent)
+    .bind(categories)
+    .fetch_all(&mut **tx)
+    .await?;
+    let mut changed = Vec::new();
+    for (rank, (id, position)) in rows.into_iter().enumerate() {
+        if position != rank as i32 {
+            sqlx::query("update channels set position = $2, updated_at = now() where id = $1")
+                .bind(id)
+                .bind(rank as i32)
+                .execute(&mut **tx)
+                .await?;
+            changed.push(id);
+        }
+    }
+    Ok(changed)
+}
+
 impl Db {
     // ───────── lecture ─────────
 
@@ -353,6 +434,7 @@ impl Db {
         for e in embeds {
             files.extend(crate::embed_paths(&e.0));
         }
+        let mut kept = 0;
         if c.kind == ChannelKind::Category {
             let start: i32 = sqlx::query_scalar(
                 "select coalesce(max(position) + 1, 0) from channels
@@ -366,6 +448,8 @@ impl Db {
                     .bind(cid)
                     .fetch_all(&mut *tx)
                     .await?;
+            // Les salons d'une catégorie privée restent privés : ils gardent ses règles d'accès.
+            kept = keep_rules(&mut tx, gid, cid, &kids).await?;
             for (i, kid) in kids.into_iter().enumerate() {
                 sqlx::query("update channels set parent_id = null, position = $2, updated_at = now() where id = $1")
                     .bind(kid)
@@ -375,13 +459,14 @@ impl Db {
             }
         }
         sqlx::query("delete from channels where id = $1").bind(cid).execute(&mut *tx).await?;
+        compact(&mut tx, gid, c.parent_id, c.kind == ChannelKind::Category).await?;
         audit_changes(
             &mut tx,
             gid,
             by,
             "channel_delete",
             Some(cid),
-            json!({ "name": c.name, "kind": kind_str(c.kind) }),
+            json!({ "name": c.name, "kind": kind_str(c.kind), "rules_kept": kept }),
         )
         .await?;
         tx.commit().await?;
@@ -434,6 +519,12 @@ impl Db {
         let mut order: Vec<Id> = group.iter().map(|g| g.0).collect();
         order.insert(at, cid);
         let was: HashMap<Id, (Option<Id>, i32)> = group.iter().map(|g| (g.0, (g.1, g.2))).collect();
+        // Un salon qui change de catégorie garde l'accès que l'ancienne lui donnait.
+        let left = c.parent_id.filter(|p| Some(*p) != req.parent_id);
+        let kept = match left {
+            Some(old) if !category => keep_rules(&mut tx, gid, old, &[cid]).await?,
+            _ => 0,
+        };
         let mut changed = Vec::new();
         for (rank, id) in order.iter().enumerate() {
             let rank = rank as i32;
@@ -452,6 +543,14 @@ impl Db {
                 changed.push(*id);
             }
         }
+        if c.parent_id != req.parent_id {
+            // Plus de trou là où il était.
+            for id in compact(&mut tx, gid, c.parent_id, false).await? {
+                if !changed.contains(&id) {
+                    changed.push(id);
+                }
+            }
+        }
         if !changed.is_empty() {
             audit_changes(
                 &mut tx,
@@ -459,7 +558,7 @@ impl Db {
                 by,
                 "channel_move",
                 Some(cid),
-                json!({ "parent_id": req.parent_id, "index": req.index }),
+                json!({ "parent_id": req.parent_id, "index": req.index, "rules_kept": kept }),
             )
             .await?;
         }
@@ -500,28 +599,43 @@ impl Db {
         let c = row_of(&mut tx, gid, cid).await?;
         manager(&mut tx, &c, cid, by).await?;
         let me = standing(&mut tx, gid, owner, by).await?.ok_or(DbError::NotFound)?;
-        match req.kind {
-            OverwriteKind::Role => {
-                let position: i32 = sqlx::query_scalar("select position from roles where id = $1 and guild_id = $2")
-                    .bind(target)
-                    .bind(gid)
-                    .fetch_optional(&mut *tx)
-                    .await?
-                    .ok_or(DbError::NotFound)?;
-                if target != gid {
-                    me.over_role(position)?;
-                }
-            }
-            OverwriteKind::Member => {
-                let who = standing(&mut tx, gid, owner, target).await?.ok_or(DbError::NotFound)?;
-                if target != by {
-                    me.over(&who)?;
-                }
-            }
-        }
         let before = overwrite_of(&mut tx, cid, target).await?;
         let (old_allow, old_deny) = before.unwrap_or((0, 0));
-        grantable(&me, (req.allow ^ old_allow) | (req.deny ^ old_deny))?;
+        // Une surcharge dont la cible a disparu (rôle supprimé, membre parti) doit pouvoir être
+        // retirée : il suffit de gérer le salon, rien à comparer en rang ni en droits.
+        let orphan = before.is_some() && req.allow == 0 && req.deny == 0;
+        let mut live = true;
+        match req.kind {
+            OverwriteKind::Role => {
+                let position: Option<i32> =
+                    sqlx::query_scalar("select position from roles where id = $1 and guild_id = $2")
+                        .bind(target)
+                        .bind(gid)
+                        .fetch_optional(&mut *tx)
+                        .await?;
+                match position {
+                    Some(position) => {
+                        if target != gid {
+                            me.over_role(position)?;
+                        }
+                    }
+                    None if orphan => live = false,
+                    None => return Err(DbError::NotFound),
+                }
+            }
+            OverwriteKind::Member => match standing(&mut tx, gid, owner, target).await? {
+                Some(who) => {
+                    if target != by {
+                        me.over(&who)?;
+                    }
+                }
+                None if orphan => live = false,
+                None => return Err(DbError::NotFound),
+            },
+        }
+        if live {
+            grantable(&me, (req.allow ^ old_allow) | (req.deny ^ old_deny))?;
+        }
         if before.is_none() && (req.allow | req.deny) != 0 {
             let n: i64 = sqlx::query_scalar("select count(*) from permission_overwrites where channel_id = $1")
                 .bind(cid)

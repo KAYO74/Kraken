@@ -1,5 +1,5 @@
 use axum::Json;
-use axum::http::StatusCode;
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use kraken_db::DbError;
 use kraken_proto::{
@@ -176,6 +176,14 @@ impl From<DbError> for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        (self.0, Json(ApiError { code: self.1.into(), message: self.2 })).into_response()
+        // Mode lent : le message dit combien de secondes attendre ; l'en-tête le dit aux machines.
+        let wait = (self.1 == "slowmode")
+            .then(|| self.2.split(|c: char| !c.is_ascii_digit()).find_map(|d| d.parse::<u32>().ok()))
+            .flatten();
+        let mut res = (self.0, Json(ApiError { code: self.1.into(), message: self.2 })).into_response();
+        if let Some(n) = wait {
+            res.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from(n));
+        }
+        res
     }
 }

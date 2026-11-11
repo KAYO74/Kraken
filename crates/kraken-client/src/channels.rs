@@ -603,7 +603,7 @@ fn Overview(guild: Id, channel: Id) -> impl IntoView {
             <p class="k-sr" role="status">{move || status.get()}</p>
             <Show when=move || dirty.get()>
                 <div class="app-savebar" role="region" aria-label="Modifications du salon">
-                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/>"Modifications non enregistrées"</span>
+                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/><span class="app-bar-long">"Modifications non enregistrées"</span><span class="app-bar-short">"Non enregistré"</span></span>
                     <button type="button" class="k-btn k-btn--ghost" on:click=cancel>"Annuler"</button>
                     <button type="submit" class="k-btn k-btn--primary" aria-busy=move || busy.get().to_string()>"Enregistrer"</button>
                 </div>
@@ -948,7 +948,7 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
             </div>
             <Show when=dirty>
                 <div class="app-savebar" role="region" aria-label="Modifications des permissions">
-                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/>"Modifications non enregistrées"</span>
+                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/><span class="app-bar-long">"Modifications non enregistrées"</span><span class="app-bar-short">"Non enregistré"</span></span>
                     <button type="button" class="k-btn k-btn--ghost" on:click=cancel>"Annuler"</button>
                     <button type="button" class="k-btn k-btn--primary" on:click=save aria-busy=move || busy.get().to_string()>"Enregistrer"</button>
                 </div>

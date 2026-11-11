@@ -348,10 +348,20 @@ async fn slow_mode_is_enforced_on_send(pool: PgPool) {
     );
 
     assert_eq!(low.say(general, "un").await, 201);
-    let (s, v) =
-        low.call(Method::POST, &format!("/channels/{general}/messages"), Some(json!({ "content": "deux" }))).await;
+    let r = low
+        .c
+        .post(format!("http://{}/api/v1/channels/{general}/messages", low.base))
+        .header("authorization", format!("Session {}", low.token))
+        .json(&json!({ "content": "deux" }))
+        .send()
+        .await
+        .unwrap();
+    let wait = r.headers().get("retry-after").and_then(|h| h.to_str().ok()).and_then(|h| h.parse::<u32>().ok());
+    let (s, v) = (r.status(), r.json::<Value>().await.unwrap());
     assert_eq!((s.as_u16(), code(&v)), (429, "slowmode"));
     assert!(v["message"].as_str().unwrap().starts_with("Mode lent"));
+    // L'en-tête `Retry-After` donne le délai restant, en secondes entières.
+    assert!(wait.is_some_and(|n| (1..=60).contains(&n)), "{wait:?}");
     // Ceux qui gèrent les salons (ou les messages) ne sont jamais retenus ; le propriétaire non plus.
     for who in [&mid, &own] {
         for i in 0..3 {
@@ -504,4 +514,60 @@ async fn overwrites_respect_the_hierarchy_and_never_lock_you_out(pool: PgPool) {
     assert_eq!(mid.call(Method::GET, &format!("/channels/{general}/messages"), None).await.0, 200);
     // Le salon est toujours visible de tous : rien n'a été rendu privé.
     assert_eq!(low.call(Method::GET, &format!("/channels/{general}/messages"), None).await.0, 200);
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn a_private_category_going_away_or_a_channel_leaving_it_opens_nothing(pool: PgPool) {
+    let base = spawn(pool, 1000).await;
+    let (own, mid, low, g, _) = trio(&base).await;
+    let gid = g.guild.id;
+    let cat = chan(make(&own, gid, "Staff", "category", None).await.1);
+    let (kept, moved) = (
+        chan(make(&own, gid, "salle", "text", Some(cat.id)).await.1),
+        chan(make(&own, gid, "bureau", "text", Some(cat.id)).await.1),
+    );
+    let (s, v) = own.call(Method::PATCH, &format!("/channels/{}", cat.id), Some(json!({ "private": true }))).await;
+    assert_eq!(s, 200, "{v}");
+    for c in [&cat, &kept, &moved] {
+        assert_eq!(low.call(Method::GET, &format!("/channels/{}/messages", c.id), None).await.0, 404);
+    }
+    let mut low_gw = low.gateway().await;
+    let mut mid_gw = mid.gateway().await;
+    let mut own_gw = own.gateway().await;
+
+    // Un salon sort de la catégorie privée : il reste fermé, personne d'autre n'en entend parler.
+    let (s, v) = own
+        .call(Method::PUT, &format!("/channels/{}/position", moved.id), Some(json!({ "parent_id": null, "index": 0 })))
+        .await;
+    assert_eq!(s, 200, "{v}");
+    assert!(
+        matches!(own_gw.next().await, Event::ChannelUpdate(c) if c.id == moved.id && c.private && c.parent_id.is_none())
+    );
+    // Les places de la catégorie se resserrent : « salle » passe au rang 0 (déjà vu par le propriétaire).
+    let st = own.state(gid).await.1;
+    let find = |name: &str| st["channels"].as_array().unwrap().iter().find(|c| c["name"] == name).unwrap().clone();
+    assert_eq!(find("salle")["position"], 0);
+    while let Ok(ev) = tokio::time::timeout(std::time::Duration::from_millis(300), own_gw.next()).await {
+        assert!(matches!(ev, Event::ChannelUpdate(c) if c.id == kept.id));
+    }
+    low_gw.quiet().await;
+    mid_gw.quiet().await;
+    assert_eq!(low.call(Method::GET, &format!("/channels/{}/messages", moved.id), None).await.0, 404);
+    assert_eq!(low.say(moved.id, "intrus").await, 404);
+
+    // La catégorie disparaît : son dernier salon reste fermé, et seuls ceux qui le voient reçoivent la mise à jour.
+    assert_eq!(own.call(Method::DELETE, &format!("/channels/{}", cat.id), None).await.0, 204);
+    let mut seen = [own_gw.next().await, own_gw.next().await];
+    seen.sort_by_key(|e| matches!(e, Event::ChannelUpdate(_)));
+    assert_eq!(seen[0], Event::ChannelDelete { id: cat.id });
+    assert!(matches!(&seen[1], Event::ChannelUpdate(c) if c.id == kept.id && c.private && c.parent_id.is_none()));
+    low_gw.quiet().await;
+    mid_gw.quiet().await;
+    for c in [&kept, &moved] {
+        assert_eq!(low.call(Method::GET, &format!("/channels/{}/messages", c.id), None).await.0, 404);
+        assert_eq!(mid.call(Method::GET, &format!("/channels/{}/messages", c.id), None).await.0, 404);
+    }
+    let st = low.state(gid).await.1;
+    let names: Vec<&str> = st["channels"].as_array().unwrap().iter().filter_map(|c| c["name"].as_str()).collect();
+    assert!(!names.contains(&"salle") && !names.contains(&"bureau"), "{names:?}");
 }
