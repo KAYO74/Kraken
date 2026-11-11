@@ -15,6 +15,7 @@ mod jobs;
 mod limit;
 mod media;
 mod moderation;
+mod presence;
 mod reads;
 mod social;
 mod voice;
@@ -208,6 +209,11 @@ pub fn app(state: AppState) -> Router {
         .route("/auth/reset", post(auth::reset))
         .route("/auth/reset/confirm", post(auth::reset_confirm))
         .route("/users/@me/delete", post(auth::delete_account))
+        // Changer de pseudo, d'adresse ou de mot de passe exige le mot de passe actuel (un calcul
+        // argon2 par essai) : même limite et même compteur que la connexion.
+        .route("/users/@me/username", put(auth::change_username))
+        .route("/users/@me/email", put(auth::change_email))
+        .route("/users/@me/password", put(auth::change_password))
         .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
     // Rejoindre un salon vocal (ou lancer un appel) coûte une clé DTLS : même limite, compteur à
     // part. Refuser un appel : même limite, un compteur de plus.
@@ -231,6 +237,7 @@ pub fn app(state: AppState) -> Router {
     // compteur à part. Le corps fait jusqu'à MAX_AVATAR_BYTES, que le gestionnaire borne lui-même.
     let avatars = Router::new()
         .route("/users/@me/avatar", put(avatar::set).delete(avatar::remove))
+        .route("/users/@me/banner", put(avatar::set_banner).delete(avatar::remove_banner))
         .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
     // Fichiers joints : un envoi écrit sur le disque et décode une image ; compteur à part. Le corps
     // fait jusqu'à `max_upload_bytes`, que le gestionnaire borne lui-même en le lisant en flux.
@@ -251,6 +258,7 @@ pub fn app(state: AppState) -> Router {
         ));
     let notify = Router::new()
         .route("/users/@me/notifications", put(reads::set_notify))
+        .route("/users/@me/presence", put(presence::set))
         .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
     // Demandes d'ami, blocages, nouveaux MP et groupes : même limite, un compteur pour tous.
     let social_limit = axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check);
@@ -283,12 +291,14 @@ pub fn app(state: AppState) -> Router {
         .merge(avatars)
         .merge(uploads)
         .route("/avatars/{key}", get(avatar::get))
+        .route("/banners/{key}", get(avatar::get))
         .route("/voice", delete(voice::leave))
         .route("/health", get(api::health))
         .route("/instance", get(api::instance))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/logout-all", post(auth::logout_all))
         .route("/users/@me", get(auth::me).patch(auth::update_me))
+        .route("/users/@me/account", get(auth::account))
         .route("/guilds", post(api::create_guild))
         .route("/guilds/{id}", get(api::guild).delete(moderation::delete_guild))
         .route("/guilds/{id}/invites", get(api::guild_invites))

@@ -1,15 +1,16 @@
 //! S01 : accueil Amis, onglets En ligne / Tous / En attente / Bloqués / Ajouter un ami (F02,
 //! F11). Les listes suivent le gateway : une demande reçue ou acceptée s'affiche sans recharger.
 
-use kraken_proto::{Relationship, RelationshipKind, Status};
+use kraken_proto::{Relationship, RelationshipKind};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use wasm_bindgen::JsCast;
 
 use crate::icons::{Icon, lu};
 use crate::social::{Confirm, ConfirmDialog, call_user, open_dm};
+use crate::store::Store;
 use crate::store::{Conn, store};
-use crate::ui::{Avatar, Header, MoreMenu, status_label};
+use crate::ui::{Avatar, Dot, Header, MoreMenu};
 
 #[derive(Clone, Copy, PartialEq)]
 enum Tab {
@@ -32,9 +33,9 @@ fn slug(t: Tab) -> &'static str {
     TABS.iter().find(|x| x.0 == t).map_or("", |x| x.1)
 }
 
-fn shows(t: Tab, r: &Relationship) -> bool {
+fn shows(s: Store, t: Tab, r: &Relationship) -> bool {
     match t {
-        Tab::Online => r.kind == RelationshipKind::Friend && r.status != Status::Offline,
+        Tab::Online => r.kind == RelationshipKind::Friend && s.dot_of(r.user.id) != Dot::Offline,
         Tab::All => r.kind == RelationshipKind::Friend,
         Tab::Pending => matches!(r.kind, RelationshipKind::PendingIncoming | RelationshipKind::PendingOutgoing),
         Tab::Blocked => r.kind == RelationshipKind::Blocked,
@@ -55,7 +56,7 @@ pub fn Friends() -> impl IntoView {
             .friends
             .get()
             .into_iter()
-            .filter(|r| shows(tab.get(), r))
+            .filter(|r| shows(s, tab.get(), r))
             .filter(|r| q.is_empty() || r.user.name().to_lowercase().contains(&q) || r.user.username.contains(&q))
             .collect();
         // Demandes reçues d'abord : ce sont elles qui attendent une réponse.
@@ -177,9 +178,10 @@ fn FriendRow(r: Relationship, error: RwSignal<Option<String>>, confirm: RwSignal
         RelationshipKind::PendingIncoming => "Demande reçue",
         RelationshipKind::PendingOutgoing => "Demande envoyée",
         RelationshipKind::Blocked => "Bloqué",
-        RelationshipKind::Friend => status_label(r.status),
+        RelationshipKind::Friend => "",
     };
-    let status = (r.kind == RelationshipKind::Friend).then_some(r.status);
+    let friend = r.kind == RelationshipKind::Friend;
+    let dot = Signal::derive(move || s.dot_of(uid));
     let busy = RwSignal::new(false);
     // Accepter, refuser, annuler, débloquer : un clic, sans confirmation (rien d'irréversible).
     let act = move |accept: bool| {
@@ -254,11 +256,18 @@ fn FriendRow(r: Relationship, error: RwSignal<Option<String>>, confirm: RwSignal
     };
     view! {
         <li class="app-row">
-            {match status {
-                Some(st) => view! { <Avatar user=r.user.clone() size="" status=st/> }.into_any(),
-                None => view! { <Avatar user=r.user.clone() size=""/> }.into_any(),
+            {if friend {
+                view! { <Avatar user=r.user.clone() size="" status=dot/> }.into_any()
+            } else {
+                view! { <Avatar user=r.user.clone() size=""/> }.into_any()
             }}
-            <div class="app-ellipsis"><b>{r.user.name().to_string()}</b><small>{format!("@{} · {sub}", r.user.username)}</small></div>
+            <div class="app-ellipsis">
+                <b>{r.user.name().to_string()}</b>
+                <small>{move || {
+                    let state = if friend { dot.get().label() } else { sub };
+                    format!("@{} · {state}", r.user.username)
+                }}</small>
+            </div>
             <div class="app-row-actions">{actions}</div>
         </li>
     }

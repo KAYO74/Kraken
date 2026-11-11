@@ -729,12 +729,28 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
                 view! { <time class="app-gutter-time" datetime=iso(at)>{when(at).rsplit(' ').next().unwrap_or_default().to_string()}</time> }.into_any()
             } else {
                 match msg.author.clone() {
-                    Some(u) => view! { <Avatar user=u/> }.into_any(),
+                    // Le nom, juste à côté, est le bouton qu'atteint le clavier : celui-ci n'est qu'un raccourci à la souris.
+                    Some(u) => {
+                        let open = { let u = u.clone(); move |_: leptos::ev::MouseEvent| crate::profile::open_card(u.clone(), chat.guild) };
+                        view! {
+                            <button type="button" class="app-who app-who--avatar" tabindex="-1" aria-hidden="true" on:click=open>
+                                <Avatar user=u/>
+                            </button>
+                        }
+                        .into_any()
+                    }
                     None => view! { <span class="k-avatar" aria-hidden="true">"?"</span> }.into_any(),
                 }
             }}
             <div>
-                {(!cont).then(|| view! { <header><b title=handle data-role-color=move || author_id.and_then(|a| s.role_color(chat.guild, a)).map(|c| c.to_string())>{name.clone()}</b><time datetime=iso(at)>{when(at)}</time></header> })}
+                {(!cont).then(|| {
+                    let open = msg.author.clone().map(|u| move |_: leptos::ev::MouseEvent| crate::profile::open_card(u.clone(), chat.guild));
+                    let label = match open {
+                        Some(open) => view! { <button type="button" class="app-who-name" aria-haspopup="dialog" on:click=open>{name.clone()}</button> }.into_any(),
+                        None => name.clone().into_any(),
+                    };
+                    view! { <header><b title=handle data-role-color=move || author_id.and_then(|a| s.role_color(chat.guild, a)).map(|c| c.to_string())>{label}</b><time datetime=iso(at)>{when(at)}</time></header> }
+                })}
                 {move || if editing() {
                     view! { <EditBox msg=body.get_value()/> }.into_any()
                 } else {
@@ -1406,22 +1422,26 @@ fn Members(guild: Id) -> impl IntoView {
                                             b.click();
                                         }
                                     };
+                                    let dot = Signal::derive(move || s.dot_of(uid));
+                                    let open = { let u = m.user.clone(); move |_| crate::profile::open_card(u.clone(), Some(guild)) };
                                     view! {
                                         <li class="k-dm" on:contextmenu=context>
-                                            <Avatar user=m.user.clone() size="md"/>
-                                            <div class="app-ellipsis" data-role-color=move || s.role_color(Some(guild), uid).map(|c| c.to_string())>
-                                                {name.clone()}
-                                                <Show when=is_owner>
-                                                    <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" (propriétaire)"</span></span>
-                                                </Show>
-                                                <small>{format!("@{}", m.user.username)}</small>
-                                                <Show when=move || excluded.get().is_some()>
-                                                    <small class="app-timeout">
-                                                        <Icon icon=lu::LuTimer small=true/>
-                                                        {move || excluded.get().map(|t| format!("Exclu jusqu'à {}", crate::ui::when(t)))}
-                                                    </small>
-                                                </Show>
-                                            </div>
+                                            <button type="button" class="app-who" aria-haspopup="dialog" title="Ouvrir le profil" on:click=open>
+                                                <Avatar user=m.user.clone() size="md" status=dot/>
+                                                <span class="app-ellipsis" data-role-color=move || s.role_color(Some(guild), uid).map(|c| c.to_string())>
+                                                    {name.clone()}
+                                                    <Show when=is_owner>
+                                                        <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" (propriétaire)"</span></span>
+                                                    </Show>
+                                                    <small>{format!("@{}", m.user.username)}</small>
+                                                    <Show when=move || excluded.get().is_some()>
+                                                        <small class="app-timeout">
+                                                            <Icon icon=lu::LuTimer small=true/>
+                                                            {move || excluded.get().map(|t| format!("Exclu jusqu'à {}", crate::ui::when(t)))}
+                                                        </small>
+                                                    </Show>
+                                                </span>
+                                            </button>
                                             <MoreMenu label=format!("Plus d'actions pour {name}")>
                                                 <button class="k-menuitem" on:click=move |_| profile.set(Some(uid))>
                                                     <Icon icon=lu::LuShield/>"Profil et rôles"
@@ -1492,16 +1512,21 @@ fn GroupMembers(channel: Id) -> impl IntoView {
                         let removable = i_own() && Some(u.id) != my_id();
                         let name = u.name().to_string();
                         let target = u.clone();
+                        let uid = u.id;
+                        let dot = Signal::derive(move || s.dot_of(uid));
+                        let open = { let u = u.clone(); move |_| crate::profile::open_card(u.clone(), None) };
                         view! {
                             <li class="k-dm">
-                                <Avatar user=u.clone() size="md"/>
-                                <div class="app-ellipsis">
-                                    {name.clone()}
-                                    {is_owner.then(|| view! {
-                                        <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" (propriétaire)"</span></span>
-                                    })}
-                                    <small>{format!("@{}", u.username)}</small>
-                                </div>
+                                <button type="button" class="app-who" aria-haspopup="dialog" title="Ouvrir le profil" on:click=open>
+                                    <Avatar user=u.clone() size="md" status=dot/>
+                                    <span class="app-ellipsis">
+                                        {name.clone()}
+                                        {is_owner.then(|| view! {
+                                            <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" (propriétaire)"</span></span>
+                                        })}
+                                        <small>{format!("@{}", u.username)}</small>
+                                    </span>
+                                </button>
                                 {removable.then(|| view! {
                                     <MoreMenu label=format!("Plus d'actions pour {name}")>
                                         <button class="k-menuitem is-danger" on:click=move |_| removing.set(Some(target.clone()))>

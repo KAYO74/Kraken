@@ -11,6 +11,7 @@ mod invites;
 mod jobs;
 mod moderation;
 mod perm;
+mod profile;
 mod reads;
 mod seed;
 mod social;
@@ -25,6 +26,7 @@ pub use channels::clean_channel_name;
 pub use files::{NewAttachment, StoredAttachment, attachment_paths, embed_paths};
 pub use jobs::Job;
 pub use moderation::DeletedGuild;
+pub use profile::ProfilePatch;
 pub use social::Notices;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +42,8 @@ pub enum DbError {
     Slowmode(u32),
     /// Une invitation qui existe mais ne sert plus : `"expired"` ou `"exhausted"`.
     Gone(&'static str),
+    /// Trop de changements de pseudo : encore tant de secondes avant le prochain.
+    Cooldown(u32),
     Internal(String),
 }
 
@@ -105,7 +109,9 @@ pub fn valid_username(u: &str) -> bool {
 /// Colonnes d'un utilisateur affichable, préfixées par `p`.
 fn user_cols(p: &str) -> String {
     format!(
-        "{p}.id as {p}_id, {p}.username as {p}_username, {p}.display_name as {p}_display, {p}.avatar_key as {p}_avatar"
+        "{p}.id as {p}_id, {p}.username as {p}_username, {p}.display_name as {p}_display, {p}.avatar_key as {p}_avatar,
+         {p}.banner_key as {p}_banner, {p}.bio as {p}_bio, {p}.pronouns as {p}_pronouns,
+         (extract(epoch from {p}.created_at) * 1000)::int8 as {p}_created"
     )
 }
 
@@ -117,6 +123,10 @@ fn user_from(r: &PgRow, p: &str) -> sqlx::Result<Option<User>> {
         username: r.try_get(format!("{p}_username").as_str())?,
         display_name: r.try_get(format!("{p}_display").as_str())?,
         avatar: r.try_get(format!("{p}_avatar").as_str())?,
+        banner: r.try_get(format!("{p}_banner").as_str())?,
+        bio: r.try_get(format!("{p}_bio").as_str())?,
+        pronouns: r.try_get(format!("{p}_pronouns").as_str())?,
+        created_at: r.try_get(format!("{p}_created").as_str())?,
     }))
 }
 
@@ -321,15 +331,25 @@ impl Db {
     /// Pose (ou retire, avec `None`) la clé de l'avatar ; rend l'utilisateur à jour et l'ancienne
     /// clé, dont le fichier est à supprimer.
     pub async fn set_avatar(&self, id: Id, key: Option<&str>) -> Result<(User, Option<String>)> {
+        self.set_image(id, "avatar_key", key).await
+    }
+
+    /// Pareil pour la bannière.
+    pub async fn set_banner(&self, id: Id, key: Option<&str>) -> Result<(User, Option<String>)> {
+        self.set_image(id, "banner_key", key).await
+    }
+
+    async fn set_image(&self, id: Id, column: &str, key: Option<&str>) -> Result<(User, Option<String>)> {
+        debug_assert!(matches!(column, "avatar_key" | "banner_key"));
         let mut tx = self.pool.begin().await?;
         let old: Option<Option<String>> =
-            sqlx::query_scalar("select avatar_key from users where id = $1 and deleted_at is null for update")
+            sqlx::query_scalar(&format!("select {column} from users where id = $1 and deleted_at is null for update"))
                 .bind(id)
                 .fetch_optional(&mut *tx)
                 .await?;
         let old = old.ok_or(DbError::NotFound)?;
         let r =
-            sqlx::query(&format!("update users as u set avatar_key = $2 where u.id = $1 returning {}", user_cols("u")))
+            sqlx::query(&format!("update users as u set {column} = $2 where u.id = $1 returning {}", user_cols("u")))
                 .bind(id)
                 .bind(key)
                 .fetch_one(&mut *tx)
@@ -548,7 +568,7 @@ impl Db {
     /// Anonymise les comptes dont la demande de suppression a plus de `grace_days` jours :
     /// identité, e-mail, mot de passe, profil et liens effacés ; les messages restent sous
     /// « compte supprimé ».
-    /// Rend le nombre de comptes, les clés d'avatar et les chemins des fichiers joints (leurs
+    /// Rend le nombre de comptes, les clés d'avatar et de bannière et les chemins des fichiers joints (leurs
     /// lignes sont supprimées avec le compte) dont le fichier est à supprimer.
     pub async fn purge_deleted_accounts(&self, grace_days: i32) -> Result<(u64, Vec<String>, Vec<String>)> {
         let mut tx = self.pool.begin().await?;
@@ -558,11 +578,13 @@ impl Db {
         .bind(grace_days)
         .fetch_all(&mut *tx)
         .await?;
-        let avatars: Vec<String> =
-            sqlx::query_scalar("select avatar_key from users where id = any($1) and avatar_key is not null")
-                .bind(&ids)
-                .fetch_all(&mut *tx)
-                .await?;
+        // Photos et bannières partagent le même dossier et le même genre de clé.
+        let avatars: Vec<String> = sqlx::query_scalar(
+            "select k from users u, unnest(array[u.avatar_key, u.banner_key]) as k where u.id = any($1) and k is not null",
+        )
+        .bind(&ids)
+        .fetch_all(&mut *tx)
+        .await?;
         let mut files = Vec::new();
         for r in sqlx::query("delete from attachments where uploader_id = any($1) returning storage_key, preview")
             .bind(&ids)
@@ -571,13 +593,16 @@ impl Db {
         {
             files.extend(attachment_paths(r.try_get("storage_key")?, r.try_get("preview")?));
         }
-        for table in ["sessions", "auth_tokens", "relationships", "connections", "user_settings", "members"] {
+        for table in
+            ["sessions", "auth_tokens", "relationships", "connections", "user_settings", "members", "username_changes"]
+        {
             sqlx::query(&format!("delete from {table} where user_id = any($1)")).bind(&ids).execute(&mut *tx).await?;
         }
         sqlx::query("delete from relationships where target_id = any($1)").bind(&ids).execute(&mut *tx).await?;
         sqlx::query(
             "update users set username = 'deleted_' || substr(replace(id::text, '-', ''), 21), display_name = null,
-               email = null, phone = null, password_hash = null, mfa_secret = null, mfa_recovery_hashes = '{}',
+               email = null, pending_email = null, phone = null, password_hash = null, mfa_secret = null,
+               mfa_recovery_hashes = '{}',
                avatar_key = null, banner_key = null, avatar_decoration = null, bio = null, pronouns = null,
                accent_color = null, profile_theme = null, name_style = null, deleted_at = now()
              where id = any($1)",
@@ -1198,3 +1223,5 @@ mod tests_channels;
 
 #[cfg(test)]
 mod tests_guild;
+#[cfg(test)]
+mod tests_profile;

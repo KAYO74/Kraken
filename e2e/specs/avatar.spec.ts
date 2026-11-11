@@ -1,4 +1,4 @@
-// Photo de profil : envoi depuis Réglages > Compte (recadrage dans le navigateur), affichage
+// Photo de profil : envoi depuis Réglages > Mon profil (recadrage dans le navigateur), affichage
 // partout, retrait, et refus d'un fichier trop gros ou qui n'est pas une image.
 import { deflateSync } from 'node:zlib';
 import { test, expect, a11y, API, type User } from '../fixtures';
@@ -49,7 +49,7 @@ test('profil-H1 envoyer une photo : recadrage, affichage, puis retrait', async (
   expect((await asA.post(`${API}/users/@me/relationships`, { data: { username: b.name } })).status()).toBe(201);
   expect((await (await api(b.token)).put(`${API}/users/@me/relationships/${a.id}`, { data: { kind: 'friend' } })).status()).toBe(200);
 
-  await a.page.goto('/settings/account');
+  await a.page.goto('/settings/profiles');
   await expect(a.page.getByRole('button', { name: 'Retirer', exact: true })).toHaveCount(0);
   await a11y(a.page);
   await a.page.getByLabel('Changer la photo').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: png(300, 180) });
@@ -87,7 +87,7 @@ test('profil-H1 envoyer une photo : recadrage, affichage, puis retrait', async (
 
 test('profil-E1 pas une image, ou trop lourde : message clair, rien d’enregistré', async ({ user, api }) => {
   const a = await user('nina');
-  await a.page.goto('/settings/account');
+  await a.page.goto('/settings/profiles');
   const input = a.page.getByLabel('Changer la photo');
   await input.setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('ceci n’est pas une image') });
   await expect(a.page.getByRole('alert').filter({ hasText: 'pas une image lisible' })).toBeVisible();

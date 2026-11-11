@@ -58,37 +58,78 @@ pub fn initials(name: &str) -> String {
     s.to_uppercase()
 }
 
-pub fn status_label(s: Status) -> &'static str {
-    match s {
-        Status::Online => "en ligne",
-        Status::Idle => "absent",
-        Status::Dnd => "ne pas déranger",
-        Status::Offline => "hors ligne",
+/// Ce qu'une pastille de statut montre : les statuts que les autres voient, et « invisible », que
+/// seul son propriétaire voit sur lui-même.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dot {
+    Online,
+    Idle,
+    Dnd,
+    Offline,
+    Invisible,
+}
+
+impl From<Status> for Dot {
+    fn from(s: Status) -> Self {
+        match s {
+            Status::Online => Self::Online,
+            Status::Idle => Self::Idle,
+            Status::Dnd => Self::Dnd,
+            Status::Offline => Self::Offline,
+        }
     }
+}
+
+impl Dot {
+    /// Le mot qui le dit, pour les lecteurs d'écran et sous les noms.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Online => "en ligne",
+            Self::Idle => "inactif",
+            Self::Dnd => "ne pas déranger",
+            Self::Offline => "hors ligne",
+            Self::Invisible => "invisible",
+        }
+    }
+
+    fn class(self) -> &'static str {
+        match self {
+            Self::Online => "online",
+            Self::Idle => "idle",
+            Self::Dnd => "dnd",
+            Self::Offline => "offline",
+            Self::Invisible => "invisible",
+        }
+    }
+}
+
+/// Seule la forme de la pastille (cercle plein, croissant, barre, anneau vide, anneau pointé)
+/// distingue les états en plus de la couleur ; le mot est dans le nom accessible de l'avatar.
+#[component]
+pub fn StatusDot(#[prop(into)] status: Signal<Dot>) -> impl IntoView {
+    view! { <i class=move || format!("k-presence k-presence--{}", status.get().class()) aria-hidden="true"></i> }
+}
+
+/// Une teinte stable par compte (1 à 8, somme des octets de l'id), pour reconnaître les gens d'un
+/// coup d'œil : l'avatar sans photo, la bannière sans image.
+pub fn tint(id: kraken_proto::Id) -> String {
+    (id.as_bytes().iter().map(|&b| u32::from(b)).sum::<u32>() % 8 + 1).to_string()
 }
 
 #[component]
 pub fn Avatar(
     user: User,
     #[prop(optional)] size: &'static str,
-    #[prop(optional)] status: Option<Status>,
+    #[prop(optional, into)] status: Option<Signal<Dot>>,
 ) -> impl IntoView {
     let class = if size.is_empty() { "k-avatar".to_string() } else { format!("k-avatar k-avatar--{size}") };
-    let label = match status {
-        Some(s) => format!("{}, {}", user.name(), status_label(s)),
-        None => user.name().to_string(),
+    let name = user.name().to_string();
+    let label = move || match status {
+        Some(s) => format!("{name}, {}", s.get().label()),
+        None => name.clone(),
     };
-    let presence = status.map(|s| {
-        let k = match s {
-            Status::Online => "online",
-            Status::Idle => "idle",
-            Status::Dnd => "dnd",
-            Status::Offline => "offline",
-        };
-        view! { <i class=format!("k-presence k-presence--{k}")></i> }
-    });
-    // Une teinte stable par compte (somme des octets de l'id), pour reconnaître les gens d'un coup d'œil.
-    let tint = (user.id.as_bytes().iter().map(|&b| u32::from(b)).sum::<u32>() % 8 + 1).to_string();
+    let presence = status.map(|s| view! { <StatusDot status=s/> });
+    let tint = tint(user.id);
     // La photo remplace les initiales ; si elle ne charge pas, les initiales reviennent. Le
     // `<span>` porte déjà le nom (role="img"), l'image est donc décorative.
     let broken = RwSignal::new(false);
@@ -109,6 +150,11 @@ pub fn Avatar(
 /// Adresse d'une photo de profil, d'après la clé gardée dans `User::avatar`.
 pub fn avatar_url(key: &str) -> String {
     format!("/api/v1/avatars/{key}")
+}
+
+/// Adresse d'une bannière, d'après la clé gardée dans `User::banner`.
+pub fn banner_url(key: &str) -> String {
+    format!("/api/v1/banners/{key}")
 }
 
 /// « Plus d'actions » : un bouton ⋯ qui déplie les actions secondaires (retirer, bloquer…), pour ne

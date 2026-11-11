@@ -5,6 +5,7 @@ use kraken_db::DbError;
 use kraken_proto::{
     ApiError, MAX_CHANNEL_NAME, MAX_CHANNELS, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_INVITE_USES,
     MAX_INVITES_PER_MEMBER, MAX_OVERWRITES, MAX_PURGE_HOURS, MAX_REASON, MAX_ROLES, MAX_TOPIC,
+    USERNAME_CHANGES_PER_WINDOW,
 };
 
 /// Erreur d'API : un code stable que le client traduit, et un message de secours.
@@ -35,6 +36,10 @@ impl AppError {
     pub fn timed_out(until: i64) -> Self {
         Self(StatusCode::FORBIDDEN, "timed_out", until.to_string())
     }
+    /// Mot de passe actuel refusé (changement de pseudo, d'adresse ou de mot de passe, suppression).
+    pub fn bad_password() -> Self {
+        Self(StatusCode::FORBIDDEN, "bad_password", "Mot de passe incorrect.".into())
+    }
 }
 
 impl From<DbError> for AppError {
@@ -59,6 +64,8 @@ impl From<DbError> for AppError {
                 "C'est le dernier salon d'écriture du serveur : crée-en un autre avant de le supprimer.".into(),
             ),
             DbError::Conflict(f) => Self(StatusCode::CONFLICT, "conflict", format!("Déjà utilisé : {f}.")),
+            DbError::Cooldown(secs) => Self(StatusCode::TOO_MANY_REQUESTS, "username_cooldown", secs.to_string()),
+            DbError::Invalid("username") => Self::invalid("Pseudo : 2 à 32 caractères parmi a-z, 0-9, _ et ."),
             DbError::Invalid("reactions") => Self::invalid("20 emojis différents au plus sur un message."),
             DbError::Invalid("emoji") => Self::invalid("Seuls les emojis servent de réaction."),
             DbError::Invalid("reply_to") => Self::invalid("Le message d'origine n'est plus dans ce salon."),
@@ -232,6 +239,17 @@ impl IntoResponse for AppError {
                 Some(until),
             ),
             _ => (self.2, None),
+        };
+        // `username_cooldown` : les secondes à attendre voyagent dans le message jusqu'ici.
+        let (message, wait) = match (self.1, message.parse::<u32>()) {
+            ("username_cooldown", Ok(secs)) => (
+                format!(
+                    "Tu as déjà changé ton pseudo {USERNAME_CHANGES_PER_WINDOW} fois en une heure. Réessaie dans {}.",
+                    if secs < 90 { format!("{secs} s") } else { format!("{} min", secs.div_ceil(60)) }
+                ),
+                Some(secs),
+            ),
+            _ => (message, wait),
         };
         let mut res = (self.0, Json(ApiError { code: self.1.into(), message, timeout_until })).into_response();
         if let Some(n) = wait {

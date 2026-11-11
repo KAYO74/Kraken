@@ -1,7 +1,7 @@
 //! La coquille : rail des serveurs (S02) avec mon compte en bas (S04), barre latérale
 //! (S03 ou salons), zone principale. Plus la création / l'adhésion à un serveur (S21).
 
-use kraken_proto::{Channel, ChannelKind, GuildState, Id};
+use kraken_proto::{Channel, ChannelKind, GuildState, Id, Presence};
 use leptos::portal::Portal;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -12,7 +12,7 @@ use leptos_router::hooks::{use_location, use_navigate};
 use crate::call::{CallAudio, ControlPanel, IncomingCalls, VoicePanel, VoiceUsers};
 use crate::icons::{Icon, lu};
 use crate::store::{Conn, store};
-use crate::ui::{Avatar, Logo, initials, modal};
+use crate::ui::{Avatar, Dot, Logo, StatusDot, initials, modal};
 use crate::unread::{MentionBadge, MutedMark, NotifyDialog, Target, TargetMenu, UnreadText};
 use crate::update::{UpdateEntry, UpdateTile, Updater};
 
@@ -170,6 +170,7 @@ pub fn Shell() -> impl IntoView {
             <ControlPanel/>
             <IncomingCalls/>
             <TargetMenu/>
+            <crate::profile::ProfileCardHost/>
             {move || notify_ui.dialog.get().map(|t| view! { <NotifyDialog target=t/> })}
         </div>
     }
@@ -312,7 +313,11 @@ fn HomeSidebar() -> impl IntoView {
                             on:contextmenu=u.on_context(Target::Channel(id)) on:keydown=u.on_key(Target::Channel(id))
                             aria-current=move || (ids.get().1 == Some(id) || loc.pathname.get().ends_with(&id.to_string())).then_some("page")>
                             {match (group, first) {
-                                (false, Some(u)) => view! { <Avatar user=u size="md"/> }.into_any(),
+                                (false, Some(u)) => {
+                                    let uid = u.id;
+                                    let dot = Signal::derive(move || s.dot_of(uid));
+                                    view! { <Avatar user=u size="md" status=dot/> }.into_any()
+                                }
                                 _ => view! { <span class="k-avatar k-avatar--md" aria-hidden="true">{initials(&title)}</span> }.into_any(),
                             }}
                             <div>{title.clone()}<UnreadText on=unread/>{group.then(|| view! { <small>{format!("{count} membres")}</small> })}</div>
@@ -567,6 +572,14 @@ fn InviteDialog(guild: Id, close: impl Fn() + Copy + Send + Sync + 'static) -> i
     }
 }
 
+/// Les statuts qu'on peut choisir, avec la pastille et ce que chacun change.
+const PRESENCES: [(Presence, Dot, &str, &str); 4] = [
+    (Presence::Online, Dot::Online, "En ligne", ""),
+    (Presence::Idle, Dot::Idle, "Inactif", ""),
+    (Presence::Dnd, Dot::Dnd, "Ne pas déranger", "Ni notification du bureau, ni sonnerie d'appel."),
+    (Presence::Invisible, Dot::Invisible, "Invisible", "Les autres te voient hors ligne."),
+];
+
 /// S04 : mon compte, en bas du rail. L'avatar ouvre une carte : nom, pseudo, état de la
 /// connexion, réglages, déconnexion. Échap ou un clic ailleurs la referme.
 #[component]
@@ -641,8 +654,23 @@ fn Me() -> impl IntoView {
             navigate("/login", Default::default());
         });
     };
-    let presence =
-        move || if s.conn.get() == Conn::Ready { kraken_proto::Status::Online } else { kraken_proto::Status::Offline };
+    let dot = Signal::derive(move || s.my_dot());
+    // Choisir son statut : appliqué tout de suite, rétabli si le serveur le refuse.
+    let presence_error = RwSignal::new(None::<String>);
+    let choose = move |p: Presence| {
+        let before = s.presence.get_untracked();
+        if before == p {
+            return;
+        }
+        s.presence.set(p);
+        presence_error.set(None);
+        spawn_local(async move {
+            if let Err(e) = crate::api::set_presence(p).await {
+                s.presence.try_set(before);
+                presence_error.try_set(Some(e.message));
+            }
+        });
+    };
     let state = move || match s.conn.get() {
         Conn::Ready => "Connecté",
         Conn::Connecting => "Connexion…",
@@ -650,21 +678,36 @@ fn Me() -> impl IntoView {
     };
     view! {
         <div class="app-me" node_ref=wrap on:focusout=on_focusout>
-            <button class="k-me" node_ref=button aria-label="Mon compte" title="Mon compte"
+            <button class="k-me" node_ref=button aria-label=move || format!("Mon compte, {}", dot.get().label()) title="Mon compte"
                 aria-expanded=move || open.get().to_string() aria-controls=move || open.get().then_some("me-card")
                 on:click=move |_| open.update(|o| *o = !*o)>
-                {move || s.me.get().map(|u| view! { <Avatar user=u status=presence()/> })}
+                {move || s.me.get().map(|u| view! { <Avatar user=u status=dot/> })}
             </button>
             <Show when=move || open.get()>
                 <div class="k-mecard" id="me-card" role="group" aria-label="Mon compte" node_ref=card>
                     <header>
-                        {move || s.me.get().map(|u| view! { <Avatar user=u size="md" status=presence()/> })}
+                        {move || s.me.get().map(|u| view! { <Avatar user=u size="md" status=dot/> })}
                         <div>
                             <b class="app-ellipsis">{move || s.me.get().map(|u| u.name().to_string()).unwrap_or_default()}</b>
                             <small class="app-ellipsis">{move || s.me.get().map(|u| format!("@{}", u.username)).unwrap_or_default()}</small>
                         </div>
                     </header>
                     <p class="k-mecard-state" data-state=move || (s.conn.get() == Conn::Ready).then_some("on")>{state}</p>
+                    <fieldset class="app-presence">
+                        <legend class="k-sr">"Mon statut"</legend>
+                        {PRESENCES.iter().map(|&(p, shown, label, hint)| view! {
+                            <label class="k-mecard-item app-presence-opt">
+                                <input type="radio" name="presence" class="k-sr" prop:checked=move || s.presence.get() == p
+                                    on:change=move |_| choose(p)/>
+                                <span class="app-dot-inline"><StatusDot status=Signal::derive(move || shown)/></span>
+                                <span class="app-presence-text"><b>{label}</b><small>{hint}</small></span>
+                                <Show when=move || s.presence.get() == p><Icon icon=lu::LuCheck small=true/></Show>
+                            </label>
+                        }).collect_view()}
+                    </fieldset>
+                    <Show when=move || presence_error.get().is_some()>
+                        <p class="k-error app-presence-error" role="alert">{move || presence_error.get()}</p>
+                    </Show>
                     <a class="k-mecard-item" href="/settings/account" on:click=picked>
                         <Icon icon=lu::LuUserPen/>"Réglages"<span class="k-sr">" utilisateur"</span>
                     </a>

@@ -15,6 +15,7 @@ mod home;
 mod icons;
 mod legal;
 mod markdown;
+mod profile;
 mod settings;
 mod shell;
 mod social;

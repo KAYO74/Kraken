@@ -298,6 +298,9 @@ pub async fn join(State(state): State<AppState>, auth: Auth, Path(code): Path<St
         let others: Vec<Id> = g.members.iter().map(|m| m.user.id).filter(|u| *u != auth.user.id).collect();
         state.hub.send(&others, Event::MemberAdd { guild_id: g.guild.id, member });
         state.hub.send(&[auth.user.id], Event::GuildCreate(Box::new(g.clone())));
+        // Chacun découvre les statuts de l'autre.
+        let everyone: Vec<Id> = g.members.iter().map(|m| m.user.id).collect();
+        crate::presence::joined(&state, auth.user.id, &everyone).await;
     }
     Ok(Json(g))
 }

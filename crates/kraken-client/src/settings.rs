@@ -1,6 +1,6 @@
-//! Réglages utilisateur (S06 à S15) dans la modale `k-settings`. Compte, Apparence, la liste
-//! des comptes bloqués (S08) et les notifications (S09) sont branchés ; les autres sections ont
-//! leur route et leur place dans la navigation.
+//! Réglages utilisateur (S06 à S15) dans la modale `k-settings`. Mon compte (pseudo, e-mail, mot
+//! de passe), Mon profil, Apparence, la liste des comptes bloqués (S08) et les notifications
+//! (S09) sont branchés ; les autres sections ont leur route et leur place dans la navigation.
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -11,8 +11,8 @@ use crate::store::store;
 use crate::ui::{Avatar, modal};
 
 const SECTIONS: &[(&str, &str, &str, &str)] = &[
-    ("Toi", "account", "Compte et sécurité", "S06"),
-    ("Toi", "profiles", "Profil public", "S20"),
+    ("Toi", "account", "Mon compte", "S06"),
+    ("Toi", "profiles", "Mon profil", "S20"),
     ("Toi", "privacy", "Tes données", "S07"),
     ("Toi", "messaging", "Qui peut t'écrire", "S08"),
     ("Toi", "apps", "Applications liées", "S15"),
@@ -80,6 +80,7 @@ pub fn Settings() -> impl IntoView {
                     </div>
                     {move || match section().as_str() {
                         "account" => view! { <Account/> }.into_any(),
+                        "profiles" => view! { <crate::profile::ProfileSettings/> }.into_any(),
                         "appearance" => view! { <Appearance/> }.into_any(),
                         "messaging" => view! { <Messaging/> }.into_any(),
                         "notifications" => view! { <Notifications/> }.into_any(),
@@ -110,29 +111,6 @@ fn Account() -> impl IntoView {
         });
     };
     let leave2 = leave.clone();
-    let display = RwSignal::new(String::new());
-    // Suit le nom enregistré (le READY peut arriver après l'ouverture des réglages), sans
-    // écraser la saisie quand autre chose change dans le compte.
-    let saved_name = Memo::new(move |_| s.me.with(|m| m.as_ref().and_then(|u| u.display_name.clone())));
-    Effect::new(move || display.set(saved_name.get().unwrap_or_default()));
-    let saved = RwSignal::new(false);
-    let name_error = RwSignal::new(None::<String>);
-    let save_name = move |e: leptos::ev::SubmitEvent| {
-        e.prevent_default();
-        saved.set(false);
-        name_error.set(None);
-        spawn_local(async move {
-            match crate::api::update_me(&display.get_untracked()).await {
-                Ok(u) => {
-                    display.set(u.display_name.clone().unwrap_or_default());
-                    s.update_user(u);
-                    saved.set(true);
-                }
-                Err(e) => name_error.set(Some(e.message)),
-            }
-        });
-    };
-    let username = move || s.me.get().map(|u| u.username).unwrap_or_default();
     let delete = move |e: leptos::ev::SubmitEvent| {
         e.prevent_default();
         spawn_local(async move {
@@ -146,16 +124,11 @@ fn Account() -> impl IntoView {
         });
     };
     view! {
-        <div class="k-card app-account"><crate::avatar::AvatarBlock/></div>
-        <form class="k-setting app-name-form" on:submit=save_name>
-            <label for="display-name">"Nom affiché"</label>
-            <p id="display-name-h">{move || format!("Ce que les autres voient. Ton pseudo unique @{} ne change pas : il reste écrit en dessous.", username())}</p>
-            <button class="k-btn k-btn--primary" type="submit">"Enregistrer"</button>
-            <input id="display-name" class="k-input" maxlength=kraken_proto::MAX_DISPLAY_NAME.to_string() placeholder=username bind:value=display
-                aria-describedby="display-name-h" aria-invalid=move || name_error.get().is_some().then_some("true")/>
-            <Show when=move || name_error.get().is_some()><p class="k-error" role="alert">{move || name_error.get()}</p></Show>
-            <Show when=move || saved.get()><p role="status">"Nom affiché enregistré."</p></Show>
-        </form>
+        <div class="app-acct-stack">
+            <UsernameForm/>
+            <EmailForm/>
+            <PasswordForm/>
+        </div>
         <div class="k-setting">
             <label for="logout">"Se déconnecter"</label>
             <button id="logout" class="k-btn" on:click=move |_| leave(false)>"Déconnexion"</button>
@@ -194,6 +167,190 @@ fn Account() -> impl IntoView {
                 </div>
             </div>
         </Show>
+    }
+}
+
+/// Mon pseudo : unique, mêmes règles qu'à l'inscription, mot de passe demandé, deux changements
+/// par heure au plus.
+#[component]
+fn UsernameForm() -> impl IntoView {
+    let s = store();
+    let name = RwSignal::new(String::new());
+    let password = RwSignal::new(String::new());
+    let error = RwSignal::new(None::<String>);
+    let note = RwSignal::new(None::<String>);
+    let busy = RwSignal::new(false);
+    let current = move || s.me.get().map(|u| u.username).unwrap_or_default();
+    let submit = move |e: leptos::ev::SubmitEvent| {
+        e.prevent_default();
+        if busy.get_untracked() {
+            return;
+        }
+        busy.set(true);
+        error.set(None);
+        note.set(None);
+        spawn_local(async move {
+            match crate::api::change_username(name.get_untracked().trim(), &password.get_untracked()).await {
+                Ok(u) => {
+                    note.try_set(Some(format!("Ton pseudo est maintenant @{}.", u.username)));
+                    s.update_user(u);
+                    name.try_set(String::new());
+                    password.try_set(String::new());
+                }
+                Err(e) => {
+                    error.try_set(Some(e.message));
+                }
+            }
+            busy.try_set(false);
+        });
+    };
+    view! {
+        <form class="app-acct" on:submit=submit aria-labelledby="acct-username-t">
+            <h3 id="acct-username-t" class="app-acct-title">"Pseudo"</h3>
+            <p id="acct-username-h" class="app-hint">{move || format!(
+                "Ton pseudo actuel est @{}. C'est celui que tes amis tapent pour t'ajouter : minuscules, chiffres, points et tirets bas. Tu peux le changer {} fois par heure au plus.",
+                current(),
+                kraken_proto::USERNAME_CHANGES_PER_WINDOW,
+            )}</p>
+            <label class="k-field"><span class="k-label">"Nouveau pseudo"</span>
+                <input class="k-input" name="new-username" autocomplete="off" autocapitalize="none" spellcheck="false" required
+                    minlength="2" maxlength="32" pattern="[a-zA-Z0-9_.]+" bind:value=name aria-describedby="acct-username-h"
+                    aria-invalid=move || error.get().is_some().then_some("true")/></label>
+            <label class="k-field"><span class="k-label">"Mot de passe actuel"</span>
+                <input class="k-input" type="password" name="username-password" autocomplete="current-password" required bind:value=password/></label>
+            <div class="app-acct-actions">
+                <button class="k-btn k-btn--primary" type="submit" disabled=move || busy.get() aria-busy=move || busy.get().to_string()>"Changer le pseudo"</button>
+                <Show when=move || note.get().is_some()><p class="app-hint" role="status">{move || note.get()}</p></Show>
+            </div>
+            <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+        </form>
+    }
+}
+
+/// Mon adresse e-mail. Une nouvelle adresse doit être confirmée par le lien qu'on y reçoit ;
+/// d'ici là, l'ancienne reste valable.
+#[component]
+fn EmailForm() -> impl IntoView {
+    let account = RwSignal::new(None::<kraken_proto::Account>);
+    spawn_local(async move {
+        if let Ok(a) = crate::api::account().await {
+            account.try_set(Some(a));
+        }
+    });
+    let email = RwSignal::new(String::new());
+    let password = RwSignal::new(String::new());
+    let error = RwSignal::new(None::<String>);
+    let note = RwSignal::new(None::<String>);
+    let busy = RwSignal::new(false);
+    let submit = move |e: leptos::ev::SubmitEvent| {
+        e.prevent_default();
+        if busy.get_untracked() {
+            return;
+        }
+        busy.set(true);
+        error.set(None);
+        note.set(None);
+        spawn_local(async move {
+            match crate::api::change_email(email.get_untracked().trim(), &password.get_untracked()).await {
+                Ok(a) => {
+                    note.try_set(Some(match &a.pending_email {
+                        Some(p) => format!(
+                            "Un message de confirmation est parti vers {p}. Ton adresse actuelle reste valable jusqu'à ce que tu ouvres le lien."
+                        ),
+                        None => "Adresse enregistrée.".to_string(),
+                    }));
+                    account.try_set(Some(a));
+                    email.try_set(String::new());
+                    password.try_set(String::new());
+                }
+                Err(e) => {
+                    error.try_set(Some(e.message));
+                }
+            }
+            busy.try_set(false);
+        });
+    };
+    let current = move || {
+        account.with(|a| match a {
+            None => "Chargement de ton adresse…".to_string(),
+            Some(a) => match (&a.email, a.email_verified) {
+                (Some(e), true) => format!("Ton adresse actuelle est {e}."),
+                (Some(e), false) => format!("Ton adresse actuelle est {e} (pas encore confirmée)."),
+                (None, _) => "Aucune adresse n'est enregistrée.".to_string(),
+            },
+        })
+    };
+    let pending = move || account.with(|a| a.as_ref().and_then(|a| a.pending_email.clone()));
+    view! {
+        <form class="app-acct" on:submit=submit aria-labelledby="acct-email-t">
+            <h3 id="acct-email-t" class="app-acct-title">"Adresse e-mail"</h3>
+            <p id="acct-email-h" class="app-hint">{current}</p>
+            <Show when=move || pending().is_some()>
+                <p class="app-hint app-acct-pending" role="status">{move || format!(
+                    "En attente de confirmation : {}. Ouvre le lien reçu à cette adresse ; d'ici là, l'ancienne reste valable.",
+                    pending().unwrap_or_default(),
+                )}</p>
+            </Show>
+            <label class="k-field"><span class="k-label">"Nouvelle adresse e-mail"</span>
+                <input class="k-input" type="email" name="new-email" autocomplete="email" required maxlength="254" bind:value=email
+                    aria-describedby="acct-email-h" aria-invalid=move || error.get().is_some().then_some("true")/></label>
+            <label class="k-field"><span class="k-label">"Mot de passe actuel"</span>
+                <input class="k-input" type="password" name="email-password" autocomplete="current-password" required bind:value=password/></label>
+            <div class="app-acct-actions">
+                <button class="k-btn k-btn--primary" type="submit" disabled=move || busy.get() aria-busy=move || busy.get().to_string()>"Changer l'adresse"</button>
+                <Show when=move || note.get().is_some()><p class="app-hint" role="status">{move || note.get()}</p></Show>
+            </div>
+            <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+        </form>
+    }
+}
+
+/// Mon mot de passe : l'ancien et le nouveau (8 caractères au moins, comme à l'inscription). Les
+/// autres appareils sont déconnectés, celui-ci reste connecté.
+#[component]
+fn PasswordForm() -> impl IntoView {
+    let current = RwSignal::new(String::new());
+    let new = RwSignal::new(String::new());
+    let error = RwSignal::new(None::<String>);
+    let note = RwSignal::new(None::<&'static str>);
+    let busy = RwSignal::new(false);
+    let submit = move |e: leptos::ev::SubmitEvent| {
+        e.prevent_default();
+        if busy.get_untracked() {
+            return;
+        }
+        busy.set(true);
+        error.set(None);
+        note.set(None);
+        spawn_local(async move {
+            match crate::api::change_password(&current.get_untracked(), &new.get_untracked()).await {
+                Ok(()) => {
+                    note.try_set(Some("Mot de passe changé. Tes autres appareils ont été déconnectés."));
+                    current.try_set(String::new());
+                    new.try_set(String::new());
+                }
+                Err(e) => {
+                    error.try_set(Some(e.message));
+                }
+            }
+            busy.try_set(false);
+        });
+    };
+    view! {
+        <form class="app-acct" on:submit=submit aria-labelledby="acct-password-t">
+            <h3 id="acct-password-t" class="app-acct-title">"Mot de passe"</h3>
+            <p id="acct-password-h" class="app-hint">"8 caractères au moins. Tes autres appareils seront déconnectés ; celui-ci reste ouvert."</p>
+            <label class="k-field"><span class="k-label">"Mot de passe actuel"</span>
+                <input class="k-input" type="password" name="old-password" autocomplete="current-password" required bind:value=current/></label>
+            <label class="k-field"><span class="k-label">"Nouveau mot de passe"</span>
+                <input class="k-input" type="password" name="new-password" autocomplete="new-password" required minlength="8"
+                    bind:value=new aria-describedby="acct-password-h" aria-invalid=move || error.get().is_some().then_some("true")/></label>
+            <div class="app-acct-actions">
+                <button class="k-btn k-btn--primary" type="submit" disabled=move || busy.get() aria-busy=move || busy.get().to_string()>"Changer le mot de passe"</button>
+                <Show when=move || note.get().is_some()><p class="app-hint" role="status">{move || note.get()}</p></Show>
+            </div>
+            <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
+        </form>
     }
 }
 

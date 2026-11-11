@@ -1,4 +1,4 @@
-//! Tâches de fond : e-mails (vérification, mot de passe oublié) et purge des comptes
+//! Tâches de fond : e-mails (vérification, nouvelle adresse, mot de passe oublié) et purge des comptes
 //! supprimés. Reprise exponentielle, lettre morte après 5 échecs (`kraken-db::jobs`).
 
 use std::time::Duration;
@@ -74,6 +74,7 @@ async fn handle(state: &AppState, job: Job) {
     let result = match job.kind.as_str() {
         "email_verify" => email(state, &job, "verify_email").await,
         "email_reset" => email(state, &job, "reset_password").await,
+        "email_change" => email_change(state, &job).await,
         "embed_fetch" => crate::embed::run(state, &job).await,
         "attachment_sweep" => {
             // Tâche permanente, comme la purge des comptes : reprise toutes les heures.
@@ -114,6 +115,26 @@ async fn handle(state: &AppState, job: Job) {
     if let Err(e) = saved {
         tracing::error!("tâches : {e:?}");
     }
+}
+
+/// Confirmation d'une nouvelle adresse : le lien part vers la nouvelle adresse (pas l'ancienne,
+/// qui reste celle du compte jusqu'au clic). Le jeton porte l'adresse qu'il confirme : une
+/// demande plus récente rend les liens précédents inutiles.
+async fn email_change(state: &AppState, job: &Job) -> Result<(), String> {
+    let mailer = state.mailer.as_ref().ok_or("pas de SMTP configuré")?;
+    let uid: Uuid =
+        job.payload.get("user_id").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()).ok_or("user_id manquant")?;
+    let Some((to, username)) = state.db.pending_email(uid).await.map_err(|e| format!("{e:?}"))? else {
+        return Ok(()); // demande annulée, ou compte supprimé entre-temps
+    };
+    let token = new_token();
+    state.db.create_email_change_token(uid, &to, &token_hash(&token), 24 * 60).await.map_err(|e| format!("{e:?}"))?;
+    let base = state.cfg.public_url.trim_end_matches('/');
+    let body = format!(
+        "Bonjour {username},\n\nPour confirmer cette nouvelle adresse e-mail pour ton compte KRAKEN, ouvre ce lien dans les 24 heures :\n{base}/verify-email?token={token}\n\n\
+         Tu n'as rien demandé ? Ignore ce message : ton compte garde son adresse actuelle.\n"
+    );
+    mailer.send(&to, "Confirme ta nouvelle adresse e-mail KRAKEN", body).await
 }
 
 /// Crée le jeton au moment de l'envoi : il n'est jamais stocké en clair, même dans la file.

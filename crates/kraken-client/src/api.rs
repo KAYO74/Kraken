@@ -269,18 +269,55 @@ pub async fn call_decline(channel: Id) -> ApiResult<()> {
     call(Method::POST, &format!("/channels/{channel}/call/decline"), NO_BODY).await
 }
 
-pub async fn update_me(display_name: &str) -> ApiResult<User> {
-    call(Method::PATCH, "/users/@me", Some(UpdateMe { display_name: Some(display_name.into()) })).await
+/// Enregistre le profil : nom affiché, bio, pronoms (vides : effacés).
+pub async fn update_profile(display_name: &str, bio: &str, pronouns: &str) -> ApiResult<User> {
+    let body =
+        UpdateMe { display_name: Some(display_name.into()), bio: Some(bio.into()), pronouns: Some(pronouns.into()) };
+    call(Method::PATCH, "/users/@me", Some(body)).await
 }
 
-/// Envoie la photo de profil (déjà recadrée) : le corps de la requête est l'image elle-même.
+/// Mon adresse e-mail et celle que j'attends de confirmer.
+pub async fn account() -> ApiResult<Account> {
+    call(Method::GET, "/users/@me/account", NO_BODY).await
+}
+
+pub async fn change_username(username: &str, password: &str) -> ApiResult<User> {
+    call(
+        Method::PUT,
+        "/users/@me/username",
+        Some(ChangeUsername { username: username.into(), password: password.into() }),
+    )
+    .await
+}
+
+pub async fn change_email(email: &str, password: &str) -> ApiResult<Account> {
+    call(Method::PUT, "/users/@me/email", Some(ChangeEmail { email: email.into(), password: password.into() })).await
+}
+
+pub async fn change_password(current: &str, new: &str) -> ApiResult<()> {
+    call(Method::PUT, "/users/@me/password", Some(ChangePassword { current: current.into(), new: new.into() })).await
+}
+
+/// Choisir mon statut.
+pub async fn set_presence(presence: Presence) -> ApiResult<SetPresence> {
+    call(Method::PUT, "/users/@me/presence", Some(SetPresence { presence })).await
+}
+
+/// Envoie la photo de profil (déjà recadrée, ou une animation telle quelle) : le corps de la
+/// requête est l'image elle-même.
 pub async fn set_avatar(bytes: &[u8], mime: &str) -> ApiResult<User> {
+    put_image("/api/v1/users/@me/avatar", bytes, mime).await
+}
+
+/// Pareil pour la bannière.
+pub async fn set_banner(bytes: &[u8], mime: &str) -> ApiResult<User> {
+    put_image("/api/v1/users/@me/banner", bytes, mime).await
+}
+
+async fn put_image(path: &str, bytes: &[u8], mime: &str) -> ApiResult<User> {
     let body = js_sys::Uint8Array::from(bytes);
-    let req = RequestBuilder::new("/api/v1/users/@me/avatar")
-        .method(Method::PUT)
-        .header("content-type", mime)
-        .body(body)
-        .map_err(|_| network())?;
+    let req =
+        RequestBuilder::new(path).method(Method::PUT).header("content-type", mime).body(body).map_err(|_| network())?;
     let resp = req.send().await.map_err(|_| network())?;
     if resp.ok() {
         resp.json().await.map_err(|_| network())
@@ -303,6 +340,11 @@ fn too_large() -> ApiError {
 /// Retirer la photo de profil.
 pub async fn remove_avatar() -> ApiResult<User> {
     call(Method::DELETE, "/users/@me/avatar", NO_BODY).await
+}
+
+/// Retirer la bannière.
+pub async fn remove_banner() -> ApiResult<User> {
+    call(Method::DELETE, "/users/@me/banner", NO_BODY).await
 }
 
 pub async fn logout_all() -> ApiResult<()> {

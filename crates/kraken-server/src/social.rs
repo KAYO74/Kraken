@@ -79,6 +79,9 @@ pub async fn set_relationship(
         _ => return Err(AppError::invalid("Seuls « friend » et « blocked » se choisissent.")),
     };
     notify(&state, notices);
+    if req.kind == RelationshipKind::Blocked {
+        crate::presence::hide(&state, auth.user.id, uid);
+    }
     Ok(Json(presence(&state, r)))
 }
 
@@ -90,6 +93,7 @@ pub async fn remove_relationship(
 ) -> ApiResult<StatusCode> {
     let notices = state.db.remove_relationship(auth.user.id, uid).await?;
     notify(&state, notices);
+    crate::presence::reveal(&state, auth.user.id, uid).await;
     Ok(StatusCode::NO_CONTENT)
 }
 

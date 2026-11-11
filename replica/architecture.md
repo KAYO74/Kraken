@@ -73,7 +73,10 @@ REST sous `/api/v1`, JSON, jeton `Authorization: Session <t>` (ou `Bot <t>`). Qu
 | POST /auth/login | ouvre une session | anon | login, password, code MFA? | session ou `mfa_required` | F12 |
 | POST /auth/logout | révoque la session courante | user | — | 204 | F12 |
 | POST /auth/verify-email, /auth/reset, /auth/reset/confirm | jetons e-mail | anon | token, password | 204 | F12 |
-| GET/PATCH /users/@me | lire, modifier compte et profil | user | champs profil, password actuel pour e-mail/mdp | user | S06, F08 |
+| GET/PATCH /users/@me | lire, modifier le profil (nom affiché, bio 190, pronoms 40 ; champ absent = inchangé, vide = effacé) | user | champs profil | user | S20, F08 |
+| PUT/DELETE /users/@me/avatar, /users/@me/banner | photo et bannière (GIF/WebP animés gardés tels quels), servis sous /avatars et /banners | user | image | user | S20 |
+| PUT /users/@me/username, /email, /password | changer de pseudo (2 par heure, 429 `username_cooldown`), d'adresse (confirmée par e-mail si SMTP, l'ancienne reste valide) et de mot de passe (les autres appareils sont déconnectés) | user + mot de passe actuel (403 `bad_password`) | champs | user, compte, 204 | S06 |
+| PUT /users/@me/presence | statut choisi : en ligne, inactif, ne pas déranger, invisible (gardé en base, 0009) | user | presence | presence | S04 |
 | POST/DELETE /users/@me/mfa | activer, désactiver TOTP | user | code | codes de secours | S06 |
 | GET /users/@me/sessions, DELETE /…/{id} | appareils, révocation | user | — | sessions | S06 |
 | GET/PATCH /users/@me/settings | réglages synchronisés | user | patch + `version` | settings | S07–S14 |
