@@ -105,9 +105,10 @@ pub(crate) const CATEGORIES: &[(&str, &[Perm])] = &[
 /// Droits sensibles : une icône d'alerte, en plus de leur phrase.
 pub(crate) const SENSITIVE: [u64; 4] = [perms::ADMINISTRATOR, perms::BAN, perms::MANAGE_ROLES, perms::MANAGE_CHANNELS];
 
-const SECTIONS: [(&str, &str); 5] = [
+const SECTIONS: [(&str, &str); 6] = [
     ("roles", "Rôles"),
     ("channels", "Salons"),
+    ("emojis", "Emojis"),
     ("invites", "Invitations"),
     ("bans", "Bannis"),
     ("owner", "Propriété"),
@@ -119,12 +120,15 @@ fn allowed(guild: Id) -> Vec<&'static str> {
     let p = s.guild_perms(guild);
     s.me.track();
     let owner = s.my_id().is_some() && s.guild(guild).is_some_and(|g| Some(g.guild.owner_id) == s.my_id());
+    // Qui administre le serveur (rôles, salons, bannis, propriété) voit les emojis, même sans pouvoir les changer.
+    let admin = p & (perms::MANAGE_ROLES | perms::MANAGE_CHANNELS | perms::BAN) != 0 || owner;
     SECTIONS
         .iter()
         .map(|(slug, _)| *slug)
         .filter(|slug| match *slug {
             "roles" => p & perms::MANAGE_ROLES != 0,
             "channels" => p & perms::MANAGE_CHANNELS != 0,
+            "emojis" => p & perms::MANAGE_EMOJIS != 0 || admin,
             // Qui gère le serveur voit toutes les invitations, qui peut seulement en créer voit les siennes.
             "invites" => p & (perms::MANAGE_GUILD | perms::CREATE_INVITE) != 0,
             "bans" => p & perms::BAN != 0,
@@ -191,6 +195,7 @@ pub fn GuildSettings() -> impl IntoView {
                         match section.get() {
                             "roles" => view! { <Roles guild=g/> }.into_any(),
                             "channels" => view! { <crate::channels::ChannelsAdmin guild=g/> }.into_any(),
+                            "emojis" => view! { <crate::emoji_settings::EmojiSettings guild=g/> }.into_any(),
                             "invites" => view! { <Invites guild=g/> }.into_any(),
                             "bans" => view! { <Bans guild=g/> }.into_any(),
                             "owner" => view! { <Ownership guild=g/> }.into_any(),

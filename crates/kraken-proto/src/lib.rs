@@ -303,6 +303,54 @@ pub struct GuildState {
     /// Qui est dans les salons vocaux (ceux que ce membre voit).
     #[serde(default)]
     pub voice_states: Vec<VoiceState>,
+    /// Les emojis perso du serveur, du plus ancien au plus récent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub emojis: Vec<Emoji>,
+}
+
+/// Emplacements d'emojis perso au plus par serveur.
+pub const MAX_EMOJIS: usize = 50;
+/// Poids maximal d'un emoji envoyé, en octets (256 Kio).
+pub const MAX_EMOJI_BYTES: usize = 256 * 1024;
+/// Côté, en pixels, d'un emoji fixe tel que le serveur le garde (le client recadre en carré à cette
+/// taille ; une image plus petite n'est pas agrandie).
+pub const EMOJI_SIZE: u32 = 128;
+/// Plus petit côté, en pixels, de l'image d'un emoji (fixe ou animée) : en dessous, il ne reste qu'un point.
+pub const MIN_EMOJI_SIDE: u32 = 8;
+/// Rapport grand côté / petit côté de l'image d'un emoji, fixe ou animée, au plus (8 pour 1) : une bande très
+/// allongée n'a pas de sens dans un carré. Les animations sont encore plus serrées, voir [`MAX_EMOJI_RATIO`].
+pub const MAX_EMOJI_IMAGE_RATIO: u32 = 8;
+/// Une animation d'emoji tient dans un rectangle de ce rapport au plus (2 pour 1, dans un sens ou
+/// dans l'autre) : elle n'est pas recadrée, l'emoji est affiché en entier dans un carré.
+pub const MAX_EMOJI_RATIO: u32 = 2;
+
+/// Qui a ajouté un emoji (« ajouté par … »).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EmojiCreator {
+    pub id: Id,
+    /// Son nom affiché, ou son pseudo.
+    pub name: String,
+}
+
+/// Un emoji perso. L'image se lit sous `/api/v1/emojis/{id}/image` ; elle ne change jamais (renommer
+/// ne la touche pas), d'où un cache sans fin. Dans un message, il s'écrit `<:nom:id>` : l'id ne change
+/// pas au renommage et survit à la suppression.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Emoji {
+    pub id: Id,
+    pub guild_id: Id,
+    /// 2 à 32 caractères parmi les lettres, les chiffres et `_`, unique dans le serveur sans tenir
+    /// compte de la casse.
+    pub name: String,
+    pub animated: bool,
+    /// `None` : son compte n'existe plus.
+    pub creator: Option<EmojiCreator>,
+}
+
+/// `PATCH /guilds/{id}/emojis/{eid}` : renommer.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RenameEmoji {
+    pub name: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -491,13 +539,15 @@ pub struct Reply {
     /// `None` : le message d'origine a été supprimé.
     pub id: Option<Id>,
     pub author: Option<User>,
-    /// Ses [`REPLY_EXCERPT`] premiers caractères.
+    /// Ses [`REPLY_EXCERPT`] premiers caractères, sans jeton d'emoji perso coupé en deux.
     pub content: String,
 }
 
 /// Un emoji et ceux qui ont réagi avec, du premier au dernier.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Reaction {
+    /// Un emoji Unicode, ou l'id (avec tirets) d'un emoji perso : il reste dans la réaction même
+    /// si l'emoji est supprimé ensuite (le client l'affiche alors comme « emoji supprimé »).
     pub emoji: String,
     pub users: Vec<Id>,
 }
@@ -1183,6 +1233,11 @@ pub enum Event {
     GuildOwnerUpdate {
         guild_id: Id,
         owner_id: Id,
+    },
+    /// Un emoji perso ajouté, renommé ou retiré : la liste entière du serveur, à sa place.
+    EmojisUpdate {
+        guild_id: Id,
+        emojis: Vec<Emoji>,
     },
     /// Profil changé (nom affiché, photo, bannière, bio, pronoms, pseudo) : envoyé à l'intéressé et à
     /// ceux qui le voient.

@@ -53,11 +53,11 @@ fn data(state: &AppState) -> PathBuf {
 }
 
 /// Supprime des fichiers du dossier de données (chemins relatifs rendus par `kraken-db`).
-/// Seuls `attachments/…` et `embeds/…`, sans `..`, sont admis : un chemin qui sortirait de ces
+/// Seuls `attachments/…`, `embeds/…` et `emojis/…`, sans `..`, sont admis : un chemin qui sortirait de ces
 /// dossiers est ignoré.
 pub async fn remove_files(state: &AppState, paths: Vec<String>) {
     for p in paths {
-        let ok = ["attachments/", "embeds/"].iter().any(|d| {
+        let ok = ["attachments/", "embeds/", "emojis/"].iter().any(|d| {
             p.strip_prefix(d).is_some_and(|name| {
                 !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.') && !name.contains("..")
             })

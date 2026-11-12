@@ -698,6 +698,12 @@ impl Db {
         for e in embeds {
             files.extend(crate::embed_paths(&e.0));
         }
+        // Les images des emojis perso (les lignes partent en cascade avec le serveur).
+        let emoji_keys: Vec<String> = sqlx::query_scalar("select image_key from emojis where guild_id = $1")
+            .bind(gid)
+            .fetch_all(&mut *tx)
+            .await?;
+        files.extend(emoji_keys.into_iter().map(|k| format!("emojis/{k}")));
         // Tout le reste part en cascade (salons et leurs messages, rôles, invitations, journal…).
         sqlx::query("delete from guilds where id = $1").bind(gid).execute(&mut *tx).await?;
         tx.commit().await?;

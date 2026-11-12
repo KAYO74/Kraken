@@ -37,7 +37,7 @@ Filtre de contenu média sensible (flou bloquer),moderation,could,yes,no,S08 ; n
 Envoyer modifier supprimer un message,messages,must,yes,yes,"S05 F10 ; envoi optimiste (nonce, réessai ou abandon), modifier le sien, supprimer le sien ou tout message avec MANAGE_MESSAGES"
 Markdown mentions et spoilers,messages,must,yes,yes,"S05 S11 ; gras, italique, souligné, barré, code, blocs, citations, liens, spoilers ; @pseudo, @everyone/@here selon MENTION_EVERYONE, #salon ; autocomplétion"
 Répondre à un message,messages,must,yes,yes,"S05 ; citation au-dessus, clic pour y aller (charge l'historique plus ancien)"
-Réactions emoji,messages,must,yes,yes,"S05 ; emojis Unicode, sélecteur de 86 emojis, 20 différents au plus par message ; emojis perso pas encore"
+Réactions emoji,messages,must,yes,yes,"S05 ; emojis Unicode, sélecteur de 86 emojis, 20 différents au plus par message ; emojis perso de ses serveurs aussi (l'id fait la réaction)"
 Épingler un message,messages,should,yes,no,S05
 Transférer un message,messages,could,yes,no,S13
 Aperçus de liens (embeds),messages,must,yes,yes,"S05 ; carte avec site, titre, description et image gardée en local, retirable par l'auteur ; page récupérée par le serveur sans jamais viser le réseau local ; selon le droit « Aperçu des liens »"
@@ -45,8 +45,8 @@ Pièces jointes images vidéos fichiers,messages,must,yes,yes,"S05 ; trombone, g
 Envois lourds jusqu'à 500 Mo,messages,should,yes,no,nitro : gratuit ; plafond réglable par l'instance
 Messages longs (4000 caractères),messages,should,yes,yes,nitro : gratuit
 Texte alternatif des images,messages,should,yes,no,S12
-Emojis perso de serveur,emojis,must,yes,no,S22
-Emojis perso utilisables partout et animés,emojis,must,yes,no,nitro : gratuit
+Emojis perso de serveur,emojis,must,yes,yes,"S22 ; 50 par serveur, PNG JPEG WebP GIF, 256 Ko, nom unique, droit « Gérer les émojis » ; Réglages › Emojis, sélecteur par serveur, :nom: avec suggestions, grand format, réactions, journal d'audit"
+Emojis perso utilisables partout et animés,emojis,must,yes,yes,"nitro : gratuit ; dans tous les serveurs dont on est membre, y compris en réaction, et lisibles par tous ; animés au survol, fixes en mouvement réduit. Limite : l'image d'un emoji retiré peut rester dans le cache du navigateur"
 Autocollants perso partout,emojis,should,yes,no,nitro : gratuit
 Super réactions,emojis,could,yes,no,nitro : gratuit
 GIF dans la zone de saisie,emojis,could,yes,no,S05 ; fournisseur GIF libre ou clé de l'instance

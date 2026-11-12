@@ -6,6 +6,7 @@
 
 mod calls;
 mod channels;
+mod emojis;
 mod files;
 mod invites;
 mod jobs;
@@ -80,6 +81,8 @@ impl From<sqlx::Error> for DbError {
                         "email"
                     } else if c.contains("nonce") {
                         "nonce"
+                    } else if c.starts_with("emojis_") {
+                        "emoji_name"
                     } else {
                         "unique"
                     });
@@ -214,13 +217,17 @@ fn channel_from(r: &PgRow) -> sqlx::Result<Channel> {
     })
 }
 
+/// Ce que la requête lit du message d'origine d'une réponse : l'extrait, plus de quoi reconnaître un
+/// jeton d'emoji que la coupe tranche (voir [`kraken_core::emoji::excerpt`], qui fait l'extrait).
+const REPLY_FETCH: usize = REPLY_EXCERPT + kraken_core::emoji::TOKEN_MAX_LEN;
+
 fn message_sql(filter: &str) -> String {
     format!(
         "select m.id, m.channel_id, m.content, m.nonce, m.kind, m.reply_to_id, m.mention_everyone,
                 m.call_participants, (extract(epoch from m.call_ended_at) * 1000)::int8 as call_ended_ms,
                 (extract(epoch from m.created_at) * 1000)::int8 as created_ms,
                 (extract(epoch from m.edited_at) * 1000)::int8 as edited_ms, {}, {},
-                left(r.content, {REPLY_EXCERPT}) as reply_content,
+                left(r.content, {REPLY_FETCH}) as reply_content,
                 coalesce((select json_agg(json_build_object('emoji', x.emoji_key, 'users', x.users) order by x.first)
                           from (select emoji_key, array_agg(user_id order by created_at, user_id) as users,
                                        min(created_at) as first
@@ -253,7 +260,10 @@ fn message_from(r: &PgRow) -> sqlx::Result<Message> {
         "reply" => Some(Reply {
             id: r.try_get("reply_to_id")?,
             author: user_from(r, "ra")?,
-            content: r.try_get::<Option<String>, _>("reply_content")?.unwrap_or_default(),
+            content: kraken_core::emoji::excerpt(
+                &r.try_get::<Option<String>, _>("reply_content")?.unwrap_or_default(),
+                REPLY_EXCERPT,
+            ),
         }),
         _ => None,
     };
@@ -710,7 +720,14 @@ impl Db {
                 .collect();
         let roles = self.roles(gid).await?;
         // États vocaux : en mémoire dans le serveur, ajoutés par lui.
-        Ok(Some(GuildState { guild, channels, roles, members: self.members(gid).await?, voice_states: vec![] }))
+        Ok(Some(GuildState {
+            guild,
+            channels,
+            roles,
+            members: self.members(gid).await?,
+            voice_states: vec![],
+            emojis: self.guild_emojis(gid).await?,
+        }))
     }
 
     /// Rôles du serveur, `@everyone` compris, du plus bas au plus haut.
@@ -1132,9 +1149,15 @@ impl Db {
     }
 
     /// Ajoute ma réaction ; `false` si elle y était déjà. Au plus
-    /// [`kraken_core::emoji::MAX_REACTIONS`] emojis différents par message.
+    /// [`kraken_core::emoji::MAX_REACTIONS`] emojis différents par message. L'emoji est un
+    /// caractère Unicode de la sélection, ou l'id d'un emoji perso d'un serveur dont je suis
+    /// membre (sinon `Invalid("emoji")`).
     pub async fn add_reaction(&self, cid: Id, mid: Id, uid: Id, emoji: &str) -> Result<Changed> {
-        if !kraken_core::emoji::valid(emoji) {
+        if let Some(eid) = kraken_core::emoji::custom_key(emoji) {
+            if !self.can_use_emoji(eid, uid).await? {
+                return Err(DbError::Invalid("emoji"));
+            }
+        } else if !kraken_core::emoji::valid(emoji) {
             return Err(DbError::Invalid("emoji"));
         }
         let mut tx = self.pool.begin().await?;
@@ -1240,6 +1263,8 @@ pub(crate) async fn insert_channel(
 mod tests;
 #[cfg(test)]
 mod tests_channels;
+#[cfg(test)]
+mod tests_emojis;
 
 #[cfg(test)]
 mod tests_guild;

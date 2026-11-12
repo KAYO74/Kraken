@@ -306,33 +306,59 @@ pub async fn set_presence(presence: Presence) -> ApiResult<SetPresence> {
 /// Envoie la photo de profil (déjà recadrée, ou une animation telle quelle) : le corps de la
 /// requête est l'image elle-même.
 pub async fn set_avatar(bytes: &[u8], mime: &str) -> ApiResult<User> {
-    put_image("/api/v1/users/@me/avatar", bytes, mime).await
+    send_image(Method::PUT, "/api/v1/users/@me/avatar", bytes, mime, MAX_AVATAR_BYTES).await
 }
 
 /// Pareil pour la bannière.
 pub async fn set_banner(bytes: &[u8], mime: &str) -> ApiResult<User> {
-    put_image("/api/v1/users/@me/banner", bytes, mime).await
+    send_image(Method::PUT, "/api/v1/users/@me/banner", bytes, mime, MAX_BANNER_BYTES).await
 }
 
-async fn put_image(path: &str, bytes: &[u8], mime: &str) -> ApiResult<User> {
+/// Ajoute un emoji au serveur : le corps est l'image (recadrée, ou une animation telle quelle), le nom
+/// est dans l'adresse.
+pub async fn add_emoji(guild: Id, name: &str, bytes: &[u8], mime: &str) -> ApiResult<Emoji> {
+    let n = String::from(js_sys::encode_uri_component(name));
+    send_image(Method::POST, &format!("/api/v1/guilds/{guild}/emojis?name={n}"), bytes, mime, MAX_EMOJI_BYTES).await
+}
+
+pub async fn rename_emoji(guild: Id, emoji: Id, name: &str) -> ApiResult<Emoji> {
+    call(Method::PATCH, &format!("/guilds/{guild}/emojis/{emoji}"), Some(RenameEmoji { name: name.to_string() })).await
+}
+
+pub async fn delete_emoji(guild: Id, emoji: Id) -> ApiResult<()> {
+    call(Method::DELETE, &format!("/guilds/{guild}/emojis/{emoji}"), NO_BODY).await
+}
+
+/// L'image d'un emoji perso (une session suffit : le cookie part avec la balise `<img>`).
+pub fn emoji_url(id: Id) -> String {
+    format!("/api/v1/emojis/{id}/image")
+}
+
+async fn send_image<T: DeserializeOwned>(
+    method: Method,
+    path: &str,
+    bytes: &[u8],
+    mime: &str,
+    max: usize,
+) -> ApiResult<T> {
     let body = js_sys::Uint8Array::from(bytes);
     let req =
-        RequestBuilder::new(path).method(Method::PUT).header("content-type", mime).body(body).map_err(|_| network())?;
+        RequestBuilder::new(path).method(method).header("content-type", mime).body(body).map_err(|_| network())?;
     let resp = req.send().await.map_err(|_| network())?;
     if resp.ok() {
         resp.json().await.map_err(|_| network())
     } else if resp.status() == 413 {
-        Err(resp.json().await.unwrap_or_else(|_| too_large()))
+        Err(resp.json().await.unwrap_or_else(|_| too_large(max)))
     } else {
         Err(resp.json().await.unwrap_or_else(|_| network()))
     }
 }
 
-fn too_large() -> ApiError {
-    let mo = MAX_AVATAR_BYTES / (1024 * 1024);
+fn too_large(max: usize) -> ApiError {
+    let size = if max >= 1024 * 1024 { format!("{} Mo", max / (1024 * 1024)) } else { format!("{} Ko", max / 1024) };
     ApiError {
         code: "too_large".into(),
-        message: format!("Cette image pèse trop lourd : {mo} Mo au plus."),
+        message: format!("Cette image pèse trop lourd : {size} au plus."),
         timeout_until: None,
     }
 }

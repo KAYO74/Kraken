@@ -7,7 +7,8 @@ Le logo est gardé tel quel (pas de recadrage ni de recoloration), seulement ré
 arrondis (un masque de transparence, comme une icône d'appli).
 Écrit dans replica/brand/icons/ :
 - icon-{16..1024}.png, favicon.ico : le web (favicon, écran d'accueil iOS et Android, rail) ;
-- 32x32.png, 128x128.png, 128x128@2x.png, icon.png, icon.ico, icon.icns : le jeu attendu par Tauri.
+- 32x32.png, 128x128.png, 128x128@2x.png, icon.png, icon.ico, icon.icns : le jeu attendu par Tauri ;
+- apps/desktop/ui/logo.png : le logo de l'écran de lancement de l'appli de bureau (mêmes coins arrondis que l'icône).
 """
 from pathlib import Path
 
@@ -41,4 +42,6 @@ for name, s in (("32x32.png", 32), ("128x128.png", 128), ("128x128@2x.png", 256)
     sizes[s].save(OUT / name, optimize=True)
 sizes[256].save(OUT / "icon.ico", sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 sizes[1024].save(OUT / "icon.icns")
+# Écran de lancement de l'appli de bureau : affiché à 80 px, donc 192 px suffit (écrans 2x et zoom).
+png(sizes[192], HERE.parents[1] / "apps" / "desktop" / "ui" / "logo.png")
 print("icônes écrites dans", OUT.relative_to(HERE.parents[1]))

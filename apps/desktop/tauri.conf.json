@@ -22,6 +22,7 @@
       "../../crates/kraken-client/dist/": "client/"
     },
     "icon": [
+      "../../replica/brand/icons/icon.png",
       "../../replica/brand/icons/32x32.png",
       "../../replica/brand/icons/128x128.png",
       "../../replica/brand/icons/128x128@2x.png",
