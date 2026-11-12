@@ -13,6 +13,7 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement};
 
+use crate::photo::Photo;
 use crate::store::{Store, store};
 use crate::ui::{Avatar, banner_url, modal};
 
@@ -255,7 +256,7 @@ pub fn BannerBlock() -> impl IntoView {
     view! {
         <div class="app-banner-edit">
             <div class="app-banner-box">
-                {move || banner.get().map(|k| view! { <img class="app-banner-img" src=banner_url(&k) alt="Ta bannière actuelle"/> })}
+                {move || banner.get().map(|k| view! { <Photo class="app-banner-img" src=banner_url(&k) alt="Ta bannière actuelle" cap=640/> })}
                 <Show when=move || banner.get().is_none()><span class="app-hint">"Pas de bannière"</span></Show>
             </div>
             <div class="app-avatar-actions">

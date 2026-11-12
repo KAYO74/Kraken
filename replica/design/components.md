@@ -21,7 +21,7 @@ python3 replica/design/tokens.py        # régénère tokens.css + rapport de co
 - **Couleur d'accent = placeholder** (`#2b7a78`, sarcelle neutre). La couleur de marque de l'original est notée comme rôle `accent` et n'est pas reprise ; `/replica-brand` fixe la vraie.
 - **Gris gardés tels que mesurés** (7 surfaces + 2 bordures) : ce sont des rôles génériques, pas de la marque.
 - **Accessibilité corrigée dans les jetons**, là où l'original est sous le seuil : texte indicatif `#6c6d75` (3,0 à 3,5:1) remonté à `text-faint` (≥ 4,5:1) ; champs sans bordure dotés d'une `border-input` ≥ 3:1 ; piste d'interrupteur éteint visible (3:1).
-- **Thèmes** : `dark` (défaut, mesuré), `light` et `black` (déduits, non capturés), `auto` suit le système. Contraste élevé (should) viendra comme 4e thème.
+- **Thèmes** : `dark` (défaut, mesuré), `light` et `black` (déduits, non capturés), `auto` suit le système. Le contraste élevé n'est pas un 4e thème mais un jeu de couleurs par thème (`contrast.high` dans `tokens.json`, posé par `data-contrast="high"`).
 - **Police** : Inter (OFL), repli Noto Sans puis système ; mono JetBrains Mono (OFL). Embarquées dans le client, jamais via CDN. L'original utilise une police propriétaire.
 - **Icônes** : Lucide (ISC), via le crate `icondata` côté Leptos. Les SVG de la galerie sont des tracés simples écrits à la main.
 
@@ -40,11 +40,11 @@ python3 replica/design/tokens.py        # régénère tokens.css + rapport de co
 | zoom | 50–200 %, défaut 100 | 08.26.27 |
 | texte | 12 / 14 / 16 / 20 / 24 / 32 ; messages 16/22 | toutes |
 
-Espacements base 4 : 0, 2, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64 (`--space-0` à `--space-11`). Rayons : 4, 6, 8, 12, 16, pilule. Ombres : `low`, `pop` (menus), `modal`, `scrim`. Mouvement : 100 / 180 / 280 ms, coupé par `prefers-reduced-motion`. Points de rupture : mobile < 640 (rail + barre en tiroir), tablette < 1024 (panneau membres masqué), large ≥ 1440.
+Espacements base 4 : 0, 2, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64 (`--space-0` à `--space-11`). Rayons : 4, 6, 8, 12, 16, pilule. Ombres : `low`, `pop` (menus), `modal`, `scrim`. Mouvement : 100 / 180 / 280 ms, coupé par `data-motion="reduce"` (choix de l'appareil ou `prefers-reduced-motion`). Points de rupture : mobile < 640 (rail + barre en tiroir), tablette < 1024 (panneau membres masqué), large ≥ 1440.
 
 ## Contraste
 
-`tokens.py` : 62 couples × 3 thèmes, **0 échec AA** (marge mini ×1,01 sombre, ×1,03 clair, ×1,12 noir). Le `contrast.py` du skill donne le même résultat sur le thème par défaut.
+`tokens.py` : les couples de chaque thème sont mesurés en normal (**AA**) et en élevé (**AAA** : texte 7:1, bordures et contrôles 3:1), soit 3 thèmes × 2 niveaux, **0 échec**. Le rapport donne la marge mini de chaque combinaison.
 
 ## Composants
 

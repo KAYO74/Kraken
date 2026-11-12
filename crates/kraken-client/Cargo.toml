@@ -20,6 +20,8 @@ web-sys = { version = "0.3", features = [
     "Storage", "Window", "Document", "Element", "HtmlElement", "KeyboardEvent", "Location", "Navigator", "Clipboard",
     "HtmlInputElement", "File", "FileList", "Blob", "Url", "HtmlCanvasElement", "CanvasRenderingContext2d",
     "HtmlImageElement", "HtmlDocument", "MediaQueryList",
+    # Images animées : première image (createImageBitmap) d'un GIF ou d'un WebP animé.
+    "ImageBitmap",
     # Fichiers joints : envoi avec progression, glisser-déposer, collage.
     "XmlHttpRequest", "XmlHttpRequestUpload", "XmlHttpRequestEventTarget", "ProgressEvent", "DragEvent", "DataTransfer",
     "ClipboardEvent",

@@ -19,7 +19,7 @@ use crate::icons::{Icon, lu};
 use crate::markdown::Body;
 use crate::shell::first_text;
 use crate::store::{Conn, Pending, store};
-use crate::ui::{Avatar, Header, Stub, iso, modal, when};
+use crate::ui::{Avatar, Header, Stub, clock, iso, modal, when};
 
 thread_local! {
     static DRAFTS: std::cell::RefCell<std::collections::HashMap<Id, String>> = Default::default();
@@ -726,7 +726,7 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
             hidden=move || blocked.get() && !shown.get()>
             {reply}
             {if cont {
-                view! { <time class="app-gutter-time" datetime=iso(at)>{when(at).rsplit(' ').next().unwrap_or_default().to_string()}</time> }.into_any()
+                view! { <time class="app-gutter-time" datetime=iso(at)>{clock(at)}</time> }.into_any()
             } else {
                 match msg.author.clone() {
                     // Le nom, juste à côté, est le bouton qu'atteint le clavier : celui-ci n'est qu'un raccourci à la souris.

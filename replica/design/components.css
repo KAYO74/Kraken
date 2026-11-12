@@ -3,12 +3,14 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html { font-family: var(--font-sans); font-size: 100%; -webkit-font-smoothing: antialiased; }
-body { margin: 0; background: var(--surface); color: var(--text); font-size: var(--text-base-size); line-height: var(--text-base-line); }
-:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+/* zoom : « Zoom de l'interface » (Réglages > Apparence), sur tout le corps pour que les fenêtres montées hors de .app suivent aussi. */
+body { margin: 0; zoom: var(--zoom); background: var(--surface); color: var(--text); font-size: var(--text-base-size); line-height: var(--text-base-line); }
+:focus-visible { outline: var(--size-focus) solid var(--accent-text); outline-offset: 2px; }
 button, input, select, textarea { font: inherit; color: inherit; }
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
-[data-underline-links] a { text-decoration: underline; }
+/* « Souligner les liens » (Réglages > Accessibilité) : les liens de texte, pas les boutons ni la navigation. */
+[data-underline-links] a:not(.k-btn, .k-navitem, .k-channel, .k-dm, .k-server, .k-related, .k-tab, .k-menuitem, .k-mecard-item, .k-callbtn, .app-skip, .app-mention) { text-decoration: underline; }
 .k-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .k-icon { width: var(--size-icon); height: var(--size-icon); flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .k-icon--sm { width: 16px; height: 16px; }
@@ -48,7 +50,7 @@ a:hover { text-decoration: underline; }
   background: var(--input); color: var(--text); transition: border-color var(--motion-fast); }
 .k-input::placeholder { color: var(--text-faint); }
 .k-input:hover { border-color: var(--text-muted); }
-.k-input:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 0; border-color: transparent; }
+.k-input:focus-visible { outline: var(--size-focus) solid var(--accent-text); outline-offset: 0; border-color: transparent; }
 .k-input[aria-invalid="true"] { border-color: var(--danger); }
 .k-input:disabled { opacity: .5; }
 .k-search { position: relative; display: flex; align-items: center; }
@@ -103,6 +105,11 @@ a:hover { text-decoration: underline; }
 .k-avatar { position: relative; display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: var(--radius-md);
   background: var(--control); color: var(--text-strong); font-weight: var(--weight-semibold); font-size: var(--text-sm-size); }
 .k-avatar img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+/* Image animée (GIF, WebP) : la copie fixe de sa première image (.k-still) ou l'original (.k-live) selon --live / --still,
+   posés plus bas et dans app.css. Les images non animées n'ont qu'un <img> ; tant qu'on ne sait pas, elle reste invisible. */
+.k-avatar img[data-probing], .app-card-banner img[data-probing], .app-banner-box img[data-probing] { opacity: 0; }
+.k-live { display: var(--live, none); position: absolute; inset: 0; }
+.k-still { visibility: var(--still, visible); }
 .k-avatar--xs { width: 16px; height: 16px; font-size: 8px; border-radius: var(--radius-xs); }
 .k-avatar--sm { width: 24px; height: 24px; font-size: 10px; border-radius: var(--radius-sm); }
 .k-avatar--md { width: 32px; height: 32px; font-size: 12px; border-radius: var(--radius-sm); }
@@ -147,7 +154,7 @@ a:hover { text-decoration: underline; }
 .k-me { display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--radius-md); background: none; cursor: pointer; --presence-ring: var(--bg); }
 .k-me:hover .k-avatar, .k-me[aria-expanded="true"] .k-avatar { box-shadow: 0 0 0 var(--space-1) var(--bg), 0 0 0 var(--space-2) var(--border-input); }
 .k-mecard { position: absolute; left: calc(100% + var(--space-2)); bottom: var(--space-4); z-index: var(--z-popover); display: grid; gap: var(--space-1);
-  width: min(calc(var(--size-sidebar) - var(--space-8)), calc(100vw - var(--size-rail) - var(--space-5))); padding: var(--space-3);
+  width: min(calc(var(--size-sidebar) - var(--space-8)), calc(var(--vw) - var(--size-rail) - var(--space-5))); padding: var(--space-3);
   border-radius: var(--radius-lg); border: 1px solid var(--border-strong); background: var(--surface-overlay); box-shadow: var(--shadow-pop);
   --presence-ring: var(--surface-overlay); }
 .k-mecard > header { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3); }
@@ -191,8 +198,11 @@ a:hover { text-decoration: underline; }
 .k-dm .k-badge--count { margin-left: auto; flex: none; }
 
 /* Message */
-.k-msg { position: relative; display: grid; grid-template-columns: 40px 1fr; column-gap: var(--space-5); padding: 2px var(--space-5) 2px var(--space-5);
+.k-msg { position: relative; display: grid; grid-template-columns: var(--size-msg-avatar) 1fr; column-gap: var(--space-5); padding: 2px var(--space-5) 2px var(--space-5);
   margin-top: var(--size-message-gap); }
+/* L'avatar d'un message suit la densité (40 px, 24 px en compact). */
+.k-msg > .k-avatar, .k-msg > .app-who--avatar .k-avatar { width: var(--size-msg-avatar); height: var(--size-msg-avatar); }
+:root[data-density="compact"] :is(.k-msg > .k-avatar, .k-msg > .app-who--avatar .k-avatar) { font-size: var(--text-xs-size); }
 .k-msg:hover { background: var(--surface-raised); }
 .k-msg--cont { margin-top: 0; }
 .k-msg--cont .k-avatar { visibility: hidden; height: 0; }
@@ -246,7 +256,7 @@ a:hover { text-decoration: underline; }
 /* Zone de saisie */
 .k-composer { display: flex; align-items: flex-end; gap: var(--space-2); min-height: var(--size-composer-min); margin: 0 var(--space-4) var(--space-4);
   padding: var(--space-3) var(--space-3); border-radius: var(--radius-md); background: var(--surface-overlay); border: 1px solid var(--border); }
-.k-composer textarea { flex: 1; field-sizing: content; min-height: 38px; max-height: 50vh; resize: none; border: 0; background: none; padding: 9px var(--space-2); color: var(--text); }
+.k-composer textarea { flex: 1; field-sizing: content; min-height: 38px; max-height: calc(var(--vh) * .5); resize: none; border: 0; background: none; padding: 9px var(--space-2); color: var(--text); }
 .k-composer textarea::placeholder { color: var(--text-faint); }
 .k-composer textarea:focus-visible { outline: none; }
 .k-composer:focus-within { border-color: var(--border-input); }
@@ -273,7 +283,7 @@ a:hover { text-decoration: underline; }
 
 /* Modale paramètres + dialogue */
 .k-scrim { position: fixed; inset: 0; background: var(--shadow-scrim); display: grid; place-items: center; z-index: var(--z-modal); }
-.k-settings { display: grid; grid-template-columns: var(--size-settings-nav) 1fr; width: min(1400px, 100vw - 64px); height: min(940px, 100vh - 64px);
+.k-settings { display: grid; grid-template-columns: var(--size-settings-nav) 1fr; width: min(1400px, var(--vw) - 64px); height: min(940px, var(--vh) - 64px);
   border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-raised); box-shadow: var(--shadow-modal); border: 1px solid var(--border); }
 .k-settings nav { background: var(--surface); padding: var(--space-6) var(--space-5); overflow-y: auto; display: grid; gap: 2px; align-content: start; }
 .k-settings nav h3 { margin: var(--space-6) var(--space-3) var(--space-2); font-size: var(--text-xs-size); color: var(--text-muted); font-weight: var(--weight-semibold); }
@@ -286,7 +296,7 @@ a:hover { text-decoration: underline; }
 .k-subnav a[aria-current] { color: var(--text-strong); }
 .k-settings main { overflow-y: auto; padding: var(--space-9) var(--space-9) var(--space-11); }
 .k-settings main > * { max-width: var(--size-settings-content); margin-inline: auto; }
-.k-dialog { width: min(440px, 100vw - 32px); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-modal); border: 1px solid var(--border); }
+.k-dialog { width: min(440px, var(--vw) - 32px); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-modal); border: 1px solid var(--border); }
 .k-dialog > header { padding: var(--space-7) var(--space-7) 0; }
 .k-dialog > header h2 { margin: 0; font-size: var(--text-xl-size); line-height: var(--text-xl-line); color: var(--text-strong); }
 .k-dialog > div { padding: var(--space-5) var(--space-7); color: var(--text-secondary); }
@@ -314,7 +324,7 @@ a:hover { text-decoration: underline; }
 .k-shortcut { display: flex; justify-content: space-between; align-items: center; padding: var(--space-4) 0; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
 .k-swatches { display: grid; grid-template-columns: repeat(auto-fill, 60px); gap: var(--space-5); padding: 0; margin: 0; list-style: none; }
 .k-swatch { width: 60px; height: 60px; border-radius: var(--radius-lg); border: 0; cursor: pointer; background: var(--swatch, var(--control)); position: relative; }
-.k-swatch[aria-checked="true"] { outline: 2px solid var(--accent-text); outline-offset: 3px; }
+.k-swatch[aria-checked="true"] { outline: var(--size-focus) solid var(--accent-text); outline-offset: 3px; }
 .k-swatch .k-badge { position: absolute; top: -8px; right: -8px; }
 .k-card { border-radius: var(--radius-md); background: var(--surface-overlay); border: 1px solid var(--border); }
 .k-card > header { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-5); }
@@ -353,4 +363,5 @@ a:hover { text-decoration: underline; }
 .k-empty b { color: var(--text-strong); font-size: var(--text-base-size); }
 .k-skeleton { border-radius: var(--radius-md); background: var(--surface-hover); animation: k-pulse 1.4s ease-in-out infinite; }
 @keyframes k-pulse { 50% { opacity: .5; } }
-@media (prefers-reduced-motion: reduce) { .k-skeleton, .k-btn[aria-busy="true"]::after { animation: none; } }
+/* Mouvement réduit : choisi dans Réglages > Accessibilité, ou suivi du système (le client pose data-motion sur <html>). */
+:root[data-motion="reduce"] .k-skeleton, :root[data-motion="reduce"] .k-btn[aria-busy="true"]::after { animation: none; }

@@ -86,12 +86,12 @@ Thèmes de couleur perso,apparence,should,yes,no,S11 ; nitro : gratuit
 Icônes d'appli alternatives,apparence,could,yes,no,S11 ; nitro : gratuit ; icônes originales
 Synchro des réglages entre appareils,apparence,should,yes,no,S11
 Mode streamer,apparence,could,yes,no,S11
-Taille du texte densité zoom,accessibilite,must,yes,no,S12
-Contraste élevé saturation mouvement réduit,accessibilite,should,yes,no,S12
+Taille du texte densité zoom,accessibilite,must,yes,yes,S11 ; texte 14 à 20 px ; zoom 90 à 150 % ; densité compacte ; sur l'appareil
+Contraste élevé saturation mouvement réduit,accessibilite,should,yes,partial,S12 ; contraste élevé (7 pour 1) et mouvement réduit faits ; sans saturation ; images animées fixes dans les listes
 Synthèse vocale des messages,accessibilite,could,yes,no,S12
 Raccourcis clavier par défaut,systeme,must,yes,no,S13
 Raccourcis clavier perso,systeme,should,yes,no,S13
-Langues multiples et format 12 24 h,systeme,must,yes,no,S14 ; FR et EN d'abord
+Langues multiples et format 12 24 h,systeme,must,yes,partial,S14 ; format de l'heure fait (une seule fonction pour toutes les heures) ; une seule langue pour l'instant
 Événements de serveur,serveurs,could,yes,no,S27
 Applications OAuth autorisées (bots),integrations,should,yes,no,S15 ; API publique KRAKEN pour bots
 Client desktop web et mobile,plateformes,must,yes,partial,web responsive (390 à 1728 px) ; coque Tauri pas encore
