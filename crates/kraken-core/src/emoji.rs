@@ -157,6 +157,26 @@ pub fn parse_token(s: &str) -> Option<(&str, Uuid, usize)> {
     Some((name, id, 2 + colon + 1 + 36 + 1))
 }
 
+/// Longueur, en caractères, du plus long jeton `<:nom:id>` (nom de 32 caractères).
+pub const TOKEN_MAX_LEN: usize = 2 + 32 + 1 + 36 + 1;
+
+/// Les `max` premiers caractères de `full`, pour un aperçu : un jeton `<:nom:id>` que la coupe tranche
+/// en deux est retiré en entier (avec l'espace qui le précédait), pour que l'aperçu ne montre jamais un
+/// bout de jeton (`… <:pieuvre`). Un jeton complet reste ; un `<:` qui n'est pas un jeton aussi. `full`
+/// doit aller au moins [`TOKEN_MAX_LEN`] caractères au-delà de la coupe (ou jusqu'à la fin du message).
+pub fn excerpt(full: &str, max: usize) -> String {
+    let Some((end, _)) = full.char_indices().nth(max) else { return full.to_string() };
+    // Le `:` juste après la coupe compte : elle peut tomber entre `<` et `:`.
+    let probe = if full[end..].starts_with(':') { end + 1 } else { end };
+    if let Some(at) = full[..probe].rfind("<:")
+        && let Some((_, _, len)) = parse_token(&full[at..])
+        && at + len > end
+    {
+        return full[..at].trim_end().to_string();
+    }
+    full[..end].to_string()
+}
+
 /// Une réaction faite avec un emoji perso : l'id, écrit avec tirets et en minuscules (une seule
 /// écriture par emoji, pour qu'il n'y ait pas deux réactions « différentes » du même).
 pub fn custom_key(e: &str) -> Option<Uuid> {
@@ -210,8 +230,20 @@ fn split_code(text: &str) -> Vec<(bool, &str)> {
     out
 }
 
+/// Un `:nom:` qui vient après `before` (le texte qui le précède) doit-il rester du texte ? Oui s'il est
+/// protégé par une barre inverse (`\:nom:` ; `\\:nom:` ne protège pas, la barre s'échappe elle-même) ou
+/// s'il est dans un lien : un mot (suite de caractères non blancs) qui contient `http://` ou `https://`.
+fn literal(before: &str) -> bool {
+    if before.bytes().rev().take_while(|b| *b == b'\\').count() % 2 == 1 {
+        return true;
+    }
+    let word = before.rsplit(char::is_whitespace).next().unwrap_or(before);
+    word.contains("http://") || word.contains("https://")
+}
+
 /// Écrit `:nom:` partout où `find(nom)` donne le jeton d'un emoji (voir [`token`]) ; le code, les jetons
-/// déjà écrits et les `:` collés à un mot (« 12:30:45 », « http://… ») sont laissés tels quels.
+/// déjà écrits, les `:` collés à un mot (« 12:30:45 »), les liens (« https://…/:nom:/… ») et les `:nom:`
+/// précédés d'une barre inverse (`\:nom:`, que l'affichage montre sans la barre) sont laissés tels quels.
 pub fn expand_shortcodes(text: &str, find: impl Fn(&str) -> Option<String>) -> String {
     let mut out = String::with_capacity(text.len());
     for (code, part) in split_code(text) {
@@ -236,6 +268,7 @@ pub fn expand_shortcodes(text: &str, find: impl Fn(&str) -> Option<String>) -> S
             if lone
                 && closed
                 && valid_name(name)
+                && !literal(&part[..i])
                 && let Some(t) = find(name)
             {
                 out.push_str(&part[done..i]);
@@ -348,6 +381,42 @@ mod tests {
     }
 
     #[test]
+    fn excerpts_never_cut_a_token() {
+        let id = Uuid::from_bytes([7; 16]);
+        let tok = token("pieuvre", id);
+        assert_eq!(tok.chars().count(), 2 + 7 + 1 + 36 + 1);
+        assert_eq!(token(&"x".repeat(32), id).chars().count(), TOKEN_MAX_LEN);
+        // Court, ou juste à la limite : tel quel.
+        assert_eq!(excerpt("salut", 200), "salut");
+        assert_eq!(excerpt("abcde", 5), "abcde");
+        assert_eq!(excerpt("abcdef", 5), "abcde");
+        assert_eq!(excerpt("é😀èà🙂suite", 5), "é😀èà🙂");
+        // Un jeton complet reste, qu'il finisse à la limite ou avant.
+        let text = format!("{}{tok}", "a".repeat(10));
+        assert_eq!(excerpt(&text, text.chars().count()), text);
+        assert_eq!(excerpt(&format!("{text} fin"), text.chars().count()), text);
+        // Coupé en deux, où que tombe la coupe : retiré avec l'espace qui le précédait.
+        let full = format!("{} {tok} la suite", "a".repeat(10));
+        let start = 11;
+        for cut in start + 1..start + tok.chars().count() {
+            assert_eq!(excerpt(&full, cut), "a".repeat(10), "coupe à {cut}");
+        }
+        assert_eq!(excerpt(&full, start), format!("{} ", "a".repeat(10)), "la coupe juste avant le jeton");
+        assert_eq!(excerpt(&full, start + tok.chars().count()), format!("{} {tok}", "a".repeat(10)));
+        // Les caractères larges d'avant ne changent rien (les coupes se comptent en caractères).
+        let wide = format!("😀é {tok} suite");
+        assert_eq!(excerpt(&wide, 3 + 1 + 20), "😀é");
+        assert_eq!(excerpt(&wide, 3 + tok.chars().count()), format!("😀é {tok}"));
+        // Seul un vrai jeton est retiré : un `<:` ordinaire reste, comme un jeton invalide.
+        assert_eq!(excerpt("a <:pieuvre suite", 12), "a <:pieuvre ");
+        assert_eq!(excerpt("a <:p:0707 suite", 7), "a <:p:0");
+        assert_eq!(excerpt("<:", 1), "<");
+        // Deux jetons : seul le second, coupé, disparaît.
+        let two = format!("{tok}{tok}!");
+        assert_eq!(excerpt(&two, tok.chars().count() + 20), tok);
+    }
+
+    #[test]
     fn shortcodes_become_tokens_and_back() {
         let id = Uuid::from_bytes([7; 16]);
         let tok = token("blob", id);
@@ -371,6 +440,27 @@ mod tests {
         ] {
             assert_eq!(expand_shortcodes(same, find), same, "{same}");
         }
+        // Une barre inverse protège le `:nom:` qui la suit (l'affichage montre `:nom:` sans la barre) ;
+        // deux barres sont une barre, et le `:nom:` redevient un emoji.
+        assert_eq!(expand_shortcodes(r"\:blob: et :blob:", find), format!(r"\:blob: et {tok}"));
+        assert_eq!(expand_shortcodes(r"\\:blob:", find), format!(r"\\{tok}"));
+        assert_eq!(expand_shortcodes(r"\\\:blob:", find), r"\\\:blob:");
+        assert_eq!(expand_shortcodes(r"a\:blob:b \x:blob:", find), r"a\:blob:b \x:blob:");
+        // Un lien reste intact, où que le `:nom:` s'y trouve ; le mot d'après n'est plus dans le lien.
+        for same in [
+            "https://x.org/a/:blob:/b",
+            "http://x.org/?e=:blob:",
+            "(https://x.org/:blob:)",
+            "<https://x.org/:blob:>",
+            "voir https://x.org/a:blob: ici",
+            "https://x.org/:blob:/:blob:",
+        ] {
+            assert_eq!(expand_shortcodes(same, find), same, "{same}");
+        }
+        assert_eq!(expand_shortcodes("https://x.org/ :blob:", find), format!("https://x.org/ {tok}"));
+        assert_eq!(expand_shortcodes("https://x.org/\n:blob:", find), format!("https://x.org/\n{tok}"));
+        assert_eq!(expand_shortcodes("www.x.org/:blob:", find), format!("www.x.org/{tok}"));
+        assert_eq!(expand_shortcodes(":blob: https://x.org/:blob:", find), format!("{tok} https://x.org/:blob:"));
         // Un accent grave jamais refermé n'est pas du code.
         assert_eq!(expand_shortcodes("`:blob:", find), format!("`{tok}"));
         assert_eq!(expand_shortcodes("`a` :blob: `b`", find), format!("`a` {tok} `b`"));

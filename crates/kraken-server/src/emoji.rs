@@ -2,9 +2,13 @@
 //! (comme pour une photo de profil). Elle est reconnue à ses premiers octets, jamais à son
 //! extension ni au type annoncé, puis gardée sur disque sous une clé aléatoire dans
 //! `KRAKEN_DATA_DIR/emojis` (`clé.png`, `clé.gif` ou `clé.webp`, nom repris dans `emojis.image_key`).
-//! L'image ne change jamais (renommer ne la touche pas) : elle est servie avec un cache sans fin.
+//! L'image ne change jamais (renommer ne la touche pas) ; elle est servie avec un cache d'un jour
+//! seulement, pour qu'un emoji retiré ne reste pas affiché des mois chez ceux qui l'avaient chargé.
 //!
 //! * 256 Kio au plus (413 `too_large`), PNG, JPEG, WebP ou GIF (400 `not_image`).
+//! * Forme, jugée sur l'en-tête avant tout décodage, pour les images fixes comme pour les animations :
+//!   8 pixels au moins pour le petit côté (400 `image_too_small`), 8 pour 1 au plus entre le grand et le
+//!   petit côté (400 `bad_ratio`). Sans cela, une bande de 4000 × 1 donnerait un emoji d'un pixel.
 //! * Image fixe : même garde que les photos de profil (4096 pixels de côté, 16 millions de pixels,
 //!   jugés sur l'en-tête, 2 décodages à la fois sur tout le serveur), recadrée au centre en carré,
 //!   réduite à 128 × 128 (jamais agrandie) et ré-encodée en PNG, ce qui efface EXIF et métadonnées.
@@ -71,6 +75,38 @@ fn bad_ratio() -> AppError {
             "Cette animation est trop allongée : elle doit rester presque carrée ({MAX_EMOJI_RATIO} pour 1 au plus)."
         ),
     )
+}
+
+fn too_small() -> AppError {
+    AppError(
+        StatusCode::BAD_REQUEST,
+        "image_too_small",
+        format!("Cette image est trop petite : {MIN_EMOJI_SIDE} pixels de côté au moins."),
+    )
+}
+
+fn too_elongated() -> AppError {
+    AppError(
+        StatusCode::BAD_REQUEST,
+        "bad_ratio",
+        format!(
+            "Cette image est trop allongée : son grand côté ne doit pas dépasser {MAX_EMOJI_IMAGE_RATIO} fois son petit côté."
+        ),
+    )
+}
+
+/// La forme de l'image, lue dans son en-tête (sans rien décoder) : ni trop petite, ni trop allongée.
+/// Un format ou un en-tête illisible n'est pas jugé ici : le décodage dira `not_image`.
+fn check_shape(raw: &[u8]) -> Result<(), AppError> {
+    let Some((w, h)) = media::header_size(Cursor::new(raw)) else { return Ok(()) };
+    let (small, large) = (w.min(h), w.max(h));
+    if small < MIN_EMOJI_SIDE {
+        return Err(too_small());
+    }
+    if large > MAX_EMOJI_IMAGE_RATIO * small {
+        return Err(too_elongated());
+    }
+    Ok(())
 }
 
 fn internal() -> AppError {
@@ -178,6 +214,7 @@ pub async fn create(
     if raw.is_empty() {
         return Err(avatar::not_image());
     }
+    check_shape(&raw)?;
     let (stored, animated) = gated(move || normalize(&raw)).await.ok_or_else(avatar::not_image)??;
 
     let file_name = format!("{}.{}", avatar::new_key(), stored.ext);
@@ -238,7 +275,8 @@ pub async fn image(State(state): State<AppState>, _auth: Auth, Path(eid): Path<I
         [
             (header::CONTENT_TYPE, HeaderValue::from_static(mime)),
             // Privé : la lecture demande une session, un cache partagé ne doit pas la resservir à d'autres.
-            (header::CACHE_CONTROL, HeaderValue::from_static("private, max-age=31536000, immutable")),
+            // Un jour seulement, sans `immutable` : un emoji supprimé ne doit pas rester affiché un an.
+            (header::CACHE_CONTROL, HeaderValue::from_static("private, max-age=86400")),
         ],
         bytes,
     ))

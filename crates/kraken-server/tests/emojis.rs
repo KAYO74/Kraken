@@ -1,6 +1,6 @@
 //! Emojis perso d'un serveur, de bout en bout sur un vrai port et une vraie base : droit « Gérer les
 //! émojis », 50 par serveur, formats reconnus aux premiers octets, 256 Kio, garde de dimensions,
-//! noms uniques sans tenir compte de la casse, lecture de l'image avec cache sans fin, événement en
+//! noms uniques sans tenir compte de la casse, lecture de l'image avec cache d'un jour, événement en
 //! direct, réactions, et fichiers qui partent avec l'emoji ou le serveur.
 
 mod common;
@@ -313,14 +313,14 @@ async fn an_emoji_is_added_seen_live_served_renamed_and_removed(pool: PgPool) {
     assert_eq!(sam_gw.next_emojis().await, vec![e.clone()]);
     assert_eq!(files_in(&dir).len(), 1);
 
-    // L'image : une session suffit (même sans être dans ce serveur), cache sans fin, PNG de 128 × 128.
+    // L'image : une session suffit (même sans être dans ce serveur), cache d'un jour, PNG de 128 × 128.
     let noa = Who::new(&base, "noa").await;
     for who in [&lou, &sam, &noa] {
         let r = who.get_image(&e.id.to_string()).await;
         assert_eq!(r.status(), 200);
         assert_eq!(r.headers()["content-type"], "image/png");
         let cache = r.headers()["cache-control"].to_str().unwrap().to_string();
-        assert!(cache.contains("immutable") && cache.contains("max-age=31536000"), "{cache}");
+        assert_eq!(cache, "private, max-age=86400", "un jour, pas d'`immutable` : un emoji retiré ne reste pas un an");
         let img = image::load_from_memory(&r.bytes().await.unwrap()).unwrap();
         assert_eq!((img.width(), img.height()), (EMOJI_SIZE, EMOJI_SIZE));
     }
@@ -501,11 +501,45 @@ async fn names_formats_and_sizes_are_refused_with_a_clear_code(pool: PgPool) {
     assert_eq!(s, 201, "{v}");
 
     // Dimensions : même garde que les photos, jugée sur l'en-tête avant tout décodage.
-    for (w, h) in [(4097, 1), (6000, 6000), (4096, 4096)] {
+    for (w, h) in [(4097, 2000), (6000, 6000), (4096, 4096)] {
         let (s, v) = lou.upload(gid, "enorme", common::flat(w, h, ImageFormat::Png)).await;
         assert_eq!((s.as_u16(), code(&v)), (400, "image_too_big"), "{w} × {h}");
     }
     assert_eq!(lou.upload(gid, "limite", common::flat(4000, 4000, ImageFormat::Png)).await.0, 201);
+    // Forme, jugée sur l'en-tête : 8 pixels au moins pour le petit côté, 8 pour 1 au plus. Une bande de
+    // 4000 × 1 donnerait sinon un emoji d'un pixel. Même règle pour les animations.
+    let before = files_in(&dir).len();
+    for (what, bytes) in [
+        ("bande fixe", common::flat(4000, 1, ImageFormat::Png)),
+        ("bande JPEG", picture(900, 7, ImageFormat::Jpeg)),
+        ("pixel", picture(1, 1, ImageFormat::Png)),
+        ("petite", picture(7, 40, ImageFormat::Png)),
+        ("petite animation", gif(7, 7, 2)),
+        ("animation fine", flat_gif(600, 4, 2)),
+    ] {
+        let (s, v) = lou.upload(gid, "mince", bytes).await;
+        assert_eq!((s.as_u16(), code(&v)), (400, "image_too_small"), "{what}");
+        assert!(v["message"].as_str().unwrap().contains("8 pixels"), "{what} : {v}");
+    }
+    for (what, bytes) in [
+        ("fixe 9 pour 1", picture(72, 8, ImageFormat::Png)),
+        ("fixe haute", common::flat(8, 100, ImageFormat::Png)),
+        ("animation 9 pour 1", gif(72, 8, 2)),
+    ] {
+        let (s, v) = lou.upload(gid, "mince", bytes).await;
+        assert_eq!((s.as_u16(), code(&v)), (400, "bad_ratio"), "{what}");
+        assert!(v["message"].as_str().unwrap().contains("8 fois"), "{what} : {v}");
+    }
+    assert_eq!(files_in(&dir).len(), before, "un refus n'écrit rien");
+    // Les limites passent : 8 pixels, 8 pour 1 exactement (une fixe est recadrée en carré de 8 × 8).
+    let (s, v) = lou.upload(gid, "bande", picture(64, 8, ImageFormat::Png)).await;
+    assert_eq!(s, 201, "8 pour 1 exactement : {v}");
+    let (_, list) = lou.call(Method::GET, &format!("/guilds/{gid}/emojis"), None).await;
+    let band = list.as_array().unwrap().iter().find(|e| e["name"] == "bande").unwrap().clone();
+    assert_eq!(
+        lou.call(Method::DELETE, &format!("/guilds/{gid}/emojis/{}", band["id"].as_str().unwrap()), None).await.0,
+        204
+    );
     // Animation : 2 pour 1 au plus, et la garde des animations de profil.
     let (s, v) = lou.upload(gid, "longue", gif(40, 10, 2)).await;
     assert_eq!((s.as_u16(), code(&v)), (400, "bad_ratio"));
@@ -658,6 +692,42 @@ async fn reactions_take_unicode_or_an_emoji_of_a_server_the_reactor_is_in(pool: 
     assert_eq!(put_reaction(&lou, cid, &mid, &ea).await.0, 400);
     let path = format!("/channels/{cid}/messages/{mid}/reactions/{ea}/@me");
     assert_eq!(sam.call(Method::DELETE, &path, None).await.0, 204, "on peut retirer la sienne");
+}
+
+/// Envoie un message (en réponse à `reply_to`, s'il y en a un) et rend le message créé.
+async fn send(who: &Who, cid: Id, content: String, reply_to: Option<&str>) -> Value {
+    let body = Some(json!({ "content": content, "reply_to": reply_to }));
+    let (s, m) = who.call(Method::POST, &format!("/channels/{cid}/messages"), body).await;
+    assert_eq!(s, 201, "{m}");
+    m
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn a_reply_excerpt_never_shows_half_an_emoji_token(pool: PgPool) {
+    let (base, _dir) = spawn(pool).await;
+    let lou = Who::new(&base, "lou").await;
+    let g = lou.guild("Abysse").await;
+    let cid = general(&g);
+    let (_, e) = lou.upload(g.guild.id, "pieuvre", picture(32, 32, ImageFormat::Png)).await;
+    let tok = format!("<:pieuvre:{}>", e["id"].as_str().unwrap());
+    let excerpt = |reply: Value| reply["reply"]["content"].as_str().unwrap().to_string();
+
+    // Le jeton commence avant la 200e lettre et finit après : il est retiré en entier.
+    let cut = send(&lou, cid, format!("{} {tok} suite", "a".repeat(190)), None).await;
+    let r = send(&lou, cid, "ok".into(), Some(cut["id"].as_str().unwrap())).await;
+    assert_eq!(excerpt(r), "a".repeat(190));
+    // Un jeton qui tient dans les 200 caractères reste entier.
+    let whole = send(&lou, cid, format!("{} {tok} suite", "a".repeat(100)), None).await;
+    let r = send(&lou, cid, "ok".into(), Some(whole["id"].as_str().unwrap())).await;
+    assert_eq!(excerpt(r), format!("{} {tok} suite", "a".repeat(100)));
+    // Tout autre texte long est coupé à 200 caractères, sans plus.
+    let long = send(&lou, cid, "é".repeat(300), None).await;
+    let r = send(&lou, cid, "ok".into(), Some(long["id"].as_str().unwrap())).await;
+    assert_eq!(excerpt(r), "é".repeat(REPLY_EXCERPT));
+    // Même chose quand on relit le salon.
+    let (_, msgs) = lou.call(Method::GET, &format!("/channels/{cid}/messages"), None).await;
+    let first = msgs.as_array().unwrap().iter().find(|m| m["reply"]["id"] == cut["id"]).unwrap();
+    assert_eq!(first["reply"]["content"], "a".repeat(190).as_str());
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]

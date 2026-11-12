@@ -315,6 +315,11 @@ pub const MAX_EMOJI_BYTES: usize = 256 * 1024;
 /// Côté, en pixels, d'un emoji fixe tel que le serveur le garde (le client recadre en carré à cette
 /// taille ; une image plus petite n'est pas agrandie).
 pub const EMOJI_SIZE: u32 = 128;
+/// Plus petit côté, en pixels, de l'image d'un emoji (fixe ou animée) : en dessous, il ne reste qu'un point.
+pub const MIN_EMOJI_SIDE: u32 = 8;
+/// Rapport grand côté / petit côté de l'image d'un emoji, fixe ou animée, au plus (8 pour 1) : une bande très
+/// allongée n'a pas de sens dans un carré. Les animations sont encore plus serrées, voir [`MAX_EMOJI_RATIO`].
+pub const MAX_EMOJI_IMAGE_RATIO: u32 = 8;
 /// Une animation d'emoji tient dans un rectangle de ce rapport au plus (2 pour 1, dans un sens ou
 /// dans l'autre) : elle n'est pas recadrée, l'emoji est affiché en entier dans un carré.
 pub const MAX_EMOJI_RATIO: u32 = 2;
@@ -534,7 +539,7 @@ pub struct Reply {
     /// `None` : le message d'origine a été supprimé.
     pub id: Option<Id>,
     pub author: Option<User>,
-    /// Ses [`REPLY_EXCERPT`] premiers caractères.
+    /// Ses [`REPLY_EXCERPT`] premiers caractères, sans jeton d'emoji perso coupé en deux.
     pub content: String,
 }
 

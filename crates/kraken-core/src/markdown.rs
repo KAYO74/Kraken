@@ -525,6 +525,8 @@ mod tests {
         );
         assert_eq!(one(&format!(r"\{tok}")), vec![t(&tok)]);
         assert_eq!(summary(&format!("va {tok} !")), "va :blob: !");
+        // `\:nom:` (que l'envoi ne développe pas) s'affiche `:nom:`, sans la barre.
+        assert_eq!(one(r"voir \:blob: !"), vec![t("voir :blob: !")]);
         // Ni mention, ni lien.
         assert_eq!(mentions(&format!("{tok} @lou")), (vec!["lou".to_string()], false));
         assert!(links(&tok, 5).is_empty());

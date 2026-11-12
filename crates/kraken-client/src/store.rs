@@ -66,7 +66,7 @@ impl Log {
 
     /// Message modifié : remplacé à sa place, et l'aperçu des réponses suit.
     pub fn update(&mut self, m: Message) {
-        let excerpt: String = m.content.chars().take(REPLY_EXCERPT).collect();
+        let excerpt = kraken_core::emoji::excerpt(&m.content, REPLY_EXCERPT);
         for r in self.items.iter_mut().filter_map(|x| x.reply.as_mut()).filter(|r| r.id == Some(m.id)) {
             r.content = excerpt.clone();
         }

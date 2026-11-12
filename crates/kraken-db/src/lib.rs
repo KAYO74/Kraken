@@ -217,13 +217,17 @@ fn channel_from(r: &PgRow) -> sqlx::Result<Channel> {
     })
 }
 
+/// Ce que la requête lit du message d'origine d'une réponse : l'extrait, plus de quoi reconnaître un
+/// jeton d'emoji que la coupe tranche (voir [`kraken_core::emoji::excerpt`], qui fait l'extrait).
+const REPLY_FETCH: usize = REPLY_EXCERPT + kraken_core::emoji::TOKEN_MAX_LEN;
+
 fn message_sql(filter: &str) -> String {
     format!(
         "select m.id, m.channel_id, m.content, m.nonce, m.kind, m.reply_to_id, m.mention_everyone,
                 m.call_participants, (extract(epoch from m.call_ended_at) * 1000)::int8 as call_ended_ms,
                 (extract(epoch from m.created_at) * 1000)::int8 as created_ms,
                 (extract(epoch from m.edited_at) * 1000)::int8 as edited_ms, {}, {},
-                left(r.content, {REPLY_EXCERPT}) as reply_content,
+                left(r.content, {REPLY_FETCH}) as reply_content,
                 coalesce((select json_agg(json_build_object('emoji', x.emoji_key, 'users', x.users) order by x.first)
                           from (select emoji_key, array_agg(user_id order by created_at, user_id) as users,
                                        min(created_at) as first
@@ -256,7 +260,10 @@ fn message_from(r: &PgRow) -> sqlx::Result<Message> {
         "reply" => Some(Reply {
             id: r.try_get("reply_to_id")?,
             author: user_from(r, "ra")?,
-            content: r.try_get::<Option<String>, _>("reply_content")?.unwrap_or_default(),
+            content: kraken_core::emoji::excerpt(
+                &r.try_get::<Option<String>, _>("reply_content")?.unwrap_or_default(),
+                REPLY_EXCERPT,
+            ),
         }),
         _ => None,
     };
