@@ -44,7 +44,9 @@ pub fn Body(content: String, mentions: Vec<User>, everyone: bool, guild: Option<
             }
         })
         .collect_view();
-    view! { <div class="app-md">{blocks}</div> }
+    // Un message qui n'est que des emojis perso les montre en grand.
+    let jumbo = markdown::emoji_only(&content).is_some().then_some("");
+    view! { <div class="app-md" data-jumbo=jumbo>{blocks}</div> }
 }
 
 fn inline(v: Vec<Inline>, lk: &Rc<Lookup>) -> Vec<AnyView> {
@@ -80,6 +82,7 @@ fn one(i: Inline, lk: &Rc<Lookup>) -> AnyView {
                 word.into_any()
             }
         }
+        Inline::Emoji { name, id } => view! { <crate::emoji::EmojiImg id=id name=name/> }.into_any(),
         Inline::Channel(name) => match lk.channels.iter().find(|(n, _, _)| *n == name) {
             Some((_, g, c)) => {
                 view! { <a class="app-mention" href=format!("/channels/{g}/{c}")>"#"{name}</a> }.into_any()

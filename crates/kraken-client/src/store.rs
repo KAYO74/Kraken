@@ -243,6 +243,31 @@ impl Store {
         self.guilds.with(|gs| gs.iter().find(|g| g.guild.id == id).cloned())
     }
 
+    /// Les emojis perso que je peux utiliser, serveur par serveur : celui de `current` d'abord, puis
+    /// les autres dans l'ordre de mes serveurs. Les serveurs sans emoji n'y sont pas (suivi).
+    pub fn emoji_sets(&self, current: Option<Id>) -> Vec<(Guild, Vec<Emoji>)> {
+        self.guilds.with(|gs| {
+            let mut sets: Vec<(Guild, Vec<Emoji>)> =
+                gs.iter().filter(|g| !g.emojis.is_empty()).map(|g| (g.guild.clone(), g.emojis.clone())).collect();
+            if let Some(at) = sets.iter().position(|(g, _)| Some(g.id) == current) {
+                let first = sets.remove(at);
+                sets.insert(0, first);
+            }
+            sets
+        })
+    }
+
+    /// Un emoji perso d'après son id, dans l'un de mes serveurs (suivi).
+    pub fn emoji(&self, id: Id) -> Option<Emoji> {
+        self.guilds.with(|gs| gs.iter().flat_map(|g| &g.emojis).find(|e| e.id == id).cloned())
+    }
+
+    /// Ce que désigne `:nom:` quand j'écris dans `current` : l'emoji de ce nom (sans tenir compte de la
+    /// casse) dans ce serveur, sinon dans le premier de mes serveurs qui en a un (suivi).
+    pub fn emoji_named(&self, name: &str, current: Option<Id>) -> Option<Emoji> {
+        self.emoji_sets(current).into_iter().flat_map(|(_, es)| es).find(|e| e.name.eq_ignore_ascii_case(name))
+    }
+
     pub fn channel(&self, id: Id) -> Option<Channel> {
         self.guilds
             .with(|gs| gs.iter().flat_map(|g| &g.channels).find(|c| c.id == id).cloned())
@@ -651,6 +676,7 @@ impl Store {
                 }
             }),
             Event::GuildOwnerUpdate { guild_id, owner_id } => self.in_guild(guild_id, |g| g.guild.owner_id = owner_id),
+            Event::EmojisUpdate { guild_id, emojis } => self.in_guild(guild_id, |g| g.emojis = emojis),
             Event::VoiceStateUpdate(v) => self.voice_state(v),
             Event::CallUpdate(c) => {
                 self.calls.update(|cs| match cs.iter_mut().find(|x| x.channel_id == c.channel_id) {

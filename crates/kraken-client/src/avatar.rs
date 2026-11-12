@@ -4,7 +4,7 @@
 //! garde qu'une image) : il part tel quel, et s'affiche recadré au centre.
 
 use kraken_core::image::{ImageKind, sniff};
-use kraken_proto::{BANNER_HEIGHT, BANNER_WIDTH, MAX_AVATAR_BYTES, MAX_BANNER_BYTES};
+use kraken_proto::{BANNER_HEIGHT, BANNER_WIDTH, EMOJI_SIZE, MAX_AVATAR_BYTES, MAX_BANNER_BYTES};
 use leptos::html;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -19,11 +19,13 @@ use crate::ui::{Avatar, banner_url, modal};
 
 const MAX_ZOOM: f64 = 4.0;
 
-/// Ce que l'on recadre : la photo (carrée) ou la bannière (3 pour 1).
+/// Ce que l'on recadre : la photo (carrée), la bannière (3 pour 1) ou un emoji de serveur (carré, petit ;
+/// la fenêtre rend alors l'image recadrée à celui qui l'a ouverte, voir `CropDialog::cropped`).
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Which {
     Avatar,
     Banner,
+    Emoji,
 }
 
 /// Géométrie du recadrage : rapport largeur / hauteur, taille de l'image envoyée, du cadre et
@@ -51,13 +53,16 @@ impl Which {
                 frame: (432.0, 144.0),
                 margin: 24.0,
             },
+            Self::Emoji => Shape { ratio: 1.0, out: (EMOJI_SIZE, EMOJI_SIZE), frame: (256.0, 256.0), margin: 32.0 },
         }
     }
 
-    fn max_bytes(self) -> usize {
+    pub(crate) fn max_bytes(self) -> usize {
         match self {
             Self::Avatar => MAX_AVATAR_BYTES,
             Self::Banner => MAX_BANNER_BYTES,
+            // Une image fixe est recadrée et réduite avant l'envoi : seule sa source peut être lourde.
+            Self::Emoji => MAX_AVATAR_BYTES,
         }
     }
 
@@ -65,6 +70,7 @@ impl Which {
         match self {
             Self::Avatar => "Photo enregistrée.",
             Self::Banner => "Bannière enregistrée.",
+            Self::Emoji => "Emoji ajouté.",
         }
     }
 
@@ -72,20 +78,21 @@ impl Which {
         match self {
             Self::Avatar => "Photo retirée.",
             Self::Banner => "Bannière retirée.",
+            Self::Emoji => "Emoji retiré.",
         }
     }
 }
 
-fn not_image() -> String {
+pub(crate) fn not_image() -> String {
     "Ce fichier n'est pas une image lisible : choisis un PNG, un JPEG, un WebP ou un GIF.".into()
 }
 
-fn too_big(which: Which) -> String {
+pub(crate) fn too_big(which: Which) -> String {
     format!("Cette image pèse trop lourd : {} Mo au plus.", which.max_bytes() / (1024 * 1024))
 }
 
 /// PNG, JPEG, WebP ou GIF, d'après les premiers octets du fichier.
-fn looks_like_image(head: &[u8]) -> bool {
+pub(crate) fn looks_like_image(head: &[u8]) -> bool {
     head.starts_with(&[0x89, b'P', b'N', b'G'])
         || head.starts_with(&[0xFF, 0xD8, 0xFF])
         || head.starts_with(b"GIF8")
@@ -128,6 +135,8 @@ async fn take_file(
             let sent = match which {
                 Which::Avatar => crate::api::set_avatar(&all, found.kind.mime()).await,
                 Which::Banner => crate::api::set_banner(&all, found.kind.mime()).await,
+                // Les emojis ont leur propre fenêtre d'ajout (`emoji_settings.rs`).
+                Which::Emoji => Err(unsupported()),
             };
             match sent {
                 Ok(u) => {
@@ -144,6 +153,10 @@ async fn take_file(
         Ok(url) => picked.set(Some(url)),
         Err(_) => error.set(Some(not_image())),
     }
+}
+
+fn unsupported() -> kraken_proto::ApiError {
+    kraken_proto::ApiError { code: "unsupported".into(), message: not_image(), timeout_until: None }
 }
 
 /// Bloc « photo » du profil : l'avatar, changer, retirer.
@@ -323,7 +336,15 @@ async fn export(img: &HtmlImageElement, crop: (f64, f64, f64, f64), out: (u32, u
 
 /// Recadrer : glisser ou flèches pour déplacer, curseur ou + et − pour zoomer.
 #[component]
-fn CropDialog(url: String, which: Which, done: Callback<Option<Result<(), String>>>) -> impl IntoView {
+pub(crate) fn CropDialog(
+    url: String,
+    which: Which,
+    done: Callback<Option<Result<(), String>>>,
+    /// Si présent, l'image recadrée (PNG) est rendue à ce rappel au lieu d'être envoyée comme photo ou
+    /// bannière, et la fenêtre se ferme.
+    #[prop(optional, into)]
+    cropped: Option<Callback<Vec<u8>>>,
+) -> impl IntoView {
     let s = store();
     let shape = which.shape();
     let (frame_w, margin, ratio, out) = (shape.frame.0, shape.margin, shape.ratio, shape.out);
@@ -454,9 +475,15 @@ fn CropDialog(url: String, which: Which, done: Callback<Option<Result<(), String
                 error.try_set(Some("Impossible de préparer l'image. Essaie-en une autre.".into()));
                 return;
             };
+            if let Some(cropped) = cropped {
+                cropped.run(bytes);
+                done.run(None);
+                return;
+            }
             let sent = match which {
                 Which::Avatar => crate::api::set_avatar(&bytes, "image/png").await,
                 Which::Banner => crate::api::set_banner(&bytes, "image/png").await,
+                Which::Emoji => Err(unsupported()),
             };
             match sent {
                 Ok(u) => {
@@ -473,8 +500,17 @@ fn CropDialog(url: String, which: Which, done: Callback<Option<Result<(), String
     let (title, title_id) = match which {
         Which::Avatar => ("Recadrer ta photo", "crop-t"),
         Which::Banner => ("Recadrer ta bannière", "crop-banner-t"),
+        Which::Emoji => ("Recadrer ton emoji", "crop-emoji-t"),
     };
     let previews = match which {
+        Which::Emoji => view! {
+            <div class="app-crop-previews" aria-hidden="true">
+                <figure><canvas node_ref=big class="app-emoji-preview" width="96" height="96"></canvas><figcaption class="k-hint">"Grand"</figcaption></figure>
+                <figure><canvas node_ref=mid class="app-emoji-preview app-emoji-preview--md" width="64" height="64"></canvas><figcaption class="k-hint">"Moyen"</figcaption></figure>
+                <figure><canvas node_ref=small class="app-emoji-preview app-emoji-preview--sm" width="44" height="44"></canvas><figcaption class="k-hint">"Dans un message"</figcaption></figure>
+            </div>
+        }
+        .into_any(),
         Which::Avatar => view! {
             <div class="app-crop-previews" aria-hidden="true">
                 <figure><canvas node_ref=big class="k-avatar k-avatar--xl" width="240" height="240"></canvas><figcaption class="k-hint">"Grand"</figcaption></figure>

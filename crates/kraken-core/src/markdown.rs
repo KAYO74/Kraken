@@ -3,8 +3,9 @@
 //!
 //! Reconnu : `**gras**`, `*italique*` ou `_italique_`, `__souligné__`, `~~barré~~`,
 //! `` `code` ``, blocs ```` ``` ````, citations `> `, `||spoiler||`, liens `http(s)://`
-//! détectés seuls (entre chevrons, `<https://…>`, sans aperçu), mentions `@pseudo`, `@everyone`, `@here` et salons `#nom`. Une barre
-//! oblique inverse rend littéral le signe qui la suit.
+//! détectés seuls (entre chevrons, `<https://…>`, sans aperçu), mentions `@pseudo`, `@everyone`, `@here` et salons `#nom`,
+//! emojis perso de serveur `<:nom:id>` (voir [`crate::emoji`]). Une barre oblique inverse rend
+//! littéral le signe qui la suit.
 
 /// Un bloc du message.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -36,7 +37,15 @@ pub enum Inline {
     Here,
     /// `#nom` d'un salon ; le client décide s'il existe.
     Channel(String),
+    /// Emoji perso `<:nom:id>` : le nom que le message portait, et l'id qui désigne l'emoji.
+    Emoji {
+        name: String,
+        id: uuid::Uuid,
+    },
 }
+
+/// Un message qui ne contient que des emojis perso : jusqu'à ce nombre, ils sont montrés en grand.
+pub const JUMBO_MAX: usize = 27;
 
 /// Profondeur d'imbrication au plus (`**__~~…~~__**`) ; au-delà, le texte reste brut.
 const MAX_DEPTH: usize = 6;
@@ -219,6 +228,14 @@ fn inline(s: &str, depth: usize) -> Vec<Inline> {
             }
         }
         if c == '<'
+            && let Some((name, id, n)) = crate::emoji::parse_token(rest)
+        {
+            flush(&mut text, &mut out);
+            out.push(Inline::Emoji { name: name.to_string(), id });
+            i += n;
+            continue;
+        }
+        if c == '<'
             && (rest[1..].starts_with("https://") || rest[1..].starts_with("http://"))
             && let Some(n) = rest.find('>')
             && !rest[1..n].contains(|c: char| c.is_whitespace() || "<\"".contains(c))
@@ -296,9 +313,30 @@ pub fn plain(inl: &[Inline]) -> String {
                 s.push('#');
                 s.push_str(c);
             }
+            Inline::Emoji { name, .. } => {
+                s.push(':');
+                s.push_str(name);
+                s.push(':');
+            }
         }
     }
     s
+}
+
+/// Le nombre d'emojis perso d'un message qui n'est fait que de cela (et d'espaces), de 1 à
+/// [`JUMBO_MAX`] : il s'affiche alors en grand. `None` : il y a autre chose, ou trop d'emojis.
+pub fn emoji_only(src: &str) -> Option<usize> {
+    let blocks = parse(src);
+    let [Block::Text(v)] = blocks.as_slice() else { return None };
+    let mut n = 0;
+    for i in v {
+        match i {
+            Inline::Emoji { .. } => n += 1,
+            Inline::Text(t) if t.trim().is_empty() => {}
+            _ => return None,
+        }
+    }
+    (1..=JUMBO_MAX).contains(&n).then_some(n)
 }
 
 /// Tout le message en texte simple, les spoilers remplacés par des points de suspension.
@@ -470,6 +508,36 @@ mod tests {
         let deep = "**__~~||*".repeat(50) + "x" + &"*||~~__**".repeat(50);
         let _ = parse(&deep);
         let _ = parse(&"*a".repeat(2000));
+    }
+
+    #[test]
+    fn custom_emojis() {
+        let id = uuid::Uuid::from_bytes([7; 16]);
+        let tok = format!("<:blob:{id}>");
+        let e = || Emoji { name: "blob".into(), id };
+        assert_eq!(one(&format!("a {tok}!")), vec![t("a "), e(), t("!")]);
+        assert_eq!(one(&format!("**{tok}** ||{tok}||")), vec![Bold(vec![e()]), t(" "), Spoiler(vec![e()])]);
+        // Dans du code, ou mal formé : du texte.
+        assert_eq!(one(&format!("`{tok}`")), vec![Code(tok.clone())]);
+        assert_eq!(
+            one("<:b:07070707-0707-0707-0707-070707070707>"),
+            vec![t("<:b:07070707-0707-0707-0707-070707070707>")]
+        );
+        assert_eq!(one(&format!(r"\{tok}")), vec![t(&tok)]);
+        assert_eq!(summary(&format!("va {tok} !")), "va :blob: !");
+        // Ni mention, ni lien.
+        assert_eq!(mentions(&format!("{tok} @lou")), (vec!["lou".to_string()], false));
+        assert!(links(&tok, 5).is_empty());
+        // Un message fait d'emojis seulement.
+        assert_eq!(emoji_only(&tok), Some(1));
+        assert_eq!(emoji_only(&format!("{tok} {tok}\n{tok}")), Some(3));
+        assert_eq!(emoji_only(&format!("{tok} oui")), None);
+        assert_eq!(emoji_only(&format!("> {tok}")), None);
+        assert_eq!(emoji_only(&format!("**{tok}**")), None);
+        assert_eq!(emoji_only(""), None);
+        assert_eq!(emoji_only("   "), None);
+        assert_eq!(emoji_only(&vec![tok.as_str(); JUMBO_MAX].join(" ")), Some(JUMBO_MAX));
+        assert_eq!(emoji_only(&vec![tok.as_str(); JUMBO_MAX + 1].join(" ")), None);
     }
 
     #[test]

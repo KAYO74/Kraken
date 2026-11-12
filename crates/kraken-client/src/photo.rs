@@ -40,7 +40,7 @@ thread_local! {
 }
 
 /// La première image d'une image animée, en PNG, réduite à `cap` pixels de côté au plus.
-async fn first_frame(bytes: &[u8], cap: u32) -> Option<String> {
+pub(crate) async fn first_frame(bytes: &[u8], cap: u32) -> Option<String> {
     let array = js_sys::Uint8Array::from(bytes);
     let parts = js_sys::Array::of1(&array);
     let blob = web_sys::Blob::new_with_u8_array_sequence(&parts).ok()?;
@@ -102,7 +102,7 @@ fn want(src: &str, cap: u32, state: RwSignal<Still>) {
 pub fn Photo(
     src: String,
     #[prop(optional)] class: &'static str,
-    #[prop(optional)] alt: &'static str,
+    #[prop(optional, into)] alt: String,
     cap: u32,
     #[prop(optional, into)] on_error: Option<Callback<()>>,
 ) -> impl IntoView {
@@ -134,8 +134,11 @@ pub fn Photo(
             f.run(());
         }
     };
+    let alt2 = alt.clone();
     let fixed = move || match state.get() {
-        Still::Frozen(url) => Some(view! { <img class=format!("{class} k-still") src=url alt=alt on:error=fail/> }),
+        Still::Frozen(url) => {
+            Some(view! { <img class=format!("{class} k-still") src=url alt=alt2.clone() on:error=fail/> })
+        }
         _ => None,
     };
     view! {

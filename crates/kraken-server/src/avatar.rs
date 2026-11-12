@@ -37,7 +37,7 @@ const MAX_SIDE: u32 = 8192;
 /// Une image fixe se décode en entier avant d'être réduite : un PNG de 215 Ko en 8192 × 8192 pèse
 /// plus de 400 Mo décodé. Au-delà de ces dimensions, on la refuse d'après son seul en-tête, sans
 /// rien décoder (voir [`media::decode_within`]).
-const STILL: Bounds = Bounds { side: 4096, pixels: 16_000_000 };
+pub(crate) const STILL: Bounds = Bounds { side: 4096, pixels: 16_000_000 };
 /// Surface totale (pixels × images) qu'on accepte de décoder pour vérifier une animation.
 const MAX_ANIMATED_PIXELS: u64 = 128 * 1024 * 1024;
 /// Les extensions sous lesquelles un fichier peut être gardé.
@@ -67,12 +67,12 @@ impl Kind {
 }
 
 /// Un fichier prêt à être gardé.
-struct Stored {
-    bytes: Vec<u8>,
-    ext: &'static str,
+pub(crate) struct Stored {
+    pub bytes: Vec<u8>,
+    pub ext: &'static str,
 }
 
-enum Refused {
+pub(crate) enum Refused {
     NotImage,
     BigAnimation,
     BigImage,
@@ -82,15 +82,15 @@ fn dir(state: &AppState) -> PathBuf {
     PathBuf::from(&state.cfg.data_dir).join("avatars")
 }
 
-fn valid_key(key: &str) -> bool {
+pub(crate) fn valid_key(key: &str) -> bool {
     key.len() == 32 && key.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-fn new_key() -> String {
+pub(crate) fn new_key() -> String {
     rand::random::<[u8; 16]>().iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn not_image() -> AppError {
+pub(crate) fn not_image() -> AppError {
     AppError(
         StatusCode::BAD_REQUEST,
         "not_image",
@@ -98,7 +98,7 @@ fn not_image() -> AppError {
     )
 }
 
-fn big_animation() -> AppError {
+pub(crate) fn big_animation() -> AppError {
     AppError(
         StatusCode::BAD_REQUEST,
         "animation_too_big",
@@ -108,7 +108,7 @@ fn big_animation() -> AppError {
     )
 }
 
-fn big_image() -> AppError {
+pub(crate) fn big_image() -> AppError {
     AppError(
         StatusCode::BAD_REQUEST,
         "image_too_big",
@@ -147,7 +147,7 @@ fn check_animation<'a, D: AnimationDecoder<'a> + ImageDecoder>(mut decoder: D) -
     if frames == 0 { Err(Refused::NotImage) } else { Ok(()) }
 }
 
-fn normalize_animated(raw: &[u8], kind: ImageKind) -> Result<Stored, Refused> {
+pub(crate) fn normalize_animated(raw: &[u8], kind: ImageKind) -> Result<Stored, Refused> {
     match kind {
         ImageKind::Gif => {
             check_animation(image::codecs::gif::GifDecoder::new(Cursor::new(raw)).map_err(|_| Refused::NotImage)?)?

@@ -6,6 +6,7 @@
 
 mod calls;
 mod channels;
+mod emojis;
 mod files;
 mod invites;
 mod jobs;
@@ -80,6 +81,8 @@ impl From<sqlx::Error> for DbError {
                         "email"
                     } else if c.contains("nonce") {
                         "nonce"
+                    } else if c.starts_with("emojis_") {
+                        "emoji_name"
                     } else {
                         "unique"
                     });
@@ -710,7 +713,14 @@ impl Db {
                 .collect();
         let roles = self.roles(gid).await?;
         // États vocaux : en mémoire dans le serveur, ajoutés par lui.
-        Ok(Some(GuildState { guild, channels, roles, members: self.members(gid).await?, voice_states: vec![] }))
+        Ok(Some(GuildState {
+            guild,
+            channels,
+            roles,
+            members: self.members(gid).await?,
+            voice_states: vec![],
+            emojis: self.guild_emojis(gid).await?,
+        }))
     }
 
     /// Rôles du serveur, `@everyone` compris, du plus bas au plus haut.
@@ -1132,9 +1142,15 @@ impl Db {
     }
 
     /// Ajoute ma réaction ; `false` si elle y était déjà. Au plus
-    /// [`kraken_core::emoji::MAX_REACTIONS`] emojis différents par message.
+    /// [`kraken_core::emoji::MAX_REACTIONS`] emojis différents par message. L'emoji est un
+    /// caractère Unicode de la sélection, ou l'id d'un emoji perso d'un serveur dont je suis
+    /// membre (sinon `Invalid("emoji")`).
     pub async fn add_reaction(&self, cid: Id, mid: Id, uid: Id, emoji: &str) -> Result<Changed> {
-        if !kraken_core::emoji::valid(emoji) {
+        if let Some(eid) = kraken_core::emoji::custom_key(emoji) {
+            if !self.can_use_emoji(eid, uid).await? {
+                return Err(DbError::Invalid("emoji"));
+            }
+        } else if !kraken_core::emoji::valid(emoji) {
             return Err(DbError::Invalid("emoji"));
         }
         let mut tx = self.pool.begin().await?;
@@ -1240,6 +1256,8 @@ pub(crate) async fn insert_channel(
 mod tests;
 #[cfg(test)]
 mod tests_channels;
+#[cfg(test)]
+mod tests_emojis;
 
 #[cfg(test)]
 mod tests_guild;

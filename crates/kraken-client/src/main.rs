@@ -10,6 +10,7 @@ mod channels;
 mod chat;
 mod display;
 mod emoji;
+mod emoji_settings;
 mod files;
 mod guild;
 mod home;

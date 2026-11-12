@@ -2,7 +2,7 @@
 
 use gloo_timers::future::TimeoutFuture;
 use kraken_core::perms;
-use kraken_proto::{Channel, ChannelKind, Id, MAX_MESSAGE_LEN, Message, User};
+use kraken_proto::{Channel, ChannelKind, Emoji, Id, MAX_MESSAGE_LEN, Message, User};
 use leptos::html;
 use leptos::portal::Portal;
 use leptos::prelude::*;
@@ -13,7 +13,7 @@ use leptos_router::hooks::{use_navigate, use_params_map};
 use wasm_bindgen::JsCast;
 
 use crate::call::{DmCall, StartCall, VoiceRoom};
-use crate::emoji::EmojiPicker;
+use crate::emoji::{EmojiImg, EmojiPicker, Picked, ReactionFace, reaction_name};
 use crate::files::{self, MessageMedia, Tray, TrayView, Viewer, ViewerState};
 use crate::icons::{Icon, lu};
 use crate::markdown::Body;
@@ -352,11 +352,16 @@ fn ChannelView(channel: Channel) -> impl IntoView {
         });
     });
 
-    let on_pick = Callback::new(move |emoji: String| {
-        match chat.picker.get_untracked() {
-            Some(Pick::React(mid)) => react(chat, mid, emoji),
-            Some(Pick::Insert) => insert_text(chat, &emoji),
-            None => {}
+    let on_pick = Callback::new(move |picked: Picked| {
+        match (chat.picker.get_untracked(), picked) {
+            (Some(Pick::React(mid)), Picked::Unicode(emoji)) => react(chat, mid, emoji),
+            // Une réaction à un emoji perso porte son id.
+            (Some(Pick::React(mid)), Picked::Custom(e)) => react(chat, mid, e.id.to_string()),
+            (Some(Pick::Insert), Picked::Unicode(emoji)) => insert_text(chat, &emoji),
+            (Some(Pick::Insert), Picked::Custom(e)) => {
+                insert_text(chat, &format!("{} ", crate::emoji::written(&e, chat.guild)))
+            }
+            (None, _) => {}
         }
         chat.picker.set(None);
     });
@@ -425,7 +430,7 @@ fn ChannelView(channel: Channel) -> impl IntoView {
                 <files::DropOverlay dragging=chat.dragging place=drop_place/>
                 {move || chat.picker.get().map(|p| {
                     let title = if matches!(p, Pick::React(_)) { "Réagir avec un emoji" } else { "Insérer un emoji" };
-                    view! { <EmojiPicker title=title on_pick=on_pick on_close=on_close/> }
+                    view! { <EmojiPicker title=title guild=channel.guild_id on_pick=on_pick on_close=on_close/> }
                 })}
             </section>
             {(!is_dm).then(|| view! { <Show when=move || members_open.get()><Members guild=channel.guild_id.unwrap()/></Show> })}
@@ -684,13 +689,19 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
             let names = r.users.iter().map(|u| s.name_of(chat.guild, *u).unwrap_or_else(|| "quelqu'un".into())).collect();
             let who = people(names);
             let verb = if n > 1 { "ont réagi" } else { "a réagi" };
-            let title = format!("{who} {verb} avec {}", r.emoji);
-            let label = format!("{} : {n} {}{}", r.emoji, if n > 1 { "réactions" } else { "réaction" }, if by_me { ", dont la tienne" } else { "" });
+            // Un emoji perso retiré n'a plus d'image : la réaction le dit.
+            let gone = RwSignal::new(false);
+            let said = {
+                let emoji = r.emoji.clone();
+                move || if gone.get() { "emoji supprimé".to_string() } else { reaction_name(&emoji) }
+            };
+            let title = { let said = said.clone(); move || format!("{who} {verb} avec {}", said()) };
+            let label = move || format!("{} : {n} {}{}", said(), if n > 1 { "réactions" } else { "réaction" }, if by_me { ", dont la tienne" } else { "" });
             let emoji = r.emoji.clone();
             view! {
                 <button type="button" class="k-reaction" aria-pressed=by_me.to_string() aria-label=label title=title
                     on:click=move |_| react(chat, id, emoji.clone())>
-                    <span aria-hidden="true">{r.emoji.clone()}</span><span aria-hidden="true">{n}</span>
+                    <span aria-hidden="true"><ReactionFace emoji=r.emoji.clone() gone=gone/></span><span aria-hidden="true">{n}</span>
                 </button>
             }
         }).collect_view();
@@ -770,7 +781,7 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
                         on:click={ let m = for_reply.clone(); move |_| start_reply(chat, m.clone()) }><Icon icon=lu::LuReply/></button>
                     {mine.then(|| { let c = content.clone(); view! {
                         <button type="button" class="k-btn k-btn--icon" aria-label="Modifier le message" title="Modifier"
-                            on:click=move |_| { chat.edit_text.set(c.clone()); chat.editing.set(Some(id)); }><Icon icon=lu::LuPencil/></button>
+                            on:click=move |_| { chat.edit_text.set(crate::emoji::collapse(&c, chat.guild)); chat.editing.set(Some(id)); }><Icon icon=lu::LuPencil/></button>
                     } })}
                     {(mine || manage).then(|| { let m = for_delete.clone(); view! {
                         <button type="button" class="k-btn k-btn--icon app-link-danger" aria-label="Supprimer le message" title="Supprimer"
@@ -807,7 +818,7 @@ fn EditBox(msg: Message) -> impl IntoView {
     let original = msg.content.clone();
     let m = StoredValue::new(msg);
     let save = move || {
-        let text = chat.edit_text.get_untracked().trim().to_string();
+        let text = crate::emoji::expand(chat.edit_text.get_untracked().trim(), chat.guild);
         let msg = m.get_value();
         if text.is_empty() {
             chat.deleting.set(Some(msg));
@@ -1039,19 +1050,31 @@ struct Suggestion {
     insert: String,
     label: String,
     detail: String,
+    /// Un emoji perso : son image précède le nom.
+    emoji: Option<Emoji>,
 }
 
-/// Le mot en cours de frappe s'il commence par `@` ou `#` : sa position et ce qui suit le signe.
+/// Le mot en cours de frappe s'il commence par `@`, `#` ou `:` : sa position et ce qui suit le signe.
+/// `:` n'ouvre rien avant deux caractères de nom (lettres, chiffres, `_`) et se détache du mot qui le
+/// précède (« 12:30 », « https:// » ne proposent rien).
 fn token(text: &str, caret: usize) -> Option<(usize, char, String)> {
     // Le curseur a pu être lu sur un texte plus ancien.
     let before = text.get(..caret.min(text.len()))?;
-    let start = before.rfind(['@', '#'])?;
+    let start = before.rfind(['@', '#', ':'])?;
     let sign = before[start..].chars().next()?;
     let q = &before[start + 1..];
     if q.chars().any(char::is_whitespace) || q.chars().count() > 32 {
         return None;
     }
-    if before[..start].chars().next_back().is_some_and(char::is_alphanumeric) {
+    let prev = before[..start].chars().next_back();
+    if prev.is_some_and(char::is_alphanumeric) {
+        return None;
+    }
+    if sign == ':'
+        && (q.chars().count() < 2
+            || !q.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            || prev.is_some_and(|c| matches!(c, '_' | '<' | ':')))
+    {
         return None;
     }
     Some((start, sign, q.to_lowercase()))
@@ -1081,6 +1104,7 @@ fn suggestions(chat: Chat, sign: char, q: &str) -> Vec<Suggestion> {
                     insert: format!("@{} ", u.username),
                     label: shown,
                     detail: format!("@{}", u.username),
+                    emoji: None,
                 });
             }
         }
@@ -1094,15 +1118,39 @@ fn suggestions(chat: Chat, sign: char, q: &str) -> Vec<Suggestion> {
                         insert: format!("@{word} "),
                         label: format!("@{word}"),
                         detail: what.into(),
+                        emoji: None,
                     });
                 }
             }
+        }
+    } else if sign == ':' {
+        // Les emojis perso dont le nom commence par la frappe, puis ceux qui la contiennent ; ceux du serveur
+        // du salon d'abord.
+        let sets = s.emoji_sets(chat.guild);
+        let all = sets.iter().flat_map(|(g, es)| es.iter().map(move |e| (g, e)));
+        let starts = all.clone().filter(|(_, e)| e.name.to_lowercase().starts_with(q));
+        let inside = all.filter(|(_, e)| {
+            let n = e.name.to_lowercase();
+            !n.starts_with(q) && n.contains(q)
+        });
+        for (g, e) in starts.chain(inside).take(8) {
+            out.push(Suggestion {
+                insert: format!("{} ", crate::emoji::written(e, chat.guild)),
+                label: crate::emoji::shortcode(&e.name),
+                detail: g.name.clone(),
+                emoji: Some(e.clone()),
+            });
         }
     } else if let Some(g) = chat.guild.and_then(|g| s.guild(g)) {
         for c in g.channels.iter().filter(|c| c.kind.is_textual()) {
             let Some(name) = c.name.clone() else { continue };
             if name.to_lowercase().starts_with(q) && !name.chars().any(char::is_whitespace) {
-                out.push(Suggestion { insert: format!("#{name} "), label: format!("#{name}"), detail: String::new() });
+                out.push(Suggestion {
+                    insert: format!("#{name} "),
+                    label: format!("#{name}"),
+                    detail: String::new(),
+                    emoji: None,
+                });
             }
         }
         out.truncate(8);
@@ -1173,6 +1221,12 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
         if t.trim().is_empty() && ready == 0 {
             return;
         }
+        // `:nom:` devient le jeton de l'emoji ; le message envoyé est plus long que ce qui est écrit.
+        let t = crate::emoji::expand(t.trim(), chat.guild);
+        if t.chars().count() > MAX_MESSAGE_LEN {
+            chat.notice.set(Some(format!("Une fois les emojis écrits en entier, ton message dépasse {MAX_MESSAGE_LEN} caractères : raccourcis-le.")));
+            return;
+        }
         let delay = slow.get_untracked();
         if delay > 0 && !exempt() {
             let left = slow_left(chat.channel);
@@ -1192,7 +1246,7 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
         chat.replying.set(None);
         chat.since.set(None);
         let attached = files::take_done(chat.tray);
-        send(chat.channel, t.trim().to_string(), reply, None, attached);
+        send(chat.channel, t, reply, None, attached);
     };
     let picker = NodeRef::<html::Input>::new();
     let can_attach = move || !locked() && chat.guild.is_none_or(|g| s.guild_perms(g) & perms::ATTACH_FILES != 0);
@@ -1240,7 +1294,7 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
             });
             if let Some(m) = last {
                 e.prevent_default();
-                chat.edit_text.set(m.content.clone());
+                chat.edit_text.set(crate::emoji::collapse(&m.content, chat.guild));
                 chat.editing.set(Some(m.id));
             }
         } else if key == "Enter" && !e.shift_key() && !e.is_composing() {
@@ -1283,6 +1337,7 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
                     {list.into_iter().enumerate().map(|(i, sg)| view! {
                         <li role="option" id=opt_id(i) aria-selected=move || (active.get() == i).to_string()
                             on:mousedown=move |e| { e.prevent_default(); pick(i); }>
+                            {sg.emoji.map(|e| view! { <span class="app-suggest-emoji" aria-hidden="true"><EmojiImg id=e.id name=e.name/></span> })}
                             <b>{sg.label}</b><small>{sg.detail}</small>
                         </li>
                     }).collect_view()}

@@ -133,6 +133,13 @@
   --size-embed: 432px;
   --size-embed-thumb: 80px;
   --size-favicon: 16px;
+  --size-emoji: 22px;
+  --size-emoji-jumbo: 48px;
+  --size-emoji-reaction: 18px;
+  --size-emoji-cell: 36px;
+  --size-emoji-row: 32px;
+  --size-emoji-row-mobile: 40px;
+  --size-emoji-preview: 128px;
   --z-base: 0;
   --z-sticky: 10;
   --z-popover: 100;
@@ -267,6 +274,7 @@
 :root[data-density="compact"] {
   --size-message-gap: var(--space-2);
   --size-msg-avatar: var(--space-7);
+  --size-emoji: var(--size-icon);
 }
 
 :root[data-contrast="high"] { --size-focus: 3px; }

@@ -3,7 +3,7 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use kraken_db::DbError;
 use kraken_proto::{
-    ApiError, MAX_CHANNEL_NAME, MAX_CHANNELS, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_INVITE_USES,
+    ApiError, MAX_CHANNEL_NAME, MAX_CHANNELS, MAX_EMOJIS, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_INVITE_USES,
     MAX_INVITES_PER_MEMBER, MAX_OVERWRITES, MAX_PURGE_HOURS, MAX_REASON, MAX_ROLES, MAX_TOPIC,
     USERNAME_CHANGES_PER_WINDOW,
 };
@@ -63,11 +63,28 @@ impl From<DbError> for AppError {
                 "last_text",
                 "C'est le dernier salon d'écriture du serveur : crée-en un autre avant de le supprimer.".into(),
             ),
+            DbError::Conflict("emoji_name") => {
+                Self(StatusCode::CONFLICT, "name_taken", "Ce nom est déjà pris dans ce serveur.".into())
+            }
             DbError::Conflict(f) => Self(StatusCode::CONFLICT, "conflict", format!("Déjà utilisé : {f}.")),
             DbError::Cooldown(secs) => Self(StatusCode::TOO_MANY_REQUESTS, "username_cooldown", secs.to_string()),
             DbError::Invalid("username") => Self::invalid("Pseudo : 2 à 32 caractères parmi a-z, 0-9, _ et ."),
             DbError::Invalid("reactions") => Self::invalid("20 emojis différents au plus sur un message."),
-            DbError::Invalid("emoji") => Self::invalid("Seuls les emojis servent de réaction."),
+            DbError::Invalid("emoji") => Self(
+                StatusCode::BAD_REQUEST,
+                "emoji",
+                "Seuls les emojis de la sélection ou ceux de tes serveurs servent de réaction.".into(),
+            ),
+            DbError::Invalid("emoji_name") => Self(
+                StatusCode::BAD_REQUEST,
+                "invalid_name",
+                "Le nom d'un emoji compte de 2 à 32 caractères : lettres sans accent, chiffres et _.".into(),
+            ),
+            DbError::Invalid("emoji_limit") => Self(
+                StatusCode::BAD_REQUEST,
+                "emoji_limit",
+                format!("Ce serveur a déjà ses {MAX_EMOJIS} emojis : retires-en un pour en ajouter."),
+            ),
             DbError::Invalid("reply_to") => Self::invalid("Le message d'origine n'est plus dans ce salon."),
             DbError::Invalid("self") => Self(StatusCode::BAD_REQUEST, "self", "C'est ton propre pseudo.".into()),
             DbError::Invalid("recipients") => {
