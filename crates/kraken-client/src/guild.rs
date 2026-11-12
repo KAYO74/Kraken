@@ -105,12 +105,13 @@ pub(crate) const CATEGORIES: &[(&str, &[Perm])] = &[
 /// Droits sensibles : une icône d'alerte, en plus de leur phrase.
 pub(crate) const SENSITIVE: [u64; 4] = [perms::ADMINISTRATOR, perms::BAN, perms::MANAGE_ROLES, perms::MANAGE_CHANNELS];
 
-const SECTIONS: [(&str, &str); 6] = [
+const SECTIONS: [(&str, &str); 7] = [
     ("roles", "Rôles"),
     ("channels", "Salons"),
     ("emojis", "Emojis"),
     ("invites", "Invitations"),
     ("bans", "Bannis"),
+    ("audit", "Journal d'audit"),
     ("owner", "Propriété"),
 ];
 
@@ -132,6 +133,7 @@ fn allowed(guild: Id) -> Vec<&'static str> {
             // Qui gère le serveur voit toutes les invitations, qui peut seulement en créer voit les siennes.
             "invites" => p & (perms::MANAGE_GUILD | perms::CREATE_INVITE) != 0,
             "bans" => p & perms::BAN != 0,
+            "audit" => p & perms::VIEW_AUDIT_LOG != 0,
             _ => owner,
         })
         .collect()
@@ -198,6 +200,7 @@ pub fn GuildSettings() -> impl IntoView {
                             "emojis" => view! { <crate::emoji_settings::EmojiSettings guild=g/> }.into_any(),
                             "invites" => view! { <Invites guild=g/> }.into_any(),
                             "bans" => view! { <Bans guild=g/> }.into_any(),
+                            "audit" => view! { <crate::audit::AuditLog guild=g/> }.into_any(),
                             "owner" => view! { <Ownership guild=g/> }.into_any(),
                             _ => empty("Rien à régler ici", "Tes rôles ne te donnent accès à aucun réglage de ce serveur.").into_any(),
                         }

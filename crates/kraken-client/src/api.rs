@@ -528,6 +528,23 @@ pub async fn bans(guild: Id) -> ApiResult<Vec<Ban>> {
     call(Method::GET, &format!("/guilds/{guild}/bans"), NO_BODY).await
 }
 
+/// Une page du journal d'audit du serveur (voir `kraken-db::audit`), plus ancienne que `before`. `category` :
+/// un mot de [`AuditCategory::slug`], ou vide ; `actor` : l'id de celui qui a agi, ou vide.
+pub async fn audit_log(guild: Id, before: Option<Id>, category: &str, actor: &str) -> ApiResult<AuditPage> {
+    let mut path = format!("/guilds/{guild}/audit-log?limit={AUDIT_PAGE}");
+    if let Some(b) = before {
+        path.push_str(&format!("&before={b}"));
+    }
+    // Des mots et des identifiants que le client a lui-même posés dans les listes : rien à encoder.
+    if AuditCategory::parse(category).is_some() {
+        path.push_str(&format!("&category={category}"));
+    }
+    if actor.parse::<Id>().is_ok() {
+        path.push_str(&format!("&actor={actor}"));
+    }
+    call(Method::GET, &path, NO_BODY).await
+}
+
 pub async fn leave_guild(guild: Id) -> ApiResult<()> {
     call(Method::DELETE, &format!("/guilds/{guild}/members/@me"), NO_BODY).await
 }

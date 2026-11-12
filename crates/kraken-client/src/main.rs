@@ -3,6 +3,7 @@
 
 mod api;
 mod app;
+mod audit;
 mod auth;
 mod avatar;
 mod call;
