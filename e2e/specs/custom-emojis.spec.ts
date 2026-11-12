@@ -122,7 +122,7 @@ test('emojis-H1 Réglages › Emojis : ajouter (recadrage, nom), refuser un nom,
     const data = new DataTransfer();
     data.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], 'vague.gif', { type: 'image/gif' }));
     return data;
-  }, animatedGif(3).toString('base64'));
+  }, animatedGif(3, 16).toString('base64'));
   await page.dispatchEvent('.app-emojis', 'dragenter', { dataTransfer: dt });
   await expect(admin.getByText("Dépose l'image pour l'ajouter")).toBeVisible();
   await page.dispatchEvent('.app-emojis', 'drop', { dataTransfer: dt });
@@ -171,7 +171,7 @@ test('emojis-H2 écrire :nom: (suggestions au clavier), sélecteur, grand format
   const [gx, cx] = await createGuild(a.page, 'Abysse');
   const poulpe = await addEmoji(asA, gx, 'poulpe', png(40, 40));
   await addEmoji(asA, gx, 'poussin', png(40, 40));
-  await addEmoji(asA, gx, 'danse', animatedGif(3));
+  await addEmoji(asA, gx, 'danse', animatedGif(3, 16));
   // Les emojis d'un autre de ses serveurs s'écrivent partout : on écrit dans Récif, où mousse n'a pas Abysse.
   const [gy, cy] = await createGuild(a.page, 'Récif');
   await addEmoji(asA, gy, 'corail', png(40, 40));
@@ -409,7 +409,7 @@ test.describe('à 390 px', () => {
 
     const chooser = a.page.waitForEvent('filechooser');
     await admin.getByRole('button', { name: 'Ajouter un emoji' }).click();
-    await (await chooser).setFiles({ name: 'danse.gif', mimeType: 'image/gif', buffer: animatedGif(3) });
+    await (await chooser).setFiles({ name: 'danse.gif', mimeType: 'image/gif', buffer: animatedGif(3, 16) });
     const add = a.page.getByRole('dialog', { name: 'Ajouter un emoji' });
     await expect(add.getByLabel('Nom', { exact: true })).toBeFocused();
     expect((await sizeOf(add.locator('.app-emoji-add-preview'))).w).toBe(128);

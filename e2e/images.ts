@@ -52,12 +52,11 @@ export function flatPng(w: number, h: number) {
 }
 
 /**
- * Un GIF animé de `frames` images de 4 × 4 pixels, chacune d'une couleur unie (deux couleurs en
+ * Un GIF animé de `frames` images de `size` × `size` pixels (4 par défaut ; un emoji en demande 8 au moins), chacune d'une couleur unie (deux couleurs en
  * alternance). Le flux LZW n'est pas compressé : un code d'effacement tous les deux pixels garde la
  * largeur des codes à 3 bits, ce qui suffit à n'importe quel décodeur.
  */
-export function animatedGif(frames = 2) {
-  const size = 4;
+export function animatedGif(frames = 2, size = 4) {
   const lzw = (index: number) => {
     const bits: number[] = [];
     const emit = (code: number) => {
