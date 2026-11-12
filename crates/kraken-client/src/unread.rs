@@ -359,7 +359,8 @@ pub fn href(c: &Channel) -> String {
 }
 
 fn desktop_notification(s: Store, c: &Channel, m: &Message) {
-    if !desktop_enabled() {
+    // « Ne pas déranger » coupe les notifications du bureau ; les non-lus et les badges restent.
+    if !desktop_enabled() || s.presence.get_untracked() == kraken_proto::Presence::Dnd {
         return;
     }
     let who = m.author.as_ref().map(|a| a.name().to_string()).unwrap_or_else(|| "Compte supprimé".into());

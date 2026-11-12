@@ -2,10 +2,10 @@ feature,area,priority,original,clone,notes
 Inscription et connexion par e-mail ou pseudo,comptes,must,yes,yes,S28 ; vérif e-mail et mot de passe oublié si l'instance a un SMTP ; QR plus tard
 Authentification multi-facteurs (TOTP),comptes,should,yes,no,S06
 Liste et révocation des appareils connectés,comptes,should,yes,partial,"S06 ; « se déconnecter partout » fait, liste des appareils pas encore"
-Modifier pseudo e-mail téléphone mot de passe,comptes,must,yes,no,S06 ; téléphone facultatif
+Modifier pseudo e-mail téléphone mot de passe,comptes,must,yes,partial,"S06 ; pseudo (mot de passe demandé, 2 par heure), e-mail (mot de passe demandé, confirmé par un lien si l'instance a un SMTP, l'ancienne adresse reste valide jusque-là) et mot de passe (les autres appareils sont déconnectés) faits ; téléphone facultatif, pas fait"
 Demande d'export de ses données,comptes,should,yes,no,S07 ; RGPD
 Suppression et désactivation du compte,comptes,must,yes,partial,"S07 ; suppression faite (fermeture immédiate, anonymisation à 14 jours), désactivation pas encore"
-Présence (en ligne inactif ne pas déranger invisible),social,must,yes,partial,"S01 S04 ; en ligne/hors ligne réels, autres statuts pas encore réglables"
+Présence (en ligne inactif ne pas déranger invisible),social,must,yes,yes,"S01 S04 ; statut choisi dans « Mon compte » et gardé en base, inactif tout seul après 5 min sans geste, invisible = hors ligne pour les autres, ne pas déranger coupe les notifications du bureau et la sonnerie d'appel ; pastille à forme distincte + mot ; vue des amis et des membres des mêmes serveurs ou MP seulement"
 Statut personnalisé et activité en cours,social,should,yes,no,S01
 Ajouter un ami par pseudo,social,must,yes,yes,"F02 ; pseudo unique, erreurs claires (inconnu, soi-même, déjà amis, déjà demandé, bloqué), limite par minute"
 Demandes d'ami en attente (accepter refuser),social,must,yes,yes,"S01 ; accepter, refuser, annuler, retirer un ami, en direct par le gateway"
@@ -75,8 +75,8 @@ Aperçu du stream,video,could,yes,no,S10
 Soundboard,voix,should,yes,no,S10 S22
 Sons du soundboard de tous les serveurs,voix,could,yes,no,nitro : gratuit
 Son d'entrée en vocal,voix,could,yes,no,S10 ; nitro : gratuit
-Profil avec avatar bio pronoms,profil,must,yes,partial,"S20 ; nom affiché modifiable (pseudo unique dessous), avatar bio pronoms pas encore"
-Avatar animé et bannière,profil,should,yes,no,S20 ; nitro : gratuit
+Profil avec avatar bio pronoms,profil,must,yes,yes,"S20 ; Réglages › Mon profil : nom affiché, pronoms (40), à propos (190), photo recadrée, aperçu en direct ; carte de profil depuis la liste des membres et les messages (bannière, rôles, membre depuis, statut, écrire, ajouter en ami, bloquer)"
+Avatar animé et bannière,profil,should,yes,yes,S20 ; GIF et WebP animés gardés tels quels (pas de recompression) pour la photo et la bannière ; bannière recadrée en 3 pour 1 ; nitro : gratuit
 Thème de profil et déco d'avatar,profil,could,yes,no,S20 ; nitro : gratuit
 Profil par serveur,profil,could,yes,no,S20 ; nitro : gratuit
 Styles de pseudo (police effet couleur),profil,could,yes,no,S12 ; nitro : gratuit

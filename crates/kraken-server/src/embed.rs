@@ -140,7 +140,12 @@ async fn build(state: &AppState, url: &str, policy: Policy) -> Option<Embed> {
 /// sous `KRAKEN_DATA_DIR/embeds`.
 async fn store_image(state: &AppState, src: &str, side: u32, policy: Policy) -> Option<EmbedImage> {
     let got = fetch::fetch(src, Want::Image, policy).await.ok()?;
-    let enc = tokio::task::spawn_blocking(move || media::shrink(&media::decode(&got.body)?, side)).await.ok()??;
+    // Même portail que les photos de profil et les pièces jointes : deux décodages à la fois.
+    let enc = media::gated(move || {
+        let img = media::decode_within(&got.body, media::MEDIA).ok()?;
+        media::shrink(&img, side)
+    })
+    .await??;
     let key = format!("{}.{}", crate::attach::new_key(), enc.ext);
     let dir: PathBuf = PathBuf::from(&state.cfg.data_dir).join("embeds");
     tokio::fs::create_dir_all(&dir).await.ok()?;

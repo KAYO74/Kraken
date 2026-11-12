@@ -4,6 +4,7 @@
 // le serveur de test à une page locale demanderait un réglage réservé aux tests.
 import { deflateSync } from 'node:zlib';
 import { test, expect, a11y, createGuild, say, messages, API, type User } from '../fixtures';
+import { flatPng } from '../images';
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
   let c = n;
@@ -180,4 +181,37 @@ test('PJ-H3 fichier trop lourd : refusé avant tout envoi, le plateau reste vide
   await expect(page.getByRole('list', { name: 'Fichiers à joindre' })).toHaveCount(0);
   await say(page, 'général', 'rien ne part en plus');
   await expect(messages(page).filter({ hasText: 'rien ne part en plus' })).toHaveCount(1);
+});
+
+test('PJ-E1 image trop grande pour être décodée : envoyée comme fichier ordinaire, sans vignette', async ({ user }) => {
+  const a = await user('geante');
+  await createGuild(a.page, 'Quai des géantes');
+  const page = a.page;
+  // Quelques Ko, mais 8200 pixels de large : le serveur la juge sur son en-tête, sans la décoder,
+  // et la garde telle quelle (comme le JPEG de 48 millions de pixels d'un téléphone).
+  const wide = flatPng(8200, 16);
+  await page.locator('input[type=file]').setInputFiles([
+    { name: 'panorama.png', mimeType: 'image/png', buffer: wide },
+    { name: 'bande.png', mimeType: 'image/png', buffer: flatPng(8192, 16) },
+  ]);
+  const tray = page.getByRole('list', { name: 'Fichiers à joindre' });
+  await expect(tray.getByRole('listitem')).toHaveCount(2);
+  await expect(tray.getByRole('progressbar')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByLabel('Écrire dans #général').fill('Deux panoramas');
+  await page.getByLabel('Envoyer').click();
+  await expect(tray).toHaveCount(0);
+
+  const msg = messages(page).filter({ hasText: 'Deux panoramas' });
+  await expect(msg).toHaveCount(1);
+  await expect(msg).not.toHaveAttribute('data-pending', '');
+  // Dans la limite : une vignette. Au-delà : une carte de fichier, qui rend les octets envoyés.
+  await expect(msg.getByRole('button', { name: "Ouvrir l'image bande.png" })).toBeVisible();
+  await expect(msg.getByRole('button', { name: "Ouvrir l'image panorama.png" })).toHaveCount(0);
+  const card = msg.locator('.k-attachment');
+  await expect(card).toContainText('panorama.png');
+  const res = await page.request.get((await card.getByRole('link', { name: 'Télécharger panorama.png' }).getAttribute('href'))!);
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-disposition']).toContain('attachment');
+  expect(Buffer.compare(await res.body(), wide)).toBe(0);
 });

@@ -6,7 +6,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{FutureExt, SinkExt, StreamExt};
 use image::{ImageFormat, Rgb, RgbImage};
 use kraken_proto::*;
 use kraken_server::{AppState, Config};
@@ -14,6 +14,8 @@ use reqwest::{Client, Method, StatusCode};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tokio_tungstenite::tungstenite::Message as Ws;
+
+mod common;
 
 const MAX_UPLOAD: u64 = 100 * 1024;
 
@@ -42,8 +44,15 @@ fn config(data_dir: &Path, previews: bool, allow_private: bool) -> Config {
 }
 
 async fn spawn(pool: PgPool, previews: bool, allow_private: bool) -> (String, PathBuf) {
+    spawn_sized(pool, previews, allow_private, MAX_UPLOAD).await
+}
+
+/// Comme `spawn`, avec un plafond d'envoi choisi.
+async fn spawn_sized(pool: PgPool, previews: bool, allow_private: bool, max_upload: u64) -> (String, PathBuf) {
     let dir = std::env::temp_dir().join(format!("kraken-files-{}", rand::random::<u64>()));
-    let state = AppState::with_db(kraken_db::Db::from_pool(pool), config(&dir, previews, allow_private)).await.unwrap();
+    let mut cfg = config(&dir, previews, allow_private);
+    cfg.max_upload_bytes = max_upload;
+    let state = AppState::with_db(kraken_db::Db::from_pool(pool), cfg).await.unwrap();
     kraken_server::spawn_workers(&state);
     let app = kraken_server::app(state);
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -273,6 +282,84 @@ async fn upload_limits_and_message_rules(pool: PgPool) {
     // Le même fichier deux fois dans un message, ou celui d'un autre : refusés.
     let (_, one) = lou.upload(general, "un.txt", "text/plain", b"1".to_vec()).await;
     assert_eq!(lou.send(general, "doublon", &[one.clone(), one.clone()]).await.0, StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn attached_images_are_judged_on_their_header_and_decoded_two_at_a_time(pool: PgPool) {
+    let (base, dir) = spawn_sized(pool, false, false, 8 * 1024 * 1024).await;
+    let (lou, _sam, _g, general, _) = world(&base).await;
+
+    // Trop grandes pour qu'on les décode : plus de 8192 pixels de côté, ou plus de 40 millions de
+    // pixels. Jugées sur leur en-tête, elles ne sont jamais décodées : un fichier ordinaire, gardé
+    // tel quel, sans dimensions ni vignette. (Avant, la première était décodée en entier.)
+    let heavy = common::flat(8192, 8192, ImageFormat::Png);
+    assert!(heavy.len() < 1024 * 1024, "{} octets", heavy.len());
+    let cases = [
+        ("8192 × 8192", heavy),
+        ("côté seul (PNG)", common::flat(8193, 16, ImageFormat::Png)),
+        ("côté seul (JPEG)", common::flat(16, 8200, ImageFormat::Jpeg)),
+        ("côté seul (WebP)", common::flat(8200, 16, ImageFormat::WebP)),
+        ("surface seule", common::flat(7000, 6000, ImageFormat::Png)),
+    ];
+    let mut kept = Vec::new();
+    for (what, bytes) in cases {
+        let size = bytes.len() as u64;
+        let (s, a) = lou.upload(general, "enorme.png", "image/png", bytes.clone()).await;
+        assert_eq!(s, StatusCode::CREATED, "{what} : {a}");
+        assert!(a["width"].is_null() && a["height"].is_null(), "{what} : pas de dimensions");
+        assert_eq!((a["mime"].as_str(), a["size"].as_u64()), (Some("application/octet-stream"), Some(size)), "{what}");
+        let path = format!("/channels/{general}/attachments/{}", a["id"].as_str().unwrap());
+        // Pas de vignette ; l'original est servi tel quel, en téléchargement.
+        assert_eq!(lou.get(&format!("{path}/preview")).await.status(), 404, "{what}");
+        let r = lou.get(&path).await;
+        assert!(r.headers()["content-disposition"].to_str().unwrap().starts_with("attachment;"), "{what}");
+        assert_eq!(r.bytes().await.unwrap().to_vec(), bytes, "{what}");
+        kept.push(a);
+    }
+    assert_eq!(files_in(&dir, "attachments"), kept.len(), "les originaux sont gardés, sans aucune vignette");
+    // Elles se joignent à un message comme n'importe quel fichier.
+    let (s, m) = lou.send(general, "panoramas", &kept).await;
+    assert_eq!(s, StatusCode::CREATED, "{m}");
+    assert_eq!(m["attachments"].as_array().unwrap().len(), kept.len());
+
+    // Au plafond de côté, l'image passe, avec ses dimensions et son aperçu.
+    let (s, ok) = lou.upload(general, "large.png", "image/png", common::flat(8192, 16, ImageFormat::Png)).await;
+    assert_eq!(s, StatusCode::CREATED);
+    assert_eq!((ok["width"].as_u64(), ok["height"].as_u64()), (Some(8192), Some(16)));
+    // Un fichier qui n'est pas une image reste un fichier ordinaire, quelle que soit sa taille.
+    let (s, plain) = lou.upload(general, "notes.txt", "text/plain", vec![b'a'; 200_000]).await;
+    assert_eq!((s, plain["width"].is_null()), (StatusCode::CREATED, true));
+    // Les limites de poids du fichier restent les mêmes pour une image trop grande.
+    let mut fat = common::flat(8200, 16, ImageFormat::Png);
+    fat.resize(8 * 1024 * 1024 + 1, 0);
+    let (s, e) = lou.upload(general, "tres-gros.png", "image/png", fat).await;
+    assert_eq!((s, e["code"].as_str()), (StatusCode::PAYLOAD_TOO_LARGE, Some("too_large")));
+
+    // Huit images lourdes d'un coup : tout passe, mais jamais plus de deux décodages en même temps.
+    let one = picture(1800, 1800, ImageFormat::Png);
+    let uploads = (0..8).map(|i| lou.upload(general, "photo.png", "image/png", one.clone()).map(move |r| (i, r)));
+    for (i, (s, v)) in futures_util::future::join_all(uploads).await {
+        assert_eq!(s, StatusCode::CREATED, "envoi {i} : {v}");
+        assert_eq!(v["width"], 1800);
+    }
+    let peak = kraken_server::peak_decodes();
+    assert!((1..=2).contains(&peak), "{peak} décodages en même temps");
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn a_decompression_bomb_in_an_attached_png_is_never_allocated(pool: PgPool) {
+    let (base, _dir) = spawn_sized(pool, false, false, 8 * 1024 * 1024).await;
+    let (lou, _sam, _g, general, _) = world(&base).await;
+    let bomb = common::icc_bomb_png(12_480_000);
+    assert!(bomb.len() < 4 * 1024 * 1024, "{} octets", bomb.len());
+    let before = common::peak_rss_mib();
+    let started = std::time::Instant::now();
+    let (s, v) = lou.upload(general, "bombe.png", "image/png", bomb).await;
+    let grown = common::peak_rss_mib().saturating_sub(before);
+    assert!(grown < 1024, "la lecture de l'en-tête a fait grossir le processus de {grown} Mio (3 Gio sans limite)");
+    assert!(started.elapsed() < Duration::from_secs(5), "{:?}", started.elapsed());
+    // Le profil démesuré est abandonné ; l'image de 64 × 64 elle-même est lisible.
+    assert_eq!((s, v["width"].as_u64()), (StatusCode::CREATED, Some(64)), "{v}");
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]
@@ -538,6 +625,27 @@ async fn link_previews_are_fetched_stored_updated_and_removable(pool: PgPool) {
     }
     assert_eq!(files_in(&dir, "embeds"), 1);
     lou.call(Method::DELETE, &format!("/channels/{general}/messages/{mid2}"), None).await;
+    assert_eq!(files_in(&dir, "embeds"), 0);
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn a_link_preview_image_beyond_the_pixel_cap_is_dropped_but_the_page_stays(pool: PgPool) {
+    let (base, dir) = spawn(pool, true, true).await;
+    let (lou, sam, _g, general, _) = world(&base).await;
+    // 7000 × 6000 : 42 millions de pixels, quelques dizaines de Ko.
+    let port = fixture(common::flat(7000, 6000, ImageFormat::Png)).await;
+    let mut gw = sam.gateway().await;
+    let url = format!("http://127.0.0.1:{port}/article");
+    let (_, m) = lou.send(general, &format!("à lire {url}"), &[]).await;
+    let mid: Id = m["id"].as_str().unwrap().parse().unwrap();
+    let updated = loop {
+        let u = gw.update().await;
+        if u.id == mid && !u.embeds.is_empty() {
+            break u;
+        }
+    };
+    assert_eq!(updated.embeds[0].title.as_deref(), Some("Le grand titre"));
+    assert!(updated.embeds[0].image.is_none(), "l'image trop grande n'est pas gardée");
     assert_eq!(files_in(&dir, "embeds"), 0);
 }
 

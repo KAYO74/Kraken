@@ -11,13 +11,13 @@ test('F08-H1 changer son nom affiché : partout, en direct, @pseudo dessous', as
   await say(a.page, 'général', 'Avant le changement');
   await expect(messages(b.page).filter({ hasText: 'Avant le changement' })).toHaveCount(1);
 
-  await a.page.goto('/settings/account');
+  await a.page.goto('/settings/profiles');
   await a11y(a.page);
   const field = a.page.getByLabel('Nom affiché');
   await expect(field).toHaveAttribute('placeholder', a.name);
   await field.fill('Pablo des grands fonds 🐙');
   await a.page.getByRole('button', { name: 'Enregistrer' }).click();
-  await expect(a.page.getByRole('status')).toHaveText('Nom affiché enregistré.');
+  await expect(a.page.getByRole('status')).toHaveText('Profil enregistré.');
   await expect(a.page.getByText(`@${a.name}`).first()).toBeVisible();
   await a.page.reload();
   await expect(a.page.getByLabel('Nom affiché')).toHaveValue('Pablo des grands fonds 🐙');
@@ -38,7 +38,7 @@ test('F08-H1 changer son nom affiché : partout, en direct, @pseudo dessous', as
 
 test('F08-E1 nom vide : retour au pseudo unique', async ({ user }) => {
   const { page, name } = await user('rita');
-  await page.goto('/settings/account');
+  await page.goto('/settings/profiles');
   const field = page.getByLabel('Nom affiché');
   await field.fill('Rita');
   await page.getByRole('button', { name: 'Enregistrer' }).click();
@@ -53,7 +53,7 @@ test('F08-E1 nom vide : retour au pseudo unique', async ({ user }) => {
 
 test('F08-N1 nom trop long : coupé à 32 dans le champ, refusé par l’API', async ({ user, api }) => {
   const u = await user('sven');
-  await u.page.goto('/settings/account');
+  await u.page.goto('/settings/profiles');
   await u.page.getByLabel('Nom affiché').fill('n'.repeat(40));
   await expect(u.page.getByLabel('Nom affiché')).toHaveValue('n'.repeat(32));
   const res = await (await api(u.token)).patch(`${API}/users/@me`, { data: { display_name: 'n'.repeat(33) } });

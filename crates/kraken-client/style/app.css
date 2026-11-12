@@ -637,3 +637,119 @@ button.app-reply:hover span { color: var(--text-strong); }
 @media (max-width: 639px) {
   .app-invite-form, .app-radio-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Pastilles de statut : la forme dit l'état en plus de la couleur (disque plein, croissant,
+   disque barré, anneau, anneau pointillé). Le mot est dans le nom accessible de l'avatar. La taille
+   suit `--dot`, l'évidement autour de la pastille prend la couleur du fond (`--presence-ring`). */
+i.k-presence { --dot: var(--space-5); box-sizing: border-box; width: var(--dot); height: var(--dot); border: 0;
+  right: calc(-1 * var(--space-1)); bottom: calc(-1 * var(--space-1)); background: var(--presence-ring, var(--bg)); }
+i.k-presence::before, i.k-presence::after { content: ""; position: absolute; box-sizing: border-box; border-radius: 50%; }
+i.k-presence::before { inset: calc(var(--dot) / 8); }
+i.k-presence--online::before { background: var(--success); }
+i.k-presence--idle::before { background: var(--warning); }
+i.k-presence--idle::after { top: 0; left: 0; width: 50%; height: 50%; background: var(--presence-ring, var(--bg)); }
+i.k-presence--dnd::before { background: var(--danger); }
+i.k-presence--dnd::after { inset: 37.5% 25%; border-radius: var(--radius-pill); background: var(--presence-ring, var(--bg)); }
+i.k-presence--offline::before { border: calc(var(--dot) / 8) solid var(--status-offline); }
+i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--status-offline); }
+.k-avatar--lg > i.k-presence, .k-avatar--xl > i.k-presence { --dot: var(--space-7); right: var(--space-1); bottom: var(--space-1); }
+/* Sur un petit avatar (32 px de la liste des membres) la pastille de 16 px mordrait sur les initiales : elle sort davantage. */
+.k-avatar--sm > i.k-presence, .k-avatar--md > i.k-presence { right: calc(-1 * var(--space-2)); bottom: calc(-1 * var(--space-2)); }
+@media (forced-colors: active) { i.k-presence::before, i.k-presence::after { forced-color-adjust: none; } }
+/* La même pastille dans une ligne de texte (menu du statut, carte de profil). */
+.app-dot-inline { flex: none; display: inline-block; width: var(--space-5); height: var(--space-5); vertical-align: middle; }
+.app-dot-inline > i.k-presence { position: relative; display: block; right: auto; bottom: auto; }
+
+/* Mon statut, dans la carte « Mon compte » */
+.k-mecard { --presence-ring: var(--surface-overlay); }
+.k-mecard-item:hover { --presence-ring: var(--surface-hover); }
+.app-presence { display: grid; gap: var(--space-1); min-width: 0; margin: 0 0 var(--space-1); padding: 0; border: 0; }
+.app-presence-opt { cursor: pointer; }
+.app-presence-opt:has(input:checked) { background: var(--surface-hover); color: var(--text-strong); --presence-ring: var(--surface-hover); }
+.app-presence-opt:has(input:focus-visible) { outline: 2px solid var(--accent-text); outline-offset: -2px; }
+.app-presence-text { display: grid; flex: 1; min-width: 0; text-align: left; }
+.app-presence-text small { color: var(--text-muted); font-size: var(--text-xs-size); }
+.app-presence-error { margin: 0 var(--space-3) var(--space-2); }
+
+/* Ouvrir la carte de profil : le nom ou l'avatar d'un membre est un bouton qui ne change pas leur allure. */
+.app-who, .app-who-name { margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.app-who { display: flex; flex: 1; align-items: center; gap: var(--space-4); min-width: 0; border-radius: var(--radius-md); }
+.app-who > .app-ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-who--avatar { flex: none; align-self: start; }
+.app-who-name:hover { text-decoration: underline; }
+.app-who:focus-visible, .app-who-name:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+
+/* Carte de profil : la fenêtre ouverte sur un clic, et son aperçu dans Réglages › Mon profil */
+.app-card { position: relative; width: min(var(--size-card), 100vw - var(--space-8)); max-height: calc(100dvh - var(--space-8)); overflow-y: auto;
+  padding: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-raised); color: var(--text-secondary);
+  --presence-ring: var(--surface-raised); }
+.app-card--preview { width: 100%; max-height: none; overflow: hidden; box-shadow: none; }
+.app-card--preview .app-card-avatar { margin-top: calc(-1 * var(--space-9)); }
+.app-card > div { padding: 0; color: inherit; }
+.app-card-banner { aspect-ratio: 3 / 1; overflow: hidden; background: var(--accent-soft); }
+.app-card-banner[data-tint="1"] { background: var(--avatar-1); }
+.app-card-banner[data-tint="2"] { background: var(--avatar-2); }
+.app-card-banner[data-tint="3"] { background: var(--avatar-3); }
+.app-card-banner[data-tint="4"] { background: var(--avatar-4); }
+.app-card-banner[data-tint="5"] { background: var(--avatar-5); }
+.app-card-banner[data-tint="6"] { background: var(--avatar-6); }
+.app-card-banner[data-tint="7"] { background: var(--avatar-7); }
+.app-card-banner[data-tint="8"] { background: var(--avatar-8); }
+.app-card-banner img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.app-card > .app-card-body { display: grid; gap: var(--space-3); padding: 0 var(--space-7) var(--space-5); }
+.app-card-avatar { width: fit-content; margin-top: calc(-1 * var(--space-11)); }
+.app-card-avatar .k-avatar { box-shadow: 0 0 0 var(--space-2) var(--surface-raised); }
+.app-card-name { margin: 0; font-size: var(--text-xl-size); font-weight: var(--weight-semibold); color: var(--text-strong); overflow-wrap: anywhere; }
+.app-card-handle, .app-card-status { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); overflow-wrap: anywhere; }
+.app-card-handle { color: var(--text-secondary); }
+.app-card-pronouns { margin-left: var(--space-3); padding-left: var(--space-3); border-left: 1px solid var(--border-strong); color: var(--text-muted); }
+.app-card-status { color: var(--text-muted); font-size: var(--text-sm-size); }
+.app-card-section { display: grid; gap: var(--space-2); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+.app-card-label { margin: 0; font-size: var(--text-xs-size); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+.app-card-bio { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
+.app-card-dates { display: grid; gap: var(--space-2); margin: 0; padding-top: var(--space-4); border-top: 1px solid var(--border); }
+.app-card-dates > div { display: grid; gap: 0; }
+.app-card-dates dt { font-size: var(--text-xs-size); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+.app-card-dates dd { margin: 0; color: var(--text); }
+.app-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.app-chip { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-3); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill); font-size: var(--text-sm-size); }
+.app-chip[data-role-color] { color: var(--text); }
+.app-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); background: var(--surface); }
+/* `.app-card > div` (plus haut) remet les marges à zéro : la barre d'actions les reprend à parité de spécificité. */
+.app-card > .app-card-actions { padding: var(--space-5) var(--space-7); }
+.app-card-note { margin: 0; padding: 0 var(--space-7) var(--space-5); background: var(--surface); font-size: var(--text-sm-size); color: var(--text-secondary); }
+.app-card-close { position: absolute; top: var(--space-3); right: var(--space-3); z-index: 1; border: 1px solid var(--border); background: var(--surface-raised); }
+
+/* Réglages › Mon profil */
+.app-profile { display: grid; gap: var(--space-8); }
+.app-profile-title { margin: 0 0 var(--space-4); font-size: var(--text-lg-size); color: var(--text-strong); }
+.app-profile-form { display: grid; gap: var(--space-2); }
+.app-profile-form > .k-label { margin-top: var(--space-3); }
+.app-profile-form > .k-hint { margin: 0; }
+.app-bio { height: auto; min-height: calc(var(--space-11) + var(--space-9)); padding: var(--space-4); font-family: inherit; line-height: var(--text-sm-line); resize: vertical; }
+.app-count { text-align: right; }
+.app-profile-save { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-3); }
+.app-profile-images { display: grid; gap: var(--space-5); }
+.app-profile-images .app-account { margin-bottom: 0; padding: var(--space-5); }
+.app-banner-edit { display: grid; gap: var(--space-3); }
+.app-banner-box { display: grid; place-items: center; aspect-ratio: 3 / 1; overflow: hidden; border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-raised); }
+.app-banner-box:has(img) { border-style: solid; }
+.app-banner-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.app-banner-edit p { margin: 0; }
+.app-crop[data-wide] { grid-template-columns: minmax(0, 1fr); }
+.app-crop-previews--wide { flex-direction: column; align-items: stretch; }
+.app-banner-preview { display: block; width: 100%; height: auto; aspect-ratio: 3 / 1; border-radius: var(--radius-lg); background: var(--media); }
+
+/* Réglages › Mon compte : pseudo, adresse e-mail, mot de passe */
+.app-acct-stack { display: grid; gap: var(--space-5); margin-bottom: var(--space-7); }
+.app-acct { display: grid; gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-overlay); }
+.app-acct-title { margin: 0; font-size: var(--text-lg-size); color: var(--text-strong); }
+.app-acct > p { margin: 0; overflow-wrap: anywhere; }
+.app-acct-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
+.app-acct-actions > p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 639px) {
+  .app-card > .app-card-body, .app-card > .app-card-actions { padding-left: var(--space-5); padding-right: var(--space-5); }
+  .app-card-note { padding-left: var(--space-5); padding-right: var(--space-5); }
+  .app-card-actions > .k-btn { flex: 1 1 auto; justify-content: center; }
+}

@@ -8,9 +8,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::{ConnectInfo, Request, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
+use governor::clock::{Clock, DefaultClock};
 use governor::{DefaultKeyedRateLimiter, Quota, RateLimiter};
 
 use crate::Config;
@@ -75,11 +76,22 @@ fn client(headers: &HeaderMap, peer: Option<IpAddr>, trust_proxy: bool) -> IpAdd
     }
 }
 
+/// Les secondes à attendre avant que le compteur rende un essai, arrondies en haut (une seconde au moins).
+fn retry_after_secs(wait: Duration) -> u64 {
+    (wait.as_secs() + u64::from(wait.subsec_nanos() > 0)).max(1)
+}
+
 pub async fn check(State(l): State<Limiter>, req: Request, next: Next) -> Response {
     let peer = req.extensions().get::<ConnectInfo<SocketAddr>>().map(|c| c.0.ip());
-    if l.inner.check_key(&client(req.headers(), peer, l.trust_proxy)).is_err() {
-        return AppError(StatusCode::TOO_MANY_REQUESTS, "rate_limited", "Trop d'essais. Attends une minute.".into())
-            .into_response();
+    if let Err(not_until) = l.inner.check_key(&client(req.headers(), peer, l.trust_proxy)) {
+        let mut res =
+            AppError(StatusCode::TOO_MANY_REQUESTS, "rate_limited", "Trop d'essais. Attends une minute.".into())
+                .into_response();
+        res.headers_mut().insert(
+            header::RETRY_AFTER,
+            HeaderValue::from(retry_after_secs(not_until.wait_time_from(DefaultClock::default().now()))),
+        );
+        return res;
     }
     next.run(req).await
 }
@@ -94,6 +106,14 @@ mod tests {
             h.append("x-forwarded-for", l.parse().unwrap());
         }
         h
+    }
+
+    #[test]
+    fn retry_after_rounds_up_and_is_never_zero() {
+        assert_eq!(retry_after_secs(Duration::ZERO), 1);
+        assert_eq!(retry_after_secs(Duration::from_millis(1)), 1);
+        assert_eq!(retry_after_secs(Duration::from_millis(2999)), 3);
+        assert_eq!(retry_after_secs(Duration::from_secs(20)), 20);
     }
 
     #[test]

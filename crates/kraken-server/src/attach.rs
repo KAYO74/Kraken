@@ -119,10 +119,11 @@ struct Inspected {
     preview: Vec<u8>,
 }
 
+/// `None` : pas une image que l'on sait lire dans [`media::MEDIA`], un fichier ordinaire.
 fn inspect(path: PathBuf) -> Option<Inspected> {
     let raw = std::fs::read(path).ok()?;
     let (_, mime) = media::safe_format(&raw)?;
-    let img = media::decode(&raw)?;
+    let img = media::decode_within(&raw, media::MEDIA).ok()?;
     let enc = media::shrink(&img, PREVIEW_SIDE)?;
     Some(Inspected { mime, width: img.width(), height: img.height(), preview: enc.bytes })
 }
@@ -185,14 +186,17 @@ pub async fn upload(
         }
     };
     // Une image lisible garde ses dimensions et reçoit un aperçu propre ; tout le reste est
-    // un fichier ordinaire.
-    let image = tokio::task::spawn_blocking({
+    // un fichier ordinaire. L'en-tête dit la taille : une image au-delà de `MEDIA` (un JPEG de
+    // téléphone de 48 millions de pixels, par exemple) reste un fichier ordinaire, sans vignette,
+    // jamais décodée et sans permis de décodage.
+    let decodable = media::peek_size(file.clone()).await.is_some_and(|(w, h)| media::MEDIA.fits(w, h));
+    // Au plus deux décodages à la fois sur tout le serveur, avec les photos et les bannières.
+    let image = if decodable {
         let file = file.clone();
-        move || inspect(file)
-    })
-    .await
-    .ok()
-    .flatten();
+        media::gated(move || inspect(file)).await.flatten()
+    } else {
+        None
+    };
     let preview = image.is_some();
     if let Some(i) = &image {
         let wrote = tokio::fs::write(dir.join(format!("{key}.p")), &i.preview).await;

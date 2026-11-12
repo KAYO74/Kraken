@@ -11,7 +11,21 @@ pub struct User {
     pub id: Id,
     pub username: String,
     pub display_name: Option<String>,
+    /// Clé de la photo de profil (`/api/v1/avatars/{clé}`).
     pub avatar: Option<String>,
+    /// Clé de la bannière (`/api/v1/banners/{clé}`). Les champs qui suivent sont facultatifs : un
+    /// ancien client ou un ancien serveur qui ne les connaît pas reste compatible.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub banner: Option<String>,
+    /// Présentation, [`MAX_BIO`] caractères au plus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bio: Option<String>,
+    /// Pronoms, [`MAX_PRONOUNS`] caractères au plus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pronouns: Option<String>,
+    /// Création du compte (ms Unix).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<i64>,
 }
 
 impl User {
@@ -55,14 +69,61 @@ pub struct PasswordReq {
     pub password: String,
 }
 
-/// Modifier son compte. `display_name` vide ou absent : on revient au pseudo unique.
+/// `PATCH /users/@me` : modifier son profil. Un champ absent reste inchangé ; vide, il est
+/// effacé (`display_name` : retour au pseudo unique).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct UpdateMe {
+    #[serde(default)]
     pub display_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bio: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pronouns: Option<String>,
 }
 
 /// Longueur maximale du nom affiché, en caractères.
 pub const MAX_DISPLAY_NAME: usize = 32;
+/// Longueur maximale de la bio, en caractères (retours à la ligne compris).
+pub const MAX_BIO: usize = 190;
+/// Longueur maximale des pronoms, en caractères.
+pub const MAX_PRONOUNS: usize = 40;
+
+/// `PUT /users/@me/username` : changer son pseudo unique. Le mot de passe actuel est exigé.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChangeUsername {
+    pub username: String,
+    pub password: String,
+}
+
+/// `PUT /users/@me/email` : changer son adresse e-mail. Le mot de passe actuel est exigé.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChangeEmail {
+    pub email: String,
+    pub password: String,
+}
+
+/// `PUT /users/@me/password` : changer son mot de passe.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChangePassword {
+    pub current: String,
+    pub new: String,
+}
+
+/// `GET /users/@me/account` : ce qui est privé dans mon compte (jamais envoyé aux autres).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Account {
+    pub email: Option<String>,
+    pub email_verified: bool,
+    /// Nouvelle adresse choisie mais pas encore confirmée : l'ancienne reste valable d'ici là.
+    pub pending_email: Option<String>,
+    /// Cette instance envoie des e-mails : un changement d'adresse doit alors être confirmé.
+    pub mail: bool,
+}
+
+/// Un pseudo peut changer 2 fois par heure.
+pub const USERNAME_CHANGES_PER_WINDOW: u32 = 2;
+/// La fenêtre de [`USERNAME_CHANGES_PER_WINDOW`], en secondes.
+pub const USERNAME_WINDOW_S: u32 = 3600;
 
 /// Ce que l'instance dit d'elle-même sur ses pages de confidentialité et de conditions.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -531,6 +592,7 @@ pub enum RelationshipKind {
     PendingOutgoing,
 }
 
+/// Ce que les autres voient de quelqu'un.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
@@ -539,6 +601,56 @@ pub enum Status {
     Dnd,
     Offline,
 }
+
+/// Le statut que l'on choisit. `Invisible` n'est jamais montré aux autres : ils voient la
+/// personne hors ligne. « Hors ligne » n'est pas un choix (aucune connexion ouverte), et le
+/// passage automatique à inactif ne remplace que `Online`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Presence {
+    #[default]
+    Online,
+    Idle,
+    Dnd,
+    Invisible,
+}
+
+impl Presence {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Online => "online",
+            Self::Idle => "idle",
+            Self::Dnd => "dnd",
+            Self::Invisible => "invisible",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "online" => Self::Online,
+            "idle" => Self::Idle,
+            "dnd" => Self::Dnd,
+            "invisible" => Self::Invisible,
+            _ => return None,
+        })
+    }
+}
+
+/// `PUT /users/@me/presence` : choisir son statut.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetPresence {
+    pub presence: Presence,
+}
+
+/// Le statut d'une personne, tel que je le vois.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PresenceEntry {
+    pub user_id: Id,
+    pub status: Status,
+}
+
+/// Sans activité du client pendant ce temps (5 minutes), il se signale inactif.
+pub const IDLE_AFTER_SECS: u32 = 300;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Relationship {
@@ -566,8 +678,20 @@ pub const MAX_GROUP_MEMBERS: usize = 10;
 /// Poids maximal d'une photo de profil envoyée, en octets (8 Mio).
 pub const MAX_AVATAR_BYTES: usize = 8 * 1024 * 1024;
 
+/// Poids maximal d'une bannière envoyée, en octets : le même que pour la photo.
+pub const MAX_BANNER_BYTES: usize = MAX_AVATAR_BYTES;
+
 /// Côté, en pixels, de la photo de profil telle que le serveur la garde.
 pub const AVATAR_SIZE: u32 = 256;
+
+/// Dimensions, en pixels, d'une bannière fixe telle que le serveur la garde (3 pour 1).
+pub const BANNER_WIDTH: u32 = 960;
+pub const BANNER_HEIGHT: u32 = 320;
+
+/// Une image animée (GIF, WebP) est gardée telle quelle : au plus ce côté, en pixels, et ce
+/// nombre d'images (le produit des deux et de la surface est borné aussi).
+pub const MAX_ANIMATED_SIDE: u32 = 1024;
+pub const MAX_ANIMATED_FRAMES: usize = 600;
 
 /// Longueur maximale du nom d'un groupe, en caractères.
 pub const MAX_GROUP_NAME: usize = 100;
@@ -930,6 +1054,13 @@ pub struct Ready {
     /// Mes réglages de notification par serveur et par salon.
     #[serde(default)]
     pub notify_settings: Vec<NotifySetting>,
+    /// Mon statut choisi (il est resté le même d'une session à l'autre).
+    #[serde(default)]
+    pub presence: Presence,
+    /// Qui est en ligne, inactif ou ne pas déranger parmi ceux qui me voient (amis, membres de mes
+    /// serveurs, mes MP) ; les absents sont hors ligne.
+    #[serde(default)]
+    pub presences: Vec<PresenceEntry>,
 }
 
 /// Client → serveur.
@@ -944,9 +1075,22 @@ pub enum ClientOp {
     Heartbeat {
         seq: u64,
     },
+    /// Un client qui comprend les statuts le dit en l'envoyant tout de suite après IDENTIFY
+    /// (`idle` à faux) ; il reçoit alors [`Event::PresenceUpdate`] et [`Event::MyPresenceUpdate`],
+    /// que les autres clients, qui ne les connaissent pas, ne reçoivent jamais. Ensuite il
+    /// l'envoie à chaque changement : `idle` à vrai après [`IDLE_AFTER_SECS`] sans geste, à faux
+    /// dès le suivant. La personne apparaît inactive quand tous ses clients le sont ; un choix
+    /// manuel (ne pas déranger, invisible, inactif) n'est jamais remplacé.
+    Activity {
+        idle: bool,
+    },
 }
 
 /// Serveur → client.
+// Presque chaque trame est un `Dispatch` : l'enveloppe ne sert qu'un instant avant d'être écrite ou
+// consommée. L'indirection n'économiserait rien, et casserait tous les motifs `Dispatch { event:
+// Event::… }` des clients.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", content = "d", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ServerOp {
@@ -1040,8 +1184,18 @@ pub enum Event {
         guild_id: Id,
         owner_id: Id,
     },
-    /// Nom affiché ou avatar changé : envoyé à l'intéressé et à ceux qui le voient.
+    /// Profil changé (nom affiché, photo, bannière, bio, pronoms, pseudo) : envoyé à l'intéressé et à
+    /// ceux qui le voient.
     UserUpdate(User),
+    /// Statut de ces personnes, tel que je le vois : un changement en direct, ou un lot à
+    /// l'arrivée dans un serveur. Hors ligne : plus aucune connexion, ou invisible.
+    PresenceUpdate {
+        presences: Vec<PresenceEntry>,
+    },
+    /// Mon statut choisi a changé, sur cet appareil ou un autre ; à moi seulement.
+    MyPresenceUpdate {
+        presence: Presence,
+    },
     /// Arrivée, départ ou changement d'état dans un salon vocal (à ceux qui le voient) ou dans
     /// l'appel d'un MP ou d'un groupe (à ses participants).
     VoiceStateUpdate(VoiceState),

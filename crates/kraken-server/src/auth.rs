@@ -106,10 +106,33 @@ async fn open_session(state: &AppState, headers: &HeaderMap, user: User) -> ApiR
     Ok((AppendHeaders([(header::SET_COOKIE, set)]), Json(AuthResp { token, user })))
 }
 
+/// Adresse e-mail plausible (la vraie preuve est le lien envoyé).
+fn check_email(email: &str) -> ApiResult<()> {
+    if !email.contains('@') || email.len() > 254 || email.chars().any(char::is_whitespace) {
+        return Err(AppError::invalid("Adresse e-mail invalide."));
+    }
+    Ok(())
+}
+
 fn check_password(pw: &str) -> ApiResult<()> {
     let n = pw.chars().count();
     if !(8..=256).contains(&n) {
         return Err(AppError::invalid("Mot de passe : 8 caractères au minimum."));
+    }
+    Ok(())
+}
+
+/// Un pseudo (déjà en minuscules) qu'on peut prendre : la bonne forme, et pas un nom réservé.
+fn check_username(username: &str) -> ApiResult<()> {
+    if !kraken_db::valid_username(username) {
+        return Err(AppError::invalid("Pseudo : 2 à 32 caractères parmi a-z, 0-9, _ et ."));
+    }
+    if kraken_db::reserved_username(username) {
+        return Err(AppError(
+            StatusCode::BAD_REQUEST,
+            "username_reserved",
+            "Ce pseudo est réservé : choisis-en un autre.".into(),
+        ));
     }
     Ok(())
 }
@@ -120,13 +143,9 @@ pub async fn register(
     Json(req): Json<RegisterReq>,
 ) -> ApiResult<impl IntoResponse> {
     let username = req.username.trim().to_lowercase();
-    if !kraken_db::valid_username(&username) {
-        return Err(AppError::invalid("Pseudo : 2 à 32 caractères parmi a-z, 0-9, _ et ."));
-    }
+    check_username(&username)?;
     let email = req.email.trim();
-    if !email.contains('@') || email.len() > 254 || email.chars().any(char::is_whitespace) {
-        return Err(AppError::invalid("Adresse e-mail invalide."));
-    }
+    check_email(email)?;
     check_password(&req.password)?;
     let hash = hash_password(req.password).await.ok_or_else(|| AppError::invalid("Mot de passe refusé."))?;
     let user = state.db.create_user(&username, email, hash).await?;
@@ -171,19 +190,143 @@ pub async fn me(auth: Auth) -> Json<User> {
     Json(auth.user)
 }
 
-/// Changer son nom affiché. Le pseudo unique ne change pas ; il reste visible sous le nom.
-pub async fn update_me(State(state): State<AppState>, auth: Auth, Json(req): Json<UpdateMe>) -> ApiResult<Json<User>> {
-    let name = req.display_name.as_deref().map(str::trim).filter(|n| !n.is_empty());
-    if let Some(n) = name
-        && (n.chars().count() > MAX_DISPLAY_NAME || n.chars().any(char::is_control))
-    {
+/// Texte du profil : coupé aux bords, vide pour effacer. `multiline` laisse les retours à la
+/// ligne (la bio), sinon aucun caractère de contrôle (nom, pronoms).
+fn profile_text(raw: &str, max: usize, multiline: bool, what: &str) -> ApiResult<Option<String>> {
+    let text = raw.replace("\r\n", "\n");
+    let text = text.trim();
+    // Les séparateurs de ligne et de paragraphe Unicode comptent comme des retours à la ligne.
+    let bad = |c: char| (c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')) && !(multiline && c == '\n');
+    if text.chars().count() > max || text.chars().any(bad) {
         return Err(AppError::invalid(format!(
-            "Nom affiché : {MAX_DISPLAY_NAME} caractères au plus, sans retour à la ligne."
+            "{what} : {max} caractères au plus{}.",
+            if multiline { "" } else { ", sans retour à la ligne" }
         )));
     }
-    let user = state.db.set_display_name(auth.user.id, name).await?;
+    // Espaces de largeur nulle, marques de sens d'écriture, remplisseurs, étiquettes… : tout ce
+    // qu'Unicode ignore à l'affichage, sauf le liant et le sélecteur des emojis composés.
+    if text.chars().any(kraken_core::text::is_hidden) {
+        return Err(AppError(
+            StatusCode::BAD_REQUEST,
+            "invalid_chars",
+            format!(
+                "{what} : les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés."
+            ),
+        ));
+    }
+    // Un texte qui ne montre rien (rien que des espaces ou des liants d'emoji) ne dit rien de personne.
+    if !text.is_empty() && !kraken_core::text::has_visible(text) {
+        return Err(AppError(
+            StatusCode::BAD_REQUEST,
+            "invisible_text",
+            format!("{what} : écris au moins un caractère visible, ou laisse le champ vide."),
+        ));
+    }
+    Ok(Some(text.to_string()).filter(|t| !t.is_empty()))
+}
+
+/// Modifier son profil : nom affiché, bio, pronoms. Un champ absent reste tel quel, un champ vide
+/// est effacé. Le pseudo unique ne change pas ici ; il reste visible sous le nom.
+pub async fn update_me(State(state): State<AppState>, auth: Auth, Json(req): Json<UpdateMe>) -> ApiResult<Json<User>> {
+    let name =
+        req.display_name.as_deref().map(|n| profile_text(n, MAX_DISPLAY_NAME, false, "Nom affiché")).transpose()?;
+    let bio = req.bio.as_deref().map(|b| profile_text(b, MAX_BIO, true, "Bio")).transpose()?;
+    let pronouns = req.pronouns.as_deref().map(|p| profile_text(p, MAX_PRONOUNS, false, "Pronoms")).transpose()?;
+    let patch = kraken_db::ProfilePatch {
+        display_name: name.as_ref().map(Option::as_deref),
+        bio: bio.as_ref().map(Option::as_deref),
+        pronouns: pronouns.as_ref().map(Option::as_deref),
+    };
+    let user = state.db.set_profile(auth.user.id, patch).await?;
     state.hub.send(&audience_of(&state, user.id).await?, Event::UserUpdate(user.clone()));
     Ok(Json(user))
+}
+
+/// Vérifie le mot de passe actuel d'un compte, avant un changement sensible.
+async fn confirm_password(state: &AppState, uid: Id, password: String) -> ApiResult<()> {
+    let hash = state.db.password_hash(uid).await?.unwrap_or_default();
+    if verify_password(password, hash).await { Ok(()) } else { Err(AppError::bad_password()) }
+}
+
+/// `GET /users/@me/account` : mon adresse e-mail, et celle que j'attends de confirmer.
+pub async fn account(State(state): State<AppState>, auth: Auth) -> ApiResult<Json<Account>> {
+    let mut a = state.db.account(auth.user.id).await?;
+    a.mail = state.mailer.is_some();
+    Ok(Json(a))
+}
+
+/// `PUT /users/@me/username` : changer son pseudo unique. Mêmes règles qu'à l'inscription ; le
+/// mot de passe actuel est exigé ; deux changements par heure au plus. L'ancien pseudo ne
+/// connecte plus.
+pub async fn change_username(
+    State(state): State<AppState>,
+    auth: Auth,
+    Json(req): Json<ChangeUsername>,
+) -> ApiResult<Json<User>> {
+    let username = req.username.trim().trim_start_matches('@').to_lowercase();
+    check_username(&username)?;
+    if username == auth.user.username {
+        return Err(AppError(StatusCode::BAD_REQUEST, "unchanged", "C'est déjà ton pseudo.".into()));
+    }
+    confirm_password(&state, auth.user.id, req.password).await?;
+    let user = state.db.change_username(auth.user.id, &username).await?;
+    state.hub.send(&audience_of(&state, user.id).await?, Event::UserUpdate(user.clone()));
+    Ok(Json(user))
+}
+
+/// `PUT /users/@me/email` : changer son adresse e-mail. Le mot de passe actuel est exigé. Quand
+/// l'instance envoie des e-mails, la nouvelle adresse attend le clic sur le lien qu'on lui envoie
+/// et l'ancienne reste valable d'ici là ; sans e-mail, elle remplace l'ancienne tout de suite,
+/// non confirmée (comme à l'inscription).
+pub async fn change_email(
+    State(state): State<AppState>,
+    auth: Auth,
+    Json(req): Json<ChangeEmail>,
+) -> ApiResult<Json<Account>> {
+    let email = req.email.trim();
+    check_email(email)?;
+    let uid = auth.user.id;
+    confirm_password(&state, uid, req.password).await?;
+    if state.db.account(uid).await?.email.is_some_and(|e| e.eq_ignore_ascii_case(email)) {
+        return Err(AppError(StatusCode::BAD_REQUEST, "unchanged", "C'est déjà ton adresse e-mail.".into()));
+    }
+    if state.mailer.is_some() {
+        state.db.set_pending_email(uid, email).await?;
+        state
+            .db
+            .enqueue("email_change", serde_json::json!({ "user_id": uid }), Some(&format!("email_change:{uid}")), 0)
+            .await?;
+        state.jobs_wake.notify_one();
+    } else {
+        state.db.set_email_now(uid, email).await?;
+    }
+    let mut a = state.db.account(uid).await?;
+    a.mail = state.mailer.is_some();
+    Ok(Json(a))
+}
+
+/// `PUT /users/@me/password` : changer son mot de passe. Ferme les autres sessions (et leurs
+/// connexions) ; celle-ci reste ouverte.
+pub async fn change_password(
+    State(state): State<AppState>,
+    auth: Auth,
+    Json(req): Json<ChangePassword>,
+) -> ApiResult<StatusCode> {
+    check_password(&req.new)?;
+    let uid = auth.user.id;
+    confirm_password(&state, uid, req.current.clone()).await?;
+    if req.new == req.current {
+        return Err(AppError(
+            StatusCode::BAD_REQUEST,
+            "same_password",
+            "Choisis un mot de passe différent de l'actuel.".into(),
+        ));
+    }
+    let hash = hash_password(req.new).await.ok_or_else(|| AppError::invalid("Mot de passe refusé."))?;
+    state.db.set_password(uid, &hash).await?;
+    state.db.revoke_other_sessions(uid, &auth.token_hash).await?;
+    state.hub.kick_others(uid, &auth.token_hash);
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Ceux à prévenir quand ce profil change : l'intéressé et tous ceux qui le voient.
@@ -195,13 +338,15 @@ pub async fn audience_of(state: &AppState, uid: Id) -> ApiResult<Vec<Id>> {
     Ok(audience)
 }
 
+/// Le lien d'un e-mail de confirmation : l'adresse du compte à l'inscription, ou la nouvelle
+/// adresse après un changement (même page, même route).
 pub async fn verify_email(State(state): State<AppState>, Json(req): Json<TokenReq>) -> ApiResult<StatusCode> {
-    let uid = state
-        .db
-        .use_auth_token("verify_email", &token_hash(&req.token))
-        .await?
-        .ok_or_else(|| AppError::invalid("Lien invalide ou expiré."))?;
-    state.db.mark_email_verified(uid).await?;
+    let hash = token_hash(&req.token);
+    if let Some(uid) = state.db.use_auth_token("verify_email", &hash).await? {
+        state.db.mark_email_verified(uid).await?;
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    state.db.confirm_email_change(&hash).await?.ok_or_else(|| AppError::invalid("Lien invalide ou expiré."))?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -242,10 +387,7 @@ pub async fn delete_account(
     auth: Auth,
     Json(req): Json<PasswordReq>,
 ) -> ApiResult<impl IntoResponse> {
-    let hash = state.db.password_hash(auth.user.id).await?.unwrap_or_default();
-    if !verify_password(req.password, hash).await {
-        return Err(AppError(StatusCode::FORBIDDEN, "bad_password", "Mot de passe incorrect.".into()));
-    }
+    confirm_password(&state, auth.user.id, req.password).await?;
     let notices = state.db.request_deletion(auth.user.id).await?;
     crate::social::notify(&state, notices);
     state.kick(auth.user.id);

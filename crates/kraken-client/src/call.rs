@@ -921,7 +921,10 @@ pub fn IncomingCalls() -> impl IntoView {
             cs.iter().filter(|c| c.ringing.contains(&me) && Some(c.channel_id) != room).cloned().collect::<Vec<_>>()
         })
     });
-    Effect::new(move || ring(!incoming.with(Vec::is_empty) && !v.deaf.get()));
+    // La carte d'appel s'affiche toujours ; « Ne pas déranger » en coupe seulement la sonnerie.
+    Effect::new(move || {
+        ring(!incoming.with(Vec::is_empty) && !v.deaf.get() && s.presence.get() != kraken_proto::Presence::Dnd)
+    });
     on_cleanup(|| ring(false));
     view! {
         <Show when=move || incoming.with(|c| !c.is_empty())>

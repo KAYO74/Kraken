@@ -12,6 +12,7 @@ use kraken_proto::*;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
+use crate::ui::Dot;
 use crate::voice::Voice;
 
 /// Simple indicateur « connecté » : la session elle-même est dans un cookie `HttpOnly`
@@ -135,6 +136,20 @@ pub struct Store {
     pub goto: RwSignal<Option<String>>,
     /// Bannis des serveurs dont j'ai ouvert la liste (tenue à jour par le gateway).
     pub bans: RwSignal<HashMap<Id, Vec<Ban>>>,
+    /// Mon statut choisi (en ligne, inactif, ne pas déranger, invisible).
+    pub presence: RwSignal<Presence>,
+    /// Le statut de ceux qui me voient (amis, membres de mes serveurs, mes MP) ; absent : hors ligne.
+    pub statuses: RwSignal<HashMap<Id, Status>>,
+    /// La carte de profil ouverte, s'il y en a une : qui, et dans quel serveur (ses rôles).
+    pub card: RwSignal<Option<ProfileTarget>>,
+}
+
+/// La personne dont on ouvre la carte, et le serveur d'où on la regarde (ses rôles, depuis quand
+/// elle en est membre). La fiche est celle du moment du clic ; la carte suit ensuite le store.
+#[derive(Clone, PartialEq)]
+pub struct ProfileTarget {
+    pub user: User,
+    pub guild: Option<Id>,
 }
 
 pub fn store() -> Store {
@@ -164,6 +179,9 @@ impl Store {
             now: RwSignal::new(js_sys::Date::now() as i64),
             goto: RwSignal::new(None),
             bans: RwSignal::new(HashMap::new()),
+            presence: RwSignal::new(Presence::Online),
+            statuses: RwSignal::new(HashMap::new()),
+            card: RwSignal::new(None),
         }
     }
 
@@ -192,6 +210,9 @@ impl Store {
         self.last.set(HashMap::new());
         self.notify.set(vec![]);
         self.bans.set(HashMap::new());
+        self.presence.set(Presence::Online);
+        self.statuses.set(HashMap::new());
+        self.card.set(None);
     }
 
     pub fn my_id(&self) -> Option<Id> {
@@ -352,8 +373,54 @@ impl Store {
         });
     }
 
+    /// Ce que je vois du statut de cette personne (suivi). Pour moi : mon choix, sinon ce que le
+    /// serveur annonce de mes connexions (inactif quand tous mes appareils le sont), et hors
+    /// ligne tant que je ne suis pas connecté.
+    pub fn dot_of(&self, uid: Id) -> Dot {
+        if self.me.with(|m| m.as_ref().is_some_and(|m| m.id == uid)) {
+            return self.my_dot();
+        }
+        self.statuses.with(|m| m.get(&uid).copied()).map_or(Dot::Offline, Dot::from)
+    }
+
+    pub fn my_dot(&self) -> Dot {
+        if self.conn.get() != Conn::Ready {
+            return Dot::Offline;
+        }
+        match self.presence.get() {
+            Presence::Invisible => Dot::Invisible,
+            Presence::Dnd => Dot::Dnd,
+            Presence::Idle => Dot::Idle,
+            Presence::Online => {
+                let me = self.me.with(|m| m.as_ref().map(|m| m.id));
+                match me.and_then(|me| self.statuses.with(|s| s.get(&me).copied())) {
+                    Some(Status::Idle) => Dot::Idle,
+                    _ => Dot::Online,
+                }
+            }
+        }
+    }
+
+    /// Retient ces statuts ; un hors ligne efface l'entrée.
+    fn set_statuses(&self, presences: Vec<PresenceEntry>) {
+        self.statuses.update(|m| {
+            for p in presences {
+                if p.status == Status::Offline {
+                    m.remove(&p.user_id);
+                } else {
+                    m.insert(p.user_id, p.status);
+                }
+            }
+        });
+    }
+
     /// Relation ajoutée ou changée : à sa place, ou à la fin si elle est nouvelle.
     pub fn upsert_rel(&self, r: Relationship) {
+        if r.kind == RelationshipKind::Friend && r.status != Status::Offline {
+            self.statuses.update(|m| {
+                m.insert(r.user.id, r.status);
+            });
+        }
         self.friends.update(|fs| match fs.iter_mut().find(|x| x.user.id == r.user.id) {
             Some(x) => *x = r,
             None => fs.push(r),
@@ -542,6 +609,8 @@ impl Store {
             Event::RelationshipRemove { user_id } => self.remove_rel(user_id),
             Event::GuildCreate(g) => self.upsert_guild(*g),
             Event::UserUpdate(u) => self.update_user(u),
+            Event::PresenceUpdate { presences } => self.set_statuses(presences),
+            Event::MyPresenceUpdate { presence } => self.presence.set(presence),
             Event::MemberAdd { guild_id, member } => self.guilds.update(|gs| {
                 if let Some(g) = gs.iter_mut().find(|g| g.guild.id == guild_id)
                     && !g.members.iter().any(|m| m.user.id == member.user.id)
@@ -649,6 +718,9 @@ async fn run(store: Store) {
         }
     });
     let _ = out.unbounded_send(ClientOp::Identify { token: None });
+    // Ce client comprend les statuts, et dit s'il est actif.
+    let _ = out.unbounded_send(ClientOp::Activity { idle: false });
+    watch_activity(out.clone());
     let seq = Rc::new(Cell::new(0u64));
     {
         let (out, seq) = (out.clone(), seq.clone());
@@ -668,6 +740,17 @@ async fn run(store: Store) {
                 store.me.set(Some(r.user));
                 store.guilds.set(r.guilds);
                 store.dms.set(r.private_channels);
+                // Les amis d'abord (leur statut est dans la relation), puis tous ceux qui me voient.
+                store.statuses.set(HashMap::new());
+                store.set_statuses(
+                    r.relationships
+                        .iter()
+                        .filter(|x| x.kind == RelationshipKind::Friend)
+                        .map(|x| PresenceEntry { user_id: x.user.id, status: x.status })
+                        .collect(),
+                );
+                store.set_statuses(r.presences);
+                store.presence.set(r.presence);
                 store.friends.set(r.relationships);
                 store.calls.set(r.calls);
                 store.call_states.set(r.call_voice_states);
@@ -692,4 +775,45 @@ async fn run(store: Store) {
         }
     }
     out.close_channel();
+}
+
+/// Signale au serveur que ce client devient inactif après [`IDLE_AFTER_SECS`] sans geste (souris,
+/// toucher, clavier, molette, retour de focus), et de nouveau actif au geste suivant. Tourne
+/// tant que la connexion vit ; les écouteurs sont retirés avec elle.
+fn watch_activity(out: futures::channel::mpsc::UnboundedSender<ClientOp>) {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen::closure::Closure;
+
+    const EVENTS: [&str; 6] = ["pointermove", "pointerdown", "keydown", "wheel", "touchstart", "focus"];
+    let Some(window) = web_sys::window() else { return };
+    let last = Rc::new(Cell::new(js_sys::Date::now()));
+    let idle = Rc::new(Cell::new(false));
+    let on_gesture = {
+        let (last, idle, out) = (last.clone(), idle.clone(), out.clone());
+        Closure::<dyn FnMut()>::new(move || {
+            last.set(js_sys::Date::now());
+            if idle.replace(false) {
+                let _ = out.unbounded_send(ClientOp::Activity { idle: false });
+            }
+        })
+    };
+    for e in EVENTS {
+        let _ = window.add_event_listener_with_callback(e, on_gesture.as_ref().unchecked_ref());
+    }
+    spawn_local(async move {
+        loop {
+            TimeoutFuture::new(5_000).await;
+            if out.is_closed() {
+                break;
+            }
+            let quiet_ms = js_sys::Date::now() - last.get();
+            if !idle.get() && quiet_ms >= f64::from(IDLE_AFTER_SECS) * 1000.0 {
+                idle.set(true);
+                let _ = out.unbounded_send(ClientOp::Activity { idle: true });
+            }
+        }
+        for e in EVENTS {
+            let _ = window.remove_event_listener_with_callback(e, on_gesture.as_ref().unchecked_ref());
+        }
+    });
 }

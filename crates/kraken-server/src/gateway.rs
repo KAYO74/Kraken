@@ -26,6 +26,10 @@ struct Conn {
     id: u64,
     session: Vec<u8>,
     tx: mpsc::Sender<Event>,
+    /// Ce client s'est déclaré inactif (voir [`ClientOp::Activity`]).
+    idle: bool,
+    /// Il comprend les événements de statut : il a envoyé [`ClientOp::Activity`].
+    presence_aware: bool,
 }
 
 #[derive(Default)]
@@ -34,6 +38,11 @@ pub struct Hub {
     next: AtomicU64,
     /// Présence fixe des comptes de démo (ils ne se connectent jamais).
     demo_presence: RwLock<HashMap<Id, Status>>,
+    /// Le statut choisi par chaque personne connectée (la base garde le choix des absents).
+    choices: RwLock<HashMap<Id, Presence>>,
+    /// Le dernier statut annoncé aux autres, par personne ; absent : hors ligne. Tenu pendant
+    /// toute une annonce pour que deux annonces ne se croisent pas (voir `presence::refresh`).
+    pub(crate) announced: tokio::sync::Mutex<HashMap<Id, Status>>,
 }
 
 impl Hub {
@@ -48,26 +57,55 @@ impl Hub {
         }
     }
 
-    /// Ferme toutes les connexions de cet utilisateur (déconnexion partout, suppression).
-    pub fn kick(&self, uid: Id) {
-        self.conns.write().unwrap().remove(&uid);
-    }
-
-    /// Ferme les connexions ouvertes avec cette session (déconnexion de cet appareil).
-    pub fn kick_session(&self, uid: Id, session: &[u8]) {
+    /// Comme [`Self::send`], aux seuls clients qui comprennent les statuts : les autres ne
+    /// connaissent pas ces événements et ne les liraient pas.
+    pub fn send_presence(&self, users: &[Id], ev: Event) {
         let mut conns = self.conns.write().unwrap();
-        if let Some(list) = conns.get_mut(&uid) {
-            list.retain(|c| c.session != session);
-            if list.is_empty() {
-                conns.remove(&uid);
+        for u in users {
+            if let Some(list) = conns.get_mut(u) {
+                list.retain(|c| !c.presence_aware || c.tx.try_send(ev.clone()).is_ok());
             }
         }
     }
 
-    fn register(&self, uid: Id, session: Vec<u8>) -> (u64, mpsc::Receiver<Event>) {
+    /// Ferme toutes les connexions de cet utilisateur (déconnexion partout, suppression).
+    pub fn kick(&self, uid: Id) {
+        self.conns.write().unwrap().remove(&uid);
+        self.choices.write().unwrap().remove(&uid);
+    }
+
+    /// Ferme les connexions ouvertes avec cette session (déconnexion de cet appareil).
+    pub fn kick_session(&self, uid: Id, session: &[u8]) {
+        self.kick_where(uid, |c| c.session == session);
+    }
+
+    /// Ferme les connexions de toutes les sessions sauf celle-ci (changement de mot de passe).
+    pub fn kick_others(&self, uid: Id, keep: &[u8]) {
+        self.kick_where(uid, |c| c.session != keep);
+    }
+
+    fn kick_where(&self, uid: Id, closed: impl Fn(&Conn) -> bool) {
+        let mut conns = self.conns.write().unwrap();
+        if let Some(list) = conns.get_mut(&uid) {
+            list.retain(|c| !closed(c));
+            if list.is_empty() {
+                conns.remove(&uid);
+                self.choices.write().unwrap().remove(&uid);
+            }
+        }
+    }
+
+    fn register(&self, uid: Id, session: Vec<u8>, choice: Presence) -> (u64, mpsc::Receiver<Event>) {
         let (tx, rx) = mpsc::channel(QUEUE);
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        self.conns.write().unwrap().entry(uid).or_default().push(Conn { id, session, tx });
+        self.conns.write().unwrap().entry(uid).or_default().push(Conn {
+            id,
+            session,
+            tx,
+            idle: false,
+            presence_aware: false,
+        });
+        self.choices.write().unwrap().insert(uid, choice);
         (id, rx)
     }
 
@@ -77,15 +115,48 @@ impl Hub {
             list.retain(|c| c.id != conn);
             if list.is_empty() {
                 conns.remove(&uid);
+                self.choices.write().unwrap().remove(&uid);
             }
         }
     }
 
-    pub fn status(&self, uid: Id) -> Status {
-        if self.conns.read().unwrap().contains_key(&uid) {
-            return Status::Online;
+    /// Ce client est inactif, ou de nouveau actif. Vrai si c'est la première fois qu'il parle de
+    /// statut : il vient de se déclarer au courant.
+    fn set_activity(&self, uid: Id, conn: u64, idle: bool) -> bool {
+        let mut conns = self.conns.write().unwrap();
+        let Some(c) = conns.get_mut(&uid).and_then(|l| l.iter_mut().find(|c| c.id == conn)) else { return false };
+        c.idle = idle;
+        !std::mem::replace(&mut c.presence_aware, true)
+    }
+
+    /// Le statut choisi par cette personne, si elle est connectée.
+    pub fn choice(&self, uid: Id) -> Option<Presence> {
+        self.choices.read().unwrap().get(&uid).copied()
+    }
+
+    /// Retient le nouveau choix d'une personne connectée.
+    pub fn set_choice(&self, uid: Id, presence: Presence) {
+        if let Some(c) = self.choices.write().unwrap().get_mut(&uid) {
+            *c = presence;
         }
-        self.demo_presence.read().unwrap().get(&uid).copied().unwrap_or(Status::Offline)
+    }
+
+    /// Le statut de cette personne tel que les autres le voient : hors ligne sans connexion ou en
+    /// mode invisible ; sinon son choix, et « inactif » à la place de « en ligne » quand tous ses
+    /// clients le sont.
+    pub fn status(&self, uid: Id) -> Status {
+        let conns = self.conns.read().unwrap();
+        let Some(list) = conns.get(&uid) else {
+            drop(conns);
+            return self.demo_presence.read().unwrap().get(&uid).copied().unwrap_or(Status::Offline);
+        };
+        match self.choice(uid).unwrap_or_default() {
+            Presence::Invisible => Status::Offline,
+            Presence::Dnd => Status::Dnd,
+            Presence::Idle => Status::Idle,
+            Presence::Online if list.iter().all(|c| c.idle) => Status::Idle,
+            Presence::Online => Status::Online,
+        }
     }
 
     pub fn with_presence(&self, mut rels: Vec<Relationship>) -> Vec<Relationship> {
@@ -162,7 +233,14 @@ async fn session(state: AppState, mut ws: WebSocket, cookie: Option<String>) {
         return;
     };
     let uid = user.id;
-    let (conn, mut rx) = state.hub.register(uid, session);
+    let choice = match state.db.presence(uid).await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!("IDENTIFY : {e:?}");
+            return;
+        }
+    };
+    let (conn, mut rx) = state.hub.register(uid, session, choice);
 
     let loaded = async {
         let private_channels = state.db.private_channels(uid).await?;
@@ -183,6 +261,8 @@ async fn session(state: AppState, mut ws: WebSocket, cookie: Option<String>) {
             read_states: state.db.read_states(uid).await?,
             notify_settings: state.db.notify_settings(uid).await?,
             session_id: format!("{conn:x}"),
+            presence: choice,
+            presences: crate::presence::snapshot(&state, uid, None).await?,
         })
     };
     let ready = match loaded.await {
@@ -194,6 +274,8 @@ async fn session(state: AppState, mut ws: WebSocket, cookie: Option<String>) {
         }
     };
     if send(&mut ws, &ServerOp::Ready(Box::new(ready))).await {
+        // Les autres apprennent que je suis là (si ce n'était pas déjà le cas).
+        tokio::spawn(crate::presence::refresh(state.clone(), uid));
         let mut seq = 0u64;
         let grace = Duration::from_millis(u64::from(HEARTBEAT_MS) * 2);
         let mut deadline = Instant::now() + grace;
@@ -210,6 +292,14 @@ async fn session(state: AppState, mut ws: WebSocket, cookie: Option<String>) {
                         deadline = Instant::now() + grace;
                         if !send(&mut ws, &ServerOp::HeartbeatAck).await { break }
                     }
+                    Some(Some(ClientOp::Activity { idle })) => {
+                        let first = state.hub.set_activity(uid, conn, idle);
+                        tokio::spawn(crate::presence::refresh(state.clone(), uid));
+                        if first {
+                            // Ce qui a été annoncé avant qu'il se déclare ne lui est pas parvenu.
+                            tokio::spawn(crate::presence::resync(state.clone(), uid));
+                        }
+                    }
                     Some(_) => {}
                 },
                 _ = sleep_until(deadline) => break,
@@ -217,4 +307,6 @@ async fn session(state: AppState, mut ws: WebSocket, cookie: Option<String>) {
         }
     }
     state.hub.unregister(uid, conn);
+    // Le dernier appareil parti : les autres me voient hors ligne.
+    tokio::spawn(crate::presence::refresh(state, uid));
 }
