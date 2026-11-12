@@ -12,6 +12,7 @@ use kraken_core::image::sniff;
 use kraken_core::perms;
 use kraken_proto::{Emoji, Id, MAX_EMOJI_BYTES, MAX_EMOJIS};
 use leptos::html;
+use leptos::portal::Portal;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use wasm_bindgen::JsCast;
@@ -284,7 +285,8 @@ pub fn EmojiSettings(guild: Id) -> impl IntoView {
                 <p class="k-hint">"Tous les emplacements sont pris : retire un emoji pour en ajouter un autre."</p>
             </Show>
             <Show when=move || ui.error.get().is_some()><p class="k-error" role="alert">{move || ui.error.get()}</p></Show>
-            <Show when=move || ui.note.get().is_some()><p class="k-hint app-emoji-note" role="status">{move || ui.note.get()}</p></Show>
+            // Toujours là (une zone `status` doit exister avant son message) et de hauteur réservée : la liste ne saute pas.
+            <p class="k-hint app-emoji-note" role="status">{move || ui.note.get()}</p>
             <Show when=move || { count.get() == 0 }>
                 <div class="k-empty">
                     <b>"Aucun emoji pour l'instant"</b>
@@ -299,9 +301,11 @@ pub fn EmojiSettings(guild: Id) -> impl IntoView {
             </ul>
             <div class="app-emoji-drop" aria-hidden="true"><Icon icon=lu::LuUpload/>"Dépose l'image pour l'ajouter"</div>
         </div>
-        {move || ui.crop.get().map(|(url, _)| view! { <CropDialog url=url which=Which::Emoji done=crop_done cropped=cropped/> })}
-        {move || ui.adding.get().map(|r| view! { <AddDialog guild=guild ready=r added=added close=add_close/> })}
-        {move || deleting.get().map(|e| view! { <DeleteDialog guild=guild emoji=e done=ui.note close=Callback::new(move |()| deleting.set(None))/> })}
+        // Montées hors de la fenêtre des réglages : sinon `.k-settings main > *` rétrécit leur fond sombre
+        // à la largeur du contenu et laisse la navigation cliquable derrière.
+        {move || ui.crop.get().map(|(url, _)| view! { <Portal><CropDialog url=url.clone() which=Which::Emoji done=crop_done cropped=cropped/></Portal> })}
+        {move || ui.adding.get().map(|r| view! { <Portal><AddDialog guild=guild ready=r.clone() added=added close=add_close/></Portal> })}
+        {move || deleting.get().map(|e| view! { <Portal><DeleteDialog guild=guild emoji=e.clone() done=ui.note close=Callback::new(move |()| deleting.set(None))/></Portal> })}
     }
 }
 

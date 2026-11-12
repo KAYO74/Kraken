@@ -68,6 +68,9 @@ test('emojis-H1 Réglages › Emojis : ajouter (recadrage, nom), refuser un nom,
   await expect(name).toBeFocused();
   await expect(add.getByText(':poulpe_bleu:')).toBeVisible();
   await expect(add.getByRole('img', { name: "Aperçu de l'emoji" })).toBeVisible();
+  // Le fond sombre couvre toute la fenêtre : la navigation des réglages n'est pas cliquable derrière.
+  const scrim = await add.locator('xpath=..').boundingBox();
+  expect(scrim!.width).toBeGreaterThanOrEqual(page.viewportSize()!.width - 1);
   await a11y(page);
 
   // Un nom refusé s'explique sur le champ.

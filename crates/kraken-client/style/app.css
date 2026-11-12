@@ -836,6 +836,8 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 .app-emoji-row { flex-wrap: wrap; }
 .app-emoji-row > div { flex: 1 1 10ch; min-width: 0; }
 .app-emoji-row small { display: block; overflow-wrap: anywhere; }
+.app-emoji-row > .app-more { flex: none; margin-left: auto; }
+.app-emoji-note { min-height: 1.5em; }
 .app-emoji-thumb { flex: none; display: grid; place-items: center; width: var(--size-emoji-row); height: var(--size-emoji-row); border-radius: var(--radius-sm);
   background: var(--surface-overlay); }
 .app-emoji-thumb .app-emoji { --e: var(--size-emoji-row); margin: 0; }
