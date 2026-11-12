@@ -383,6 +383,14 @@ impl Db {
         {
             return Err(DbError::Invalid("slowmode"));
         }
+        // Ce qu'il y avait avant, pour le journal d'audit.
+        let (old_topic, old_slowmode): (Option<String>, i32) =
+            sqlx::query_as("select topic, slowmode_s from channels where id = $1")
+                .bind(cid)
+                .fetch_one(&mut *tx)
+                .await?;
+        let old_private =
+            overwrite_of(&mut tx, cid, gid).await?.is_some_and(|(_, deny)| deny & perms::VIEW_CHANNEL != 0);
         sqlx::query(
             "update channels set name = coalesce($2, name),
                topic = case when $3::text is null then topic else nullif($3, '') end,
@@ -406,15 +414,27 @@ impl Db {
             keeps_access(&mut tx, &c, cid, by).await?;
         }
         if name.is_some() || topic.is_some() || req.slowmode_s.is_some() || req.private.is_some() {
-            audit_changes(
-                &mut tx,
-                gid,
-                by,
-                "channel_update",
-                Some(cid),
-                json!({ "name": name, "topic": topic, "slowmode_s": req.slowmode_s, "private": req.private }),
-            )
-            .await?;
+            // Seulement ce qui change, avant et après ; le nom d'alors reste là si le salon disparaît.
+            let mut diff = serde_json::Map::new();
+            let mut note = |field: &str, old: serde_json::Value, new: serde_json::Value| {
+                if old != new {
+                    diff.insert(field.into(), json!({ "old": old, "new": new }));
+                }
+            };
+            if let Some(n) = &name {
+                note("name", json!(c.name), json!(n));
+            }
+            if let Some(t) = &topic {
+                note("topic", json!(old_topic.clone().unwrap_or_default()), json!(t));
+            }
+            if let Some(n) = req.slowmode_s {
+                note("slowmode_s", json!(old_slowmode), json!(n));
+            }
+            if let Some(p) = req.private {
+                note("private", json!(old_private), json!(p));
+            }
+            diff.insert("target_name".into(), json!(name.as_deref().unwrap_or(&c.name)));
+            audit_changes(&mut tx, gid, by, "channel_update", Some(cid), serde_json::Value::Object(diff)).await?;
         }
         tx.commit().await?;
         self.channel_view(cid).await?.ok_or(DbError::NotFound)
@@ -580,7 +600,7 @@ impl Db {
                 by,
                 "channel_move",
                 Some(cid),
-                json!({ "parent_id": req.parent_id, "index": req.index, "rules_kept": kept }),
+                json!({ "parent_id": req.parent_id, "index": req.index, "rules_kept": kept, "target_name": c.name }),
             )
             .await?;
         }
@@ -683,7 +703,13 @@ impl Db {
             by,
             "overwrite_update",
             Some(cid),
-            json!({ "target": target, "allow": req.allow, "deny": req.deny }),
+            json!({
+                "target": target,
+                "allow": req.allow,
+                "deny": req.deny,
+                "subject_kind": if kind == OverwriteKind::Role { "role" } else { "member" },
+                "target_name": c.name,
+            }),
         )
         .await?;
         let list = overwrites_in(&mut tx, cid).await?;

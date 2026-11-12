@@ -3,6 +3,7 @@
 
 mod api;
 mod attach;
+mod audit;
 mod auth;
 mod avatar;
 mod call;
@@ -256,6 +257,11 @@ pub fn app(state: AppState) -> Router {
         limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(emoji::WRITES_PER_MIN)),
         limit::check,
     );
+    // Journal d'audit : une page lit jusqu'à 100 lignes et leurs noms ; compteur à part, plus large qu'une connexion.
+    let audit_limit = axum::middleware::from_fn_with_state(
+        limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(kraken_proto::AUDIT_READS_PER_MIN)),
+        limit::check,
+    );
     // Messages lus : fréquents (le client les regroupe), compteur à part ; réglages de
     // notification : même limite que le social, compteur à part.
     let reads = Router::new()
@@ -304,6 +310,7 @@ pub fn app(state: AppState) -> Router {
         .merge(uploads)
         .route("/guilds/{id}/emojis", get(emoji::list).merge(post(emoji::create).route_layer(emoji_limit.clone())))
         .route("/guilds/{id}/emojis/{eid}", patch(emoji::rename).delete(emoji::remove).route_layer(emoji_limit))
+        .route("/guilds/{id}/audit-log", get(audit::list).route_layer(audit_limit))
         .route("/users/@me/emojis", get(emoji::mine))
         .route("/emojis/{eid}/image", get(emoji::image))
         .route("/avatars/{key}", get(avatar::get))

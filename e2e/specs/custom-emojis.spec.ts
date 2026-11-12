@@ -50,7 +50,7 @@ test('emojis-H1 Réglages › Emojis : ajouter (recadrage, nom), refuser un nom,
   const admin = settings(page);
   await expect(admin.getByRole('heading', { name: 'Emojis', level: 2 })).toBeVisible();
   // L'onglet vient après « Salons ».
-  await expect(admin.getByRole('navigation').getByRole('link')).toHaveText(['Rôles', 'Salons', 'Emojis', 'Invitations', 'Bannis', 'Propriété']);
+  await expect(admin.getByRole('navigation').getByRole('link')).toHaveText(['Rôles', 'Salons', 'Emojis', 'Invitations', 'Bannis', "Journal d'audit", 'Propriété']);
   await expect(admin.getByText("Aucun emoji pour l'instant")).toBeVisible();
   await expect(admin.getByText('0 / 50 emplacements')).toBeVisible();
   await a11y(page);

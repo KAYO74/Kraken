@@ -5,6 +5,7 @@
 
 use kraken_core::perms;
 use kraken_proto::*;
+use serde_json::json;
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::perm::timed_out_rights;
@@ -250,7 +251,7 @@ impl Db {
         .bind(req.hoist)
         .fetch_one(&mut *tx)
         .await?;
-        audit(&mut tx, gid, by, "role_create", Some(rid), None).await?;
+        audit_changes(&mut tx, gid, by, "role_create", Some(rid), json!({ "name": name })).await?;
         let role = role_in(&mut tx, gid, rid).await?;
         tx.commit().await?;
         Ok(role)
@@ -289,7 +290,19 @@ impl Db {
         .bind(permissions as i64)
         .execute(&mut *tx)
         .await?;
-        audit(&mut tx, gid, by, "role_update", Some(rid), None).await?;
+        // Avant / après de ce qui a changé, et le nom du rôle d'alors (le journal le garde s'il disparaît).
+        let mut diff = serde_json::Map::new();
+        let mut note = |field: &str, old: serde_json::Value, new: serde_json::Value| {
+            if old != new {
+                diff.insert(field.into(), json!({ "old": old, "new": new }));
+            }
+        };
+        note("name", json!(role.name), json!(name));
+        note("color", json!(role.color), json!(color.map(|c| c as u32)));
+        note("hoist", json!(role.hoist), json!(req.hoist.unwrap_or(role.hoist)));
+        note("permissions", json!(role.permissions), json!(permissions));
+        diff.insert("target_name".into(), json!(name));
+        audit_changes(&mut tx, gid, by, "role_update", Some(rid), serde_json::Value::Object(diff)).await?;
         let role = role_in(&mut tx, gid, rid).await?;
         tx.commit().await?;
         Ok(role)
@@ -316,7 +329,7 @@ impl Db {
             .bind(role.position)
             .execute(&mut *tx)
             .await?;
-        audit(&mut tx, gid, by, "role_delete", Some(rid), None).await?;
+        audit_changes(&mut tx, gid, by, "role_delete", Some(rid), json!({ "name": role.name })).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -400,7 +413,8 @@ impl Db {
         .await?
         .rows_affected();
         if done > 0 {
-            audit(&mut tx, gid, by, if on { "member_role_add" } else { "member_role_remove" }, Some(uid), None).await?;
+            let action = if on { "member_role_add" } else { "member_role_remove" };
+            audit_changes(&mut tx, gid, by, action, Some(uid), json!({ "role_id": rid, "role": role.name })).await?;
         }
         tx.commit().await?;
         self.members_of(gid, Some(uid)).await?.pop().ok_or(DbError::NotFound)

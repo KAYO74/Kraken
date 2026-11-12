@@ -4,6 +4,7 @@
 //! `kraken-core` à partir de ce que renvoie la base (pas de RLS : le serveur est le seul
 //! client de la base). Les dates sortent en millisecondes Unix.
 
+mod audit;
 mod calls;
 mod channels;
 mod emojis;
@@ -23,6 +24,7 @@ use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
 use sqlx::types::Json;
 use sqlx::{Postgres, Row, Transaction};
 
+pub use audit::AuditQuery;
 pub use channels::clean_channel_name;
 pub use files::{NewAttachment, StoredAttachment, attachment_paths, embed_paths};
 pub use jobs::Job;
@@ -1115,11 +1117,11 @@ impl Db {
                 .bind(cid)
                 .fetch_optional(&self.pool)
                 .await?;
-        match author {
+        let by_moderator = match author {
             None => return Err(DbError::NotFound),
             Some(a) if a != Some(uid) && !can_manage => return Err(DbError::Forbidden("author")),
-            Some(_) => {}
-        }
+            Some(a) => a != Some(uid),
+        };
         let mut files = Vec::new();
         for r in sqlx::query("select storage_key, preview from attachments where message_id = $1")
             .bind(mid)
@@ -1135,7 +1137,8 @@ impl Db {
         files.extend(embed_paths(&embeds.map(|e| e.0).unwrap_or_default()));
         // Le salon garde son dernier message (la clé étrangère l'aurait effacé) : les non-lus en
         // dépendent.
-        sqlx::query(
+        let mut tx = self.pool.begin().await?;
+        let gone = sqlx::query(
             "with d as (delete from messages where id = $1 and channel_id = $2 returning channel_id)
              update channels c set last_message_id =
                (select id from messages where channel_id = $2 and id <> $1 order by id desc limit 1)
@@ -1143,8 +1146,31 @@ impl Db {
         )
         .bind(mid)
         .bind(cid)
-        .execute(&self.pool)
-        .await?;
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        // Un message d'un autre, retiré par un modérateur, laisse sa trace : qui, chez qui, dans quel salon.
+        // Jamais le texte du message.
+        if by_moderator
+            && gone > 0
+            && let Some((gid, channel)) =
+                sqlx::query_as::<_, (Option<Id>, Option<String>)>("select guild_id, name from channels where id = $1")
+                    .bind(cid)
+                    .fetch_optional(&mut *tx)
+                    .await?
+            && let Some(gid) = gid
+        {
+            moderation::audit_changes(
+                &mut tx,
+                gid,
+                uid,
+                "message_delete",
+                author.flatten(),
+                serde_json::json!({ "channel_id": cid, "channel": channel.unwrap_or_default() }),
+            )
+            .await?;
+        }
+        tx.commit().await?;
         Ok(files)
     }
 
@@ -1261,6 +1287,8 @@ pub(crate) async fn insert_channel(
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_audit;
 #[cfg(test)]
 mod tests_channels;
 #[cfg(test)]
