@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use kraken_db::Job;
-use lettre::message::Mailbox;
+use lettre::message::{Mailbox, SinglePart};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use uuid::Uuid;
 
@@ -28,18 +28,25 @@ impl Mailer {
     }
 
     async fn send(&self, to: &str, subject: &str, body: String) -> Result<(), String> {
-        let msg = Message::builder()
-            .from(self.from.clone())
-            .to(to.parse().map_err(|e| format!("destinataire : {e}"))?)
-            .subject(subject)
-            .body(body)
-            .map_err(|e| e.to_string())?;
+        let msg = message(&self.from, to, subject, body)?;
         // Le texte d'un refus SMTP cite souvent le destinataire : seul le code va dans les logs.
         self.transport.send(msg).await.map(|_| ()).map_err(|e| match e.status() {
             Some(code) => format!("refus SMTP {code}"),
             None => "SMTP injoignable".into(),
         })
     }
+}
+
+/// Le message prêt à partir : un texte brut UTF-8 **déclaré** (`MIME-Version`, `Content-Type:
+/// text/plain; charset=utf-8`). Avec un simple `.body(..)` le corps part codé (quoted-printable :
+/// « token=3D… ») sans rien qui le dise, et un client strict casse le lien.
+fn message(from: &Mailbox, to: &str, subject: &str, body: String) -> Result<Message, String> {
+    Message::builder()
+        .from(from.clone())
+        .to(to.parse().map_err(|e| format!("destinataire : {e}"))?)
+        .subject(subject)
+        .singlepart(SinglePart::plain(body))
+        .map_err(|e| e.to_string())
 }
 
 pub async fn run(state: AppState) {
@@ -171,4 +178,76 @@ async fn email(state: &AppState, job: &Job, kind: &str) -> Result<(), String> {
         )
     };
     mailer.send(&to, subject, body).await
+}
+
+#[cfg(test)]
+mod tests {
+    use base64::Engine as _;
+
+    use super::*;
+
+    /// Le corps d'un message tel qu'un client l'affiche : son codage de transfert défait.
+    fn decoded(raw: &str) -> (String, String) {
+        let (head, body) = raw.split_once("\r\n\r\n").expect("en-têtes puis corps");
+        let encoding = head
+            .lines()
+            .find_map(|l| l.strip_prefix("Content-Transfer-Encoding: "))
+            .expect("codage de transfert déclaré")
+            .trim()
+            .to_ascii_lowercase();
+        let bytes = match encoding.as_str() {
+            "7bit" | "8bit" => body.as_bytes().to_vec(),
+            "base64" => {
+                base64::engine::general_purpose::STANDARD.decode(body.replace("\r\n", "")).expect("base64 valide")
+            }
+            "quoted-printable" => {
+                let mut out = Vec::new();
+                let b = body.as_bytes();
+                let mut i = 0;
+                while i < b.len() {
+                    match b[i] {
+                        b'=' if b.get(i + 1) == Some(&b'\r') => i += 3, // coupure de ligne douce
+                        b'=' => {
+                            out.push(u8::from_str_radix(&body[i + 1..i + 3], 16).expect("=XX"));
+                            i += 3;
+                        }
+                        c => {
+                            out.push(c);
+                            i += 1;
+                        }
+                    }
+                }
+                out
+            }
+            other => panic!("codage inattendu : {other}"),
+        };
+        (head.to_string(), String::from_utf8(bytes).expect("UTF-8").replace("\r\n", "\n"))
+    }
+
+    #[test]
+    fn a_mail_declares_mime_version_and_utf8_text_and_its_link_reads_back_intact() {
+        let from: Mailbox = "KRAKEN <no-reply@localhost>".parse().unwrap();
+        let token = "Zx9-_aB3".repeat(8);
+        let link = format!("https://kraken.example.org/verify-email?token={token}");
+        // Un lien long (le codage le coupe) et des accents (le codage ne peut plus être du 7 bits).
+        let body = format!(
+            "Bonjour Léa,\n\nPour confirmer cette adresse, ouvre ce lien dans les 24 heures :\n{link}\n\nÀ bientôt.\n"
+        );
+        let msg = message(&from, "lea@example.org", "Confirme ton adresse e-mail KRAKEN", body.clone()).unwrap();
+        let raw = String::from_utf8(msg.formatted()).unwrap();
+        let (head, text) = decoded(&raw);
+        let head = head.to_ascii_lowercase();
+        assert!(head.contains("mime-version: 1.0"), "MIME-Version absent :\n{head}");
+        assert!(head.contains("content-type: text/plain; charset=utf-8"), "Content-Type absent :\n{head}");
+        assert_eq!(text.trim_end(), body.trim_end(), "le corps décodé est celui qu'on a écrit");
+        assert!(text.lines().any(|l| l == link), "le lien tient sur une ligne, sans « =3D » ni coupure");
+
+        // Sans accent non plus : un lien de plus de 78 caractères est coupé par le codage.
+        let plain = format!("Ouvre ce lien :\n{link}\n");
+        let raw =
+            String::from_utf8(message(&from, "lea@example.org", "Test", plain.clone()).unwrap().formatted()).unwrap();
+        let (head, text) = decoded(&raw);
+        assert!(head.to_ascii_lowercase().contains("content-type: text/plain; charset=utf-8"), "{head}");
+        assert_eq!(text.trim_end(), plain.trim_end());
+    }
 }

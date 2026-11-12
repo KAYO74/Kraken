@@ -44,7 +44,9 @@ enum Culprit {
 fn culprit_of(code: &str) -> Option<Culprit> {
     match code {
         "bad_password" => Some(Culprit::Password),
-        "invalid" | "unchanged" | "conflict" | "username_cooldown" | "same_password" => Some(Culprit::Value),
+        "invalid" | "unchanged" | "conflict" | "username_reserved" | "username_cooldown" | "same_password" => {
+            Some(Culprit::Value)
+        }
         _ => None,
     }
 }

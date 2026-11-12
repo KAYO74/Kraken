@@ -1,7 +1,7 @@
 // Profil (S20 : bio, pronoms, bannière, animations, carte de profil), compte (S06 : pseudo, e-mail,
 // mot de passe) et présence (S04 : statut choisi, inactif, ne pas déranger, invisible).
 import { test, expect, a11y, createGuild, say, messages, watch, PASSWORD, API, unique, type User } from '../fixtures';
-import { png, animatedGif } from '../images';
+import { png, flatPng, animatedGif } from '../images';
 import type { APIRequestContext, BrowserContext, Locator, Page } from '@playwright/test';
 
 // Un appel qui sonne a besoin du micro factice de Chromium (voir calls.spec.ts).
@@ -192,6 +192,53 @@ test('S20-E1 bannière : pas une image, trop lourde ; rien d’enregistré', asy
   expect((await me(api, a)).banner ?? null).toBeNull();
 });
 
+test('S20-E2 texte du profil : caractères invisibles refusés, emojis composés acceptés', async ({ user, api, allow }) => {
+  allow.push(REJECTED);
+  const a = await user('opale');
+  const { page } = a;
+  await page.goto('/settings/profiles');
+  const alert = page.getByRole('form', { name: 'Ce que les autres voient' }).getByRole('alert');
+  // Espace de largeur nulle dans le nom, marque de sens d'écriture dans la bio : refusés, rien d'enregistré.
+  await page.getByLabel('Nom affiché').fill('Opa\u200Ble');
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(alert).toContainText('Nom affiché : les caractères invisibles de mise en forme');
+  await page.getByLabel('Nom affiché').fill('Opale');
+  await page.getByLabel('À propos de toi').fill('texte \u202Eà l’envers');
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(alert).toContainText('Bio : les caractères invisibles de mise en forme');
+  const refused = await me(api, a);
+  expect([refused.display_name ?? null, refused.bio ?? null]).toEqual([null, null]);
+
+  // Le liant d'emoji et le sélecteur de variante ne sont pas touchés : famille, drapeau, cœur.
+  const bio = '👩\u200D👩\u200D👧 🏳\uFE0F\u200D🌈 ❤\uFE0F';
+  await page.getByLabel('À propos de toi').fill(bio);
+  await page.getByLabel('Pronoms').fill('❤\uFE0F');
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByRole('status')).toHaveText('Profil enregistré.');
+  const saved = await me(api, a);
+  expect([saved.bio, saved.pronouns]).toEqual([bio, '❤\uFE0F']);
+});
+
+test('S20-E3 photo et bannière : une image trop grande est refusée d’après son en-tête', async ({ user, api, allow }) => {
+  allow.push(REJECTED);
+  const a = await user('cime');
+  const asA = await api(a.token);
+  const send = (which: string, data: Buffer) => asA.put(`${API}/users/@me/${which}`, { data, headers: { 'content-type': 'image/png' } });
+  for (const which of ['avatar', 'banner']) {
+    // Plus de 4096 pixels de côté : refusé, même s'il ne pèse que quelques Ko.
+    const wide = await send(which, flatPng(4100, 16));
+    expect([wide.status(), (await wide.json()).code]).toEqual([400, 'image_too_big']);
+    expect((await wide.json()).message).toContain('4096 pixels de côté');
+    // Plus de 16 millions de pixels au total, chaque côté dans la limite.
+    const heavy = await send(which, flatPng(4096, 4096));
+    expect([heavy.status(), (await heavy.json()).code]).toEqual([400, 'image_too_big']);
+  }
+  const user0 = await me(api, a);
+  expect([user0.avatar ?? null, user0.banner ?? null]).toEqual([null, null]);
+  // 4096 de côté passe.
+  expect((await send('banner', flatPng(4096, 16))).status()).toBe(200);
+});
+
 test('S20-H3 carte de profil : depuis la liste des membres et depuis un message, avec ses actions', async ({ user, api }) => {
   const a = await user('perle');
   const b = await user('quartz');
@@ -307,6 +354,10 @@ test('S06-H1 changer de pseudo : mot de passe demandé, en direct chez les amis,
   await change(b.name, PASSWORD);
   await expect(form.getByRole('alert')).toHaveText('Ce pseudo est déjà pris.');
   await blames(form, 'Nouveau pseudo', pseudoFields);
+  // Un nom réservé (l'équipe, les mentions) est refusé sans compter dans la limite horaire.
+  await change('support', PASSWORD);
+  await expect(form.getByRole('alert')).toHaveText('Ce pseudo est réservé : choisis-en un autre.');
+  await blames(form, 'Nouveau pseudo', pseudoFields);
   expect((await me(api, a)).username).toBe(a.name);
 
   const first = unique('nouv');
@@ -401,6 +452,17 @@ test('S06-H3 changer de mot de passe : les autres appareils sont déconnectés, 
   expect((await (await api()).post(`${API}/auth/login`, { data: { login: a.name, password: PASSWORD } })).status()).toBe(401);
   expect((await (await api()).post(`${API}/auth/login`, { data: { login: a.name, password: next } })).status()).toBe(200);
   await other.close();
+});
+
+test('S06-E1 inscription : un pseudo réservé est refusé avec son message', async ({ page, allow }) => {
+  allow.push(REJECTED);
+  await page.goto('/register');
+  await page.getByLabel('E-mail').fill(`${unique('res')}@example.org`);
+  await page.getByLabel('Pseudo').fill('admin');
+  await page.getByLabel('Mot de passe').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Créer mon compte' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Ce pseudo est réservé : choisis-en un autre.');
+  await expect(page).toHaveURL(/\/register/);
 });
 
 // ───────── S04 : présence ─────────

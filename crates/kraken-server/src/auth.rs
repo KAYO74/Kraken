@@ -122,15 +122,28 @@ fn check_password(pw: &str) -> ApiResult<()> {
     Ok(())
 }
 
+/// Un pseudo (déjà en minuscules) qu'on peut prendre : la bonne forme, et pas un nom réservé.
+fn check_username(username: &str) -> ApiResult<()> {
+    if !kraken_db::valid_username(username) {
+        return Err(AppError::invalid("Pseudo : 2 à 32 caractères parmi a-z, 0-9, _ et ."));
+    }
+    if kraken_db::reserved_username(username) {
+        return Err(AppError(
+            StatusCode::BAD_REQUEST,
+            "username_reserved",
+            "Ce pseudo est réservé : choisis-en un autre.".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn register(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(req): Json<RegisterReq>,
 ) -> ApiResult<impl IntoResponse> {
     let username = req.username.trim().to_lowercase();
-    if !kraken_db::valid_username(&username) {
-        return Err(AppError::invalid("Pseudo : 2 à 32 caractères parmi a-z, 0-9, _ et ."));
-    }
+    check_username(&username)?;
     let email = req.email.trim();
     check_email(email)?;
     check_password(&req.password)?;
@@ -177,6 +190,15 @@ pub async fn me(auth: Auth) -> Json<User> {
     Json(auth.user)
 }
 
+/// Un caractère de mise en forme Unicode qui ne se voit pas : espaces de largeur nulle, marques et
+/// isolats de sens d'écriture, BOM. Ils servent à tromper la lecture (un nom qui s'affiche à
+/// l'envers, deux noms qui semblent identiques). Le liant d'emoji (U+200D) et le sélecteur de
+/// variante (U+FE0F) restent permis : sans eux, les emojis composés (famille, drapeau arc-en-ciel,
+/// cœur) ne s'écrivent pas.
+fn hidden_format(c: char) -> bool {
+    matches!(c, '\u{200B}'..='\u{200C}' | '\u{200E}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}')
+}
+
 /// Texte du profil : coupé aux bords, vide pour effacer. `multiline` laisse les retours à la
 /// ligne (la bio), sinon aucun caractère de contrôle (nom, pronoms).
 fn profile_text(raw: &str, max: usize, multiline: bool, what: &str) -> ApiResult<Option<String>> {
@@ -188,6 +210,15 @@ fn profile_text(raw: &str, max: usize, multiline: bool, what: &str) -> ApiResult
             "{what} : {max} caractères au plus{}.",
             if multiline { "" } else { ", sans retour à la ligne" }
         )));
+    }
+    if text.chars().any(hidden_format) {
+        return Err(AppError(
+            StatusCode::BAD_REQUEST,
+            "invalid_chars",
+            format!(
+                "{what} : les caractères invisibles de mise en forme (espace de largeur nulle, changement de sens d'écriture) ne sont pas acceptés."
+            ),
+        ));
     }
     Ok(Some(text.to_string()).filter(|t| !t.is_empty()))
 }
@@ -231,9 +262,7 @@ pub async fn change_username(
     Json(req): Json<ChangeUsername>,
 ) -> ApiResult<Json<User>> {
     let username = req.username.trim().trim_start_matches('@').to_lowercase();
-    if !kraken_db::valid_username(&username) {
-        return Err(AppError::invalid("Pseudo : 2 à 32 caractères parmi a-z, 0-9, _ et ."));
-    }
+    check_username(&username)?;
     if username == auth.user.username {
         return Err(AppError(StatusCode::BAD_REQUEST, "unchanged", "C'est déjà ton pseudo.".into()));
     }

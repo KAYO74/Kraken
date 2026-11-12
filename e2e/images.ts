@@ -37,6 +37,20 @@ export function png(w: number, h: number) {
   ]);
 }
 
+/** Un PNG uni en niveaux de gris de `w` × `h` pixels : minuscule en octets, énorme une fois décodé. */
+export function flatPng(w: number, h: number) {
+  const head = Buffer.alloc(13);
+  head.writeUInt32BE(w, 0);
+  head.writeUInt32BE(h, 4);
+  head.set([8, 0, 0, 0, 0], 8);
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', head),
+    chunk('IDAT', deflateSync(Buffer.alloc((w + 1) * h))),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
 /**
  * Un GIF animé de `frames` images de 4 × 4 pixels, chacune d'une couleur unie (deux couleurs en
  * alternance). Le flux LZW n'est pas compressé : un code d'effacement tous les deux pixels garde la

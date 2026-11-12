@@ -249,6 +249,19 @@ fn picture(w: u32, h: u32, format: ImageFormat) -> Vec<u8> {
     out
 }
 
+/// Une image unie de `w × h` pixels : minuscule en octets, énorme une fois décodée.
+fn flat(w: u32, h: u32, format: ImageFormat) -> Vec<u8> {
+    let mut out = Vec::new();
+    match format {
+        ImageFormat::Png => {
+            image::GrayImage::from_pixel(w, h, image::Luma([7])).write_to(&mut Cursor::new(&mut out), format)
+        }
+        _ => RgbImage::from_pixel(w, h, Rgb([7, 7, 7])).write_to(&mut Cursor::new(&mut out), format),
+    }
+    .unwrap();
+    out
+}
+
 /// Un GIF de `frames` images.
 fn gif(w: u32, h: u32, frames: u32) -> Vec<u8> {
     let mut out = Vec::new();
@@ -439,6 +452,39 @@ async fn banner_is_validated_cropped_served_replaced_and_removed(pool: PgPool) {
     assert_eq!(fetch(&base, "banners", &second).await.status(), 404);
     assert_eq!(files_in(&dir).len(), 1);
     assert_eq!(lou.call(Method::DELETE, "/users/@me/banner", None).await.0, 200, "idempotent");
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn huge_still_images_are_refused_from_their_header_before_any_decoding(pool: PgPool) {
+    let (base, dir) = spawn(pool).await;
+    let lou = Who::new(&base, "lou").await;
+    // Un PNG de 8192 × 8192 : quelques centaines de Ko, plus de 400 Mo décodé.
+    let heavy = flat(8192, 8192, ImageFormat::Png);
+    assert!(heavy.len() < 2 * 1024 * 1024, "{} octets", heavy.len());
+    let cases = [
+        ("le cas du testeur", heavy),
+        ("côté seul (PNG)", flat(4097, 16, ImageFormat::Png)),
+        ("côté seul (JPEG)", flat(16, 4097, ImageFormat::Jpeg)),
+        ("côté seul (WebP)", flat(4097, 16, ImageFormat::WebP)),
+        ("surface seule", flat(4096, 4096, ImageFormat::Png)),
+    ];
+    for which in ["avatar", "banner"] {
+        for (what, bytes) in &cases {
+            let (s, v) = lou.put_image(which, bytes.clone()).await;
+            assert_eq!((s.as_u16(), code(&v)), (400, "image_too_big"), "{which}, {what}");
+            let message = v["message"].as_str().unwrap();
+            assert!(message.contains("4096") && message.contains("16 millions"), "{message}");
+        }
+    }
+    let (_, me) = lou.call(Method::GET, "/users/@me", None).await;
+    assert!(me["avatar"].is_null() && me["banner"].is_null(), "rien n'est enregistré");
+    assert!(files_in(&dir).is_empty());
+
+    // Le plafond lui-même passe : 4096 de côté.
+    let (s, _) = lou.put_image("banner", flat(4096, 64, ImageFormat::Png)).await;
+    assert_eq!(s, 200);
+    let (s, _) = lou.put_image("avatar", flat(64, 4096, ImageFormat::Png)).await;
+    assert_eq!(s, 200);
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]
@@ -774,4 +820,162 @@ async fn a_block_hides_presence_both_ways_and_unblocking_restores_it(pool: PgPoo
     assert_eq!(lou.call(Method::DELETE, &path, None).await.0, 204);
     assert_eq!(sam_gw.status_of(&lou).await, Status::Dnd);
     assert_eq!(lou_gw.status_of(&sam).await, Status::Online);
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn profile_edits_share_the_presence_budget_and_a_refusal_says_when_to_retry(pool: PgPool) {
+    // Quatre appels par minute : un `PATCH /users/@me` est diffusé à tous les co-membres, il compte
+    // sur le même compteur que le choix du statut.
+    let (base, _) = spawn_with(pool, |c| c.auth_per_min = 4).await;
+    let lou = Who::new(&base, "lou").await;
+    let patch = |name: &str| lou.call(Method::PATCH, "/users/@me", Some(json!({"display_name": name})));
+    for i in 0..3 {
+        let (s, _) = patch(&format!("Lou {i}")).await;
+        assert_eq!(s, 200, "modification {i}");
+    }
+    let (s, _) = lou.call(Method::PUT, "/users/@me/presence", Some(json!({"presence": "idle"}))).await;
+    assert_eq!(s, 200, "le quatrième appel du compteur commun passe encore");
+
+    let refused = lou
+        .c
+        .patch(format!("http://{base}/api/v1/users/@me"))
+        .header("authorization", format!("Session {}", lou.token))
+        .json(&json!({"bio": "trop vite"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), 429);
+    let wait: u64 = refused.headers()["retry-after"].to_str().unwrap().parse().expect("des secondes");
+    assert!((1..=60).contains(&wait), "Retry-After : {wait}");
+    let v: Value = refused.json().await.unwrap();
+    assert_eq!(code(&v), "rate_limited");
+
+    // Même compteur : le statut est refusé lui aussi, et rien n'a été enregistré par le refus.
+    let (s, v) = lou.call(Method::PUT, "/users/@me/presence", Some(json!({"presence": "dnd"}))).await;
+    assert_eq!((s.as_u16(), code(&v)), (429, "rate_limited"));
+    // Lire son profil n'est pas limité.
+    let (s, me) = lou.call(Method::GET, "/users/@me", None).await;
+    assert_eq!(s, 200);
+    assert!(me["bio"].is_null(), "la modification refusée n'a rien écrit");
+    assert_eq!(me["display_name"], "Lou 2");
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn reserved_usernames_are_refused_at_signup_and_on_change_but_existing_accounts_keep_theirs(pool: PgPool) {
+    let (base, _) = spawn(pool.clone()).await;
+    let register = |name: String| {
+        let base = base.clone();
+        async move {
+            let r = Client::new()
+                .post(format!("http://{base}/api/v1/auth/register"))
+                .json(&json!({"username": name, "email": format!("{}@example.org", name.trim().replace('@', "")), "password": PASSWORD}))
+                .send()
+                .await
+                .unwrap();
+            let s = r.status();
+            (s, r.json::<Value>().await.unwrap_or(Value::Null))
+        }
+    };
+    for name in [
+        "everyone",
+        "here",
+        "admin",
+        "administrator",
+        "moderator",
+        "mod",
+        "root",
+        "system",
+        "kraken",
+        "support",
+        "staff",
+    ] {
+        for shown in [name.to_string(), name.to_uppercase(), format!("  {name} ")] {
+            let (s, v) = register(shown.clone()).await;
+            assert_eq!((s.as_u16(), code(&v)), (400, "username_reserved"), "{shown:?}");
+            assert!(v["message"].as_str().unwrap().contains("réservé"), "{v}");
+        }
+    }
+    // Un nom qui contient un mot réservé n'est pas réservé.
+    for name in ["admin2", "the_root", "kraken.fan", "modo"] {
+        assert_eq!(register(name.to_string()).await.0, 201, "{name}");
+    }
+    // Les règles de forme passent avant : un pseudo invalide reste « invalid ».
+    assert_eq!(code(&register("Admin!".into()).await.1), "invalid");
+
+    // Changer de pseudo : refusé sans rien consommer de la limite des deux changements par heure.
+    let lou = Who::new(&base, "lou").await;
+    for name in ["support", "@Staff", "kraken"] {
+        let (s, v) =
+            lou.call(Method::PUT, "/users/@me/username", Some(json!({"username": name, "password": PASSWORD}))).await;
+        assert_eq!((s.as_u16(), code(&v)), (400, "username_reserved"), "{name}");
+    }
+    let (_, me) = lou.call(Method::GET, "/users/@me", None).await;
+    assert_eq!(me["username"], "lou");
+    for name in ["lou_un", "lou_deux"] {
+        let (s, _) =
+            lou.call(Method::PUT, "/users/@me/username", Some(json!({"username": name, "password": PASSWORD}))).await;
+        assert_eq!(s, 200, "{name} : les refus n'ont pas compté dans la limite");
+    }
+
+    // Un compte qui porte déjà un nom réservé le garde : il se connecte et modifie son profil.
+    let old = Who::new(&base, "ancien").await;
+    sqlx::query("update users set username = 'admin' where id = $1").bind(old.user.id).execute(&pool).await.unwrap();
+    let (s, _) = old.login_again("admin", PASSWORD).await;
+    assert_eq!(s, 200, "l'ancien compte se connecte toujours");
+    let (s, v) = old.call(Method::PATCH, "/users/@me", Some(json!({"display_name": "Chef"}))).await;
+    assert_eq!((s.as_u16(), v["username"].as_str()), (200, Some("admin")));
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn invisible_formatting_characters_are_refused_in_profile_text_but_joined_emoji_pass(pool: PgPool) {
+    let (base, _) = spawn(pool).await;
+    let lou = Who::new(&base, "lou").await;
+    let (s, _) = lou
+        .call(Method::PATCH, "/users/@me", Some(json!({"display_name": "Lou", "bio": "Bonjour", "pronouns": "elle"})))
+        .await;
+    assert_eq!(s, 200);
+
+    // Espaces de largeur nulle, marques de sens d'écriture, isolats et BOM : refusés partout.
+    let hidden = [
+        '\u{200B}', '\u{200C}', '\u{200E}', '\u{200F}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}',
+        '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}', '\u{FEFF}',
+    ];
+    for c in hidden {
+        for (field, what) in [("display_name", "Nom affiché"), ("pronouns", "Pronoms"), ("bio", "Bio")] {
+            for text in [format!("a{c}b"), format!("{c}ab"), format!("ab{c}"), format!("{c}")] {
+                let (s, v) = lou.call(Method::PATCH, "/users/@me", Some(json!({ field: text }))).await;
+                assert_eq!(
+                    (s.as_u16(), code(&v)),
+                    (400, "invalid_chars"),
+                    "U+{:04X} dans {field} : {text:?}",
+                    c as u32
+                );
+                assert!(v["message"].as_str().unwrap().starts_with(what), "{v}");
+            }
+        }
+    }
+    let (_, me) = lou.call(Method::GET, "/users/@me", None).await;
+    assert_eq!(
+        (me["display_name"].as_str(), me["bio"].as_str(), me["pronouns"].as_str()),
+        (Some("Lou"), Some("Bonjour"), Some("elle"))
+    );
+
+    // Un refus dans un champ n'écrit rien dans les autres.
+    let (s, _) =
+        lou.call(Method::PATCH, "/users/@me", Some(json!({"display_name": "Nouveau", "bio": "x\u{202E}y"}))).await;
+    assert_eq!(s, 400);
+    let (_, me) = lou.call(Method::GET, "/users/@me", None).await;
+    assert_eq!(me["display_name"], "Lou");
+
+    // Le liant d'emoji (U+200D) et le sélecteur de variante (U+FE0F) font les emojis composés : ils passent.
+    let family = "👩\u{200D}👩\u{200D}👧";
+    let heart = "❤\u{FE0F}";
+    let flag = "🏳\u{FE0F}\u{200D}🌈";
+    let (s, v) = lou
+        .call(Method::PATCH, "/users/@me", Some(json!({"display_name": format!("Lou {family}"), "pronouns": heart, "bio": format!("{flag} {heart} {family}\nfin")})))
+        .await;
+    assert_eq!(s, 200, "{v}");
+    assert_eq!(v["display_name"], format!("Lou {family}"));
+    assert_eq!(v["pronouns"], heart);
+    assert_eq!(v["bio"], format!("{flag} {heart} {family}\nfin"));
 }

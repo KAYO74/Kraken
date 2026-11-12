@@ -256,9 +256,12 @@ pub fn app(state: AppState) -> Router {
             limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(kraken_proto::ACKS_PER_MIN)),
             limit::check,
         ));
+    // Modifier son profil est diffusé à tous les co-membres, comme le choix du statut : même
+    // limite, même compteur que lui et que les réglages de notification.
     let notify = Router::new()
         .route("/users/@me/notifications", put(reads::set_notify))
         .route("/users/@me/presence", put(presence::set))
+        .route("/users/@me", patch(auth::update_me))
         .route_layer(axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check));
     // Demandes d'ami, blocages, nouveaux MP et groupes : même limite, un compteur pour tous.
     let social_limit = axum::middleware::from_fn_with_state(limit::Limiter::new(&state.cfg), limit::check);
@@ -297,7 +300,7 @@ pub fn app(state: AppState) -> Router {
         .route("/instance", get(api::instance))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/logout-all", post(auth::logout_all))
-        .route("/users/@me", get(auth::me).patch(auth::update_me))
+        .route("/users/@me", get(auth::me))
         .route("/users/@me/account", get(auth::account))
         .route("/guilds", post(api::create_guild))
         .route("/guilds/{id}", get(api::guild).delete(moderation::delete_guild))

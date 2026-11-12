@@ -101,6 +101,26 @@ impl From<sqlx::Error> for DbError {
     }
 }
 
+/// Pseudos que personne ne peut prendre à l'inscription ni en changeant de pseudo : ceux des
+/// mentions (`@everyone`, `@here`) et ceux qui se feraient passer pour l'équipe. Les comptes qui en
+/// portent déjà un le gardent. `u` est déjà en minuscules.
+pub fn reserved_username(u: &str) -> bool {
+    const RESERVED: [&str; 11] = [
+        "everyone",
+        "here",
+        "admin",
+        "administrator",
+        "moderator",
+        "mod",
+        "root",
+        "system",
+        "kraken",
+        "support",
+        "staff",
+    ];
+    RESERVED.contains(&u)
+}
+
 pub fn valid_username(u: &str) -> bool {
     (2..=32).contains(&u.len())
         && u.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'.')
