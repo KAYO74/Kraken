@@ -22,6 +22,8 @@ web-sys = { version = "0.3", features = [
     "HtmlImageElement", "HtmlDocument", "MediaQueryList",
     # Images animées : première image (createImageBitmap) d'un GIF ou d'un WebP animé.
     "ImageBitmap",
+    # Zoom de l'interface : plafonné à la largeur de la fenêtre, posé en ligne sur <html> (`--zoom`).
+    "CssStyleDeclaration",
     # Fichiers joints : envoi avec progression, glisser-déposer, collage.
     "XmlHttpRequest", "XmlHttpRequestUpload", "XmlHttpRequestEventTarget", "ProgressEvent", "DragEvent", "DataTransfer",
     "ClipboardEvent",

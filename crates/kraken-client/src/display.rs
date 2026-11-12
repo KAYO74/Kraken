@@ -51,11 +51,13 @@ fn Choices(
     let current = RwSignal::new(prefs::get(pref));
     let described_by = (!hint.is_empty()).then(|| format!("{name}-h"));
     let hint_id = described_by.clone();
+    // Trois choix tiennent sur une ligne dans une fenêtre large (style/app.css) : pas de carte seule en dessous.
+    let columns = if options.len() == 3 { "k-radios app-choices app-choices--3" } else { "k-radios app-choices" };
     view! {
         <fieldset class="app-choice-group" aria-describedby=described_by>
             <legend class="k-label">{legend}</legend>
             {hint_id.map(|id| view! { <p id=id class="app-hint">{hint}</p> })}
-            <div class="k-radios app-choices">
+            <div class=columns>
                 {options.iter().map(|&(value, label, sub)| {
                     let (label_id, sub_id) = (format!("{name}-{value}-l"), format!("{name}-{value}-d"));
                     view! {
@@ -140,13 +142,15 @@ pub fn Appearance() -> impl IntoView {
             <div class="app-choice-group">
                 <label class="k-field app-pref-select">
                     <span class="k-label">"Zoom de l'interface"</span>
-                    <select class="k-select" aria-describedby="zoom-h" on:change=on_zoom>
+                    <select class="k-select" aria-describedby="zoom-h" prop:disabled=prefs::zoom_locked on:change=on_zoom>
                         {ZOOMS.iter().map(|&z| view! {
                             <option value=z prop:selected=move || zoom.get() == z>{format!("{z} %")}</option>
                         }).collect_view()}
                     </select>
                 </label>
-                <p id="zoom-h" class="app-hint">"Agrandit ou réduit toute l'interface, texte compris."</p>
+                <p id="zoom-h" class="app-hint">
+                    "Agrandit ou réduit toute l'interface, texte compris. Le zoom est limité par la largeur de la fenêtre."
+                </p>
             </div>
             <Choices pref=&prefs::DENSITY name="density" legend="Densité" options=DENSITIES
                 hint="L'espace entre les messages et la taille des avatars."/>

@@ -772,7 +772,7 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 
 /* Réglages › Apparence, Accessibilité, Langue et heure : l'aperçu reste en haut, les choix s'empilent dessous.
    Chaque choix s'applique tout de suite ; rien à enregistrer. */
-.app-prefs { display: grid; gap: var(--space-8); }
+.app-prefs { display: grid; gap: var(--space-8); container-type: inline-size; }
 .app-prefs > .app-hint { max-width: 60ch; }
 .app-preview { position: sticky; top: 0; z-index: var(--z-sticky); border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
   background: var(--surface); box-shadow: var(--shadow-pop); overflow: hidden; }
@@ -782,6 +782,9 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 .app-preview-body > .k-msg:first-child { margin-top: var(--space-3); }
 .app-preview-body p { margin: 0; }
 .app-choices { grid-template-columns: repeat(auto-fit, minmax(min(var(--size-tile), 100%), 1fr)); }
+/* Trois choix sur une ligne dès que la page de réglages est assez large (jamais une carte seule sur la 2e ligne) ; la largeur de la
+   page, pas celle de la fenêtre : le zoom et la taille du texte changent la place qu'il reste. */
+@container (min-width: 600px) { .app-choices--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .app-choice-group { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: 0; border: 0; }
 .app-choice-group > legend { padding: 0; margin-bottom: var(--space-3); }
 .app-choice-group > .app-hint { margin-bottom: var(--space-2); }

@@ -27,6 +27,12 @@
   set("data-text", text === "16" ? null : text);
   var zoom = read("kraken.zoom", ["90", "100", "110", "125", "150"], "100");
   set("data-zoom", zoom === "100" ? null : zoom);
+  // Zoom plafonné à la largeur de la fenêtre (même calcul que prefs.rs) : les points de rupture des
+  // feuilles de style lisent la largeur réelle, donc la page zoomée doit rester au moins aussi large
+  // que le point de rupture où l'on se trouve (1024 px, puis 640 px), et le zoom vaut 1 sous 640 px.
+  var width = window.innerWidth, choice = Number(zoom) / 100;
+  var applied = width < 640 ? 1 : Math.min(choice, width / (width >= 1024 ? 1024 : 640));
+  if (Math.abs(applied - choice) > 1e-6) root.style.setProperty("--zoom", String(Math.round(applied * 1000) / 1000));
   set("data-density", read("kraken.density", ["comfortable", "compact"], "comfortable") === "compact" ? "compact" : null);
   var motion = read("kraken.motion", ["auto", "reduce", "normal"], "auto");
   set("data-motion", motion === "reduce" || (motion === "auto" && media("(prefers-reduced-motion: reduce)")) ? "reduce" : "normal");

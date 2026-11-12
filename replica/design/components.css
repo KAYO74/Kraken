@@ -283,6 +283,8 @@ a:hover { text-decoration: underline; }
 
 /* Modale paramètres + dialogue */
 .k-scrim { position: fixed; inset: 0; background: var(--shadow-scrim); display: grid; place-items: center; z-index: var(--z-modal); }
+/* Jamais centrée au-dessus de l'écran : si une fenêtre est plus haute, son haut reste visible (et le pied s'atteint en la faisant défiler). */
+.k-scrim { align-items: safe center; }
 .k-settings { display: grid; grid-template-columns: var(--size-settings-nav) 1fr; width: min(1400px, var(--vw) - 64px); height: min(940px, var(--vh) - 64px);
   border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-raised); box-shadow: var(--shadow-modal); border: 1px solid var(--border); }
 .k-settings nav { background: var(--surface); padding: var(--space-6) var(--space-5); overflow-y: auto; display: grid; gap: 2px; align-content: start; }
@@ -296,7 +298,7 @@ a:hover { text-decoration: underline; }
 .k-subnav a[aria-current] { color: var(--text-strong); }
 .k-settings main { overflow-y: auto; padding: var(--space-9) var(--space-9) var(--space-11); }
 .k-settings main > * { max-width: var(--size-settings-content); margin-inline: auto; }
-.k-dialog { width: min(440px, var(--vw) - 32px); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-modal); border: 1px solid var(--border); }
+.k-dialog { width: min(440px, var(--vw) - 32px); max-height: calc(var(--dvh) - var(--space-8)); overflow-y: auto; border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-modal); border: 1px solid var(--border); }
 .k-dialog > header { padding: var(--space-7) var(--space-7) 0; }
 .k-dialog > header h2 { margin: 0; font-size: var(--text-xl-size); line-height: var(--text-xl-line); color: var(--text-strong); }
 .k-dialog > div { padding: var(--space-5) var(--space-7); color: var(--text-secondary); }

@@ -13,6 +13,10 @@ const radio = (p: Page, g: string, label: string) => group(p, g).getByRole('radi
 const attr = (p: Page, name: string) => p.locator('html').getAttribute(name);
 const style = (loc: Locator, prop: string) => loc.evaluate((el, p) => getComputedStyle(el).getPropertyValue(p), prop);
 const members = (p: Page) => p.getByRole('complementary', { name: 'Membres' });
+/** Le zoom réellement appliqué (`--zoom` sur <html>). */
+const appliedZoom = async (p: Page) => parseFloat(await style(p.locator('html'), '--zoom'));
+/** Le zoom attendu : le choix, plafonné pour que la page garde la largeur du point de rupture (1024 px, puis 640 px) ; 1 sous 640 px. */
+const capped = (choice: number, width: number) => (width < 640 ? 1 : Math.min(choice, width / (width >= 1024 ? 1024 : 640)));
 
 /** Choisit un bouton radio et vérifie qu'il est coché tout de suite. */
 async function pick(p: Page, g: string, label: string) {
@@ -151,7 +155,7 @@ test('S11-H3 les flèches du clavier changent de choix et l’appliquent tout de
   expect(await attr(page, 'data-density')).toBe('compact');
 });
 
-test('S11-H4 zoom de l’interface : 90 à 150 %, tout tient encore dans la fenêtre', async ({ user }) => {
+test('S11-H4 zoom de l’interface : 90 à 150 % (plafonné à la largeur de la fenêtre), tout tient encore dans la fenêtre', async ({ user }) => {
   const { page } = await user('zooma');
   await page.goto('/settings/appearance');
   const zoom = page.getByLabel("Zoom de l'interface");
@@ -161,7 +165,10 @@ test('S11-H4 zoom de l’interface : 90 à 150 %, tout tient encore dans la fen�
   for (const z of ['90', '110', '125', '150']) {
     await zoom.selectOption(z);
     expect(await attr(page, 'data-zoom')).toBe(z);
-    expect(await style(page.locator('body'), 'zoom')).toBe(String(Number(z) / 100));
+    // À 1440 px, 150 % est ramené à 1440 / 1024 : le choix reste 150, le zoom appliqué est plafonné.
+    const expected = capped(Number(z) / 100, width);
+    expect(parseFloat(await style(page.locator('body'), 'zoom'))).toBeCloseTo(expected, 2);
+    expect(await appliedZoom(page)).toBeCloseTo(expected, 2);
     // La fenêtre des réglages reste entière à l'écran, la page ne déborde pas.
     const box = (await reglages(page).boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
@@ -313,6 +320,115 @@ test('S11-E3 le client reprend ce que boot.js a posé : rien ne clignote, les r�
   await expect(page.locator('html')).toHaveAttribute('data-motion', 'normal');
 });
 
+test('S11-H6 zoom plafonné : à 1440 px et 150 %, la page garde la mise en page large, sans écraser la colonne du salon', async ({ user }) => {
+  const { page } = await user('zoomlarge');
+  const [gid, cid] = await createGuild(page, 'Banc');
+  await page.evaluate(() => localStorage.setItem('kraken.zoom', '150'));
+  await page.goto(`/channels/${gid}/${cid}`);
+  await expect(page.getByLabel(/^Écrire dans/)).toBeVisible();
+  const zoom = await appliedZoom(page);
+  expect(zoom).toBeLessThanOrEqual(1440 / 1024 + 0.001);
+  expect(zoom).toBeGreaterThan(1.4);
+  expect(parseFloat(await style(page.locator('body'), 'zoom'))).toBeCloseTo(zoom, 3);
+  // La page zoomée est au moins aussi large que le point de rupture du bureau : la liste des membres reste affichée.
+  expect(1440 / zoom).toBeGreaterThanOrEqual(1023.9);
+  await expect(members(page)).toBeVisible();
+  await noScroll(page);
+  // La colonne du salon n'est pas plus étroite que dans une fenêtre de 1024 px sans zoom.
+  const main = async (p: Page) => (await p.locator('#main').evaluate((m) => m.getBoundingClientRect().width)) / (await appliedZoom(p));
+  const wide = await main(page);
+  const ref = await page.context().newPage();
+  await ref.setViewportSize({ width: 1024, height: 768 });
+  await ref.goto(`/channels/${gid}/${cid}`);
+  await expect(ref.getByLabel(/^Écrire dans/)).toBeVisible();
+  expect(await appliedZoom(ref)).toBe(1);
+  expect(wide).toBeGreaterThanOrEqual((await main(ref)) - 2);
+  await ref.close();
+  // Les réglages gardent le choix de l'utilisateur : 150 %.
+  await page.goto('/settings/appearance');
+  await expect(page.getByLabel("Zoom de l'interface")).toHaveValue('150');
+  await expect(page.getByLabel("Zoom de l'interface")).toBeEnabled();
+  await expect(page.getByText('Le zoom est limité par la largeur de la fenêtre.')).toBeVisible();
+  await expect(page.getByLabel("Zoom de l'interface")).toHaveAccessibleDescription(/limité par la largeur de la fenêtre/);
+  await a11y(page);
+});
+
+test('S11-H7 zoom plafonné : recalculé quand la fenêtre change de taille, gelé sous 640 px', async ({ user }) => {
+  const { page } = await user('zoomresize');
+  await page.goto('/settings/appearance');
+  const select = page.getByLabel("Zoom de l'interface");
+  await select.selectOption('150');
+  for (const [width, height] of [[1100, 800], [1023, 800], [900, 800], [700, 800], [639, 800], [390, 800], [1440, 900]]) {
+    await page.setViewportSize({ width, height });
+    await expect.poll(() => appliedZoom(page)).toBeCloseTo(capped(1.5, width), 2);
+    expect(await attr(page, 'data-zoom')).toBe('150');
+    // Sous 640 px le zoom est gelé : la liste est désactivée et la page est à sa taille d'origine.
+    if (width < 640) await expect(select).toBeDisabled();
+    else await expect(select).toBeEnabled();
+    await noScroll(page);
+  }
+  // Le choix est gardé : de retour à 1440 px, le plafond de cette largeur s'applique à nouveau.
+  expect(await appliedZoom(page)).toBeCloseTo(1440 / 1024, 2);
+  await expect(select).toHaveValue('150');
+});
+
+/**
+ * Texte à 20 px et zoom à 150 % (plafonné par la largeur de la fenêtre) : les fenêtres de dialogue sont plus hautes que
+ * l'écran. Chacune doit tenir dans l'écran (elle défile), et son dernier bouton doit se cliquer pour de vrai : on le fait
+ * défiler dans la vue puis on clique, sans `force`.
+ */
+async function dialogsReachable(f: { user: (p?: string) => Promise<User>; api: Api }) {
+  const owner = await f.user('fenetres');
+  const { page } = owner;
+  const res = await (await f.api(owner.token)).post(`${API}/guilds`, { data: { name: 'Poche' } });
+  expect(res.status(), await res.text()).toBe(201);
+  const g = await res.json();
+  const cid = g.channels.find((c: { kind: string }) => c.kind === 'text').id;
+  await page.evaluate(() => {
+    localStorage.setItem('kraken.zoom', '150');
+    localStorage.setItem('kraken.text', '20');
+  });
+  await page.goto(`/channels/${g.guild.id}/${cid}`);
+  await expect(page.getByRole('heading', { name: 'général', level: 1 })).toBeVisible();
+  const { width, height } = page.viewportSize()!;
+  expect(await appliedZoom(page)).toBeCloseTo(capped(1.5, width), 2);
+
+  const reach = async (dialog: Locator, last: string) => {
+    await expect(dialog).toBeVisible();
+    const box = (await dialog.boundingBox())!;
+    expect(box.y, 'le haut de la fenêtre est visible').toBeGreaterThanOrEqual(-1);
+    expect(box.y + box.height, 'la fenêtre tient dans l’écran').toBeLessThanOrEqual(height + 1);
+    const button = dialog.getByRole('button', { name: last, exact: true });
+    await expect(button).toBeEnabled();
+    await button.scrollIntoViewIfNeeded();
+    await expect(button).toBeInViewport({ ratio: 1 });
+    await button.click({ timeout: 3000 });
+    await expect(dialog).toHaveCount(0);
+  };
+
+  // Créer un salon. Sur téléphone la liste des salons est dans le tiroir.
+  const menu = page.getByRole('button', { name: 'Ouvrir la navigation' });
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole('navigation', { name: 'Salons' }).getByRole('button', { name: 'Créer un salon' }).first().click();
+  const create = page.getByRole('dialog', { name: 'Créer un salon' });
+  await create.getByLabel('Nom du salon').fill('fenetre');
+  await reach(create, 'Créer le salon');
+  await expect(page.getByRole('heading', { name: 'fenetre', level: 1 })).toBeVisible();
+
+  // Notifications du salon.
+  await page.getByRole('button', { name: 'Notifications du salon' }).click();
+  await reach(page.getByRole('dialog', { name: /Notifications/ }), 'Fermer');
+
+  // Recadrer la photo.
+  await page.goto('/settings/profiles');
+  await page.getByLabel('Changer la photo').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: png(600, 600) });
+  await reach(page.getByRole('dialog', { name: 'Recadrer ta photo' }), 'Appliquer');
+  // Recadrer la bannière.
+  await page.getByLabel('Changer la bannière').setInputFiles({ name: 'banniere.png', mimeType: 'image/png', buffer: png(900, 240) });
+  await reach(page.getByRole('dialog', { name: 'Recadrer ta bannière' }), 'Appliquer');
+}
+
+
 test.describe('largeur mobile', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
@@ -339,6 +455,33 @@ test.describe('largeur mobile', () => {
     await pick(page, 'Taille du texte', 'Très grand');
     await noScroll(page);
     await a11y(page);
+  });
+
+  test('S11-N2 à 390 px le zoom est gelé : liste désactivée, page à sa taille, même avec 150 % gardé', async ({ user }) => {
+    const { page } = await user('mobilz');
+    await page.evaluate(() => localStorage.setItem('kraken.zoom', '150'));
+    await page.goto('/settings/appearance');
+    const select = page.getByLabel("Zoom de l'interface");
+    await expect(select).toBeDisabled();
+    await expect(select).toHaveValue('150');
+    await expect(select).toHaveAccessibleDescription(/limité par la largeur de la fenêtre/);
+    expect(await attr(page, 'data-zoom')).toBe('150');
+    expect(await appliedZoom(page)).toBe(1);
+    expect(await style(page.locator('body'), 'zoom')).toBe('1');
+    await noScroll(page);
+    await a11y(page);
+  });
+
+  test('S11-N3 à 390 px, zoom 150 % et texte 20 px : chaque fenêtre défile et son dernier bouton se clique', async ({ user, api }) => {
+    await dialogsReachable({ user, api });
+  });
+});
+
+test.describe('fenêtre de 1280 × 720', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  test('S11-N4 à 1280 × 720, zoom 150 % (plafonné) et texte 20 px : chaque fenêtre défile et son dernier bouton se clique', async ({ user, api }) => {
+    await dialogsReachable({ user, api });
   });
 });
 
@@ -393,6 +536,20 @@ test.describe('largeur mobile', () => {
     expect(await style(page.locator('.app-nav'), 'transition-property')).toBe('none');
     await expect(page.getByRole('navigation', { name: 'Serveurs' })).toBeVisible();
   });
+});
+
+test('S12-H7 trois choix : Mouvement, Contraste et Format de l’heure tiennent sur une seule ligne dans une fenêtre large', async ({ user }) => {
+  const { page } = await user('troisla');
+  const row = async (name: string) =>
+    (await group(page, name).getByRole('radio').evaluateAll((r) => r.map((x) => x.closest('label')!.getBoundingClientRect()))).map((b) => [Math.round(b.y), Math.round(b.x)]);
+  for (const [path, name] of [['accessibility', 'Mouvement'], ['accessibility', 'Contraste'], ['language', "Format de l'heure"]]) {
+    await page.goto(`/settings/${path}`);
+    await expect(group(page, name)).toBeVisible();
+    const boxes = await row(name);
+    expect(boxes).toHaveLength(3);
+    expect(new Set(boxes.map(([y]) => y)).size, `${name} : une seule ligne`).toBe(1);
+    expect(new Set(boxes.map(([, x]) => x)).size, `${name} : trois colonnes`).toBe(3);
+  }
 });
 
 test('S12-H2 images animées : fixes dans les listes, animées au survol, au focus et sur la carte ; fixes partout en mouvement réduit', async ({ user, api }) => {

@@ -8,12 +8,25 @@
 //! `data-motion`, `data-contrast`, `data-underline-links`) et les feuilles de style font le reste
 //! (`replica/design/tokens.css`). `boot.js` pose les mêmes attributs avant le premier rendu ; les deux
 //! suivent les mêmes clés et les mêmes valeurs.
+//!
+//! Le zoom est plafonné à la largeur de la fenêtre : les points de rupture des feuilles de style (639 et
+//! 1023 px) lisent la largeur réelle de la fenêtre, pas celle de la page zoomée, donc un zoom qui
+//! réduirait la page sous 1024 px (ou 640 px) de large ferait garder la mise en page large dans une
+//! colonne écrasée. Le zoom réellement appliqué (`--zoom` en ligne sur `<html>` quand il diffère du
+//! choix) garde donc la largeur de la page au moins égale à celle du point de rupture où l'on se trouve,
+//! et vaut 1 sous 640 px. Il est recalculé quand la fenêtre change de taille (un seul écouteur).
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+use leptos::prelude::{ArcRwSignal, Get, GetUntracked, Set};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
+
+/// Largeur de la fenêtre (px) sous laquelle la mise en page est celle du téléphone, et où le zoom est coupé.
+const PHONE_PX: f64 = 640.0;
+/// Largeur de la fenêtre (px) à partir de laquelle la liste des membres s'affiche.
+const DESKTOP_PX: f64 = 1024.0;
 
 /// Un réglage : sa clé de stockage, ses valeurs permises et sa valeur par défaut.
 pub struct Pref {
@@ -36,6 +49,8 @@ const ALL: [&Pref; 8] = [&THEME, &TEXT, &ZOOM, &DENSITY, &MOTION, &CONTRAST, &UN
 thread_local! {
     /// La valeur courante de chaque réglage, lue une fois dans le stockage.
     static VALUES: RefCell<HashMap<&'static str, &'static str>> = RefCell::new(HashMap::new());
+    /// La fenêtre est trop étroite pour zoomer (sous 640 px) : le choix du zoom est alors gelé.
+    static ZOOM_LOCKED: ArcRwSignal<bool> = ArcRwSignal::new(window_width() < PHONE_PX);
 }
 
 fn storage() -> Option<web_sys::Storage> {
@@ -95,6 +110,52 @@ pub fn high_contrast() -> bool {
     }
 }
 
+/// Le zoom ne peut pas être changé : la fenêtre est trop étroite (se suit dans une vue).
+pub fn zoom_locked() -> bool {
+    ZOOM_LOCKED.with(|locked| locked.get())
+}
+
+/// La largeur de la fenêtre, en pixels (sans limite si on ne peut pas la lire).
+fn window_width() -> f64 {
+    web_sys::window().and_then(|w| w.inner_width().ok()).and_then(|v| v.as_f64()).unwrap_or(f64::INFINITY)
+}
+
+/// Le zoom à appliquer : le choix, plafonné pour que la page garde au moins la largeur du point de rupture
+/// où se trouve la fenêtre (1024 px, puis 640 px), et 1 sous 640 px. Même calcul que `boot.js`.
+fn effective_zoom(choice: f64, width: f64) -> f64 {
+    if width < PHONE_PX {
+        return 1.0;
+    }
+    let layout = if width >= DESKTOP_PX { DESKTOP_PX } else { PHONE_PX };
+    choice.min(width / layout)
+}
+
+/// Pose le zoom réellement appliqué sur `<html>` (`--zoom` en ligne, seulement s'il diffère du choix que
+/// les feuilles de style connaissent déjà par `data-zoom`) et met à jour l'état « zoom gelé ».
+fn apply_zoom() {
+    let width = window_width();
+    let choice = get(&ZOOM).parse::<f64>().map_or(1.0, |percent| percent / 100.0);
+    let zoom = effective_zoom(choice, width);
+    let root = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.document_element())
+        .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok());
+    if let Some(root) = root {
+        let style = root.style();
+        let _ = if (zoom - choice).abs() < 1e-6 {
+            style.remove_property("--zoom").map(|_| ())
+        } else {
+            style.set_property("--zoom", &format!("{}", (zoom * 1000.0).round() / 1000.0))
+        };
+    }
+    let locked = width < PHONE_PX;
+    ZOOM_LOCKED.with(|signal| {
+        if signal.get_untracked() != locked {
+            signal.set(locked);
+        }
+    });
+}
+
 fn attribute(name: &str, value: Option<&str>) {
     let Some(root) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.document_element()) else { return };
     let _ = match value {
@@ -110,14 +171,15 @@ fn apply() {
     attribute("data-text", (text != TEXT.default).then_some(text));
     let zoom = get(&ZOOM);
     attribute("data-zoom", (zoom != ZOOM.default).then_some(zoom));
+    apply_zoom();
     attribute("data-density", (get(&DENSITY) == "compact").then_some("compact"));
     attribute("data-motion", Some(if reduced_motion() { "reduce" } else { "normal" }));
     attribute("data-contrast", high_contrast().then_some("high"));
     attribute("data-underline-links", (get(&UNDERLINE) == "on").then_some(""));
 }
 
-/// Au démarrage : lit les réglages, les pose, et suit les changements du système (mouvement, contraste)
-/// pour les réglages laissés sur « Automatique ».
+/// Au démarrage : lit les réglages, les pose, suit les changements du système (mouvement, contraste)
+/// pour les réglages laissés sur « Automatique », et la taille de la fenêtre pour le zoom.
 pub fn init() {
     for pref in ALL {
         get(pref);
@@ -128,5 +190,10 @@ pub fn init() {
         let on_change = Closure::<dyn FnMut(web_sys::Event)>::new(|_| apply());
         let _ = list.add_event_listener_with_callback("change", on_change.as_ref().unchecked_ref());
         on_change.forget();
+    }
+    if let Some(window) = web_sys::window() {
+        let on_resize = Closure::<dyn FnMut()>::new(apply_zoom);
+        let _ = window.add_event_listener_with_callback("resize", on_resize.as_ref().unchecked_ref());
+        on_resize.forget();
     }
 }
