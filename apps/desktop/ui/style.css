@@ -5,7 +5,6 @@
 body { margin: 0; min-height: 100vh; padding: 24px 0; display: grid; place-items: center; background: var(--bg); color: var(--text);
   font: 16px/1.5 Inter, system-ui, sans-serif; }
 main { width: min(480px, 100% - 32px); padding: 32px; border-radius: 16px; background: var(--surface); text-align: center; }
-img { border-radius: 20px; }
 h1 { margin: 16px 0 8px; font-size: 24px; }
 h1:focus { outline: none; }
 h2 { margin: 0 0 8px; font-size: 18px; }
