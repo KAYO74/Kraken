@@ -1,5 +1,6 @@
 /* Généré par tokens.py depuis tokens.json. Ne pas éditer à la main. */
-/* Thèmes : data-theme="dark" (défaut) | "light" | "black" | "auto" sur <html>. */
+/* Sur <html> : data-theme="dark" (défaut) | "light" | "black" | "auto" ; data-text="14"|"18"|"20" ; data-zoom="90"|"110"|"125"|"150" ;
+   data-density="compact" ; data-contrast="high" ; data-motion="reduce". Le client les pose avant le premier rendu (boot.js). */
 /* Points de rupture (pas de variables CSS dans @media) : bp-mobile 640px, bp-tablet 1024px, bp-wide 1440px */
 
 :root {
@@ -56,23 +57,28 @@
   --avatar-8-text: #f19ddc;
   --font-sans: "Inter", "Noto Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --text-xs-size: 0.75rem;
-  --text-xs-line: 1rem;
+  --text-scale: 1;
+  --zoom: 1;
+  --vw: calc(100vw / var(--zoom));
+  --vh: calc(100vh / var(--zoom));
+  --dvh: calc(100dvh / var(--zoom));
+  --text-xs-size: calc(0.75rem * var(--text-scale));
+  --text-xs-line: calc(1rem * var(--text-scale));
   --text-xs-weight: 500;
-  --text-sm-size: 0.875rem;
-  --text-sm-line: 1.125rem;
+  --text-sm-size: calc(0.875rem * var(--text-scale));
+  --text-sm-line: calc(1.125rem * var(--text-scale));
   --text-sm-weight: 500;
-  --text-base-size: 1rem;
-  --text-base-line: 1.375rem;
+  --text-base-size: calc(1rem * var(--text-scale));
+  --text-base-line: calc(1.375rem * var(--text-scale));
   --text-base-weight: 400;
-  --text-lg-size: 1.25rem;
-  --text-lg-line: 1.5rem;
+  --text-lg-size: calc(1.25rem * var(--text-scale));
+  --text-lg-line: calc(1.5rem * var(--text-scale));
   --text-lg-weight: 600;
-  --text-xl-size: 1.5rem;
-  --text-xl-line: 1.875rem;
+  --text-xl-size: calc(1.5rem * var(--text-scale));
+  --text-xl-line: calc(1.875rem * var(--text-scale));
   --text-xl-weight: 600;
-  --text-2xl-size: 2rem;
-  --text-2xl-line: 2.5rem;
+  --text-2xl-size: calc(2rem * var(--text-scale));
+  --text-2xl-line: calc(2.5rem * var(--text-scale));
   --text-2xl-weight: 700;
   --weight-regular: 400;
   --weight-medium: 500;
@@ -116,6 +122,8 @@
   --size-server-icon: 40px;
   --size-icon: 20px;
   --size-message-gap: 16px;
+  --size-msg-avatar: 40px;
+  --size-focus: 2px;
   --size-card: 480px;
   --size-dialog-wide: 520px;
   --size-tile: 240px;
@@ -246,9 +254,134 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  :root { --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; }
+:root[data-text="14"] { --text-scale: 0.875; }
+:root[data-text="16"] { --text-scale: 1; }
+:root[data-text="18"] { --text-scale: 1.125; }
+:root[data-text="20"] { --text-scale: 1.25; }
+:root[data-zoom="90"] { --zoom: 0.9; }
+:root[data-zoom="100"] { --zoom: 1; }
+:root[data-zoom="110"] { --zoom: 1.1; }
+:root[data-zoom="125"] { --zoom: 1.25; }
+:root[data-zoom="150"] { --zoom: 1.5; }
+
+:root[data-density="compact"] {
+  --size-message-gap: var(--space-2);
+  --size-msg-avatar: var(--space-7);
 }
+
+:root[data-contrast="high"] { --size-focus: 3px; }
+
+:root[data-contrast="high"]:is(:not([data-theme]), [data-theme="dark"], [data-theme="auto"]) {
+  --border: #74757d;
+  --border-strong: #8e8f97;
+  --border-input: #8e8f97;
+  --text-strong: #ffffff;
+  --text: #ffffff;
+  --text-secondary: #c0c1c5;
+  --text-muted: #c0c1c5;
+  --text-faint: #c0c1c5;
+  --link: #a5c3f4;
+  --accent: #7ecfcb;
+  --accent-hover: #9edbd8;
+  --accent-text: #7ecfcb;
+  --on-accent: #000000;
+  --danger: #f69a9d;
+  --danger-solid: #f69a9d;
+  --on-danger: #000000;
+  --success: #8aba94;
+  --info: #a5c3f4;
+  --avatar-1-text: #f5b6b6;
+  --avatar-2-text: #f8edcc;
+  --avatar-3-text: #edfbe0;
+  --avatar-4-text: #d8f9e0;
+  --avatar-5-text: #e0fbfb;
+  --avatar-6-text: #b2c2f4;
+  --avatar-7-text: #d3b3f4;
+  --avatar-8-text: #f5b8e6;
+}
+:root[data-contrast="high"][data-theme="light"] {
+  --border: #7c7d85;
+  --border-strong: #686972;
+  --border-input: #686972;
+  --text-strong: #000000;
+  --text: #000000;
+  --text-secondary: #45464d;
+  --text-muted: #45464d;
+  --text-faint: #45464d;
+  --link: #134391;
+  --accent: #17514f;
+  --accent-hover: #0f3d3b;
+  --accent-text: #17514f;
+  --on-accent: #ffffff;
+  --danger: #952128;
+  --danger-solid: #952128;
+  --on-danger: #ffffff;
+  --success: #165d2c;
+  --warning: #704900;
+  --info: #134391;
+  --avatar-2-text: #5c4911;
+  --avatar-3-text: #335710;
+  --avatar-4-text: #105822;
+  --avatar-5-text: #0f5555;
+}
+:root[data-contrast="high"][data-theme="black"] {
+  --border: #74757d;
+  --border-strong: #8e8f97;
+  --border-input: #8e8f97;
+  --text-strong: #ffffff;
+  --text: #ffffff;
+  --text-secondary: #c0c1c5;
+  --text-muted: #c0c1c5;
+  --text-faint: #c0c1c5;
+  --link: #a5c3f4;
+  --accent: #7ecfcb;
+  --accent-hover: #9edbd8;
+  --accent-text: #7ecfcb;
+  --on-accent: #000000;
+  --danger: #f69a9d;
+  --danger-solid: #f69a9d;
+  --on-danger: #000000;
+  --success: #8aba94;
+  --info: #a5c3f4;
+  --avatar-1-text: #f5b6b6;
+  --avatar-2-text: #f8edcc;
+  --avatar-3-text: #edfbe0;
+  --avatar-4-text: #d8f9e0;
+  --avatar-5-text: #e0fbfb;
+  --avatar-6-text: #b2c2f4;
+  --avatar-7-text: #d3b3f4;
+  --avatar-8-text: #f5b8e6;
+}
+@media (prefers-color-scheme: light) {
+  :root[data-contrast="high"][data-theme="auto"] {
+    --border: #7c7d85;
+    --border-strong: #686972;
+    --border-input: #686972;
+    --text-strong: #000000;
+    --text: #000000;
+    --text-secondary: #45464d;
+    --text-muted: #45464d;
+    --text-faint: #45464d;
+    --link: #134391;
+    --accent: #17514f;
+    --accent-hover: #0f3d3b;
+    --accent-text: #17514f;
+    --on-accent: #ffffff;
+    --danger: #952128;
+    --danger-solid: #952128;
+    --on-danger: #ffffff;
+    --success: #165d2c;
+    --warning: #704900;
+    --info: #134391;
+    --avatar-2-text: #5c4911;
+    --avatar-3-text: #335710;
+    --avatar-4-text: #105822;
+    --avatar-5-text: #0f5555;
+  }
+}
+
+/* Mouvement réduit : choisi dans Réglages > Accessibilité, ou suivi du système (prefers-reduced-motion) par le client. */
+:root[data-motion="reduce"] { --motion-fast: 0ms; --motion-base: 0ms; --motion-slow: 0ms; }
 
 /* Utilitaires rôle -> classe (équivalent du thème Tailwind, sans chaîne Node). */
 .bg-bg { background-color: var(--bg); }

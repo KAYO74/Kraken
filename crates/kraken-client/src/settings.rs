@@ -1,6 +1,7 @@
 //! Réglages utilisateur (S06 à S15) dans la modale `k-settings`. Mon compte (pseudo, e-mail, mot
-//! de passe), Mon profil, Apparence, la liste des comptes bloqués (S08) et les notifications
-//! (S09) sont branchés ; les autres sections ont leur route et leur place dans la navigation.
+//! de passe), Mon profil, la liste des comptes bloqués (S08), les notifications (S09) et les réglages
+//! d'affichage de l'appareil (Apparence, Accessibilité, Langue et heure : `display.rs`) sont branchés ;
+//! les autres sections ont leur route et leur place dans la navigation.
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -24,14 +25,6 @@ const SECTIONS: &[(&str, &str, &str, &str)] = &[
     ("Préférences", "language", "Langue et heure", "S14"),
 ];
 
-const THEME_KEY: &str = "kraken.theme";
-const THEMES: &[(&str, &str, &str)] = &[
-    ("dark", "Sombre", "Le thème par défaut, doux pour les yeux le soir."),
-    ("light", "Clair", "Fond blanc, pour les pièces lumineuses."),
-    ("black", "Noir", "Noir profond, idéal sur les écrans OLED."),
-    ("auto", "Automatique", "Suit le réglage clair ou sombre de ton système."),
-];
-
 /// Le champ d'un formulaire du compte qu'une réponse d'erreur met en cause : la nouvelle valeur
 /// (pseudo, adresse, nouveau mot de passe) ou le mot de passe actuel. Une erreur sans champ
 /// (réseau, serveur) n'en marque aucun : l'alerte seule la dit.
@@ -49,23 +42,6 @@ fn culprit_of(code: &str) -> Option<Culprit> {
         }
         _ => None,
     }
-}
-
-fn set_theme(t: &str) {
-    if let Some(el) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.document_element()) {
-        let _ = el.set_attribute("data-theme", t);
-    }
-}
-
-fn saved_theme() -> String {
-    web_sys::window()
-        .and_then(|w| w.local_storage().ok().flatten())
-        .and_then(|s| s.get_item(THEME_KEY).ok().flatten())
-        .unwrap_or_else(|| "dark".into())
-}
-
-pub fn apply_saved_theme() {
-    set_theme(&saved_theme());
 }
 
 #[component]
@@ -100,7 +76,9 @@ pub fn Settings() -> impl IntoView {
                     {move || match section().as_str() {
                         "account" => view! { <Account/> }.into_any(),
                         "profiles" => view! { <crate::profile::ProfileSettings/> }.into_any(),
-                        "appearance" => view! { <Appearance/> }.into_any(),
+                        "appearance" => view! { <crate::display::Appearance/> }.into_any(),
+                        "accessibility" => view! { <crate::display::Accessibility/> }.into_any(),
+                        "language" => view! { <crate::display::Language/> }.into_any(),
                         "messaging" => view! { <Messaging/> }.into_any(),
                         "notifications" => view! { <Notifications/> }.into_any(),
                         other => {
@@ -389,29 +367,6 @@ fn PasswordForm() -> impl IntoView {
             </div>
             <Show when=move || error.get().is_some()><p id="acct-password-err" class="k-error" role="alert">{move || error.get()}</p></Show>
         </form>
-    }
-}
-
-#[component]
-fn Appearance() -> impl IntoView {
-    let current = RwSignal::new(saved_theme());
-    let pick = move |t: &'static str| {
-        current.set(t.into());
-        set_theme(t);
-        if let Some(s) = web_sys::window().and_then(|w| w.local_storage().ok().flatten()) {
-            let _ = s.set_item(THEME_KEY, t);
-        }
-    };
-    view! {
-        <fieldset class="k-radios">
-            <legend class="k-label app-legend">"Thème"</legend>
-            {THEMES.iter().map(|(t, label, sub)| view! {
-                <label class="k-radio">
-                    <input type="radio" name="theme" prop:checked=move || current.get() == *t on:change=move |_| pick(t)/>
-                    <div><b>{*label}</b><span>{*sub}</span></div>
-                </label>
-            }).collect_view()}
-        </fieldset>
     }
 }
 

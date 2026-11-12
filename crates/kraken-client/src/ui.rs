@@ -8,6 +8,7 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
 use crate::icons::{Icon, lu};
+use crate::photo::Photo;
 use crate::store::store;
 
 thread_local! {
@@ -138,7 +139,7 @@ pub fn Avatar(
         let photo = user.avatar.clone();
         move || match &photo {
             Some(key) if !broken.get() => view! {
-                <img src=avatar_url(key) alt="" loading="lazy" decoding="async" on:error=move |_| broken.set(true)/>
+                <Photo src=avatar_url(key) cap=256 on_error=move |()| broken.set(true)/>
             }
             .into_any(),
             _ => initials.clone().into_any(),
@@ -266,11 +267,37 @@ pub fn NotFound() -> impl IntoView {
     }
 }
 
-/// Heure locale `HH:MM`, précédée de la date si ce n'est pas aujourd'hui.
+/// L'heure locale de `ms`, au format choisi dans Réglages › Langue et heure : « 14:30 » en 24 h,
+/// « 2:30 PM » en 12 h, et d'après la langue du navigateur en « Automatique ». C'est le seul endroit
+/// qui écrit une heure : messages, « Exclu jusqu'à », sourdines, dates des invitations et des bans.
+pub fn clock(ms: i64) -> String {
+    let d = js_sys::Date::new(&(ms as f64).into());
+    let (h, m) = (d.get_hours(), d.get_minutes());
+    match crate::prefs::get(&crate::prefs::CLOCK) {
+        "24" => format!("{h:02}:{m:02}"),
+        "12" => format!("{}:{m:02} {}", if h % 12 == 0 { 12 } else { h % 12 }, if h < 12 { "AM" } else { "PM" }),
+        _ => automatic_clock(&d).unwrap_or_else(|| format!("{h:02}:{m:02}")),
+    }
+}
+
+/// L'heure selon la langue du navigateur (« 14:30 » en France, « 2:30 PM » aux États-Unis).
+fn automatic_clock(d: &js_sys::Date) -> Option<String> {
+    let locale = web_sys::window()?.navigator().language()?;
+    if locale.len() < 2 || !locale.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return None;
+    }
+    let options = js_sys::Object::new();
+    for (key, value) in [("hour", "numeric"), ("minute", "2-digit")] {
+        js_sys::Reflect::set(&options, &key.into(), &value.into()).ok()?;
+    }
+    Some(d.to_locale_string(&locale, &options).into())
+}
+
+/// L'heure ([`clock`]), précédée de la date si ce n'est pas aujourd'hui.
 pub fn when(ms: i64) -> String {
     let d = js_sys::Date::new(&(ms as f64).into());
     let now = js_sys::Date::new_0();
-    let hm = format!("{:02}:{:02}", d.get_hours(), d.get_minutes());
+    let hm = clock(ms);
     if d.to_date_string() == now.to_date_string() {
         hm
     } else {

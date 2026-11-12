@@ -5,9 +5,10 @@ use kraken_proto::{Id, MAX_BIO, MAX_DISPLAY_NAME, MAX_PRONOUNS, RelationshipKind
 use leptos::portal::Portal;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsCast, JsValue};
 
 use crate::icons::{Icon, lu};
+use crate::photo::Photo;
 use crate::social::{Confirm, ConfirmDialog, open_dm};
 use crate::store::{ProfileTarget, Store, store};
 use crate::ui::{Avatar, StatusDot, banner_url, modal, tint};
@@ -58,6 +59,30 @@ fn live_user(s: Store, t: &ProfileTarget) -> User {
         .unwrap_or_else(|| t.user.clone())
 }
 
+/// « Lire l'animation » : en mouvement réduit, les images animées de la carte (photo, bannière) restent
+/// fixes ; ce bouton les anime (ou les fige de nouveau). Les feuilles de style ne le montrent qu'en
+/// mouvement réduit et quand la carte a une image animée.
+#[component]
+fn PlayAnimation() -> impl IntoView {
+    let playing = RwSignal::new(false);
+    let toggle = move |e: leptos::ev::MouseEvent| {
+        let on = !playing.get_untracked();
+        playing.set(on);
+        let card = e
+            .current_target()
+            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+            .and_then(|el| el.closest(".app-card").ok().flatten());
+        if let Some(card) = card {
+            let _ = if on { card.set_attribute("data-play", "") } else { card.remove_attribute("data-play") };
+        }
+    };
+    view! {
+        <button type="button" class="k-btn k-btn--sm app-play" aria-pressed=move || playing.get().to_string() on:click=toggle>
+            <Icon icon=lu::LuPlay small=true/>"Lire l'animation"
+        </button>
+    }
+}
+
 /// Le contenu d'une carte de profil : bannière, avatar, noms, pronoms, bio, dates, rôles du
 /// serveur. Sert à la fenêtre qui s'ouvre sur un clic et à l'aperçu des réglages.
 #[component]
@@ -75,7 +100,7 @@ fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: 
     });
     let banner = move || {
         let u = user.get();
-        let image = u.banner.map(|k| view! { <img src=banner_url(&k) alt="" loading="lazy" decoding="async"/> });
+        let image = u.banner.map(|k| view! { <Photo src=banner_url(&k) cap=640/> });
         view! { <div class="app-card-banner" data-tint=tint(u.id)>{image}</div> }
     };
     // Rôles du serveur (sans @everyone), du plus haut au plus bas, et depuis quand il y est.
@@ -110,6 +135,7 @@ fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: 
                 <span class="app-dot-inline"><StatusDot status=dot/></span>
                 {move || capital(dot.get().label())}
             </p>
+            <PlayAnimation/>
             {move || user.get().bio.filter(|b| !b.is_empty()).map(|b| view! {
                 <section class="app-card-section" aria-label="À propos">
                     <h3 class="app-card-label">"À propos"</h3>
