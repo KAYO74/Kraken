@@ -1,7 +1,9 @@
 //! Images reçues (fichiers joints, images d'aperçus de liens) : décodage borné, réduction et
 //! ré-encodage, ce qui efface EXIF, position GPS et autres métadonnées de la copie servie.
 
-use std::io::Cursor;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Cursor, Seek};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use image::imageops::FilterType;
@@ -19,6 +21,10 @@ const HEADER_ALLOC: u64 = 64 * 1024 * 1024;
 /// images d'aperçus) : les autres attendent leur tour.
 pub const MAX_DECODES: usize = 2;
 static DECODES: Semaphore = Semaphore::const_new(MAX_DECODES);
+/// Lectures d'en-tête menées en même temps (voir [`peek_size`]) : chacune peut aller jusqu'à
+/// [`HEADER_ALLOC`], aucune ne décode de pixel.
+const MAX_PEEKS: usize = 8;
+static PEEKS: Semaphore = Semaphore::const_new(MAX_PEEKS);
 static RUNNING: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);
 
@@ -75,13 +81,15 @@ impl Bounds {
 }
 
 /// Pièces jointes et images d'aperçus : jusqu'à 8192 pixels de côté et 40 millions de pixels.
+/// Une pièce jointe plus grande reste un fichier ordinaire, sans vignette ; une image d'aperçu
+/// plus grande est écartée.
 pub const MEDIA: Bounds = Bounds { side: 8192, pixels: 40_000_000 };
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Refusal {
     /// Pas une image que l'on sait lire (ou métadonnées démesurées).
     NotImage,
-    /// Lisible, mais plus grande que les [`Bounds`] : refusée d'après son seul en-tête.
+    /// Lisible, mais plus grande que les [`Bounds`] : jugée d'après son seul en-tête.
     TooBig,
 }
 
@@ -96,6 +104,39 @@ pub fn safe_format(raw: &[u8]) -> Option<(ImageFormat, &'static str)> {
     }
 }
 
+/// Les limites de la lecture d'un en-tête : de la mémoire, pas de limite de dimensions (c'est
+/// justement lui qui les dit).
+fn header_limits() -> Limits {
+    let mut limits = Limits::no_limits();
+    limits.max_alloc = Some(HEADER_ALLOC);
+    limits
+}
+
+/// Les dimensions que l'en-tête d'un PNG, JPEG, WebP ou GIF annonce, sans décoder un pixel.
+/// `None` : un autre format, ou un en-tête illisible.
+pub fn header_size<R: BufRead + Seek>(source: R) -> Option<(u32, u32)> {
+    let mut reader = ImageReader::new(source).with_guessed_format().ok()?;
+    if !matches!(reader.format()?, ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::WebP | ImageFormat::Gif) {
+        return None;
+    }
+    reader.limits(header_limits());
+    let (w, h) = reader.into_decoder().ok()?.dimensions();
+    (w > 0 && h > 0).then_some((w, h))
+}
+
+/// [`header_size`] d'un fichier posé sur le disque, hors du runtime, sans le lire en entier et
+/// sans permis de décodage.
+pub async fn peek_size(path: PathBuf) -> Option<(u32, u32)> {
+    let permit = PEEKS.acquire().await.ok()?;
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        header_size(BufReader::new(File::open(path).ok()?))
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 /// Décode une image dans ces [`Bounds`], en appliquant l'orientation EXIF.
 ///
 /// L'en-tête est lu d'abord, avec une mémoire bornée à [`HEADER_ALLOC`] : c'est lui qui dit la
@@ -103,9 +144,7 @@ pub fn safe_format(raw: &[u8]) -> Option<(ImageFormat, &'static str)> {
 /// 215 Ko en 8192 × 8192 pèse plus de 400 Mo décodé.
 pub fn decode_within(raw: &[u8], bounds: Bounds) -> Result<DynamicImage, Refusal> {
     let mut reader = ImageReader::new(Cursor::new(raw)).with_guessed_format().map_err(|_| Refusal::NotImage)?;
-    let mut header = Limits::no_limits();
-    header.max_alloc = Some(HEADER_ALLOC);
-    reader.limits(header);
+    reader.limits(header_limits());
     let mut decoder = reader.into_decoder().map_err(|_| Refusal::NotImage)?;
     let (w, h) = decoder.dimensions();
     if w == 0 || h == 0 {
@@ -157,10 +196,22 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
     use std::time::Duration;
 
+    use image::{GrayImage, RgbImage};
+
     use super::*;
+
+    /// Les tests qui comptent ou occupent les permis de décodage ne tournent pas ensemble.
+    static PERMITS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    fn encoded(img: &DynamicImage, format: ImageFormat) -> Vec<u8> {
+        let mut out = Cursor::new(Vec::new());
+        img.write_to(&mut out, format).unwrap();
+        out.into_inner()
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn at_most_two_decodes_run_at_the_same_time() {
+        let _alone = PERMITS.lock().await;
         static NOW: AtomicUsize = AtomicUsize::new(0);
         static MOST: AtomicUsize = AtomicUsize::new(0);
         let jobs = (0..8).map(|_| {
@@ -188,5 +239,42 @@ mod tests {
         assert!(MEDIA.fits(8192, 4882) && MEDIA.fits(8192, 16) && MEDIA.fits(6324, 6324));
         assert!(!MEDIA.fits(8193, 1) && !MEDIA.fits(1, 8193) && !MEDIA.fits(8192, 8192) && !MEDIA.fits(7000, 6000));
         assert_eq!(MEDIA.describe(), "8192 pixels de côté et 40 millions de pixels au plus");
+    }
+
+    #[test]
+    fn the_header_gives_the_size_of_the_four_safe_formats_and_nothing_else() {
+        let gray = DynamicImage::ImageLuma8(GrayImage::new(8200, 16));
+        let rgb = DynamicImage::ImageRgb8(RgbImage::new(40, 30));
+        for (format, what) in [(ImageFormat::Png, "png"), (ImageFormat::Gif, "gif"), (ImageFormat::WebP, "webp")] {
+            let img = if format == ImageFormat::Png { &gray } else { &rgb };
+            let (w, h) = (img.width(), img.height());
+            let got = header_size(Cursor::new(encoded(img, format)));
+            assert_eq!(got, Some((w, h)), "{what}");
+        }
+        assert_eq!(header_size(Cursor::new(encoded(&rgb, ImageFormat::Jpeg))), Some((40, 30)));
+        // Un BMP, du texte, un fichier vide ou coupé : pas lus.
+        let mut bmp = b"BM".to_vec();
+        bmp.resize(64, 0);
+        assert_eq!(header_size(Cursor::new(bmp)), None);
+        assert_eq!(header_size(Cursor::new(b"<html>pas un png</html>".to_vec())), None);
+        assert_eq!(header_size(Cursor::new(Vec::new())), None);
+        let png = encoded(&gray, ImageFormat::Png);
+        assert_eq!(header_size(Cursor::new(png[..12].to_vec())), None);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn reading_a_header_needs_no_decode_permit() {
+        let _alone = PERMITS.lock().await;
+        let dir = std::env::temp_dir().join(format!("kraken-peek-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("large.png");
+        std::fs::write(&path, encoded(&DynamicImage::ImageLuma8(GrayImage::new(8200, 16)), ImageFormat::Png)).unwrap();
+        // Les deux places de décodage sont prises : la lecture de l'en-tête passe quand même.
+        let held = DECODES.acquire_many(MAX_DECODES as u32).await.unwrap();
+        let size = tokio::time::timeout(Duration::from_secs(5), peek_size(path.clone())).await;
+        drop(held);
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(size.expect("la lecture d'un en-tête attend un permis de décodage"), Some((8200, 16)));
+        assert_eq!(PEEKS.available_permits(), MAX_PEEKS, "tous les permis sont rendus");
     }
 }

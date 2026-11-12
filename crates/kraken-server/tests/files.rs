@@ -289,9 +289,9 @@ async fn attached_images_are_judged_on_their_header_and_decoded_two_at_a_time(po
     let (base, dir) = spawn_sized(pool, false, false, 8 * 1024 * 1024).await;
     let (lou, _sam, _g, general, _) = world(&base).await;
 
-    // Trop grandes : plus de 8192 pixels de côté, ou plus de 40 millions de pixels. Refusées d'après
-    // leur en-tête, rien n'est gardé. (Avant, la première était décodée en entier, la deuxième
-    // devenait un fichier ordinaire, la troisième était décodée aussi.)
+    // Trop grandes pour qu'on les décode : plus de 8192 pixels de côté, ou plus de 40 millions de
+    // pixels. Jugées sur leur en-tête, elles ne sont jamais décodées : un fichier ordinaire, gardé
+    // tel quel, sans dimensions ni vignette. (Avant, la première était décodée en entier.)
     let heavy = common::flat(8192, 8192, ImageFormat::Png);
     assert!(heavy.len() < 1024 * 1024, "{} octets", heavy.len());
     let cases = [
@@ -301,15 +301,26 @@ async fn attached_images_are_judged_on_their_header_and_decoded_two_at_a_time(po
         ("côté seul (WebP)", common::flat(8200, 16, ImageFormat::WebP)),
         ("surface seule", common::flat(7000, 6000, ImageFormat::Png)),
     ];
+    let mut kept = Vec::new();
     for (what, bytes) in cases {
-        let (s, e) = lou.upload(general, "enorme.png", "image/png", bytes).await;
-        assert_eq!((s, e["code"].as_str()), (StatusCode::BAD_REQUEST, Some("image_too_big")), "{what}");
-        let message = e["message"].as_str().unwrap();
-        assert!(message.contains("8192 pixels de côté") && message.contains("40 millions"), "{message}");
+        let size = bytes.len() as u64;
+        let (s, a) = lou.upload(general, "enorme.png", "image/png", bytes.clone()).await;
+        assert_eq!(s, StatusCode::CREATED, "{what} : {a}");
+        assert!(a["width"].is_null() && a["height"].is_null(), "{what} : pas de dimensions");
+        assert_eq!((a["mime"].as_str(), a["size"].as_u64()), (Some("application/octet-stream"), Some(size)), "{what}");
+        let path = format!("/channels/{general}/attachments/{}", a["id"].as_str().unwrap());
+        // Pas de vignette ; l'original est servi tel quel, en téléchargement.
+        assert_eq!(lou.get(&format!("{path}/preview")).await.status(), 404, "{what}");
+        let r = lou.get(&path).await;
+        assert!(r.headers()["content-disposition"].to_str().unwrap().starts_with("attachment;"), "{what}");
+        assert_eq!(r.bytes().await.unwrap().to_vec(), bytes, "{what}");
+        kept.push(a);
     }
-    assert_eq!(files_in(&dir, "attachments"), 0, "rien n'est gardé");
-    let (_, rows) = lou.call(Method::GET, &format!("/channels/{general}/messages"), None).await;
-    assert!(rows.as_array().is_none_or(|a| a.is_empty()));
+    assert_eq!(files_in(&dir, "attachments"), kept.len(), "les originaux sont gardés, sans aucune vignette");
+    // Elles se joignent à un message comme n'importe quel fichier.
+    let (s, m) = lou.send(general, "panoramas", &kept).await;
+    assert_eq!(s, StatusCode::CREATED, "{m}");
+    assert_eq!(m["attachments"].as_array().unwrap().len(), kept.len());
 
     // Au plafond de côté, l'image passe, avec ses dimensions et son aperçu.
     let (s, ok) = lou.upload(general, "large.png", "image/png", common::flat(8192, 16, ImageFormat::Png)).await;
@@ -318,6 +329,11 @@ async fn attached_images_are_judged_on_their_header_and_decoded_two_at_a_time(po
     // Un fichier qui n'est pas une image reste un fichier ordinaire, quelle que soit sa taille.
     let (s, plain) = lou.upload(general, "notes.txt", "text/plain", vec![b'a'; 200_000]).await;
     assert_eq!((s, plain["width"].is_null()), (StatusCode::CREATED, true));
+    // Les limites de poids du fichier restent les mêmes pour une image trop grande.
+    let mut fat = common::flat(8200, 16, ImageFormat::Png);
+    fat.resize(8 * 1024 * 1024 + 1, 0);
+    let (s, e) = lou.upload(general, "tres-gros.png", "image/png", fat).await;
+    assert_eq!((s, e["code"].as_str()), (StatusCode::PAYLOAD_TOO_LARGE, Some("too_large")));
 
     // Huit images lourdes d'un coup : tout passe, mais jamais plus de deux décodages en même temps.
     let one = picture(1800, 1800, ImageFormat::Png);
