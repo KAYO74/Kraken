@@ -190,34 +190,36 @@ pub async fn me(auth: Auth) -> Json<User> {
     Json(auth.user)
 }
 
-/// Un caractère de mise en forme Unicode qui ne se voit pas : espaces de largeur nulle, marques et
-/// isolats de sens d'écriture, BOM. Ils servent à tromper la lecture (un nom qui s'affiche à
-/// l'envers, deux noms qui semblent identiques). Le liant d'emoji (U+200D) et le sélecteur de
-/// variante (U+FE0F) restent permis : sans eux, les emojis composés (famille, drapeau arc-en-ciel,
-/// cœur) ne s'écrivent pas.
-fn hidden_format(c: char) -> bool {
-    matches!(c, '\u{200B}'..='\u{200C}' | '\u{200E}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}')
-}
-
 /// Texte du profil : coupé aux bords, vide pour effacer. `multiline` laisse les retours à la
 /// ligne (la bio), sinon aucun caractère de contrôle (nom, pronoms).
 fn profile_text(raw: &str, max: usize, multiline: bool, what: &str) -> ApiResult<Option<String>> {
     let text = raw.replace("\r\n", "\n");
     let text = text.trim();
-    let bad = |c: char| c.is_control() && !(multiline && c == '\n');
+    // Les séparateurs de ligne et de paragraphe Unicode comptent comme des retours à la ligne.
+    let bad = |c: char| (c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')) && !(multiline && c == '\n');
     if text.chars().count() > max || text.chars().any(bad) {
         return Err(AppError::invalid(format!(
             "{what} : {max} caractères au plus{}.",
             if multiline { "" } else { ", sans retour à la ligne" }
         )));
     }
-    if text.chars().any(hidden_format) {
+    // Espaces de largeur nulle, marques de sens d'écriture, remplisseurs, étiquettes… : tout ce
+    // qu'Unicode ignore à l'affichage, sauf le liant et le sélecteur des emojis composés.
+    if text.chars().any(kraken_core::text::is_hidden) {
         return Err(AppError(
             StatusCode::BAD_REQUEST,
             "invalid_chars",
             format!(
-                "{what} : les caractères invisibles de mise en forme (espace de largeur nulle, changement de sens d'écriture) ne sont pas acceptés."
+                "{what} : les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés."
             ),
+        ));
+    }
+    // Un texte qui ne montre rien (rien que des espaces ou des liants d'emoji) ne dit rien de personne.
+    if !text.is_empty() && !kraken_core::text::has_visible(text) {
+        return Err(AppError(
+            StatusCode::BAD_REQUEST,
+            "invisible_text",
+            format!("{what} : écris au moins un caractère visible, ou laisse le champ vide."),
         ));
     }
     Ok(Some(text.to_string()).filter(|t| !t.is_empty()))

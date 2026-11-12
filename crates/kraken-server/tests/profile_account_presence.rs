@@ -15,6 +15,8 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use tokio_tungstenite::tungstenite::Message as Ws;
 
+mod common;
+
 fn config(data_dir: &std::path::Path) -> Config {
     Config {
         addr: "127.0.0.1:0".into(),
@@ -249,19 +251,6 @@ fn picture(w: u32, h: u32, format: ImageFormat) -> Vec<u8> {
     out
 }
 
-/// Une image unie de `w × h` pixels : minuscule en octets, énorme une fois décodée.
-fn flat(w: u32, h: u32, format: ImageFormat) -> Vec<u8> {
-    let mut out = Vec::new();
-    match format {
-        ImageFormat::Png => {
-            image::GrayImage::from_pixel(w, h, image::Luma([7])).write_to(&mut Cursor::new(&mut out), format)
-        }
-        _ => RgbImage::from_pixel(w, h, Rgb([7, 7, 7])).write_to(&mut Cursor::new(&mut out), format),
-    }
-    .unwrap();
-    out
-}
-
 /// Un GIF de `frames` images.
 fn gif(w: u32, h: u32, frames: u32) -> Vec<u8> {
     let mut out = Vec::new();
@@ -459,14 +448,14 @@ async fn huge_still_images_are_refused_from_their_header_before_any_decoding(poo
     let (base, dir) = spawn(pool).await;
     let lou = Who::new(&base, "lou").await;
     // Un PNG de 8192 × 8192 : quelques centaines de Ko, plus de 400 Mo décodé.
-    let heavy = flat(8192, 8192, ImageFormat::Png);
+    let heavy = common::flat(8192, 8192, ImageFormat::Png);
     assert!(heavy.len() < 2 * 1024 * 1024, "{} octets", heavy.len());
     let cases = [
         ("le cas du testeur", heavy),
-        ("côté seul (PNG)", flat(4097, 16, ImageFormat::Png)),
-        ("côté seul (JPEG)", flat(16, 4097, ImageFormat::Jpeg)),
-        ("côté seul (WebP)", flat(4097, 16, ImageFormat::WebP)),
-        ("surface seule", flat(4096, 4096, ImageFormat::Png)),
+        ("côté seul (PNG)", common::flat(4097, 16, ImageFormat::Png)),
+        ("côté seul (JPEG)", common::flat(16, 4097, ImageFormat::Jpeg)),
+        ("côté seul (WebP)", common::flat(4097, 16, ImageFormat::WebP)),
+        ("surface seule", common::flat(4096, 4096, ImageFormat::Png)),
     ];
     for which in ["avatar", "banner"] {
         for (what, bytes) in &cases {
@@ -481,10 +470,38 @@ async fn huge_still_images_are_refused_from_their_header_before_any_decoding(poo
     assert!(files_in(&dir).is_empty());
 
     // Le plafond lui-même passe : 4096 de côté.
-    let (s, _) = lou.put_image("banner", flat(4096, 64, ImageFormat::Png)).await;
+    let (s, _) = lou.put_image("banner", common::flat(4096, 64, ImageFormat::Png)).await;
     assert_eq!(s, 200);
-    let (s, _) = lou.put_image("avatar", flat(64, 4096, ImageFormat::Png)).await;
+    let (s, _) = lou.put_image("avatar", common::flat(64, 4096, ImageFormat::Png)).await;
     assert_eq!(s, 200);
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn a_decompression_bomb_in_a_png_metadata_chunk_is_never_allocated(pool: PgPool) {
+    let (base, dir) = spawn(pool).await;
+    let lou = Who::new(&base, "lou").await;
+    // Un PNG de 64 × 64 de 3 Mo dont le profil de couleur (iCCP) se décompresse en 3 Gio.
+    let bomb = common::icc_bomb_png(12_480_000);
+    assert!(bomb.len() < 4 * 1024 * 1024, "{} octets", bomb.len());
+    // Le même PNG avec un profil raisonnable est une image comme une autre.
+    let (s, v) = lou.put_image("avatar", common::icc_bomb_png(10)).await;
+    assert_eq!(s, 200, "{v}");
+
+    let before = common::peak_rss_mib();
+    let started = std::time::Instant::now();
+    for which in ["avatar", "banner"] {
+        // Le profil démesuré est abandonné à la lecture de l'en-tête (comme un profil cassé) : la
+        // petite image, elle, est lisible, et la copie gardée est ré-encodée, sans profil.
+        let (s, v) = lou.put_image(which, bomb.clone()).await;
+        assert_eq!(s, 200, "{which} : {v}");
+    }
+    let grown = common::peak_rss_mib().saturating_sub(before);
+    assert!(grown < 1024, "la lecture de l'en-tête a fait grossir le processus de {grown} Mio (3 Gio sans limite)");
+    assert!(started.elapsed() < Duration::from_secs(5), "{:?}", started.elapsed());
+    for name in files_in(&dir) {
+        let bytes = std::fs::read(dir.join("avatars").join(name)).unwrap();
+        assert!(bytes.len() < 100_000 && !bytes.windows(4).any(|w| w == b"iCCP"), "{} octets", bytes.len());
+    }
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]
@@ -927,29 +944,35 @@ async fn reserved_usernames_are_refused_at_signup_and_on_change_but_existing_acc
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]
-async fn invisible_formatting_characters_are_refused_in_profile_text_but_joined_emoji_pass(pool: PgPool) {
-    let (base, _) = spawn(pool).await;
+async fn invisible_characters_are_refused_in_profile_text_but_joined_emoji_pass(pool: PgPool) {
+    // Beaucoup de modifications d'affilée : le plafond par minute n'est pas ce qu'on teste ici.
+    let (base, _) = spawn_with(pool, |c| c.auth_per_min = 100_000).await;
     let lou = Who::new(&base, "lou").await;
     let (s, _) = lou
         .call(Method::PATCH, "/users/@me", Some(json!({"display_name": "Lou", "bio": "Bonjour", "pronouns": "elle"})))
         .await;
     assert_eq!(s, 200);
 
-    // Espaces de largeur nulle, marques de sens d'écriture, isolats et BOM : refusés partout.
-    let hidden = [
-        '\u{200B}', '\u{200C}', '\u{200E}', '\u{200F}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}',
-        '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}', '\u{FEFF}',
+    // Tout ce qui est ignorable par défaut en Unicode (sauf le liant et le sélecteur d'emoji), le
+    // braille vide et les séparateurs de ligne : un exemple par famille, ses bords et des points isolés.
+    let hidden: Vec<u32> = vec![
+        0x00AD, 0x034F, 0x061C, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x180B, 0x180D, 0x180E, 0x180F, 0x200B, 0x200C, 0x200E,
+        0x200F, 0x2028, 0x2029, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2060, 0x2061, 0x2062, 0x2063, 0x2064, 0x2065,
+        0x2066, 0x2067, 0x2068, 0x2069, 0x206A, 0x206F, 0x2800, 0x3164, 0xFE00, 0xFE01, 0xFE0E, 0xFEFF, 0xFFA0, 0xFFF0,
+        0xFFF8, 0x1BCA0, 0x1BCA3, 0x1D173, 0x1D17A, 0xE0000, 0xE0001, 0xE0020, 0xE007F, 0xE0100, 0xE01EF, 0xE0FFF,
     ];
-    for c in hidden {
+    for n in hidden {
+        let c = char::from_u32(n).unwrap();
         for (field, what) in [("display_name", "Nom affiché"), ("pronouns", "Pronoms"), ("bio", "Bio")] {
-            for text in [format!("a{c}b"), format!("{c}ab"), format!("ab{c}"), format!("{c}")] {
+            let mut texts = vec![format!("a{c}b")];
+            // Aux bords, une espace est simplement coupée (les séparateurs de ligne en sont) ; le reste, non.
+            if !c.is_whitespace() {
+                texts.extend([format!("{c}ab"), format!("ab{c}"), format!("{c}")]);
+            }
+            for text in texts {
                 let (s, v) = lou.call(Method::PATCH, "/users/@me", Some(json!({ field: text }))).await;
-                assert_eq!(
-                    (s.as_u16(), code(&v)),
-                    (400, "invalid_chars"),
-                    "U+{:04X} dans {field} : {text:?}",
-                    c as u32
-                );
+                assert_eq!(s.as_u16(), 400, "U+{n:04X} dans {field} : {text:?}");
+                assert!(["invalid_chars", "invalid"].contains(&code(&v)), "U+{n:04X} dans {field} : {v}");
                 assert!(v["message"].as_str().unwrap().starts_with(what), "{v}");
             }
         }
@@ -959,6 +982,17 @@ async fn invisible_formatting_characters_are_refused_in_profile_text_but_joined_
         (me["display_name"].as_str(), me["bio"].as_str(), me["pronouns"].as_str()),
         (Some("Lou"), Some("Bonjour"), Some("elle"))
     );
+
+    // Un texte qui ne montre rien est refusé, même fait de caractères permis (liant, sélecteur).
+    for text in ["\u{200D}", "\u{FE0F}", "\u{FE0F}\u{200D}\u{FE0F}", " \u{200D} ", "\u{3000}\u{200D}\u{3000}"] {
+        for field in ["display_name", "pronouns", "bio"] {
+            let (s, v) = lou.call(Method::PATCH, "/users/@me", Some(json!({ field: text }))).await;
+            assert_eq!((s.as_u16(), code(&v)), (400, "invisible_text"), "{field} : {text:?}");
+        }
+    }
+    // Un champ vide ou d'espaces seules, lui, efface (ce n'est pas un texte à montrer).
+    let (s, v) = lou.call(Method::PATCH, "/users/@me", Some(json!({"pronouns": "   "}))).await;
+    assert_eq!((s.as_u16(), v["pronouns"].is_null()), (200, true));
 
     // Un refus dans un champ n'écrit rien dans les autres.
     let (s, _) =
@@ -972,10 +1006,17 @@ async fn invisible_formatting_characters_are_refused_in_profile_text_but_joined_
     let heart = "❤\u{FE0F}";
     let flag = "🏳\u{FE0F}\u{200D}🌈";
     let (s, v) = lou
-        .call(Method::PATCH, "/users/@me", Some(json!({"display_name": format!("Lou {family}"), "pronouns": heart, "bio": format!("{flag} {heart} {family}\nfin")})))
+        .call(
+            Method::PATCH,
+            "/users/@me",
+            Some(json!({"display_name": format!("Lou {family}"), "pronouns": heart, "bio": format!("{flag} {heart} {family}\nfin")})),
+        )
         .await;
     assert_eq!(s, 200, "{v}");
     assert_eq!(v["display_name"], format!("Lou {family}"));
     assert_eq!(v["pronouns"], heart);
     assert_eq!(v["bio"], format!("{flag} {heart} {family}\nfin"));
+    // Un emoji seul (liant compris) est un texte visible.
+    let (s, _) = lou.call(Method::PATCH, "/users/@me", Some(json!({"display_name": family}))).await;
+    assert_eq!(s, 200);
 }

@@ -22,27 +22,22 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::IntoResponse;
 use image::imageops::FilterType;
-use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits};
+use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageFormat, Limits};
 use kraken_core::image::{ImageKind, sniff, strip_animated};
 use kraken_proto::*;
-use tokio::sync::Semaphore;
 
 use crate::AppState;
 use crate::auth::{Auth, audience_of};
 use crate::error::{ApiResult, AppError};
+use crate::media::{self, Bounds, Refusal, gated};
 
 /// Dimensions au-delà desquelles on refuse de décoder une animation (une image minuscule en octets
 /// peut réclamer des gigaoctets de mémoire).
 const MAX_SIDE: u32 = 8192;
 /// Une image fixe se décode en entier avant d'être réduite : un PNG de 215 Ko en 8192 × 8192 pèse
-/// plus de 400 Mo décodé. Au-delà de ce côté, ou de cette surface, on la refuse d'après son seul
-/// en-tête, sans rien décoder.
-const MAX_STILL_SIDE: u32 = 4096;
-const MAX_STILL_PIXELS: u64 = 16_000_000;
-/// Décodages d'image (photo ou bannière, fixe ou animée) menés en même temps sur tout le serveur ;
-/// les autres envois attendent leur tour.
-const MAX_DECODES: usize = 2;
-static DECODES: Semaphore = Semaphore::const_new(MAX_DECODES);
+/// plus de 400 Mo décodé. Au-delà de ces dimensions, on la refuse d'après son seul en-tête, sans
+/// rien décoder (voir [`media::decode_within`]).
+const STILL: Bounds = Bounds { side: 4096, pixels: 16_000_000 };
 /// Surface totale (pixels × images) qu'on accepte de décoder pour vérifier une animation.
 const MAX_ANIMATED_PIXELS: u64 = 128 * 1024 * 1024;
 /// Les extensions sous lesquelles un fichier peut être gardé.
@@ -117,28 +112,8 @@ fn big_image() -> AppError {
     AppError(
         StatusCode::BAD_REQUEST,
         "image_too_big",
-        format!(
-            "Cette image est trop grande : {MAX_STILL_SIDE} pixels de côté et {} millions de pixels au plus. Réduis-la avant de l'envoyer.",
-            MAX_STILL_PIXELS / 1_000_000
-        ),
+        format!("Cette image est trop grande : {}. Réduis-la avant de l'envoyer.", STILL.describe()),
     )
-}
-
-/// Une image fixe de ces dimensions peut-elle être décodée ?
-fn still_fits(w: u32, h: u32) -> bool {
-    w <= MAX_STILL_SIDE && h <= MAX_STILL_SIDE && u64::from(w) * u64::from(h) <= MAX_STILL_PIXELS
-}
-
-/// Exécute un calcul lourd hors du runtime, derrière le portail des décodages : le permis voyage
-/// avec le calcul, qui ne le rend qu'en finissant, même si la requête est abandonnée entre-temps.
-async fn gated<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
-    let permit = DECODES.acquire().await.ok()?;
-    tokio::task::spawn_blocking(move || {
-        let _permit = permit;
-        work()
-    })
-    .await
-    .ok()
 }
 
 fn decode_limits() -> Limits {
@@ -185,25 +160,11 @@ fn normalize_animated(raw: &[u8], kind: ImageKind) -> Result<Stored, Refused> {
 
 /// Décode, recadre au centre au format de `kind`, réduit, ré-encode en PNG.
 fn normalize_still(raw: Vec<u8>, kind: Kind) -> Result<Stored, Refused> {
-    let mut reader = ImageReader::new(Cursor::new(raw)).with_guessed_format().map_err(|_| Refused::NotImage)?;
-    // L'en-tête d'abord, sans limite : c'est lui qui dit si l'image est trop grande, avant que
-    // le moindre pixel soit décodé.
-    reader.no_limits();
-    let mut decoder = reader.into_decoder().map_err(|_| Refused::NotImage)?;
-    let (hw, hh) = decoder.dimensions();
-    if hw == 0 || hh == 0 {
-        return Err(Refused::NotImage);
-    }
-    if !still_fits(hw, hh) {
-        return Err(Refused::BigImage);
-    }
-    decoder.set_limits(decode_limits()).map_err(|_| Refused::NotImage)?;
-    let orientation = decoder.orientation().ok();
     // Un GIF fixe ne livre qu'une image ; un GIF animé n'arrive pas ici.
-    let mut img = DynamicImage::from_decoder(decoder).map_err(|_| Refused::NotImage)?;
-    if let Some(o) = orientation {
-        img.apply_orientation(o);
-    }
+    let img = media::decode_within(&raw, STILL).map_err(|e| match e {
+        Refusal::NotImage => Refused::NotImage,
+        Refusal::TooBig => Refused::BigImage,
+    })?;
     let (w, h) = (img.width(), img.height());
     if w == 0 || h == 0 {
         return Err(Refused::NotImage);
@@ -351,9 +312,6 @@ pub async fn get(State(state): State<AppState>, Path(key): Path<String>) -> ApiR
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
-    use std::time::Duration;
-
     use super::*;
 
     fn crc32(bytes: &[u8]) -> u32 {
@@ -409,30 +367,7 @@ mod tests {
 
     #[test]
     fn side_and_surface_limits() {
-        assert!(still_fits(4096, 3906) && still_fits(4000, 4000) && still_fits(1, 1));
-        assert!(!still_fits(4097, 1) && !still_fits(1, 4097) && !still_fits(4096, 4096) && !still_fits(4000, 4001));
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn at_most_two_decodes_run_at_the_same_time() {
-        static NOW: AtomicUsize = AtomicUsize::new(0);
-        static PEAK: AtomicUsize = AtomicUsize::new(0);
-        let jobs = (0..8).map(|_| {
-            tokio::spawn(gated(|| {
-                let now = NOW.fetch_add(1, SeqCst) + 1;
-                PEAK.fetch_max(now, SeqCst);
-                std::thread::sleep(Duration::from_millis(40));
-                NOW.fetch_sub(1, SeqCst);
-            }))
-        });
-        for job in jobs.collect::<Vec<_>>() {
-            assert!(job.await.unwrap().is_some());
-        }
-        assert_eq!(
-            PEAK.load(SeqCst),
-            MAX_DECODES,
-            "jamais plus de {MAX_DECODES} à la fois, et les deux places servent"
-        );
-        assert_eq!(DECODES.available_permits(), MAX_DECODES, "tous les permis sont rendus");
+        assert!(STILL.fits(4096, 3906) && STILL.fits(4000, 4000) && STILL.fits(1, 1));
+        assert!(!STILL.fits(4097, 1) && !STILL.fits(1, 4097) && !STILL.fits(4096, 4096) && !STILL.fits(4000, 4001));
     }
 }

@@ -201,13 +201,25 @@ test('S20-E2 texte du profil : caractères invisibles refusés, emojis composés
   // Espace de largeur nulle dans le nom, marque de sens d'écriture dans la bio : refusés, rien d'enregistré.
   await page.getByLabel('Nom affiché').fill('Opa\u200Ble');
   await page.getByRole('button', { name: 'Enregistrer' }).click();
-  await expect(alert).toContainText('Nom affiché : les caractères invisibles de mise en forme');
+  await expect(alert).toContainText('Nom affiché : les caractères invisibles');
   await page.getByLabel('Nom affiché').fill('Opale');
   await page.getByLabel('À propos de toi').fill('texte \u202Eà l’envers');
   await page.getByRole('button', { name: 'Enregistrer' }).click();
-  await expect(alert).toContainText('Bio : les caractères invisibles de mise en forme');
+  await expect(alert).toContainText('Bio : les caractères invisibles');
   const refused = await me(api, a);
   expect([refused.display_name ?? null, refused.bio ?? null]).toEqual([null, null]);
+
+  // Trait d'union conditionnel, braille vide, remplisseur hangul, étiquettes : invisibles aussi.
+  for (const sneaky of ['Opa\u00ADle', 'Opale\u2800', '\u3164Opale', 'Op\u{E0041}ale']) {
+    await page.getByLabel('Nom affiché').fill(sneaky);
+    await page.getByRole('button', { name: 'Enregistrer' }).click();
+    await expect(alert).toContainText('Nom affiché : les caractères invisibles');
+  }
+  // Un nom qui ne montre rien (que le liant d'emoji) n'est pas un nom.
+  await page.getByLabel('Nom affiché').fill('\u200D');
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(alert).toContainText('Nom affiché : écris au moins un caractère visible');
+  await page.getByLabel('Nom affiché').fill('Opale');
 
   // Le liant d'emoji et le sélecteur de variante ne sont pas touchés : famille, drapeau, cœur.
   const bio = '👩\u200D👩\u200D👧 🏳\uFE0F\u200D🌈 ❤\uFE0F';

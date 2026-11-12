@@ -4,6 +4,7 @@
 // le serveur de test à une page locale demanderait un réglage réservé aux tests.
 import { deflateSync } from 'node:zlib';
 import { test, expect, a11y, createGuild, say, messages, API, type User } from '../fixtures';
+import { flatPng } from '../images';
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
   let c = n;
@@ -180,4 +181,21 @@ test('PJ-H3 fichier trop lourd : refusé avant tout envoi, le plateau reste vide
   await expect(page.getByRole('list', { name: 'Fichiers à joindre' })).toHaveCount(0);
   await say(page, 'général', 'rien ne part en plus');
   await expect(messages(page).filter({ hasText: 'rien ne part en plus' })).toHaveCount(1);
+});
+
+test('PJ-E1 image trop grande : refusée avec son message, retirable du plateau', async ({ user, allow }) => {
+  allow.push(/status of 4\d\d/);
+  const a = await user('geante');
+  await createGuild(a.page, 'Quai des géantes');
+  const page = a.page;
+  // Quelques Ko, mais 8200 pixels de large : le serveur la refuse d'après son en-tête, sans la décoder.
+  await page.locator('input[type=file]').setInputFiles({ name: 'panorama.png', mimeType: 'image/png', buffer: flatPng(8200, 16) });
+  await expect(page.getByRole('alert')).toContainText('Cette image est trop grande');
+  await expect(page.getByRole('alert')).toContainText('8192 pixels de côté et 40 millions de pixels au plus');
+  // La vignette en échec reste visible avec son message, jusqu'à ce qu'on la retire.
+  await page.getByRole('button', { name: 'Retirer panorama.png' }).click();
+  await expect(page.getByRole('list', { name: 'Fichiers à joindre' })).toHaveCount(0);
+  // Une image dans la limite part normalement.
+  await page.locator('input[type=file]').setInputFiles({ name: 'bande.png', mimeType: 'image/png', buffer: flatPng(8192, 16) });
+  await expect(page.getByRole('list', { name: 'Fichiers à joindre' })).toBeVisible();
 });

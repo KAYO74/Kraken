@@ -119,12 +119,18 @@ struct Inspected {
     preview: Vec<u8>,
 }
 
-fn inspect(path: PathBuf) -> Option<Inspected> {
-    let raw = std::fs::read(path).ok()?;
-    let (_, mime) = media::safe_format(&raw)?;
-    let img = media::decode(&raw)?;
-    let enc = media::shrink(&img, PREVIEW_SIDE)?;
-    Some(Inspected { mime, width: img.width(), height: img.height(), preview: enc.bytes })
+/// `Ok(None)` : pas une image que l'on sait lire, un fichier ordinaire. `Err` : une image
+/// plus grande que [`media::MEDIA`], refusée d'après son en-tête.
+fn inspect(path: PathBuf) -> Result<Option<Inspected>, media::Refusal> {
+    let Ok(raw) = std::fs::read(path) else { return Ok(None) };
+    let Some((_, mime)) = media::safe_format(&raw) else { return Ok(None) };
+    let img = match media::decode_within(&raw, media::MEDIA) {
+        Ok(img) => img,
+        Err(media::Refusal::NotImage) => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    let Some(enc) = media::shrink(&img, PREVIEW_SIDE) else { return Ok(None) };
+    Ok(Some(Inspected { mime, width: img.width(), height: img.height(), preview: enc.bytes }))
 }
 
 pub async fn upload(
@@ -186,13 +192,24 @@ pub async fn upload(
     };
     // Une image lisible garde ses dimensions et reçoit un aperçu propre ; tout le reste est
     // un fichier ordinaire.
-    let image = tokio::task::spawn_blocking({
+    // Au plus deux décodages à la fois sur tout le serveur, avec les photos et les bannières.
+    let image = match media::gated({
         let file = file.clone();
         move || inspect(file)
     })
     .await
-    .ok()
-    .flatten();
+    {
+        Some(Ok(image)) => image,
+        Some(Err(_)) => {
+            tokio::fs::remove_file(&file).await.ok();
+            return Err(AppError(
+                StatusCode::BAD_REQUEST,
+                "image_too_big",
+                format!("Cette image est trop grande : {}. Réduis-la avant de l'envoyer.", media::MEDIA.describe()),
+            ));
+        }
+        None => None,
+    };
     let preview = image.is_some();
     if let Some(i) = &image {
         let wrote = tokio::fs::write(dir.join(format!("{key}.p")), &i.preview).await;

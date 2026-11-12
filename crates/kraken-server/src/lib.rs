@@ -33,6 +33,8 @@ use tower_http::set_header::{SetResponseHeader, SetResponseHeaderLayer};
 pub use gateway::Hub;
 pub use jobs::Mailer;
 pub use kraken_voice::{self, Sfu};
+#[doc(hidden)]
+pub use media::peak_decodes;
 
 /// Mot de passe des comptes de démonstration créés par `--seed`.
 pub const DEMO_PASSWORD: &str = "kraken-demo";
