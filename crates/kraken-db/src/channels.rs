@@ -32,6 +32,9 @@ pub fn clean_channel_name(kind: ChannelKind, raw: &str) -> Result<String> {
     if n == 0 || n > MAX_CHANNEL_NAME || name.chars().any(char::is_control) {
         return Err(DbError::Invalid("channel_name"));
     }
+    if !kraken_core::text::visible_name(&name) {
+        return Err(DbError::Invalid("hidden_chars"));
+    }
     Ok(name)
 }
 

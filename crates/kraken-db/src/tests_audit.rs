@@ -520,3 +520,26 @@ async fn a_hundred_entries_read_in_one_page_and_the_log_goes_with_the_guild(pool
     );
     assert_eq!(db.audit_log(gid, other.id, &query(10)).await.map(|_| ()), Err(DbError::NotFound));
 }
+
+/// Un nom de rôle, de salon ou de serveur, ou un motif, avec un caractère invisible ou un changement de
+/// sens d'écriture (U+202E) est refusé : le journal afficherait une phrase à l'envers.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn invisible_and_bidi_characters_are_refused_in_names_and_reasons(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (own, bob) = (user(&db, "lou").await, user(&db, "bob").await);
+    let (gid, _) = guild_with(&db, &own, &[&bob]).await;
+    let hidden = Err(DbError::Invalid("hidden_chars"));
+
+    assert_eq!(db.create_guild(own.id, "Abys\u{202E}se").await.map(|_| ()), hidden);
+    assert_eq!(db.create_role(gid, own.id, &role("evil\u{202E}tset", 0)).await.map(|_| ()), hidden);
+    assert_eq!(db.create_role(gid, own.id, &role("\u{200B}", 0)).await.map(|_| ()), hidden);
+    let channel = CreateChannel { kind: ChannelKind::Text, name: "an\u{200B}nonces".into(), parent_id: None };
+    assert_eq!(db.create_channel(gid, own.id, &channel).await.map(|_| ()), hidden);
+    assert_eq!(
+        db.kick_member(gid, own.id, bob.id, Some("texte \u{202E}retourné")).await.map(|_| ()),
+        hidden,
+        "le motif aussi"
+    );
+    // Les noms ordinaires, accents et emojis compris, passent toujours.
+    db.create_role(gid, own.id, &role("Modérateurs 🛡️", 0)).await.unwrap();
+}

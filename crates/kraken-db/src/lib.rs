@@ -655,6 +655,9 @@ impl Db {
         if !(2..=100).contains(&name.chars().count()) {
             return Err(DbError::Invalid("guild_name"));
         }
+        if !kraken_core::text::visible_name(name) {
+            return Err(DbError::Invalid("hidden_chars"));
+        }
         let mut tx = self.pool.begin().await?;
         // FOR SHARE : sérialisé avec `request_deletion`, un compte fermé ne crée plus rien.
         sqlx::query("select 1 from users where id = $1 and deletion_requested_at is null for share")

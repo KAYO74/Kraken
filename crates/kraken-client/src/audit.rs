@@ -384,7 +384,8 @@ fn segs_view(segs: Vec<Seg>) -> impl IntoView {
     segs.into_iter()
         .map(|s| match s {
             Seg::T(x) => x.into_any(),
-            Seg::B(x) => view! { <b>{x}</b> }.into_any(),
+            // `bdi` : un nom qui contient un changement de sens d'écriture ne retourne pas la fin de la phrase.
+            Seg::B(x) => view! { <b><bdi>{x}</bdi></b> }.into_any(),
         })
         .collect_view()
 }
@@ -556,7 +557,7 @@ pub fn AuditLog(guild: Id) -> impl IntoView {
                 </div>
             </form>
             // Toujours là (une zone `status` doit exister avant son message) et de hauteur réservée : rien ne saute.
-            <p class="k-hint app-audit-count" role="status">{status}</p>
+            <p class="k-hint app-audit-count" role="status" data-empty=move || (phase.get() == Phase::Ready && entries.with(Vec::is_empty)).then_some("")>{status}</p>
             {move || match phase.get() {
                 Phase::Loading => view! {
                     <div class="app-audit-skels" aria-hidden="true">
@@ -637,15 +638,19 @@ fn Row(entry: AuditEntry) -> impl IntoView {
             <div>
                 <p class="app-audit-sentence">{segs_view(sentence)}</p>
                 <small class="app-audit-when">{when_view(entry.created_at)}</small>
-                {extra.map(|x| view! { <small class="app-ban-reason">{x}</small> })}
-                {reason.map(|r| view! { <small class="app-ban-reason">"Raison : "{r}</small> })}
+                {extra.map(|x| view! { <small class="app-ban-reason"><bdi>{x}</bdi></small> })}
+                {reason.map(|r| view! { <small class="app-ban-reason">"Raison : "<bdi>{r}</bdi></small> })}
                 {has_diff.then(|| {
                     let controls = diff_id.clone();
                     view! {
                         <button type="button" class="k-btn k-btn--ghost k-btn--sm app-audit-toggle"
                             aria-expanded=move || expanded.get().to_string() aria-controls=controls
                             on:click=move |_| expanded.update(|e| *e = !*e)>
-                            {move || if expanded.get() { "Masquer les changements" } else { "Voir les changements" }}
+                            {move || if expanded.get() {
+                                view! { <Icon icon=lu::LuChevronUp small=true/>"Masquer les changements" }.into_any()
+                            } else {
+                                view! { <Icon icon=lu::LuChevronDown small=true/>"Voir les changements" }.into_any()
+                            }}
                         </button>
                     }
                 })}

@@ -474,6 +474,11 @@ test.describe('largeur mobile', () => {
     await expect(rows(page).first()).toBeVisible();
 
     const box = async (l: Locator) => (await l.boundingBox())!;
+    // La barre d'onglets défile de côté : l'onglet ouvert est entièrement à l'écran, pas coupé.
+    await expect.poll(async () => {
+      const tab = await box(settings(page).getByRole('link', { name: "Journal d'audit" }));
+      return tab.x >= 0 && tab.x + tab.width <= 390;
+    }).toBe(true);
     const action = await box(settings(page).getByLabel('Action', { exact: true }));
     const member = await box(settings(page).getByLabel('Membre', { exact: true }));
     expect(member.y, 'empilés').toBeGreaterThan(action.y + action.height - 1);

@@ -171,12 +171,23 @@ fn clean_reason(r: Option<&str>) -> Result<Option<String>> {
     if r.is_some_and(|r| r.chars().count() > MAX_REASON) {
         return Err(DbError::Invalid("reason"));
     }
+    // Pas de caractères invisibles ni de changement de sens d'écriture : le journal d'audit et la liste
+    // des bannis afficheraient une phrase à l'envers.
+    if r.is_some_and(|r| r.chars().any(kraken_core::text::is_hidden)) {
+        return Err(DbError::Invalid("hidden_chars"));
+    }
     Ok(r.map(str::to_string))
 }
 
 fn clean_role_name(n: &str) -> Result<&str> {
     let n = n.trim();
-    if (1..=100).contains(&n.chars().count()) { Ok(n) } else { Err(DbError::Invalid("role_name")) }
+    if !(1..=100).contains(&n.chars().count()) {
+        return Err(DbError::Invalid("role_name"));
+    }
+    if !kraken_core::text::visible_name(n) {
+        return Err(DbError::Invalid("hidden_chars"));
+    }
+    Ok(n)
 }
 
 fn clean_color(c: u32) -> Result<Option<i32>> {

@@ -165,10 +165,29 @@ pub fn GuildSettings() -> impl IntoView {
     let title = Memo::new(move |_| {
         gid.get().and_then(|g| s.guild(g)).map(|g| g.guild.name).unwrap_or_else(|| "Paramètres du serveur".into())
     });
+    // À 390 px la barre d'onglets défile de côté : l'onglet ouvert vient se placer au centre (sinon le
+    // huitième reste coupé hors de l'écran). Sans effet quand la liste est verticale et tient en entier.
+    let nav = NodeRef::<html::Nav>::new();
+    Effect::new(move || {
+        section.track();
+        open.track();
+        spawn_local(async move {
+            TimeoutFuture::new(0).await;
+            // La fenêtre peut s'être fermée entre-temps : `try_` plutôt que de paniquer sur une référence retirée.
+            if let Some(a) =
+                nav.try_get_untracked().flatten().and_then(|n| n.query_selector("a[aria-current]").ok().flatten())
+            {
+                let opts = web_sys::ScrollIntoViewOptions::new();
+                opts.set_inline(web_sys::ScrollLogicalPosition::Center);
+                opts.set_block(web_sys::ScrollLogicalPosition::Nearest);
+                a.scroll_into_view_with_scroll_into_view_options(&opts);
+            }
+        });
+    });
     view! {
         <div class="k-scrim app-settings" node_ref=root>
             <div class="k-settings" role="dialog" aria-modal="true" aria-label="Paramètres du serveur">
-                <nav aria-label="Sections des paramètres du serveur">
+                <nav aria-label="Sections des paramètres du serveur" node_ref=nav>
                     <h3>{move || title.get()}</h3>
                     {move || gid.get().map(|g| {
                         let open = open.get();
