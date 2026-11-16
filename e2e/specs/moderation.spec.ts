@@ -28,7 +28,7 @@ test('S22-H1 créer un rôle, lui donner une couleur, le donner à un membre : l
   const [gid, cid] = await createGuild(owner.page, 'Galion');
   await invite(api, owner, cid, crew);
   await owner.page.getByRole('link', { name: 'Serveur Galion' }).click();
-  await expect(members(owner).getByText(crew.name)).toBeVisible();
+  await expect(members(owner).getByText(crew.name, { exact: true })).toBeVisible();
 
   // Réglages : créer, renommer, colorier, afficher à part, un droit, puis enregistrer d'un coup.
   await owner.page.getByRole('link', { name: 'Paramètres du serveur' }).click();
@@ -126,7 +126,7 @@ test('S22-H2 exclure : la personne est renvoyée à l’accueil et peut revenir 
   await invite(api, owner, cid, crew);
   const code = await invite(api, owner, cid, other);
   await crew.page.getByRole('link', { name: 'Serveur Barque' }).click();
-  await expect(members(crew).getByText(other.name)).toBeVisible();
+  await expect(members(crew).getByText(other.name, { exact: true })).toBeVisible();
 
   // Sans le droit, ni « Expulser » ni « Bannir » dans le menu d'un membre.
   await moreFor(crew, other.name).click();
@@ -146,14 +146,14 @@ test('S22-H2 exclure : la personne est renvoyée à l’accueil et peut revenir 
   await dialog.getByLabel('Raison (facultatif)').fill('trop de bruit');
   await dialog.getByRole('button', { name: 'Expulser', exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(members(owner).getByText(crew.name)).toHaveCount(0);
+  await expect(members(owner).getByText(crew.name, { exact: true })).toHaveCount(0);
 
   // L'exclu perd le serveur en direct, sans recharger, et la page quitte le serveur.
   await expect(crew.page.getByRole('link', { name: 'Serveur Barque' })).toHaveCount(0);
   await expect(crew.page.getByRole('heading', { name: 'Amis', level: 1 })).toBeVisible();
   expect((await (await api(crew.token)).get(`${API}/guilds/${gid}`)).status()).toBe(404);
   // Les autres membres ne le voient plus non plus.
-  await expect(members(other).getByText(crew.name)).toHaveCount(0);
+  await expect(members(other).getByText(crew.name, { exact: true })).toHaveCount(0);
   // Une exclusion n'est pas un bannissement : retour par invitation.
   expect((await (await api(crew.token)).post(`${API}/invites/${code}`)).status()).toBe(200);
 });
@@ -175,7 +175,7 @@ test('S22-H3 bannir puis débannir : plus de retour par invitation, liste des ba
   await dialog.getByLabel('Supprimer ses messages').selectOption('24');
   await dialog.getByRole('button', { name: 'Bannir', exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(members(owner).getByText(crew.name)).toHaveCount(0);
+  await expect(members(owner).getByText(crew.name, { exact: true })).toHaveCount(0);
   // Ses messages des dernières 24 h ont disparu du fil, en direct.
   await expect(messages(owner.page).filter({ hasText: 'pub pub pub' })).toHaveCount(0);
   await expect(crew.page.getByRole('link', { name: 'Serveur Corsaires' })).toHaveCount(0);
@@ -233,7 +233,7 @@ test('S22-H4 quitter un serveur : confirmation ; le propriétaire doit d’abord
   await dialog.getByRole('button', { name: 'Quitter le serveur' }).click();
   await expect(crew.page.getByRole('heading', { name: 'Amis', level: 1 })).toBeVisible();
   await expect(crew.page.getByRole('link', { name: 'Serveur Phare' })).toHaveCount(0);
-  await expect(members(owner).getByText(crew.name)).toHaveCount(0);
+  await expect(members(owner).getByText(crew.name, { exact: true })).toHaveCount(0);
 
   // Transfert : le nouveau propriétaire reçoit la couronne, l'ancien peut partir.
   await invite(api, owner, cid, crew);
@@ -302,7 +302,7 @@ test('S22-N1 hiérarchie : un modérateur ne touche ni au propriétaire ni à un
   for (const u of [mod, peer]) expect((await http.put(`${API}/guilds/${gid}/members/${u.id}/roles/${role.id}`)).status()).toBe(200);
 
   await mod.page.getByRole('link', { name: 'Serveur Citadelle' }).click();
-  await expect(members(mod).getByText(peer.name)).toBeVisible();
+  await expect(members(mod).getByText(peer.name, { exact: true })).toBeVisible();
   // Menu : rien pour le propriétaire ni pour le pair ; la fiche refuse de changer ses rôles.
   for (const target of [owner.name, peer.name]) {
     await moreFor(mod, target).click();

@@ -301,8 +301,8 @@ test('S22-H6 exclusion temporaire : durées et raison, pastille dans la liste, s
   const [gid, cid] = await createGuild(owner.page, 'Brume');
   await invite(api, owner, cid, crew);
   await crew.page.getByRole('link', { name: 'Serveur Brume' }).click();
-  await expect(members(crew).getByText(owner.name)).toBeVisible();
-  await expect(members(owner).getByText(crew.name)).toBeVisible();
+  await expect(members(crew).getByText(owner.name, { exact: true })).toBeVisible();
+  await expect(members(owner).getByText(crew.name, { exact: true })).toBeVisible();
 
   // « Exclure temporairement… » est distinct d'Expulser et de Bannir, et ouvre une petite fenêtre.
   await moreFor(owner, crew.name).click();
@@ -399,7 +399,7 @@ test('S22-N3 exclusion temporaire : ni soi-même, ni le propriétaire, ni un ran
   const role = await (await http.post(`${API}/guilds/${gid}/roles`, { data: { name: 'Modération', permissions: TIMEOUT, color: 2, hoist: true } })).json();
   expect((await http.put(`${API}/guilds/${gid}/members/${mod.id}/roles/${role.id}`)).status()).toBe(200);
   for (const u of [mod, plain]) await u.page.getByRole('link', { name: 'Serveur Digue' }).click();
-  await expect(members(mod).getByText(plain.name)).toBeVisible();
+  await expect(members(mod).getByText(plain.name, { exact: true })).toBeVisible();
 
   // Le modérateur peut exclure le simple membre, mais le menu du propriétaire et du sien ne le propose pas.
   await moreFor(mod, owner.name).click();

@@ -26,7 +26,7 @@ test('F05-H1 + F06-H1 créer, inviter, rejoindre, discuter en direct', async ({ 
   await b.page.getByLabel('Écrire dans #général').fill('Merci, il fait sombre ici.');
   await b.page.getByRole('button', { name: 'Envoyer' }).click();
   await expect(a.page.getByText('Merci, il fait sombre ici.')).toBeVisible();
-  await expect(a.page.getByRole('complementary', { name: 'Membres' }).getByText(b.name)).toBeVisible();
+  await expect(a.page.getByRole('complementary', { name: 'Membres' }).getByText(b.name, { exact: true })).toBeVisible();
 });
 
 test('F05-N1 nom de serveur vide ou trop court refusé', async ({ user, api }) => {
