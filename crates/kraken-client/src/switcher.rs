@@ -64,6 +64,15 @@ pub fn visit(id: Id) {
     });
 }
 
+/// À la déconnexion (aussi « partout », session invalidée, compte supprimé) : plus aucun lieu visité, ni en
+/// mémoire ni dans le stockage.
+pub fn forget_recents() {
+    RECENTS.with_borrow_mut(|r| *r = None);
+    if let Some(s) = storage() {
+        let _ = s.remove_item(RECENTS_KEY);
+    }
+}
+
 /// Suit le salon affiché : chaque salon ou MP qui existe dans mes listes devient le dernier visité.
 pub fn track_visits(ids: Memo<(Option<Id>, Option<Id>)>) {
     let s = store();
@@ -489,6 +498,9 @@ pub fn Switcher() -> impl IntoView {
         }
     });
     let on_key = move |e: leptos::ev::KeyboardEvent| {
+        if !shortcuts::is_key(&e) {
+            return;
+        }
         let n = count.get_untracked();
         let here = at.get_untracked();
         let to = match e.key().as_str() {

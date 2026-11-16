@@ -56,7 +56,7 @@ pub fn modal_open() -> bool {
 /// Piège le focus dans `root` : Tab après le dernier élément revient au premier, Maj+Tab avant le premier
 /// va au dernier. À appeler dans le `keydown` de la fenêtre.
 pub fn trap_tab(e: &leptos::ev::KeyboardEvent, root: NodeRef<html::Div>) {
-    if e.key() != "Tab" {
+    if !crate::shortcuts::is_key(e) || e.key() != "Tab" {
         return;
     }
     let Some(root) = root.get_untracked() else { return };

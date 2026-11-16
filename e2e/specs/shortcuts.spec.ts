@@ -1,7 +1,7 @@
 // Raccourcis clavier et Quick Switcher (S13, S29) : Ctrl+K (opérateurs, accents, récents, MP, personnes),
 // Alt+↑/↓ et Ctrl+Alt+↑/↓, aide (Ctrl+/ et Réglages), micro et son au clavier, touches seules libres dans la saisie,
 // et le sélecteur d'emojis à un seul arrêt de Tab (tabindex itinérant).
-import { test, expect, a11y, API, type User } from '../fixtures';
+import { test, expect, a11y, API, PASSWORD, type User } from '../fixtures';
 import type { APIRequestContext, Page } from '@playwright/test';
 
 // Micro factice, sans fenêtre d'autorisation : pour les raccourcis micro et son dans un salon vocal.
@@ -30,6 +30,18 @@ async function befriend(api: Api, a: User, b: User) {
 const switcher = (page: Page) => page.getByRole('dialog', { name: 'Aller vers' });
 const field = (page: Page) => switcher(page).getByRole('combobox');
 const composer = (page: Page, channel: string) => page.getByLabel(`Écrire dans #${channel}`);
+const pttKey = (page: Page) => page.getByRole('button', { name: /Touche pour parler/ });
+
+type Init = { ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; repeat?: boolean };
+/** Un `keydown` avec `key` et `code` choisis (Playwright ne change pas la disposition du clavier), sur l'élément focalisé. */
+const keydown = (page: Page, key: string, code: string, init: Init = {}) =>
+  page.evaluate(
+    ([k, c, i]) =>
+      (document.activeElement ?? document.body).dispatchEvent(
+        new KeyboardEvent('keydown', { key: k, code: c, bubbles: true, cancelable: true, ...(i as object) }),
+      ),
+    [key, code, init] as const,
+  );
 
 /** Un compte avec deux serveurs : « Océan » (#général, vocal Général) et « Forge » (#météo en plus). */
 async function setup(user: (p?: string) => Promise<User>, api: Api) {
@@ -387,6 +399,15 @@ test('kb-H3 Ctrl+Maj+M coupe et rétablit le micro, Ctrl+Maj+D le son, pendant u
   await page.keyboard.press('Control+Shift+D');
   await expect(deaf).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByText('Son réactivé', { exact: true })).toHaveCount(1);
+  // Clavier russe : Ctrl+Maj+Ь (touche M) et Ctrl+Maj+В (touche D) font de même.
+  await keydown(page, 'Ь', 'KeyM', { ctrlKey: true, shiftKey: true });
+  await expect(mic).toHaveAttribute('aria-pressed', 'true');
+  await keydown(page, 'Ь', 'KeyM', { ctrlKey: true, shiftKey: true });
+  await expect(mic).toHaveAttribute('aria-pressed', 'false');
+  await keydown(page, 'в', 'KeyD', { ctrlKey: true, shiftKey: true });
+  await expect(deaf).toHaveAttribute('aria-pressed', 'true');
+  await keydown(page, 'в', 'KeyD', { ctrlKey: true, shiftKey: true });
+  await expect(deaf).toHaveAttribute('aria-pressed', 'false');
   await bar.getByRole('button', { name: 'Quitter', exact: true }).click();
 });
 
@@ -471,4 +492,147 @@ test('em-H1 sélecteur d\'emojis : un seul arrêt de Tab, flèches, Début/Fin, 
   await expect(picker).toHaveCount(0);
   await expect(box).toHaveValue(new RegExp(glyph));
   expect(name.length).toBeGreaterThan(0);
+});
+
+test('kb-H4 claviers russe, grec et AZERTY : Ctrl+K et l\'aide par la touche physique ou le symbole', async ({ user, api }) => {
+  const { a } = await setup(user, api);
+  const page = a.page;
+  const help = page.getByRole('dialog', { name: 'Raccourcis clavier' });
+  await composer(page, 'général').click();
+  // Russe et grec : `key` n'est pas latin, `code` dit la touche.
+  for (const [key, label] of [['л', 'russe'], ['Л', 'russe (Maj)'], ['κ', 'grec']] as const) {
+    await keydown(page, key, 'KeyK', { ctrlKey: true });
+    await expect(switcher(page), label).toBeVisible();
+    await keydown(page, key, 'KeyK', { ctrlKey: true });
+    await expect(switcher(page), label).toHaveCount(0);
+  }
+  // AZERTY : « / » demande Maj et « ? » aussi ; la touche décide, pas le code.
+  await keydown(page, '/', 'Period', { ctrlKey: true, shiftKey: true });
+  await expect(help).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(help).toHaveCount(0);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await keydown(page, '?', 'KeyM', { shiftKey: true });
+  await expect(help).toBeVisible();
+  await page.keyboard.press('Escape');
+  // Une lettre latine d'une autre touche ne déclenche rien : Ctrl+K reste Ctrl+K.
+  await keydown(page, 'k', 'KeyV', { ctrlKey: true });
+  await expect(switcher(page)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await keydown(page, 'ж', 'Semicolon', { ctrlKey: true });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('kb-H5 la touche pour parler choisie : Ctrl+K et Ctrl+/ marchent aussitôt, le focus restant sur le bouton', async ({ user }) => {
+  const a = await user('ptt');
+  const page = a.page;
+  await page.goto('/settings/voice');
+  await page.getByRole('switch', { name: 'Appuyer pour parler' }).check();
+  await expect(pttKey(page)).not.toHaveAttribute('data-no-shortcuts');
+  await pttKey(page).click();
+  // Pendant le choix, rien n'est capté ; après, plus rien n'est retenu.
+  await expect(pttKey(page)).toHaveAttribute('data-no-shortcuts', '');
+  await page.keyboard.press('F8');
+  await expect(pttKey(page).locator('kbd')).toHaveText('F8');
+  await expect(pttKey(page)).toBeFocused();
+  await expect(pttKey(page)).not.toHaveAttribute('data-no-shortcuts');
+  await expect(pttKey(page)).not.toHaveAttribute('data-capturing');
+  await page.keyboard.press('Control+k');
+  await expect(switcher(page)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(switcher(page)).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Réglages' })).toBeVisible();
+  await pttKey(page).focus();
+  await page.keyboard.press('Control+/');
+  await expect(page.getByRole('dialog', { name: 'Raccourcis clavier' })).toBeVisible();
+});
+
+test('nav-H2 une touche de navigation maintenue remplace l\'entrée d\'historique au lieu d\'en empiler une par salon', async ({ user, api }) => {
+  const { a, http, g1 } = await setup(user, api);
+  await channel(http, g1.guild.id, 'zèbre');
+  const page = a.page;
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'général', level: 1 })).toBeVisible();
+  await composer(page, 'général').click();
+  const length = () => page.evaluate(() => history.length);
+  const before = await length();
+  const start = page.url();
+  // Un appui : une entrée de plus.
+  await page.keyboard.press('Alt+ArrowDown');
+  await expect(page).not.toHaveURL(start);
+  expect(await length()).toBe(before + 1);
+  const afterOne = page.url();
+  // Vingt répétitions (3 salons : 20 n'est pas un multiple de 3) : on change de salon, sans entrée de plus.
+  for (let i = 0; i < 20; i++) {
+    await keydown(page, 'ArrowDown', 'ArrowDown', { altKey: true, repeat: true });
+    await page.waitForTimeout(40);
+  }
+  await expect.poll(() => page.url()).not.toBe(afterOne);
+  expect(await length()).toBeLessThanOrEqual(before + 1);
+  // Ctrl+Alt+↑/↓ : même règle.
+  const servers = page.url();
+  await keydown(page, 'ArrowDown', 'ArrowDown', { ctrlKey: true, altKey: true, repeat: true });
+  await expect.poll(() => page.url()).not.toBe(servers);
+  expect(await length()).toBeLessThanOrEqual(before + 1);
+});
+
+test('kb-H6 un keydown sans touche (remplissage automatique de Chrome) ne fait aucune erreur dans les raccourcis, le Quick Switcher et le sélecteur d\'emojis', async ({ user, api, allow }) => {
+  // Écouteurs plus anciens qui lisent encore `key` sans garde (carte de compte du shell, mise à jour, fenêtres
+  // modales, visionneuse, réglages vocaux) : connus, listés dans les notes de version. Ceux de cette version ne
+  // doivent rien lever : aucune trace d'erreur ne passe par eux.
+  allow.push(/Cannot read properties of undefined \(reading 'length'\)/, /panicked at|unreachable|RefCell already borrowed/);
+  const { a } = await setup(user, api);
+  const page = a.page;
+  const stacks: string[] = [];
+  page.on('pageerror', (e) => stacks.push(e.stack ?? e.message));
+  const bare = (target: 'window' | 'active') =>
+    page.evaluate((to) => (to === 'window' ? window : document.activeElement!).dispatchEvent(new Event('keydown', { bubbles: true })), target);
+  await composer(page, 'général').click();
+  await bare('window');
+  // Le sélecteur d'emojis : recherche, puis grille.
+  await page.getByRole('button', { name: 'Insérer un emoji' }).click();
+  await expect(page.getByRole('searchbox', { name: 'Chercher un emoji' })).toBeFocused();
+  await bare('active');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('.app-picker-emoji[tabindex="0"]')).toBeFocused();
+  await bare('active');
+  await page.keyboard.press('Escape');
+  // Le champ du Quick Switcher, et la fenêtre d'aide (piège du focus).
+  await page.keyboard.press('Control+k');
+  await expect(switcher(page)).toBeVisible();
+  await bare('active');
+  await expect(field(page)).toBeFocused();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+/');
+  await expect(page.getByRole('dialog', { name: 'Raccourcis clavier' })).toBeVisible();
+  await bare('active');
+  await page.keyboard.press('Escape');
+  // Les raccourcis marchent toujours après.
+  await page.keyboard.press('Control+k');
+  await expect(switcher(page)).toBeVisible();
+  const unknown = stacks.filter((s) => !/ui::modal<|update::__component_update_tile|shell::__component_me|files::|voice_settings::/.test(s));
+  expect(unknown).toEqual([]);
+});
+
+test('kb-H7 Récents effacés à la déconnexion : la clé disparaît et le compte suivant n\'en voit aucun', async ({ user, api }) => {
+  const a = await user('lou');
+  const b = await user('max');
+  const http = await api(a.token);
+  const g = await guild(http, 'Phare');
+  const lieu = await channel(http, g.guild.id, 'veille');
+  const page = a.page;
+  await page.goto(`/channels/${g.guild.id}/${lieu.id}`);
+  await expect(page.getByRole('heading', { name: 'veille', level: 1 })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('kraken.recents'))).toContain(lieu.id);
+  await page.goto('/settings/account');
+  await page.getByRole('button', { name: 'Se déconnecter', exact: true }).click();
+  await page.waitForURL('**/login**');
+  expect(await page.evaluate(() => localStorage.getItem('kraken.recents'))).toBeNull();
+  await page.getByLabel('Pseudo ou e-mail').fill(b.name);
+  await page.getByLabel('Mot de passe').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Se connecter' }).click();
+  await page.waitForURL('**/channels/@me');
+  await page.keyboard.press('Control+k');
+  await expect(switcher(page).getByRole('status')).toHaveText('Aucun lieu récent');
+  expect(await page.evaluate(() => localStorage.getItem('kraken.recents'))).toBeNull();
 });

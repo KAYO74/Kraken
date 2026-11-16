@@ -4,13 +4,16 @@
 //!
 //! Règles : un raccourci à modificateur marche partout, même dans un champ ; une touche seule (`?`) jamais
 //! pendant qu'on écrit. Rien n'est capté pendant le choix de la touche d'appuyer pour parler
-//! (`data-no-shortcuts`), ni pendant une composition de texte. Ctrl+T, N et W sont au navigateur : aucun
+//! (`data-no-shortcuts`, posé seulement pendant ce choix), ni pendant une composition de texte. Sur un clavier
+//! non latin (russe, grec), la lettre vient de la touche physique (`kraken_core::keys::name`). Ctrl+T, N et W sont au navigateur : aucun
 //! raccourci ne les prend. Les raccourcis ne se personnalisent pas, et aucun ne marche hors de la fenêtre.
 
 use kraken_core::grid::cycle;
 use kraken_proto::{Channel, ChannelKind, Id};
 use leptos::ev::KeyboardEvent;
 use leptos::prelude::*;
+use leptos_router::NavigateOptions;
+use leptos_router::hooks::use_navigate;
 use wasm_bindgen::JsCast;
 
 use crate::shell::ordered;
@@ -62,7 +65,7 @@ pub enum Action {
     Deafen,
 }
 
-/// Une combinaison. `key` : `KeyboardEvent.key` en minuscules. `primary` : Ctrl, ou Cmd sur Mac.
+/// Une combinaison. `key` : le nom de la touche en minuscules (`kraken_core::keys::name`). `primary` : Ctrl, ou Cmd sur Mac.
 #[derive(Clone, Copy, Debug)]
 pub struct Chord {
     pub primary: bool,
@@ -247,8 +250,14 @@ pub fn ui() -> Ui {
 
 // ───────── branchement ─────────
 
+/// Chrome envoie un `keydown` qui n'est qu'un `Event`, sans `key`, au remplissage automatique d'un champ :
+/// lire `key()` dessus lève une erreur. Les écouteurs de touches commencent par ce test et sortent sans bruit.
+pub fn is_key(e: &web_sys::Event) -> bool {
+    e.is_instance_of::<KeyboardEvent>()
+}
+
 fn chord_matches(c: &Chord, e: &KeyboardEvent, mac: bool) -> bool {
-    if e.key().to_lowercase() != c.key {
+    if kraken_core::keys::name(&e.key(), &e.code(), e.shift_key()) != c.key {
         return false;
     }
     let primary = if mac { e.meta_key() && !e.ctrl_key() } else { e.ctrl_key() && !e.meta_key() };
@@ -346,15 +355,17 @@ pub fn install(ids: Memo<(Option<Id>, Option<Id>)>) -> Ui {
     let ui = Ui { switcher: RwSignal::new(false), help: RwSignal::new(false), say: RwSignal::new(String::new()) };
     provide_context(ui);
     let mac = is_mac();
-    let listener = window_event_listener(leptos::ev::keydown, move |e: KeyboardEvent| {
-        if e.is_composing() || e.default_prevented() || reserved(&e) {
+    let navigate = use_navigate();
+    let listener = window_event_listener_untyped("keydown", move |e: web_sys::Event| {
+        let Some(e) = e.dyn_ref::<KeyboardEvent>() else { return };
+        if e.is_composing() || e.default_prevented() || reserved(e) {
             return;
         }
-        let Some(action) = lookup(&e, mac) else { return };
+        let Some(action) = lookup(e, mac) else { return };
         // Une touche seule n'est jamais prise pendant qu'on écrit, ni quand c'est celle d'appuyer pour parler.
         let v = s.voice;
         let ptt = v.ptt.get_untracked() && v.ptt_key.with_untracked(|k| k.as_ref().is_some_and(|k| k.code == e.code()));
-        if !(e.ctrl_key() || e.meta_key() || e.alt_key()) && (typing(&e) || ptt) {
+        if !(e.ctrl_key() || e.meta_key() || e.alt_key()) && (typing(e) || ptt) {
             return;
         }
         let once = !e.repeat();
@@ -392,7 +403,8 @@ pub fn install(ids: Memo<(Option<Id>, Option<Id>)>) -> Ui {
                     }
                     _ => server_step(s, ids.get_untracked().0, action == Action::ServerNext),
                 };
-                to.map(|to| s.goto.set(Some(to))).is_some()
+                // Touche maintenue : on remplace l'entrée d'historique au lieu d'en empiler une par salon.
+                to.map(|to| navigate(&to, NavigateOptions { replace: !once, ..Default::default() })).is_some()
             }
         };
         if handled {

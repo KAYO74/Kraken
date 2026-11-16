@@ -153,7 +153,7 @@ pub fn EmojiPicker(
         (0..list.length()).filter_map(|i| list.item(i)).filter_map(|n| n.dyn_into().ok()).collect()
     };
     let on_grid_key = move |e: leptos::ev::KeyboardEvent| {
-        if e.alt_key() || e.meta_key() {
+        if !crate::shortcuts::is_key(&e) || e.alt_key() || e.meta_key() {
             return;
         }
         let Some(mv) = Move::from_key(&e.key(), e.ctrl_key()) else { return };
@@ -197,12 +197,12 @@ pub fn EmojiPicker(
     view! {
         <div class="k-menu app-picker" role="dialog" aria-label=title node_ref=root>
             <input class="k-input" type="search" placeholder="Chercher un emoji" aria-label="Chercher un emoji" autofocus bind:value=q
-                on:keydown=move |e| match e.key().as_str() {
-                    "Enter" => {
+                on:keydown=move |e: leptos::ev::KeyboardEvent| match crate::shortcuts::is_key(&e).then(|| e.key()).as_deref() {
+                    Some("Enter") => {
                         e.prevent_default();
                         if let Some(p) = first() { on_pick.run(p) }
                     }
-                    "ArrowDown" => {
+                    Some("ArrowDown") => {
                         e.prevent_default();
                         into_grid();
                     }
