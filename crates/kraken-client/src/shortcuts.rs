@@ -16,8 +16,10 @@ use leptos_router::NavigateOptions;
 use leptos_router::hooks::use_navigate;
 use wasm_bindgen::JsCast;
 
+use crate::i18n::t;
 use crate::shell::ordered;
 use crate::store::{Store, store};
+use crate::tk;
 use crate::ui::{modal, modal_open, trap_tab};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -31,12 +33,13 @@ pub enum Group {
 impl Group {
     const ALL: [Group; 4] = [Self::Navigation, Self::Messages, Self::Call, Self::General];
 
+    /// Le titre du groupe : une clé de traduction (`t(…)` à l'affichage).
     fn title(self) -> &'static str {
         match self {
-            Self::Navigation => "Navigation",
-            Self::Messages => "Messages",
-            Self::Call => "Appel",
-            Self::General => "Général",
+            Self::Navigation => tk!("Navigation"),
+            Self::Messages => tk!("Messages"),
+            Self::Call => tk!("Appel"),
+            Self::General => tk!("Général"),
         }
     }
 
@@ -84,6 +87,7 @@ const fn chord(mods: u8, key: &'static str) -> Chord {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Shortcut {
+    /// Une clé de traduction : `t(label)` à l'affichage.
     pub label: &'static str,
     pub group: Group,
     /// Une ou plusieurs façons de le faire.
@@ -97,25 +101,32 @@ const fn sc(label: &'static str, group: Group, chords: &'static [Chord], action:
 }
 
 pub const SHORTCUTS: &[Shortcut] = &[
-    sc("Aller vers un salon, une personne ou un serveur", Group::Navigation, &[chord(C, "k")], Some(Action::Switcher)),
-    sc("Salon précédent", Group::Navigation, &[chord(A, "arrowup")], Some(Action::ChannelPrev)),
-    sc("Salon suivant", Group::Navigation, &[chord(A, "arrowdown")], Some(Action::ChannelNext)),
-    sc("Serveur précédent", Group::Navigation, &[chord(C | A, "arrowup")], Some(Action::ServerPrev)),
-    sc("Serveur suivant", Group::Navigation, &[chord(C | A, "arrowdown")], Some(Action::ServerNext)),
-    sc("Salon non lu précédent", Group::Navigation, &[chord(A | S, "arrowup")], Some(Action::UnreadPrev)),
-    sc("Salon non lu suivant", Group::Navigation, &[chord(A | S, "arrowdown")], Some(Action::UnreadNext)),
-    sc("Envoyer le message", Group::Messages, &[chord(0, "enter")], None),
-    sc("Aller à la ligne", Group::Messages, &[chord(S, "enter")], None),
-    sc("Modifier mon dernier message (saisie vide)", Group::Messages, &[chord(0, "arrowup")], None),
-    sc("Annuler la réponse ou la modification", Group::Messages, &[chord(0, "escape")], None),
-    sc("Couper ou réactiver le micro", Group::Call, &[chord(C | S, "m")], Some(Action::Mute)),
-    sc("Couper ou réactiver le son", Group::Call, &[chord(C | S, "d")], Some(Action::Deafen)),
-    sc("Afficher les raccourcis clavier", Group::General, &[chord(C, "/"), chord(0, "?")], Some(Action::Help)),
-    sc("Fermer la fenêtre ouverte", Group::General, &[chord(0, "escape")], None),
+    sc(
+        tk!("Aller vers un salon, une personne ou un serveur"),
+        Group::Navigation,
+        &[chord(C, "k")],
+        Some(Action::Switcher),
+    ),
+    sc(tk!("Salon précédent"), Group::Navigation, &[chord(A, "arrowup")], Some(Action::ChannelPrev)),
+    sc(tk!("Salon suivant"), Group::Navigation, &[chord(A, "arrowdown")], Some(Action::ChannelNext)),
+    sc(tk!("Serveur précédent"), Group::Navigation, &[chord(C | A, "arrowup")], Some(Action::ServerPrev)),
+    sc(tk!("Serveur suivant"), Group::Navigation, &[chord(C | A, "arrowdown")], Some(Action::ServerNext)),
+    sc(tk!("Salon non lu précédent"), Group::Navigation, &[chord(A | S, "arrowup")], Some(Action::UnreadPrev)),
+    sc(tk!("Salon non lu suivant"), Group::Navigation, &[chord(A | S, "arrowdown")], Some(Action::UnreadNext)),
+    sc(tk!("Envoyer le message"), Group::Messages, &[chord(0, "enter")], None),
+    sc(tk!("Aller à la ligne"), Group::Messages, &[chord(S, "enter")], None),
+    sc(tk!("Modifier mon dernier message (saisie vide)"), Group::Messages, &[chord(0, "arrowup")], None),
+    sc(tk!("Annuler la réponse ou la modification"), Group::Messages, &[chord(0, "escape")], None),
+    sc(tk!("Couper ou réactiver le micro"), Group::Call, &[chord(C | S, "m")], Some(Action::Mute)),
+    sc(tk!("Couper ou réactiver le son"), Group::Call, &[chord(C | S, "d")], Some(Action::Deafen)),
+    sc(tk!("Afficher les raccourcis clavier"), Group::General, &[chord(C, "/"), chord(0, "?")], Some(Action::Help)),
+    sc(tk!("Fermer la fenêtre ouverte"), Group::General, &[chord(0, "escape")], None),
 ];
 
-/// Ce que l'aide dit des raccourcis, partout où elle les liste.
-pub const NOTE: &str = "Lecture seule : ces raccourcis ne se changent pas encore, et aucun ne marche hors de la fenêtre de KRAKEN (pas de raccourci global pour l'instant).";
+/// Ce que l'aide dit des raccourcis, partout où elle les liste (une clé de traduction : `t(NOTE)`).
+pub const NOTE: &str = tk!(
+    "Lecture seule : ces raccourcis ne se changent pas encore, et aucun ne marche hors de la fenêtre de KRAKEN (pas de raccourci global pour l'instant)."
+);
 
 /// L'appareil est un Mac (ou un iPhone, un iPad) : Cmd plutôt que Ctrl, symboles ⌘ ⌥ ⇧.
 pub fn is_mac() -> bool {
@@ -134,22 +145,22 @@ pub fn is_mac() -> bool {
 }
 
 /// Les touches d'une combinaison, chacune avec ce que dit un lecteur d'écran quand le symbole ne se lit pas.
-fn parts(c: &Chord, mac: bool) -> Vec<(String, Option<&'static str>)> {
+fn parts(c: &Chord, mac: bool) -> Vec<(String, Option<String>)> {
     let mut out = Vec::new();
     if c.primary {
-        out.push(if mac { ("⌘".to_string(), Some("Commande")) } else { ("Ctrl".to_string(), None) });
+        out.push(if mac { ("⌘".to_string(), Some(t("Commande"))) } else { (t("Ctrl"), None) });
     }
     if c.alt {
-        out.push(if mac { ("⌥".to_string(), Some("Option")) } else { ("Alt".to_string(), None) });
+        out.push(if mac { ("⌥".to_string(), Some(t("Option"))) } else { (t("Alt"), None) });
     }
     if c.shift {
-        out.push(if mac { ("⇧".to_string(), Some("Majuscule")) } else { ("Maj".to_string(), Some("Majuscule")) });
+        out.push(if mac { ("⇧".to_string(), Some(t("Majuscule"))) } else { (t("Maj"), Some(t("Majuscule"))) });
     }
     out.push(match c.key {
-        "arrowup" => ("↑".to_string(), Some("flèche haut")),
-        "arrowdown" => ("↓".to_string(), Some("flèche bas")),
-        "escape" => ("Échap".to_string(), None),
-        "enter" => ("Entrée".to_string(), None),
+        "arrowup" => ("↑".to_string(), Some(t("flèche haut"))),
+        "arrowdown" => ("↓".to_string(), Some(t("flèche bas"))),
+        "escape" => (t("Échap"), None),
+        "enter" => (t("Entrée"), None),
         other => (other.to_uppercase(), None),
     });
     out
@@ -191,14 +202,14 @@ pub fn ShortcutList(prefix: &'static str) -> impl IntoView {
                         .chords
                         .iter()
                         .enumerate()
-                        .map(|(i, c)| view! { {(i > 0).then(|| view! { <span class="app-keys-or">"ou"</span> })}{chord_view(c, mac)} })
+                        .map(|(i, c)| view! { {(i > 0).then(|| view! { <span class="app-keys-or">{t("ou")}</span> })}{chord_view(c, mac)} })
                         .collect_view();
-                    view! { <div class="k-shortcut"><dt>{s.label}</dt><dd>{chords}</dd></div> }
+                    view! { <div class="k-shortcut"><dt>{t(s.label)}</dt><dd>{chords}</dd></div> }
                 })
                 .collect_view();
             view! {
                 <section class="app-keys" aria-labelledby=labelled>
-                    <h3 class="app-keys-title" id=own>{g.title()}</h3>
+                    <h3 class="app-keys-title" id=own>{t(g.title())}</h3>
                     <dl>{rows}</dl>
                 </section>
             }
@@ -211,7 +222,7 @@ pub fn ShortcutList(prefix: &'static str) -> impl IntoView {
 pub fn KeybindSettings() -> impl IntoView {
     view! {
         <div class="app-prefs">
-            <p class="k-hint">{NOTE}</p>
+            <p class="k-hint">{t(NOTE)}</p>
             <ShortcutList prefix="settings"/>
         </div>
     }
@@ -225,12 +236,12 @@ pub fn ShortcutHelp(close: Callback<()>) -> impl IntoView {
     view! {
         <div class="k-scrim" node_ref=root on:click=move |_| close.run(()) on:keydown=move |e| trap_tab(&e, root)>
             <div class="k-dialog app-help" role="dialog" aria-modal="true" aria-labelledby="help-t" on:click=|e| e.stop_propagation()>
-                <header><h2 id="help-t" tabindex="-1" autofocus>"Raccourcis clavier"</h2></header>
+                <header><h2 id="help-t" tabindex="-1" autofocus>{t("Raccourcis clavier")}</h2></header>
                 <div>
-                    <p class="k-hint">{NOTE}</p>
+                    <p class="k-hint">{t(NOTE)}</p>
                     <ShortcutList prefix="help"/>
                 </div>
-                <footer><button class="k-btn k-btn--primary" on:click=move |_| close.run(())>"Fermer"</button></footer>
+                <footer><button class="k-btn k-btn--primary" on:click=move |_| close.run(())>{t("Fermer")}</button></footer>
             </div>
         </div>
     }
@@ -338,15 +349,12 @@ fn toggle_call(s: Store, ui: Ui, deafen: bool) {
         v.toggle_mute();
     }
     let (mute, deaf) = (v.mute.get_untracked(), v.deaf.get_untracked());
-    ui.say.set(
-        match (deafen, mute || deaf, deaf) {
-            (true, _, true) => "Son coupé, micro coupé",
-            (true, _, false) => "Son réactivé",
-            (false, true, _) => "Micro coupé",
-            (false, false, _) => "Micro réactivé",
-        }
-        .to_string(),
-    );
+    ui.say.set(t(match (deafen, mute || deaf, deaf) {
+        (true, _, true) => tk!("Son coupé, micro coupé"),
+        (true, _, false) => tk!("Son réactivé"),
+        (false, true, _) => tk!("Micro coupé"),
+        (false, false, _) => tk!("Micro réactivé"),
+    }));
 }
 
 /// Branche tous les raccourcis sur la fenêtre. À appeler dans la coquille, sous le routeur.

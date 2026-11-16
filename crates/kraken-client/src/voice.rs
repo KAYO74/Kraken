@@ -35,24 +35,28 @@ use web_sys::{
     RtcRtpTransceiverInit, RtcSdpType, RtcSessionDescriptionInit, RtcTrackEvent,
 };
 
+use crate::i18n::t;
 use crate::store::Store;
+use crate::tk;
 use crate::voice_settings::{self as vs, PttKey};
 
+/// Les messages ci-dessous sont des clés de traduction : `t(…)` à l'affichage (ou quand on les range dans un signal).
 /// Page en HTTP ailleurs que sur cet ordinateur : le navigateur ne donne ni micro ni écran.
-pub const INSECURE: &str = "Connexion non sécurisée : tu peux écouter et regarder, mais parler et partager ton écran \
-                            demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).";
+pub const INSECURE: &str =
+    tk!("Connexion non sécurisée : tu peux écouter et regarder, mais parler et partager ton écran \
+     demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).");
 const MIC_DENIED: &str =
-    "Micro refusé ou introuvable : tu es en sourdine. Autorise le micro dans ton navigateur, puis réactive-le.";
-const NO_WEBRTC: &str = "Ton navigateur ne permet pas les appels vocaux. Essaie avec un navigateur récent.";
-const LOST: &str = "Connexion vocale perdue.";
-const CAM_DENIED: &str = "Le navigateur a refusé l'accès à la caméra";
-const CAM_MISSING: &str = "Aucune caméra n'a été trouvée sur cet appareil.";
-const CAM_BUSY: &str = "La caméra n'a pas pu démarrer : une autre application l'utilise peut-être.";
-const CAM_ENDED: &str = "La caméra s'est arrêtée : elle a été débranchée ou reprise par une autre application.";
-const CAM_INSECURE: &str = "La caméra demande l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).";
+    tk!("Micro refusé ou introuvable : tu es en sourdine. Autorise le micro dans ton navigateur, puis réactive-le.");
+pub const NO_WEBRTC: &str = tk!("Ton navigateur ne permet pas les appels vocaux. Essaie avec un navigateur récent.");
+const LOST: &str = tk!("Connexion vocale perdue.");
+const CAM_DENIED: &str = tk!("Le navigateur a refusé l'accès à la caméra");
+const CAM_MISSING: &str = tk!("Aucune caméra n'a été trouvée sur cet appareil.");
+const CAM_BUSY: &str = tk!("La caméra n'a pas pu démarrer : une autre application l'utilise peut-être.");
+const CAM_ENDED: &str = tk!("La caméra s'est arrêtée : elle a été débranchée ou reprise par une autre application.");
+const CAM_INSECURE: &str = tk!("La caméra demande l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).");
 /// Pas de droit « Caméra » sur ce serveur : le bouton le dit, et le refus tient aussi dans le code.
-pub const CAM_NO_RIGHT: &str = "Tu n'as pas le droit d'allumer ta caméra sur ce serveur.";
-const MIC_SWITCH: &str = "Le micro choisi n'a pas pu démarrer : l'appel garde celui qui était utilisé.";
+pub const CAM_NO_RIGHT: &str = tk!("Tu n'as pas le droit d'allumer ta caméra sur ce serveur.");
+const MIC_SWITCH: &str = tk!("Le micro choisi n'a pas pu démarrer : l'appel garde celui qui était utilisé.");
 
 /// Le salon vocal de la session : un salon de serveur, ou l'appel d'un MP ou d'un groupe
 /// (`guild` à `None`).
@@ -350,7 +354,7 @@ pub(crate) async fn camera(d: &MediaDevices) -> Result<MediaStream, JsValue> {
     camera_with(d, None).await
 }
 
-/// Ce que la caméra refusée ou absente dit à la personne.
+/// Ce que la caméra refusée ou absente dit à la personne (une clé de traduction : `t(…)` à l'affichage).
 pub(crate) fn camera_failure(e: &JsValue) -> &'static str {
     match error_name(e).as_deref() {
         Some("NotFoundError" | "OverconstrainedError" | "DevicesNotFoundError") => CAM_MISSING,
@@ -396,7 +400,7 @@ struct Refusal {
 
 /// Appelle une commande de l'appli de bureau.
 async fn invoke(cmd: &str, args: serde_json::Value) -> Result<JsValue, Refusal> {
-    let broken = || Refusal { reason: "unavailable".into(), message: "L'appli de bureau ne répond pas.".into() };
+    let broken = || Refusal { reason: "unavailable".into(), message: t("L'appli de bureau ne répond pas.") };
     let (internals, f) = tauri().ok_or_else(broken)?;
     let args = js_sys::JSON::parse(&args.to_string()).map_err(|_| broken())?;
     let promise = f.call2(&internals, &cmd.into(), &args).map_err(|_| broken())?;
@@ -525,19 +529,19 @@ impl Voice {
 
     async fn connect(self, n: u64, channel: Id) -> Result<(), String> {
         if !supported() {
-            return Err(NO_WEBRTC.into());
+            return Err(t(NO_WEBRTC));
         }
         let mic = match devices() {
             None => {
                 self.mute.set(true);
-                self.notice.set(Some(INSECURE.into()));
+                self.notice.set(Some(t(INSECURE)));
                 None
             }
             Some(d) => match microphone(&d).await {
                 Ok(m) => Some(m),
                 Err(_) => {
                     self.mute.set(true);
-                    self.notice.set(Some(MIC_DENIED.into()));
+                    self.notice.set(Some(t(MIC_DENIED)));
                     None
                 }
             },
@@ -548,7 +552,7 @@ impl Voice {
         }
         let cfg = RtcConfiguration::new();
         cfg.set_bundle_policy(RtcBundlePolicy::MaxBundle);
-        let pc = RtcPeerConnection::new_with_configuration(&cfg).map_err(|_| NO_WEBRTC.to_string())?;
+        let pc = RtcPeerConnection::new_with_configuration(&cfg).map_err(|_| t(NO_WEBRTC))?;
         let init = RtcRtpTransceiverInit::new();
         init.set_direction(RtcRtpTransceiverDirection::Sendonly);
         let mic_track = mic.as_ref().and_then(|m| track(m, "audio"));
@@ -579,7 +583,7 @@ impl Voice {
         spawn_local(self.offers(n, pc.clone(), dc, rx));
         spawn_local(self.meter(n));
 
-        let broken = |_| "Le navigateur n'a pas pu préparer l'appel.".to_string();
+        let broken = |_| t("Le navigateur n'a pas pu préparer l'appel.");
         let offer = JsFuture::from(pc.create_offer()).await.map_err(broken)?;
         JsFuture::from(pc.set_local_description(offer.unchecked_ref())).await.map_err(broken)?;
         if !current(n) {
@@ -608,10 +612,12 @@ impl Voice {
         desc.set_sdp(&reply.sdp);
         JsFuture::from(pc.set_remote_description(&desc))
             .await
-            .map_err(|_| "La réponse du serveur n'a pas convenu au navigateur.".to_string())?;
+            .map_err(|_| t("La réponse du serveur n'a pas convenu au navigateur."))?;
         TimeoutFuture::new(15_000).await;
         if current(n) && self.status.get_untracked() == Status::Connecting {
-            self.lost("Connexion impossible : le port UDP du vocal est sans doute bloqué entre toi et le serveur.");
+            self.lost(tk!(
+                "Connexion impossible : le port UDP du vocal est sans doute bloqué entre toi et le serveur."
+            ));
         }
         Ok(())
     }
@@ -694,7 +700,7 @@ impl Voice {
             }
             if answer(&pc, &dc, &sdp).await.is_err() {
                 if current(n) {
-                    self.lost("Le navigateur a refusé une mise à jour de l'appel.");
+                    self.lost(tk!("Le navigateur a refusé une mise à jour de l'appel."));
                 }
                 return;
             }
@@ -791,9 +797,10 @@ impl Voice {
         self.ptt_say.set("");
     }
 
+    /// `why` est une clé de traduction : la raison s'affiche traduite.
     fn lost(self, why: &str) {
         self.teardown();
-        self.status.set(Status::Lost(why.into()));
+        self.status.set(Status::Lost(t(why)));
     }
 
     /// Quitte le salon vocal.
@@ -824,7 +831,7 @@ impl Voice {
             && s.channel_id != Some(room.channel)
             && matches!(self.status.get_untracked(), Status::Connected | Status::Unstable)
         {
-            self.lost("Connexion vocale coupée par le serveur, ou reprise depuis un autre appareil.");
+            self.lost(tk!("Connexion vocale coupée par le serveur, ou reprise depuis un autre appareil."));
         }
     }
 
@@ -864,7 +871,7 @@ impl Voice {
         }
         let Some(d) = devices() else {
             self.mute.set(true);
-            self.notice.set(Some(INSECURE.into()));
+            self.notice.set(Some(t(INSECURE)));
             return;
         };
         let n = GEN.with(Cell::get);
@@ -886,7 +893,7 @@ impl Voice {
                 Ok(m) => stop_all(&m),
                 Err(_) => {
                     self.mute.set(true);
-                    self.notice.set(Some(MIC_DENIED.into()));
+                    self.notice.set(Some(t(MIC_DENIED)));
                 }
             }
         });
@@ -906,7 +913,7 @@ impl Voice {
                 Ok(m) => m,
                 Err(_) => {
                     if current(n) {
-                        self.notice.set(Some(MIC_SWITCH.into()));
+                        self.notice.set(Some(t(MIC_SWITCH)));
                     }
                     return;
                 }
@@ -944,7 +951,7 @@ impl Voice {
                 Ok(s) => s.unchecked_into(),
                 Err(e) => {
                     if !cancelled(&e) {
-                        self.notice.set(Some("Le partage d'écran n'a pas pu démarrer.".into()));
+                        self.notice.set(Some(t("Le partage d'écran n'a pas pu démarrer.")));
                     }
                     return;
                 }
@@ -1013,7 +1020,7 @@ impl Voice {
         if self.camera.get_untracked() {
             self.stop_camera();
         } else if untrack(|| self.camera_denied()) {
-            self.camera_error.set(Some(CAM_NO_RIGHT.into()));
+            self.camera_error.set(Some(t(CAM_NO_RIGHT)));
         } else {
             self.start_camera();
         }
@@ -1033,7 +1040,7 @@ impl Voice {
         }
         self.camera_error.set(None);
         let Some(d) = devices() else {
-            self.camera_error.set(Some(CAM_INSECURE.into()));
+            self.camera_error.set(Some(t(CAM_INSECURE)));
             return;
         };
         let n = GEN.with(Cell::get);
@@ -1045,7 +1052,7 @@ impl Voice {
                 Ok(s) => s,
                 Err(e) => {
                     if current(n) {
-                        self.camera_error.set(Some(camera_failure(&e).into()));
+                        self.camera_error.set(Some(t(camera_failure(&e))));
                     }
                     return;
                 }
@@ -1060,7 +1067,7 @@ impl Voice {
                 spawn_local(async move {
                     if current(n) {
                         self.stop_camera();
-                        self.camera_error.set(Some(CAM_ENDED.into()));
+                        self.camera_error.set(Some(t(CAM_ENDED)));
                     }
                 });
             });
