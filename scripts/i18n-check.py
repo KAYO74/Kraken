@@ -32,6 +32,8 @@ CATALOGS = CLIENT / "i18n"
 SERVER_DIRS = [ROOT / "crates" / "kraken-server" / "src", ROOT / "crates" / "kraken-db" / "src"]
 # Les noms français des emojis du sélecteur (donnée du noyau) : le client les traduit à l'affichage avec `t(nom)`.
 EMOJI_SRC = ROOT / "crates" / "kraken-core" / "src" / "emoji.rs"
+# Les modèles de serveur (donnée du noyau) : leurs noms, descriptions et noms de salons sont traduits à l'affichage.
+TEMPLATES_SRC = ROOT / "crates" / "kraken-core" / "src" / "templates.rs"
 # Fonctions dont les arguments littéraux sont des clés de traduction : nom -> numéros d'arguments (depuis 0).
 KEY_ARGS = {"t": (0,), "tf": (0,), "tn": (0, 1), "tnf": (0, 1), "tk!": (0,)}
 
@@ -457,6 +459,20 @@ def emoji_names():
     return {decode(m.group(1)) for m in re.finditer(r'\(\s*"(?:[^"\\]|\\.)*"\s*,\s*"((?:[^"\\]|\\.)*)"\s*\)', body)}
 
 
+def template_names():
+    """Les textes des modèles de serveur de `kraken-core` : `name:`, `description:` et les noms de salons `text("…")`
+    et `voice("…")` de la constante `ALL` (les noms de catégories ne sont pas montrés par le client)."""
+    if not TEMPLATES_SRC.is_file():
+        return set()
+    text = TEMPLATES_SRC.read_text(encoding="utf-8")
+    start = text.find("pub const ALL")
+    end = text.find("\n];", start)
+    body = text[start:end] if start >= 0 and end > start else ""
+    lit = r'"((?:[^"\\]|\\.)*)"'
+    found = re.findall(r"\b(?:name|description):\s*" + lit, body) + re.findall(r"\b(?:text|voice)\(\s*" + lit, body)
+    return {decode(x) for x in found}
+
+
 def cmd_check():
     errors, warnings = [], []
     lang_dirs = sorted(p for p in CATALOGS.iterdir() if p.is_dir()) if CATALOGS.is_dir() else []
@@ -471,6 +487,7 @@ def cmd_check():
     i18n_rs = (SRC / "i18n.rs").read_text(encoding="utf-8")
     server_texts = {tok.val for _, tok, _, in_test in server_literals() if not in_test}
     emojis = emoji_names()
+    templates = template_names()
     for lang_dir in lang_dirs:
         lang = lang_dir.name
         # Chaque fichier du dossier doit être lu par le client (liste de src/i18n.rs).
@@ -486,6 +503,8 @@ def cmd_check():
                 errors.append(f"{rel(f)}:{line}: [{lang}] pas de traduction pour {key!r}{more}")
         for name in sorted(emojis - set(cat)):
             errors.append(f"{rel(EMOJI_SRC)}: [{lang}] pas de traduction pour le nom d'emoji {name!r}")
+        for name in sorted(templates - set(cat)):
+            errors.append(f"{rel(TEMPLATES_SRC)}: [{lang}] pas de traduction pour le texte de modèle {name!r}")
         for key, (value, f, no) in cat.items():
             if placeholders(key) != placeholders(value):
                 errors.append(f"{rel(f)}:{no}: [{lang}] variables différentes : {key[:50]!r} {placeholders(key)} / {placeholders(value)}")
@@ -494,7 +513,7 @@ def cmd_check():
             if f.name == "server.tsv":
                 if key not in server_texts:
                     warnings.append(f"{rel(f)}:{no}: [{lang}] message absent des sources du serveur : {key[:60]!r}")
-            elif key not in keys and key not in emojis:
+            elif key not in keys and key not in emojis and key not in templates:
                 warnings.append(f"{rel(f)}:{no}: [{lang}] entrée inutilisée : {key[:60]!r}")
     for e in errors:
         print("ERREUR " + e)

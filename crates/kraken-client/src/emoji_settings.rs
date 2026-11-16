@@ -20,11 +20,13 @@ use wasm_bindgen_futures::JsFuture;
 
 use crate::avatar::{CropDialog, Which, looks_like_image, not_image, too_big};
 use crate::emoji::{EmojiImg, shortcode};
+use crate::i18n::{t, tf};
 use crate::icons::{Icon, lu};
 use crate::store::{Store, store};
+use crate::tk;
 use crate::ui::{MoreMenu, focus_menu_trigger, modal};
 
-const RULE: &str = "Le nom compte de 2 à 32 caractères : lettres sans accent, chiffres et _.";
+const RULE: &str = tk!("Le nom compte de 2 à 32 caractères : lettres sans accent, chiffres et _.");
 
 /// Une image prête à devenir un emoji : ses octets tels qu'ils partiront, son nom proposé, et l'adresse
 /// temporaire qui sert à l'aperçu.
@@ -72,7 +74,7 @@ fn free_name(s: Store, guild: Id, name: &str) -> String {
 }
 
 fn full() -> String {
-    format!("Ce serveur a déjà ses {MAX_EMOJIS} emojis : retires-en un pour en ajouter.")
+    tf("Ce serveur a déjà ses {max} emojis : retires-en un pour en ajouter.", &[("max", &MAX_EMOJIS.to_string())])
 }
 
 /// Une adresse temporaire pour ces octets (aperçu), à libérer avec `revoke_object_url`. Le navigateur
@@ -111,9 +113,10 @@ async fn take(s: Store, file: web_sys::File, guild: Id, ui: Ui) {
         };
         if let Some(found) = sniff(&all).filter(|f| f.animated) {
             if all.len() > MAX_EMOJI_BYTES {
-                return ui
-                    .error
-                    .set(Some(format!("Cette animation pèse trop lourd : {} Ko au plus.", MAX_EMOJI_BYTES / 1024)));
+                return ui.error.set(Some(tf(
+                    "Cette animation pèse trop lourd : {taille} Ko au plus.",
+                    &[("taille", &(MAX_EMOJI_BYTES / 1024).to_string())],
+                )));
             }
             let mime = found.kind.mime();
             let Some(url) = blob_url(&all) else { return ui.error.set(Some(not_image())) };
@@ -229,7 +232,7 @@ pub fn EmojiSettings(guild: Id) -> impl IntoView {
             spawn_local(async move {
                 take(s, file, guild, ui).await;
                 if many && ui.error.get_untracked().is_none() {
-                    ui.note.try_set(Some("Un emoji à la fois : seul le premier fichier a été pris.".into()));
+                    ui.note.try_set(Some(t("Un emoji à la fois : seul le premier fichier a été pris.")));
                 }
             });
         }
@@ -254,15 +257,21 @@ pub fn EmojiSettings(guild: Id) -> impl IntoView {
     });
     let added = Callback::new(move |e: Emoji| {
         ui.adding.set(None);
-        ui.note.set(Some(format!("Emoji {} ajouté.", shortcode(&e.name))));
+        ui.note.set(Some(tf("Emoji {code} ajouté.", &[("code", &shortcode(&e.name))])));
         focus_add();
     });
     let add_close = Callback::new(move |()| ui.adding.set(None));
 
+    // Le texte entier est traduit, `{code}` y marque la place de l'exemple en `<code>`.
+    let hint = t(
+        "Ajoute des images à ce serveur : ses membres les écrivent dans leurs messages avec {code} ou les choisissent dans le sélecteur d'emojis, et s'en servent aussi pour réagir dans leurs autres serveurs.",
+    );
+    let (before, after) =
+        hint.split_once("{code}").map_or((hint.clone(), String::new()), |(a, b)| (a.to_string(), b.to_string()));
     let add_button = move || {
         view! {
             <button type="button" id="emoji-add" class="k-btn k-btn--primary" aria-describedby="emoji-hint" on:click=choose>
-                <Icon icon=lu::LuPlus/>"Ajouter un emoji"
+                <Icon icon=lu::LuPlus/>{t("Ajouter un emoji")}
             </button>
         }
     };
@@ -270,36 +279,36 @@ pub fn EmojiSettings(guild: Id) -> impl IntoView {
     view! {
         <div class="app-emojis" data-over=move || dragging.get().then_some("")
             on:dragenter=on_drag_enter on:dragover=on_drag_over on:dragleave=on_drag_leave on:drop=on_drop>
-            <p class="app-hint">"Ajoute des images à ce serveur : ses membres les écrivent dans leurs messages avec "<code>":nom:"</code>" ou les choisissent dans le sélecteur d'emojis, et s'en servent aussi pour réagir dans leurs autres serveurs."</p>
+            <p class="app-hint">{before}<code>":nom:"</code>{after}</p>
             <div class="app-emoji-head">
-                <p class="app-emoji-count"><b>{move || count.get()}</b>" / "{MAX_EMOJIS}" emplacements"</p>
+                <p class="app-emoji-count"><b>{move || count.get()}</b>" / "{MAX_EMOJIS}" "{t("emplacements")}</p>
                 <Show when=move || { can_manage.get() && count.get() > 0 }>{add_button}</Show>
             </div>
             <input id="emoji-file" type="file" class="k-sr app-file" tabindex="-1" aria-hidden="true"
                 accept="image/png,image/jpeg,image/webp,image/gif" node_ref=input on:change=on_change/>
-            <p id="emoji-hint" class="k-hint">{format!("PNG, JPEG, WebP ou GIF. Une image fixe est recadrée en carré et réduite à 128 px ; une animation reste telle quelle et pèse {} Ko au plus.", MAX_EMOJI_BYTES / 1024)}</p>
+            <p id="emoji-hint" class="k-hint">{tf("PNG, JPEG, WebP ou GIF. Une image fixe est recadrée en carré et réduite à 128 px ; une animation reste telle quelle et pèse {taille} Ko au plus.", &[("taille", &(MAX_EMOJI_BYTES / 1024).to_string())])}</p>
             <Show when=move || { !can_manage.get() }>
-                <p class="k-hint">"Il faut le droit « Gérer les émojis » pour ajouter, renommer ou retirer un emoji."</p>
+                <p class="k-hint">{t("Il faut le droit « Gérer les émojis » pour ajouter, renommer ou retirer un emoji.")}</p>
             </Show>
             <Show when=move || { can_manage.get() && count.get() >= MAX_EMOJIS }>
-                <p class="k-hint">"Tous les emplacements sont pris : retire un emoji pour en ajouter un autre."</p>
+                <p class="k-hint">{t("Tous les emplacements sont pris : retire un emoji pour en ajouter un autre.")}</p>
             </Show>
             <Show when=move || ui.error.get().is_some()><p class="k-error" role="alert">{move || ui.error.get()}</p></Show>
             // Toujours là (une zone `status` doit exister avant son message) et de hauteur réservée : la liste ne saute pas.
             <p class="k-hint app-emoji-note" role="status">{move || ui.note.get()}</p>
             <Show when=move || { count.get() == 0 }>
                 <div class="k-empty">
-                    <b>"Aucun emoji pour l'instant"</b>
-                    <span>"Les emojis du serveur apparaîtront ici, et dans le sélecteur de ses membres."</span>
+                    <b>{t("Aucun emoji pour l'instant")}</b>
+                    <span>{t("Les emojis du serveur apparaîtront ici, et dans le sélecteur de ses membres.")}</span>
                     {move || can_manage.get().then(add_button)}
                 </div>
             </Show>
-            <ul class="app-emoji-list" aria-label="Emojis du serveur">
+            <ul class="app-emoji-list" aria-label=t("Emojis du serveur")>
                 <For each=move || ids.get() key=|id| *id let:id>
                     <Row guild=guild id=id emojis=emojis can_manage=can_manage renaming=renaming deleting=deleting/>
                 </For>
             </ul>
-            <div class="app-emoji-drop" aria-hidden="true"><Icon icon=lu::LuUpload/>"Dépose l'image pour l'ajouter"</div>
+            <div class="app-emoji-drop" aria-hidden="true"><Icon icon=lu::LuUpload/>{t("Dépose l'image pour l'ajouter")}</div>
         </div>
         // Montées hors de la fenêtre des réglages : sinon `.k-settings main > *` rétrécit leur fond sombre
         // à la largeur du contenu et laisse la navigation cliquable derrière.
@@ -323,8 +332,8 @@ fn Row(
     let name = move || me().map(|e| e.name).unwrap_or_default();
     let by = move || {
         me().map(|e| match e.creator {
-            Some(c) => format!("ajouté par {}", c.name),
-            None => "ajouté par un ancien membre".to_string(),
+            Some(c) => tf("ajouté par {nom}", &[("nom", &c.name)]),
+            None => t("ajouté par un ancien membre"),
         })
     };
     let first = name();
@@ -341,15 +350,15 @@ fn Row(
             <Show when=move || can_manage.get() && !editing()>
                 // Redessiné au renommage : son nom accessible dit toujours de quel emoji il s'agit.
                 {move || view! {
-                    <MoreMenu label=format!("Actions pour {}", shortcode(&name()))>
+                    <MoreMenu label=tf("Actions pour {code}", &[("code", &shortcode(&name()))])>
                         <button type="button" class="k-menuitem" on:click=move |e| {
                             focus_menu_trigger(&e);
                             renaming.set(Some(id));
-                        }><Icon icon=lu::LuPencil/>"Renommer"</button>
+                        }><Icon icon=lu::LuPencil/>{t("Renommer")}</button>
                         <button type="button" class="k-menuitem is-danger" on:click=move |e| {
                             focus_menu_trigger(&e);
                             deleting.set(me());
-                        }><Icon icon=lu::LuTrash2/>"Supprimer"</button>
+                        }><Icon icon=lu::LuTrash2/>{t("Supprimer")}</button>
                     </MoreMenu>
                 }}
             </Show>
@@ -386,10 +395,10 @@ fn RenameField(guild: Id, id: Id, name: String, renaming: RwSignal<Option<Id>>) 
             return cancel();
         }
         if !valid_name(&n) {
-            return error.set(Some(RULE.into()));
+            return error.set(Some(t(RULE)));
         }
         if taken(s, guild, &n, Some(id)) {
-            return error.set(Some("Ce nom est déjà pris dans ce serveur.".into()));
+            return error.set(Some(t("Ce nom est déjà pris dans ce serveur.")));
         }
         busy.set(true);
         error.set(None);
@@ -417,7 +426,7 @@ fn RenameField(guild: Id, id: Id, name: String, renaming: RwSignal<Option<Id>>) 
     view! {
         <form class="app-emoji-rename" on:submit=submit>
             <input class="k-input" type="text" node_ref=field autocomplete="off" spellcheck="false" maxlength="32"
-                aria-label=format!("Nouveau nom de {}", shortcode(&name))
+                aria-label=tf("Nouveau nom de {code}", &[("code", &shortcode(&name))])
                 aria-invalid=move || error.get().is_some().then_some("true")
                 aria-describedby=move || if error.get().is_some() { format!("{hint_id2} {err_id2}") } else { hint_id2.clone() }
                 prop:value=move || value.get() on:input=move |e| { value.set(event_target_value(&e)); error.set(None); }
@@ -426,7 +435,7 @@ fn RenameField(guild: Id, id: Id, name: String, renaming: RwSignal<Option<Id>>) 
                     e.stop_propagation();
                     cancel();
                 }/>
-            <small id=hint_id class="k-hint">"Entrée valide, Échap annule."</small>
+            <small id=hint_id class="k-hint">{t("Entrée valide, Échap annule.")}</small>
             <Show when=move || error.get().is_some()><small id=err_id.clone() class="k-error" role="alert">{move || error.get()}</small></Show>
         </form>
     }
@@ -458,9 +467,9 @@ fn AddDialog(guild: Id, ready: Ready, added: Callback<Emoji>, close: Callback<()
         }
         let n = name.get_untracked().trim().to_string();
         let refuse = if !valid_name(&n) {
-            Some(RULE.to_string())
+            Some(t(RULE))
         } else if taken(s, guild, &n, None) {
-            Some("Ce nom est déjà pris dans ce serveur.".to_string())
+            Some(t("Ce nom est déjà pris dans ce serveur."))
         } else {
             None
         };
@@ -515,42 +524,42 @@ fn AddDialog(guild: Id, ready: Ready, added: Callback<Emoji>, close: Callback<()
         let url = preview.1.clone();
         move || match (preview.0, frozen.get()) {
             (true, Some(Some(f))) => view! {
-                <img class="app-emoji-add-img k-still" src=f alt="Aperçu de l'emoji"/>
+                <img class="app-emoji-add-img k-still" src=f alt=t("Aperçu de l'emoji")/>
                 <img class="app-emoji-add-img k-live" src=url.clone() alt=""/>
             }
             .into_any(),
             (true, None) => {
-                view! { <img class="app-emoji-add-img" src=url.clone() alt="Aperçu de l'emoji" data-probing=""/> }
+                view! { <img class="app-emoji-add-img" src=url.clone() alt=t("Aperçu de l'emoji") data-probing=""/> }
                     .into_any()
             }
-            _ => view! { <img class="app-emoji-add-img" src=url.clone() alt="Aperçu de l'emoji"/> }.into_any(),
+            _ => view! { <img class="app-emoji-add-img" src=url.clone() alt=t("Aperçu de l'emoji")/> }.into_any(),
         }
     };
     view! {
         <div class="k-scrim" node_ref=root>
             <div class="k-dialog app-emoji-add" role="dialog" aria-modal="true" aria-labelledby="emoji-add-t">
-                <header><h2 id="emoji-add-t">"Ajouter un emoji"</h2></header>
+                <header><h2 id="emoji-add-t">{t("Ajouter un emoji")}</h2></header>
                 <form on:submit=submit>
                     <div>
                         <div class="app-emoji-add-body">
                             <span class="app-emoji-add-preview" data-animated=preview.0.then_some("")>{shown}</span>
                             <div class="k-field">
-                                <label class="k-label" for="emoji-name">"Nom"</label>
+                                <label class="k-label" for="emoji-name">{t("Nom")}</label>
                                 <input id="emoji-name" class="k-input" type="text" autocomplete="off" spellcheck="false" maxlength="32" autofocus
                                     node_ref=field
                                     aria-invalid=move || field_error.get().is_some().then_some("true")
                                     aria-describedby=move || if field_error.get().is_some() { "emoji-name-h emoji-name-e" } else { "emoji-name-h" }
                                     prop:value=move || name.get()
                                     on:input=move |e| { name.set(event_target_value(&e)); field_error.set(None); }/>
-                                <p id="emoji-name-h" class="k-hint">"Dans un message : "<code>{move || shortcode(name.get().trim())}</code></p>
+                                <p id="emoji-name-h" class="k-hint">{t("Dans un message :")}" "<code>{move || shortcode(name.get().trim())}</code></p>
                                 <Show when=move || field_error.get().is_some()><p id="emoji-name-e" class="k-error" role="alert">{move || field_error.get()}</p></Show>
                             </div>
                         </div>
                         <Show when=move || dialog_error.get().is_some()><p class="k-error" role="alert">{move || dialog_error.get()}</p></Show>
                     </div>
                     <footer>
-                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| close.run(())>"Annuler"</button>
-                        <button type="submit" class="k-btn k-btn--primary" aria-busy=move || busy.get().to_string()>"Ajouter l'emoji"</button>
+                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| close.run(())>{t("Annuler")}</button>
+                        <button type="submit" class="k-btn k-btn--primary" aria-busy=move || busy.get().to_string()>{t("Ajouter l'emoji")}</button>
                     </footer>
                 </form>
             </div>
@@ -567,7 +576,7 @@ fn DeleteDialog(guild: Id, emoji: Emoji, done: RwSignal<Option<String>>, close: 
     let busy = RwSignal::new(false);
     let error = RwSignal::new(None::<String>);
     let code = shortcode(&emoji.name);
-    let title = format!("Supprimer {code} ?");
+    let title = tf("Supprimer {code} ?", &[("code", &code)]);
     let (id, label) = (emoji.id, code.clone());
     let confirm = move |e: leptos::ev::SubmitEvent| {
         e.prevent_default();
@@ -582,7 +591,7 @@ fn DeleteDialog(guild: Id, emoji: Emoji, done: RwSignal<Option<String>>, close: 
                 Ok(()) => {
                     s.in_guild(guild, |g| g.emojis.retain(|x| x.id != id));
                     close.run(());
-                    done.try_set(Some(format!("Emoji {label} supprimé.")));
+                    done.try_set(Some(tf("Emoji {code} supprimé.", &[("code", &label)])));
                     focus_add();
                 }
                 Err(e) => {
@@ -598,12 +607,12 @@ fn DeleteDialog(guild: Id, emoji: Emoji, done: RwSignal<Option<String>>, close: 
                 <header><h2 id="emoji-del-t">{title}</h2></header>
                 <form on:submit=confirm>
                     <div>
-                        <p id="emoji-del-d">"L'emoji disparaît du serveur et du sélecteur. Les messages et les réactions qui l'utilisent restent, mais n'affichent plus que son nom. Cette action est définitive."</p>
+                        <p id="emoji-del-d">{t("L'emoji disparaît du serveur et du sélecteur. Les messages et les réactions qui l'utilisent restent, mais n'affichent plus que son nom. Cette action est définitive.")}</p>
                         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
                     </div>
                     <footer>
-                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| close.run(()) autofocus>"Annuler"</button>
-                        <button type="submit" class="k-btn k-btn--danger" aria-busy=move || busy.get().to_string()>"Supprimer l'emoji"</button>
+                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| close.run(()) autofocus>{t("Annuler")}</button>
+                        <button type="submit" class="k-btn k-btn--danger" aria-busy=move || busy.get().to_string()>{t("Supprimer l'emoji")}</button>
                     </footer>
                 </form>
             </div>
