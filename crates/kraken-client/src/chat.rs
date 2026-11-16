@@ -29,6 +29,12 @@ thread_local! {
     static SLOW_UNTIL: std::cell::RefCell<std::collections::HashMap<Id, i64>> = Default::default();
 }
 
+/// Un composeur garde un texte non envoyé (les brouillons ne survivent pas au rechargement de la page : changer
+/// de langue le perdrait).
+pub fn has_unsent_draft() -> bool {
+    DRAFTS.with_borrow(|d| d.values().any(|t| !t.trim().is_empty()))
+}
+
 /// Secondes à attendre encore avant d'écrire dans ce salon (mode lent).
 fn slow_left(channel: Id) -> u32 {
     let until = SLOW_UNTIL.with_borrow(|m| m.get(&channel).copied()).unwrap_or(0);

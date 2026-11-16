@@ -264,7 +264,7 @@ fn FriendRow(r: Relationship, error: RwSignal<Option<String>>, confirm: RwSignal
             <div class="app-ellipsis">
                 <b>{r.user.name().to_string()}</b>
                 <small>{move || {
-                    let state = if friend { dot.get().label() } else { sub };
+                    let state = if friend { dot.get().label() } else { sub.to_string() };
                     format!("@{} · {state}", r.user.username)
                 }}</small>
             </div>

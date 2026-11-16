@@ -10,8 +10,10 @@ use leptos_router::components::Outlet;
 use leptos_router::hooks::{use_location, use_navigate};
 
 use crate::call::{CallAudio, ControlPanel, IncomingCalls, VoicePanel, VoiceUsers};
+use crate::i18n::{t, tf, tn};
 use crate::icons::{Icon, lu};
 use crate::store::{Conn, store};
+use crate::tk;
 use crate::ui::{Avatar, Dot, GuildIcon, Logo, StatusDot, initials, modal};
 use crate::unread::{MentionBadge, MutedMark, NotifyDialog, Target, TargetMenu, UnreadText};
 use crate::update::{UpdateEntry, UpdateTile, Updater};
@@ -57,6 +59,19 @@ pub fn ordered(channels: &[Channel]) -> Vec<Channel> {
 #[component]
 pub fn Shell() -> impl IntoView {
     let s = store();
+    // Après un changement de langue fait dans les Réglages, la zone d'information dit la langue choisie
+    // (dans la nouvelle langue), puis s'efface d'elle-même.
+    if let Some(said) = crate::i18n::take_announcement() {
+        s.notice.set(Some(said.clone()));
+        spawn_local(async move {
+            gloo_timers::future::TimeoutFuture::new(6_000).await;
+            s.notice.try_update(|n| {
+                if n.as_deref() == Some(said.as_str()) {
+                    *n = None;
+                }
+            });
+        });
+    }
     let navigate = use_navigate();
     Effect::new(move || {
         if !s.signed_in.get() {
@@ -122,7 +137,7 @@ pub fn Shell() -> impl IntoView {
                 use wasm_bindgen::JsCast;
                 let main = document().get_element_by_id("main").and_then(|m| m.dyn_into::<web_sys::HtmlElement>().ok());
                 if let Some(m) = main { let _ = m.focus(); }
-            }>"Aller au contenu"</a>
+            }>{t("Aller au contenu")}</a>
             <Rail/>
             <div class="app-nav" on:click=close_on_link>
                 {move || match ids.get().0 {
@@ -136,7 +151,7 @@ pub fn Shell() -> impl IntoView {
                 <Show when=move || s.conn.get() != Conn::Ready>
                     <div class="k-banner k-banner--warning app-conn" role="status">
                         <Icon icon=lu::LuCircleAlert/>
-                        <span>{move || if s.conn.get() == Conn::Connecting { "Connexion au serveur…" } else { "Connexion perdue, nouvelle tentative…" }}</span>
+                        <span>{move || if s.conn.get() == Conn::Connecting { t("Connexion au serveur…") } else { t("Connexion perdue, nouvelle tentative…") }}</span>
                     </div>
                 </Show>
                 // Zone `status` toujours présente : un message qui arrive dans une zone déjà là est annoncé.
@@ -145,7 +160,7 @@ pub fn Shell() -> impl IntoView {
                         <div class="k-banner app-conn">
                             <Icon icon=lu::LuInfo/>
                             <span>{move || s.notice.get()}</span>
-                            <button type="button" class="k-btn k-btn--icon" aria-label="Fermer l'information" on:click=move |_| s.notice.set(None)>
+                            <button type="button" class="k-btn k-btn--icon" aria-label=t("Fermer l'information") on:click=move |_| s.notice.set(None)>
                                 <Icon icon=lu::LuX small=true/>
                             </button>
                         </div>
@@ -182,13 +197,12 @@ fn Rail() -> impl IntoView {
     let u = crate::unread::ui();
     let private = Memo::new(move |_| s.private_mentions());
     let home_label = move || match private.get() {
-        0 => "Accueil et messages privés".to_string(),
-        1 => "Accueil et messages privés, 1 mention".to_string(),
-        n => format!("Accueil et messages privés, {n} mentions"),
+        0 => t("Accueil et messages privés"),
+        n => format!("{}, {}", t("Accueil et messages privés"), tn("{n} mention", "{n} mentions", n)),
     };
     view! {
         <div class="k-rail app-rail">
-            <nav class="app-rail-list" aria-label="Serveurs">
+            <nav class="app-rail-list" aria-label=t("Serveurs")>
                 <a class="k-server k-server--home" href="/channels/@me" aria-label=home_label aria-current=home_current>
                     <Logo/>
                     <Show when=move || { private.get() > 0 }>
@@ -209,9 +223,9 @@ fn Rail() -> impl IntoView {
                         let badge = Memo::new(move |_| s.guild_badge(id));
                         let label = move || {
                             let (unread, n) = badge.get();
-                            let mut l = format!("Serveur {}", name());
-                            if unread { l.push_str(", non lu"); }
-                            match n { 0 => {}, 1 => l.push_str(", 1 mention"), n => l.push_str(&format!(", {n} mentions")) }
+                            let mut l = tf("Serveur {nom}", &[("nom", &name())]);
+                            if unread { l.push_str(", "); l.push_str(&t("non lu")); }
+                            if n > 0 { l.push_str(", "); l.push_str(&tn("{n} mention", "{n} mentions", n)); }
                             l
                         };
                         view! {
@@ -227,10 +241,10 @@ fn Rail() -> impl IntoView {
                         }
                     }
                 </For>
-                <a class="k-server k-server--action" href="/guilds/new" aria-label="Créer ou rejoindre un serveur" title="Créer ou rejoindre">
+                <a class="k-server k-server--action" href="/guilds/new" aria-label=t("Créer ou rejoindre un serveur") title=t("Créer ou rejoindre")>
                     <Icon icon=lu::LuPlus/>
                 </a>
-                <a class="k-server k-server--action" href="/discover" aria-label="Explorer les serveurs publics" title="Explorer">
+                <a class="k-server k-server--action" href="/discover" aria-label=t("Explorer les serveurs publics") title=t("Explorer")>
                     <Icon icon=lu::LuCompass/>
                 </a>
             </nav>
@@ -252,23 +266,23 @@ fn HomeSidebar() -> impl IntoView {
         s.friends.with(|f| f.iter().filter(|r| r.kind == kraken_proto::RelationshipKind::PendingIncoming).count())
     });
     view! {
-        <nav class="k-sidebar app-sidebar" aria-label="Messages privés">
+        <nav class="k-sidebar app-sidebar" aria-label=t("Messages privés")>
             <crate::switcher::SwitcherButton/>
-            <a class="k-channel" href="/channels/@me" aria-current=on_friends><Icon icon=lu::LuUsers/>"Amis"
+            <a class="k-channel" href="/channels/@me" aria-current=on_friends><Icon icon=lu::LuUsers/>{t("Amis")}
                 <Show when=move || { incoming.get() > 0 }>
                     <span class="k-badge k-badge--count">{move || incoming.get()}</span>
-                    <span class="k-sr">{move || if incoming.get() > 1 { " (demandes en attente)" } else { " (demande en attente)" }}</span>
+                    <span class="k-sr">" "{move || tn("(demande en attente)", "(demandes en attente)", incoming.get())}</span>
                 </Show>
             </a>
             <div class="app-dm-head">
-                <h2 class="k-category">"Messages privés"</h2>
-                <button class="k-btn k-btn--icon" aria-label="Nouvelle conversation ou groupe" title="Nouvelle conversation"
+                <h2 class="k-category">{t("Messages privés")}</h2>
+                <button class="k-btn k-btn--icon" aria-label=t("Nouvelle conversation ou groupe") title=t("Nouvelle conversation")
                     on:click=move |_| picking.set(true)>
                     <Icon icon=lu::LuPlus small=true/>
                 </button>
             </div>
             <Show when=move || s.dms.with(|d| d.is_empty()) && s.conn.get() == Conn::Ready>
-                <p class="app-hint">"Aucune conversation pour l'instant."</p>
+                <p class="app-hint">{t("Aucune conversation pour l'instant.")}</p>
             </Show>
             <For each=move || s.dms.get() key=|c| (c.id, c.name.clone(), c.owner_id, c.recipients.iter().map(|u| (u.name().to_string(), u.avatar.clone())).collect::<Vec<_>>()) let:c>
                 {
@@ -298,8 +312,8 @@ fn HomeSidebar() -> impl IntoView {
                             });
                         };
                         view! {
-                            <button type="button" class="k-btn k-btn--icon app-dm-close" aria-label=format!("Fermer la conversation avec {name}")
-                                title="Fermer la conversation" on:click=close>
+                            <button type="button" class="k-btn k-btn--icon app-dm-close" aria-label=tf("Fermer la conversation avec {nom}", &[("nom", &name)])
+                                title=t("Fermer la conversation") on:click=close>
                                 <Icon icon=lu::LuX small=true/>
                             </button>
                         }
@@ -318,9 +332,9 @@ fn HomeSidebar() -> impl IntoView {
                                 }
                                 _ => view! { <span class="k-avatar k-avatar--md" aria-hidden="true">{initials(&title)}</span> }.into_any(),
                             }}
-                            <div>{title.clone()}<UnreadText on=unread/>{group.then(|| view! { <small>{format!("{count} membres")}</small> })}</div>
+                            <div>{title.clone()}<UnreadText on=unread/>{group.then(|| view! { <small>{tn("{n} membre", "{n} membres", count)}</small> })}</div>
                             <Show when=move || calling.get()>
-                                <span class="app-dm-call" role="img" aria-label="Appel en cours" title="Appel en cours"><Icon icon=lu::LuPhoneCall small=true/></span>
+                                <span class="app-dm-call" role="img" aria-label=t("Appel en cours") title=t("Appel en cours")><Icon icon=lu::LuPhoneCall small=true/></span>
                             </Show>
                             <MutedMark on=muted/><MentionBadge count=mentions/>
                         </a>
@@ -362,7 +376,7 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
         })
     });
     view! {
-        <nav class="k-sidebar app-sidebar" aria-label="Salons">
+        <nav class="k-sidebar app-sidebar" aria-label=t("Salons")>
             <crate::switcher::SwitcherButton/>
             {move || match g.get() {
                 None => view! {
@@ -381,17 +395,17 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                     view! {
                         <div class="app-guild-head">
                             <h2 title=tip>{name}</h2>
-                            <button class="k-btn k-btn--icon" aria-label="Inviter des amis" title="Inviter" on:click=move |_| invite_open.set(true)>
+                            <button class="k-btn k-btn--icon" aria-label=t("Inviter des amis") title=t("Inviter") on:click=move |_| invite_open.set(true)>
                                 <Icon icon=lu::LuUserPlus/>
                             </button>
-                            <button class="k-btn k-btn--icon" aria-label="Notifications du serveur" title="Notifications"
+                            <button class="k-btn k-btn--icon" aria-label=t("Notifications du serveur") title=t("Notifications")
                                 on:click=move |_| u.dialog.set(Some(Target::Guild(gid)))>
                                 {move || if s.guild_muted(gid) { view! { <Icon icon=lu::LuBellOff/> } } else { view! { <Icon icon=lu::LuBell/> } }}
                             </button>
-                            <a class="k-btn k-btn--icon" href=format!("/guilds/{gid}/settings") aria-label="Paramètres du serveur" title="Paramètres">
+                            <a class="k-btn k-btn--icon" href=format!("/guilds/{gid}/settings") aria-label=t("Paramètres du serveur") title=t("Paramètres")>
                                 <Icon icon=lu::LuSettings/>
                             </a>
-                            <crate::ui::MoreMenu label="Plus d'actions pour ce serveur".to_string()>
+                            <crate::ui::MoreMenu label=t("Plus d'actions pour ce serveur")>
                                 {
                                     let mine = s.my_id() == Some(g.guild.owner_id);
                                     let (id, label) = (gid, g.guild.name.clone());
@@ -401,29 +415,29 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                                 crate::ui::focus_menu_trigger(&e);
                                                 creating.set(Some((ChannelKind::Text, None)));
                                             }>
-                                                <Icon icon=lu::LuPlus/>"Créer un salon"
+                                                <Icon icon=lu::LuPlus/>{t("Créer un salon")}
                                             </button>
                                             <button class="k-menuitem" on:click=move |e| {
                                                 crate::ui::focus_menu_trigger(&e);
                                                 creating.set(Some((ChannelKind::Category, None)));
                                             }>
-                                                <Icon icon=lu::LuFolderPlus/>"Créer une catégorie"
+                                                <Icon icon=lu::LuFolderPlus/>{t("Créer une catégorie")}
                                             </button>
                                         })}
                                         {mine.then(|| view! {
                                             <a class="k-menuitem" href=format!("/guilds/{gid}/settings/owner")>
-                                                <Icon icon=lu::LuCrown/>"Transférer la propriété"
+                                                <Icon icon=lu::LuCrown/>{t("Transférer la propriété")}
                                             </a>
                                         })}
                                         <hr/>
                                         <button class="k-menuitem is-danger" on:click=move |_| leaving.set(Some(crate::social::Confirm::LeaveGuild(id, label.clone(), mine)))>
-                                            <Icon icon=lu::LuLogOut/>"Quitter le serveur"
+                                            <Icon icon=lu::LuLogOut/>{t("Quitter le serveur")}
                                         </button>
                                     }
                                 }
                             </crate::ui::MoreMenu>
                         </div>
-                        <a class="k-channel" href=format!("/guilds/{gid}/events")><Icon icon=lu::LuCalendar/>"Événements"</a>
+                        <a class="k-channel" href=format!("/guilds/{gid}/events")><Icon icon=lu::LuCalendar/>{t("Événements")}</a>
                         {rows.into_iter().map(|c| {
                             let cid = c.id;
                             let name = c.name.clone().unwrap_or_default();
@@ -435,15 +449,15 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                         <button class="k-category" id=title_id.clone() aria-expanded=move || open().to_string()
                                             on:click=move |_| collapsed.update(|v| if v.contains(&cid) { v.retain(|x| *x != cid) } else { v.push(cid) })>
                                             <Icon icon=lu::LuChevronDown small=true/>{name}
-                                            {c.private.then(|| view! { <Icon icon=lu::LuLock small=true/><span class="k-sr">" (privée)"</span> })}
+                                            {c.private.then(|| view! { <Icon icon=lu::LuLock small=true/><span class="k-sr">" "{t("(privée)")}</span> })}
                                         </button>
                                         {manage.then(|| view! {
-                                            <button type="button" class="k-btn k-btn--icon app-row-act" aria-label="Créer un salon" aria-describedby=title_id.clone()
-                                                title="Créer un salon dans cette catégorie" on:click=move |_| creating.set(Some((ChannelKind::Text, Some(cid))))>
+                                            <button type="button" class="k-btn k-btn--icon app-row-act" aria-label=t("Créer un salon") aria-describedby=title_id.clone()
+                                                title=t("Créer un salon dans cette catégorie") on:click=move |_| creating.set(Some((ChannelKind::Text, Some(cid))))>
                                                 <Icon icon=lu::LuPlus small=true/>
                                             </button>
-                                            <a class="k-btn k-btn--icon app-row-act" href=format!("/channels/{gid}/{cid}/settings") aria-label="Paramètres de la catégorie"
-                                                aria-describedby=title_id.clone() title="Paramètres de la catégorie">
+                                            <a class="k-btn k-btn--icon app-row-act" href=format!("/channels/{gid}/{cid}/settings") aria-label=t("Paramètres de la catégorie")
+                                                aria-describedby=title_id.clone() title=t("Paramètres de la catégorie")>
                                                 <Icon icon=lu::LuSettings small=true/>
                                             </a>
                                         })}
@@ -455,13 +469,15 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                     && ids.get().1 != Some(cid);
                                 let voice = matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage);
                                 let private = c.private;
+                                // Lu avant le nom du salon par les lecteurs d'écran : « salon vocal général ».
                                 let (icon, kind) = match c.kind {
-                                    _ if voice => (lu::LuVolume2, if private { "salon vocal privé " } else { "salon vocal " }),
-                                    ChannelKind::Announcement => (lu::LuMegaphone, if private { "annonces privées " } else { "annonces " }),
-                                    ChannelKind::Forum => (lu::LuMessagesSquare, if private { "forum privé " } else { "forum " }),
-                                    _ if private => (lu::LuLock, "salon privé "),
-                                    _ => (lu::LuHash, ""),
+                                    _ if voice => (lu::LuVolume2, if private { t("salon vocal privé") } else { t("salon vocal") }),
+                                    ChannelKind::Announcement => (lu::LuMegaphone, if private { t("annonces privées") } else { t("annonces") }),
+                                    ChannelKind::Forum => (lu::LuMessagesSquare, if private { t("forum privé") } else { t("forum") }),
+                                    _ if private => (lu::LuLock, t("salon privé")),
+                                    _ => (lu::LuHash, String::new()),
                                 };
+                                let kind = if kind.is_empty() { kind } else { format!("{kind} ") };
                                 let unread = Memo::new(move |_| s.channel(cid).is_some_and(|c| s.shows_unread(&c)));
                                 let muted = Memo::new(move |_| s.channel(cid).is_some_and(|c| s.channel_muted(&c)));
                                 let mentions = Memo::new(move |_| s.channel(cid).map_or(0, |c| s.mentions(&c)));
@@ -478,8 +494,8 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                             <UnreadText on=unread/><MutedMark on=muted/><MentionBadge count=mentions/>
                                         </a>
                                         {manage.then(|| view! {
-                                            <a class="k-btn k-btn--icon app-row-act" href=format!("/channels/{gid}/{cid}/settings") aria-label="Paramètres du salon"
-                                                aria-describedby=name_id.clone() title="Paramètres du salon">
+                                            <a class="k-btn k-btn--icon app-row-act" href=format!("/channels/{gid}/{cid}/settings") aria-label=t("Paramètres du salon")
+                                                aria-describedby=name_id.clone() title=t("Paramètres du salon")>
                                                 <Icon icon=lu::LuSettings small=true/>
                                             </a>
                                         })}
@@ -507,7 +523,7 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
         {move || creating.get().map(|(kind, parent)| view! {
             <Portal>
                 <crate::channels::CreateChannelDialog guild=guild kind=kind parent=parent go=true close=Callback::new(move |()| creating.set(None))
-                    restore="button[aria-label=\"Plus d'actions pour ce serveur\"]"/>
+                    restore=".app-guild-head .app-more > button"/>
             </Portal>
         })}
     }
@@ -526,7 +542,7 @@ fn InviteDialog(guild: Id, close: impl Fn() + Copy + Send + Sync + 'static) -> i
         .or_else(|| s.guild(guild).as_ref().and_then(first_text));
     spawn_local(async move {
         let Some(c) = channel else {
-            link.set(Some(Err("Aucun salon où inviter.".into())));
+            link.set(Some(Err(t("Aucun salon où inviter."))));
             return;
         };
         let base = crate::api::public_url().await;
@@ -546,24 +562,24 @@ fn InviteDialog(guild: Id, close: impl Fn() + Copy + Send + Sync + 'static) -> i
     view! {
         <div class="k-scrim" node_ref=root on:click=move |_| close()>
             <div class="k-dialog" role="dialog" aria-modal="true" aria-labelledby="inv-t" on:click=|e| e.stop_propagation()>
-                <header><h2 id="inv-t">{format!("Inviter dans {name}")}</h2></header>
+                <header><h2 id="inv-t">{tf("Inviter dans {nom}", &[("nom", &name)])}</h2></header>
                 <div>
                     {move || match link.get() {
                         None => view! { <div class="k-skeleton app-skel-line" aria-busy="true"></div> }.into_any(),
                         Some(Err(e)) => view! { <p class="k-error" role="alert">{e}</p> }.into_any(),
                         Some(Ok(l)) => view! {
                             <label class="k-field">
-                                <span class="k-label">"Lien à partager"</span>
+                                <span class="k-label">{t("Lien à partager")}</span>
                                 <input class="k-input" readonly value=l.clone() on:focus=|e| { event_target::<web_sys::HtmlInputElement>(&e).select(); }/>
                             </label>
-                            <p class="app-hint">"Ce lien n'expire pas. Toute personne qui l'a peut rejoindre."</p>
+                            <p class="app-hint">{t("Ce lien n'expire pas. Toute personne qui l'a peut rejoindre.")}</p>
                         }.into_any(),
                     }}
                 </div>
                 <footer>
-                    <button class="k-btn k-btn--ghost" on:click=move |_| close() autofocus>"Fermer"</button>
+                    <button class="k-btn k-btn--ghost" on:click=move |_| close() autofocus>{t("Fermer")}</button>
                     <button class="k-btn k-btn--primary" on:click=copy disabled=move || !matches!(link.get(), Some(Ok(_)))>
-                        {move || if copied.get() { "Copié" } else { "Copier le lien" }}
+                        {move || if copied.get() { t("Copié") } else { t("Copier le lien") }}
                     </button>
                 </footer>
             </div>
@@ -572,11 +588,12 @@ fn InviteDialog(guild: Id, close: impl Fn() + Copy + Send + Sync + 'static) -> i
 }
 
 /// Les statuts qu'on peut choisir, avec la pastille et ce que chacun change.
+/// Textes français à traduire à l'affichage (`tk!` les marque pour `scripts/i18n-check.py`).
 const PRESENCES: [(Presence, Dot, &str, &str); 4] = [
-    (Presence::Online, Dot::Online, "En ligne", ""),
-    (Presence::Idle, Dot::Idle, "Inactif", ""),
-    (Presence::Dnd, Dot::Dnd, "Ne pas déranger", "Ni notification du bureau, ni sonnerie d'appel."),
-    (Presence::Invisible, Dot::Invisible, "Invisible", "Les autres te voient hors ligne."),
+    (Presence::Online, Dot::Online, tk!("En ligne"), ""),
+    (Presence::Idle, Dot::Idle, tk!("Inactif"), ""),
+    (Presence::Dnd, Dot::Dnd, tk!("Ne pas déranger"), tk!("Ni notification du bureau, ni sonnerie d'appel.")),
+    (Presence::Invisible, Dot::Invisible, tk!("Invisible"), tk!("Les autres te voient hors ligne.")),
 ];
 
 /// S04 : mon compte, en bas du rail. L'avatar ouvre une carte : nom, pseudo, état de la
@@ -671,19 +688,19 @@ fn Me() -> impl IntoView {
         });
     };
     let state = move || match s.conn.get() {
-        Conn::Ready => "Connecté",
-        Conn::Connecting => "Connexion…",
-        Conn::Offline => "Hors ligne",
+        Conn::Ready => t("Connecté"),
+        Conn::Connecting => t("Connexion…"),
+        Conn::Offline => t("Hors ligne"),
     };
     view! {
         <div class="app-me" node_ref=wrap on:focusout=on_focusout>
-            <button class="k-me" node_ref=button aria-label=move || format!("Mon compte, {}", dot.get().label()) title="Mon compte"
+            <button class="k-me" node_ref=button aria-label=move || tf("Mon compte, {statut}", &[("statut", &dot.get().label())]) title=t("Mon compte")
                 aria-expanded=move || open.get().to_string() aria-controls=move || open.get().then_some("me-card")
                 on:click=move |_| open.update(|o| *o = !*o)>
                 {move || s.me.get().map(|u| view! { <Avatar user=u status=dot/> })}
             </button>
             <Show when=move || open.get()>
-                <div class="k-mecard" id="me-card" role="group" aria-label="Mon compte" node_ref=card>
+                <div class="k-mecard" id="me-card" role="group" aria-label=t("Mon compte") node_ref=card>
                     <header>
                         {move || s.me.get().map(|u| view! { <Avatar user=u size="md" status=dot/> })}
                         <div>
@@ -693,13 +710,13 @@ fn Me() -> impl IntoView {
                     </header>
                     <p class="k-mecard-state" data-state=move || (s.conn.get() == Conn::Ready).then_some("on")>{state}</p>
                     <fieldset class="app-presence">
-                        <legend class="k-sr">"Mon statut"</legend>
+                        <legend class="k-sr">{t("Mon statut")}</legend>
                         {PRESENCES.iter().map(|&(p, shown, label, hint)| view! {
                             <label class="k-mecard-item app-presence-opt">
                                 <input type="radio" name="presence" class="k-sr" prop:checked=move || s.presence.get() == p
                                     on:change=move |_| choose(p)/>
                                 <span class="app-dot-inline"><StatusDot status=Signal::derive(move || shown)/></span>
-                                <span class="app-presence-text"><b>{label}</b><small>{hint}</small></span>
+                                <span class="app-presence-text"><b>{t(label)}</b><small>{t(hint)}</small></span>
                                 <Show when=move || s.presence.get() == p><Icon icon=lu::LuCheck small=true/></Show>
                             </label>
                         }).collect_view()}
@@ -707,16 +724,16 @@ fn Me() -> impl IntoView {
                     <Show when=move || presence_error.get().is_some()>
                         <p class="k-error app-presence-error" role="alert">{move || presence_error.get()}</p>
                     </Show>
-                    <a class="k-mecard-item" href="/settings/account" on:click=picked>
-                        <Icon icon=lu::LuUserPen/>"Réglages"<span class="k-sr">" utilisateur"</span>
+                    <a class="k-mecard-item" href="/settings/account" aria-label=t("Réglages utilisateur") on:click=picked>
+                        <Icon icon=lu::LuUserPen/>{t("Réglages")}
                     </a>
                     <a class="k-mecard-item" href="/settings/appearance" on:click=picked>
-                        <Icon icon=lu::LuPalette/>"Apparence"
+                        <Icon icon=lu::LuPalette/>{t("Apparence")}
                     </a>
                     <UpdateEntry me_open=open/>
                     <hr/>
                     <button class="k-mecard-item is-danger" on:click={ let leave = leave.clone(); leave }>
-                        <Icon icon=lu::LuLogOut/>"Se déconnecter"
+                        <Icon icon=lu::LuLogOut/>{t("Se déconnecter")}
                     </button>
                 </div>
             </Show>

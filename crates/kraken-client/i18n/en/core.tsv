@@ -1,0 +1,212 @@
+# Catalogue anglais, groupe « core » : socle (connexion, coquille, apparence, langue, dates, erreurs du réseau).
+# Une ligne « français<TAB>anglais » par texte ; voir ../README.md pour les règles.
+
+
+# Erreurs du réseau et du serveur (api.rs)
+Le serveur ne répond pas. Vérifie ta connexion.	The server isn't responding. Check your connection.
+Cette image pèse trop lourd : {taille} au plus.	This image is too large. The limit is {taille}.
+
+# Dates (audit.rs, ui.rs)
+{date} à {heure}	{date} at {heure}
+Aujourd'hui	Today
+Hier	Yesterday
+moins d'une minute	less than a minute
+{n} min	{n} min
+{n} h	{n} h
+{n} j	{n} d
+
+# Connexion, inscription, invitation (auth.rs)
+Confidentialité	Privacy
+Conditions	Terms
+Bon retour sous la surface	Welcome back
+Connecte-toi pour retrouver tes serveurs.	Sign in to get back to your servers.
+Pseudo ou e-mail	Username or email
+Mot de passe	Password
+Mot de passe oublié ?	Forgot your password?
+Pas encore de compte ? S'inscrire	No account yet? Sign up
+Se connecter	Sign in
+Créer un compte	Create an account
+Gratuit, sans abonnement, tout compris.	Free, no subscription, everything included.
+E-mail	Email
+Pseudo	Username
+Lettres, chiffres, _ et . ; 2 à 32 caractères.	Letters, numbers, _ and . only. 2 to 32 characters.
+Déjà inscrit ? Se connecter	Already have an account? Sign in
+Créer mon compte	Create my account
+Ce lien n'existe pas ou n'est plus valable. Demande-en un nouveau.	This link doesn't exist or is no longer valid. Ask for a new one.
+Invitation invalide	Invalid invitation
+Retour à l'accueil	Back to home
+Une place t'attend dans	There's a spot waiting for you in
+{n} membre	{n} member
+{n} membres	{n} members
+Rejoindre le serveur	Join server
+Mot de passe oublié	Forgot password
+Indique l'adresse de ton compte : on t'envoie un lien pour en choisir un nouveau.	Enter your account's email address and we'll send you a link to choose a new password.
+Si un compte utilise cette adresse, un e-mail arrive. Le lien reste valable 30 minutes.	If an account uses this address, an email is on its way. The link stays valid for 30 minutes.
+Retour à la connexion	Back to sign in
+Envoyer le lien	Send link
+Nouveau mot de passe	New password
+Toutes tes sessions seront fermées, sur chaque appareil.	All your sessions will be signed out, on every device.
+C'est fait. Connecte-toi avec ton nouveau mot de passe.	Done. Sign in with your new password.
+Demander un autre lien	Request another link
+Enregistrer	Save
+Adresse e-mail	Email address
+Adresse confirmée. Merci !	Email address confirmed. Thank you!
+Ouvrir KRAKEN	Open KRAKEN
+
+# Langue (i18n.rs, Réglages › Langue et heure)
+Langue	Language
+Langue de l'appareil	Device language
+Le changement recharge la page.	Changing it reloads the page.
+Le brouillon non envoyé sera perdu.	Any unsent draft will be lost.
+Quitte l'appel pour changer de langue.	Leave the call to change the language.
+Langue : {nom}.	Language: {nom}.
+Format de l'heure	Time format
+Exemple :	Example:
+Suit la langue de l'interface.	Follows the interface language.
+12 h	12-hour
+24 h	24-hour
+
+# Apparence et accessibilité (display.rs)
+Automatique (système)	Automatic (system)
+Suit le réglage clair ou sombre de ton système.	Follows your system's light or dark setting.
+Sombre	Dark
+Le thème par défaut, doux pour les yeux le soir.	The default theme, easy on the eyes at night.
+Clair	Light
+Fond blanc, pour les pièces lumineuses.	White background, for bright rooms.
+Noir	Black
+Noir profond, idéal sur les écrans OLED.	Deep black, ideal on OLED screens.
+Petit	Small
+Normal	Normal
+Grand	Large
+Très grand	Extra large
+Confortable	Comfortable
+Des messages aérés, avec des avatars de 40 px.	Spacious messages, with 40 px avatars.
+Compacte	Compact
+Des messages resserrés, avec des avatars de 24 px.	Tighter messages, with 24 px avatars.
+Automatique	Automatic
+Suit le réglage de ton système.	Follows your system setting.
+Réduit	Reduced
+Coupe les animations de l'interface et fige les images animées partout.	Turns off interface animations and freezes animated images everywhere.
+Garde les animations, même si ton système en demande moins.	Keeps animations, even if your system asks for fewer.
+Les couleurs d'origine du thème.	The theme's original colors.
+Élevé	High
+Texte plus net (7 pour 1), bordures bien visibles, anneau de focus plus épais.	Sharper text (7:1), clearly visible borders, thicker focus ring.
+Suit ton système, quand il demande un contraste plus élevé.	Follows your system when it asks for higher contrast.
+Aperçu	Preview
+Salut ! On se retrouve ce soir dans le vocal ?	Hey! Shall we meet in voice tonight?
+Avec plaisir, vers 21 h. Voici	Sure, around 9 pm. Here's
+le programme de la soirée	the plan for the evening
+Ces réglages s'appliquent tout de suite et restent sur cet appareil.	These settings apply immediately and stay on this device.
+Thème	Theme
+Taille du texte	Text size
+Agrandit ou réduit tout le texte de l'appli.	Makes all text in the app larger or smaller.
+Zoom de l'interface	Interface zoom
+Agrandit ou réduit toute l'interface, texte compris. Le zoom est limité par la largeur de la fenêtre.	Scales the whole interface, text included. Zoom is limited by the window width.
+Densité	Density
+L'espace entre les messages et la taille des avatars.	The spacing between messages and the size of avatars.
+Mouvement	Motion
+Les GIF et WebP animés restent fixes dans les listes ; ils bougent au survol, au focus et sur la carte de profil. En mouvement réduit, ils restent fixes partout : « Lire l'animation » les lance sur la carte de profil.	Animated GIFs and WebP images stay still in lists; they move on hover, on focus and on the profile card. With reduced motion they stay still everywhere: "Play animation" starts them on the profile card.
+Contraste	Contrast
+Souligner les liens	Underline links
+Les liens du texte sont toujours soulignés, pas seulement colorés.	Links in text are always underlined, not just colored.
+
+# Coquille : rail, barres latérales, compte (shell.rs)
+Aller au contenu	Skip to content
+Connexion au serveur…	Connecting to the server…
+Connexion perdue, nouvelle tentative…	Connection lost, retrying…
+Fermer l'information	Dismiss notice
+Accueil et messages privés	Home and direct messages
+{n} mention	{n} mention
+{n} mentions	{n} mentions
+Serveurs	Servers
+Serveur {nom}	Server {nom}
+non lu	unread
+Créer ou rejoindre un serveur	Create or join a server
+Créer ou rejoindre	Create or join
+Explorer les serveurs publics	Explore public servers
+Explorer	Explore
+Messages privés	Direct messages
+Amis	Friends
+(demande en attente)	(pending request)
+(demandes en attente)	(pending requests)
+Nouvelle conversation ou groupe	New conversation or group
+Nouvelle conversation	New conversation
+Aucune conversation pour l'instant.	No conversations yet.
+Fermer la conversation avec {nom}	Close the conversation with {nom}
+Fermer la conversation	Close conversation
+Appel en cours	Call in progress
+Salons	Channels
+Inviter des amis	Invite friends
+Inviter	Invite
+Notifications du serveur	Server notifications
+Notifications	Notifications
+Paramètres du serveur	Server settings
+Paramètres	Settings
+Plus d'actions pour ce serveur	More actions for this server
+Créer un salon	Create a channel
+Créer une catégorie	Create a category
+Transférer la propriété	Transfer ownership
+Quitter le serveur	Leave server
+Événements	Events
+(privée)	(private)
+Créer un salon dans cette catégorie	Create a channel in this category
+Paramètres de la catégorie	Category settings
+salon vocal privé	private voice channel
+salon vocal	voice channel
+annonces privées	private announcement channel
+annonces	announcement channel
+forum privé	private forum
+forum	forum
+salon privé	private channel
+Paramètres du salon	Channel settings
+Aucun salon où inviter.	There is no channel to invite people to.
+Inviter dans {nom}	Invite to {nom}
+Lien à partager	Link to share
+Ce lien n'expire pas. Toute personne qui l'a peut rejoindre.	This link never expires. Anyone who has it can join.
+Fermer	Close
+Copié	Copied
+Copier le lien	Copy link
+En ligne	Online
+Inactif	Idle
+Ne pas déranger	Do not disturb
+Ni notification du bureau, ni sonnerie d'appel.	No desktop notifications and no call ringing.
+Invisible	Invisible
+Les autres te voient hors ligne.	Others see you as offline.
+Connecté	Connected
+Connexion…	Connecting…
+Hors ligne	Offline
+Mon compte, {statut}	My account, {statut}
+Mon compte	My account
+Mon statut	My status
+Réglages utilisateur	User settings
+Réglages	Settings
+Apparence	Appearance
+Se déconnecter	Sign out
+
+# Pastilles de statut, en-têtes, pages (ui.rs)
+en ligne	online
+inactif	idle
+ne pas déranger	do not disturb
+hors ligne	offline
+invisible	invisible
+Plus	More
+Ouvrir la navigation	Open navigation
+Écran {id} prévu, pas encore construit.	Screen {id} is planned but not built yet.
+Cette page n'existe pas	This page doesn't exist
+Le lien est peut-être ancien ou mal copié.	The link may be old or copied incorrectly.
+
+# Fenêtre des Réglages (settings.rs)
+Toi	You
+Préférences	Preferences
+Mon profil	My profile
+Tes données	Your data
+Qui peut t'écrire	Who can message you
+Applications liées	Linked apps
+Voix et vidéo	Voice and video
+Accessibilité	Accessibility
+Raccourcis clavier	Keyboard shortcuts
+Langue et heure	Language and time
+Sections des réglages	Settings sections
+Fermer les réglages (Échap)	Close settings (Esc)
+Bientôt ici	Coming soon
+Section {id} prévue, pas encore construite.	Section {id} is planned but not built yet.

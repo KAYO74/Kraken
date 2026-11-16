@@ -330,6 +330,12 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-form { display: grid; gap: var(--space-5); padding: var(--space-5) var(--space-7); }
 .app-auth-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4);
   padding: var(--space-5) var(--space-7); background: var(--surface); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+/* Le sélecteur de langue en pied de la carte (/login, /register) : sous le pied du formulaire, même fond. */
+.app-auth-card > form:not(:last-child) .app-auth-foot { border-radius: 0; }
+.app-auth-lang { padding: var(--space-5) var(--space-7); background: var(--surface); border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.app-lang--auth { display: grid; gap: var(--space-2); min-width: 0; }
+.app-lang--auth .app-pref-select { width: 100%; }
 .app-invite-head { display: grid; justify-items: center; gap: var(--space-2); text-align: center; }
 .k-dialog > .app-invite-head { padding-bottom: var(--space-5); }
 .app-dialog-wide { width: min(var(--size-dialog-wide), var(--vw) - var(--space-8)); }

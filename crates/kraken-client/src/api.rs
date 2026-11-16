@@ -6,14 +6,25 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
+use crate::i18n::{t, tf};
+
 pub type ApiResult<T> = Result<T, ApiError>;
 
 fn network() -> ApiError {
     ApiError {
         code: "network".into(),
-        message: "Le serveur ne répond pas. Vérifie ta connexion.".into(),
+        message: t("Le serveur ne répond pas. Vérifie ta connexion."),
         timeout_until: None,
     }
+}
+
+/// Une erreur du serveur, avec son message dans la langue de l'interface. Le serveur écrit ses messages en
+/// français (statiques) : le texte est la clé du catalogue (`i18n/en/server.tsv`) ; un message absent du
+/// catalogue (une valeur y est glissée, par exemple) reste en français. C'est le seul endroit qui traduit un
+/// message du serveur : tout ce qui affiche `ApiError.message` le reçoit déjà traduit.
+fn from_server(mut e: ApiError) -> ApiError {
+    e.message = t(&e.message);
+    e
 }
 
 async fn call<T: DeserializeOwned>(method: Method, path: &str, body: Option<impl Serialize>) -> ApiResult<T> {
@@ -30,7 +41,7 @@ async fn call<T: DeserializeOwned>(method: Method, path: &str, body: Option<impl
     if resp.ok() {
         resp.json().await.map_err(|_| network())
     } else {
-        Err(resp.json().await.unwrap_or_else(|_| network()))
+        Err(resp.json().await.map_or_else(|_| network(), from_server))
     }
 }
 
@@ -131,7 +142,7 @@ pub fn upload<F: Fn(f64) + 'static>(
             finish(if (200..300).contains(&status) {
                 serde_json::from_str(&text).map_err(|_| network())
             } else {
-                Err(serde_json::from_str(&text).unwrap_or_else(|_| network()))
+                Err(serde_json::from_str(&text).map_or_else(|_| network(), from_server))
             });
         })
     };
@@ -375,9 +386,9 @@ async fn send_image<T: DeserializeOwned>(
     if resp.ok() {
         resp.json().await.map_err(|_| network())
     } else if resp.status() == 413 {
-        Err(resp.json().await.unwrap_or_else(|_| too_large(max)))
+        Err(resp.json().await.map_or_else(|_| too_large(max), from_server))
     } else {
-        Err(resp.json().await.unwrap_or_else(|_| network()))
+        Err(resp.json().await.map_or_else(|_| network(), from_server))
     }
 }
 
@@ -385,7 +396,7 @@ fn too_large(max: usize) -> ApiError {
     let size = if max >= 1024 * 1024 { format!("{} Mo", max / (1024 * 1024)) } else { format!("{} Ko", max / 1024) };
     ApiError {
         code: "too_large".into(),
-        message: format!("Cette image pèse trop lourd : {size} au plus."),
+        message: tf("Cette image pèse trop lourd : {taille} au plus.", &[("taille", &size)]),
         timeout_until: None,
     }
 }

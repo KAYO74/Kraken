@@ -1,0 +1,13 @@
+# Catalogue anglais, groupe « server » : les messages d'erreur du serveur (français, statiques), traduits à
+# l'affichage par api.rs (`from_server`). Le français doit être le texte exact du serveur. Un message où une
+# valeur est glissée (format!) n'y est pas : il reste en français. Voir ../README.md et `i18n-check.py --server`.
+
+# Connexion, session, accès (error.rs, auth.rs)
+Identifiant ou mot de passe incorrect.	Incorrect username or password.
+Session absente ou expirée.	Your session is missing or has expired.
+Tu n'as pas la permission de faire ça.	You don't have permission to do that.
+Introuvable.	Not found.
+Cette invitation n'existe pas ou a été révoquée.	This invitation doesn't exist or has been revoked.
+Mot de passe incorrect.	Incorrect password.
+Ce pseudo est déjà pris.	This username is already taken.
+Un compte existe déjà avec cette adresse.	An account already exists with this address.

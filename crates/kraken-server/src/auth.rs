@@ -204,8 +204,9 @@ fn profile_text(raw: &str, max: usize, multiline: bool, what: &str) -> ApiResult
         )));
     }
     // Espaces de largeur nulle, marques de sens d'écriture, remplisseurs, étiquettes… : tout ce
-    // qu'Unicode ignore à l'affichage, sauf le liant et le sélecteur des emojis composés.
-    if text.chars().any(kraken_core::text::is_hidden) {
+    // qu'Unicode ignore à l'affichage, sauf le liant et le sélecteur des emojis composés, et le non-liant
+    // (demi-espace) entre deux lettres d'un mot persan.
+    if kraken_core::text::has_hidden(text) {
         return Err(AppError(
             StatusCode::BAD_REQUEST,
             "invalid_chars",

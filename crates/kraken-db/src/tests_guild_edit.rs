@@ -204,6 +204,44 @@ async fn renaming_follows_the_creation_rules_and_is_logged_once(pool: PgPool) {
     assert_eq!(audit_of(&db, gid, own.id, "guild_update").await.len(), 2);
 }
 
+/// Un nom persan garde son demi-espace (U+200C) entre deux lettres, à la création comme au renommage et pour un
+/// rôle ; en tête, en queue, doublé ou entre deux lettres latines, il reste refusé comme les autres invisibles.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_persian_name_keeps_its_half_space_between_letters(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let own = user(&db, "lou").await;
+    let hidden = Err(DbError::Invalid("hidden_chars"));
+
+    let name = "کتاب\u{200C}خانه";
+    let g = db.create_guild(own.id, name, None).await.unwrap();
+    assert_eq!(g.guild.name, name, "le demi-espace est gardé tel quel");
+    let gid = g.guild.id;
+    assert_eq!(db.guild_state(gid, own.id).await.unwrap().unwrap().guild.name, name);
+    let renamed = "می\u{200C}خواهم می\u{200C}خوانم";
+    assert_eq!(db.rename_guild(gid, own.id, renamed).await.unwrap().name, renamed);
+    let role = db
+        .create_role(
+            gid,
+            own.id,
+            &CreateRole { name: "نیم\u{200C}فاصله".into(), color: None, hoist: false, permissions: 0 },
+        )
+        .await;
+    assert_eq!(role.unwrap().name, "نیم\u{200C}فاصله");
+
+    for bad in [
+        "\u{200C}کتاب",
+        "کتاب\u{200C}",
+        "کتاب\u{200C}\u{200C}خانه",
+        "ab\u{200C}cd",
+        "کتاب\u{200B}خانه",
+        "کتاب\u{202E}خانه",
+    ] {
+        assert_eq!(db.create_guild(own.id, bad, None).await.map(|_| ()), hidden, "création {bad:?}");
+        assert_eq!(db.rename_guild(gid, own.id, bad).await.map(|_| ()), hidden, "renommage {bad:?}");
+    }
+    assert_eq!(db.guild_state(gid, own.id).await.unwrap().unwrap().guild.name, renamed, "un refus ne change rien");
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn editing_the_server_needs_manage_guild_or_ownership(pool: PgPool) {
     let db = Db::from_pool(pool);

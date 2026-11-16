@@ -173,7 +173,7 @@ fn clean_reason(r: Option<&str>) -> Result<Option<String>> {
     }
     // Pas de caractères invisibles ni de changement de sens d'écriture : le journal d'audit et la liste
     // des bannis afficheraient une phrase à l'envers.
-    if r.is_some_and(|r| r.chars().any(kraken_core::text::is_hidden)) {
+    if r.is_some_and(kraken_core::text::has_hidden) {
         return Err(DbError::Invalid("hidden_chars"));
     }
     Ok(r.map(str::to_string))

@@ -9,7 +9,6 @@
 //! du texte, jamais comme du HTML.
 
 use gloo_timers::future::TimeoutFuture;
-use kraken_core::span;
 use kraken_proto::{AuditActor, AuditChange, AuditEntry, AuditTarget, Id, User};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -47,7 +46,7 @@ enum Seg {
     B(String),
 }
 
-fn t(s: impl Into<String>) -> Seg {
+fn seg(s: impl Into<String>) -> Seg {
     Seg::T(s.into())
 }
 
@@ -98,12 +97,12 @@ fn target_name(target: &Option<AuditTarget>) -> String {
 /// l'écriture, sinon un salon.
 fn channel_phrase(kind: Option<&str>, name: &str) -> Vec<Seg> {
     match kind {
-        Some("voice") => vec![t("le salon vocal "), b(name)],
-        Some("category") => vec![t("la catégorie "), b(name)],
-        Some("announcement") => vec![t("le salon d'annonces "), b(format!("#{name}"))],
-        Some("forum") => vec![t("le forum "), b(format!("#{name}"))],
-        Some("stage") => vec![t("la scène "), b(name)],
-        _ => vec![t("le salon "), b(format!("#{name}"))],
+        Some("voice") => vec![seg("le salon vocal "), b(name)],
+        Some("category") => vec![seg("la catégorie "), b(name)],
+        Some("announcement") => vec![seg("le salon d'annonces "), b(format!("#{name}"))],
+        Some("forum") => vec![seg("le forum "), b(format!("#{name}"))],
+        Some("stage") => vec![seg("la scène "), b(name)],
+        _ => vec![seg("le salon "), b(format!("#{name}"))],
     }
 }
 
@@ -121,83 +120,89 @@ fn predicate(e: &AuditEntry) -> Vec<Seg> {
     let mut s = Vec::new();
     match e.action.as_str() {
         "member_role_add" => {
-            s.extend([t("a ajouté le rôle "), b(detail(e, "role").unwrap_or("(rôle)")), t(" à "), b(target())]);
+            s.extend([seg("a ajouté le rôle "), b(detail(e, "role").unwrap_or("(rôle)")), seg(" à "), b(target())]);
         }
         "member_role_remove" => {
-            s.extend([t("a retiré le rôle "), b(detail(e, "role").unwrap_or("(rôle)")), t(" à "), b(target())]);
+            s.extend([seg("a retiré le rôle "), b(detail(e, "role").unwrap_or("(rôle)")), seg(" à "), b(target())]);
         }
-        "member_kick" => s.extend([t("a expulsé "), b(target())]),
-        "member_ban" => s.extend([t("a banni "), b(target())]),
-        "member_unban" => s.extend([t("a levé le bannissement de "), b(target())]),
+        "member_kick" => s.extend([seg("a expulsé "), b(target())]),
+        "member_ban" => s.extend([seg("a banni "), b(target())]),
+        "member_unban" => s.extend([seg("a levé le bannissement de "), b(target())]),
         "member_timeout" => {
-            s.extend([t("a exclu "), b(target())]);
+            s.extend([seg("a exclu "), b(target())]);
             match detail(e, "seconds").and_then(|v| v.parse::<u64>().ok()) {
-                Some(secs) => s.push(t(format!(" pendant {}", span::duration(secs)))),
-                None => s.push(t(" temporairement")),
+                Some(secs) => s.push(seg(format!(" pendant {}", crate::i18n::duration(secs)))),
+                None => s.push(seg(" temporairement")),
             }
         }
-        "member_timeout_remove" => s.extend([t("a levé l'exclusion de "), b(target())]),
-        "owner_transfer" => s.extend([t("a transféré la propriété du serveur à "), b(target())]),
-        "role_create" => s.extend([t("a créé le rôle "), b(target())]),
-        "role_update" => s.extend([t("a modifié le rôle "), b(target())]),
-        "role_delete" => s.extend([t("a supprimé le rôle "), b(target())]),
-        "role_reorder" => s.push(t("a changé l'ordre des rôles")),
+        "member_timeout_remove" => s.extend([seg("a levé l'exclusion de "), b(target())]),
+        "owner_transfer" => s.extend([seg("a transféré la propriété du serveur à "), b(target())]),
+        "role_create" => s.extend([seg("a créé le rôle "), b(target())]),
+        "role_update" => s.extend([seg("a modifié le rôle "), b(target())]),
+        "role_delete" => s.extend([seg("a supprimé le rôle "), b(target())]),
+        "role_reorder" => s.push(seg("a changé l'ordre des rôles")),
         "channel_create" => {
-            s.push(t("a créé "));
+            s.push(seg("a créé "));
             s.extend(channel_phrase(detail(e, "kind"), &target()));
         }
-        "channel_update" => s.extend([t("a modifié le salon "), b(channel())]),
+        "channel_update" => s.extend([seg("a modifié le salon "), b(channel())]),
         "channel_delete" => {
-            s.push(t("a supprimé "));
+            s.push(seg("a supprimé "));
             s.extend(channel_phrase(detail(e, "kind"), &target()));
         }
-        "channel_move" => s.extend([t("a déplacé le salon "), b(channel())]),
+        "channel_move" => s.extend([seg("a déplacé le salon "), b(channel())]),
         "overwrite_update" => {
             let who = detail(e, "subject").unwrap_or(GONE_TARGET);
             let (allow, deny) = (bits(detail(e, "allow")), bits(detail(e, "deny")));
-            s.push(t(if allow | deny == 0 { "a retiré les droits propres " } else { "a modifié les droits " }));
-            s.push(t(if detail(e, "subject_kind") == Some("role") { "du rôle " } else { "de " }));
-            s.extend([b(who), t(" dans le salon "), b(channel())]);
+            s.push(seg(if allow | deny == 0 { "a retiré les droits propres " } else { "a modifié les droits " }));
+            s.push(seg(if detail(e, "subject_kind") == Some("role") { "du rôle " } else { "de " }));
+            s.extend([b(who), seg(" dans le salon "), b(channel())]);
         }
         "invite_create" => {
-            s.push(t("a créé une invitation"));
+            s.push(seg("a créé une invitation"));
             if let Some(c) = detail(e, "channel") {
-                s.extend([t(" pour le salon "), b(format!("#{c}"))]);
+                s.extend([seg(" pour le salon "), b(format!("#{c}"))]);
             }
         }
         "invite_revoke" => {
-            s.push(t("a révoqué une invitation"));
+            s.push(seg("a révoqué une invitation"));
             if let Some(who) = detail(e, "inviter") {
-                s.extend([t(" de "), b(who)]);
+                s.extend([seg(" de "), b(who)]);
             }
         }
-        "emoji_create" => s.extend([t("a ajouté l'emoji "), b(emoji_code(&target()))]),
+        "emoji_create" => s.extend([seg("a ajouté l'emoji "), b(emoji_code(&target()))]),
         "emoji_update" => match change(e, "name") {
             Some(c) => {
-                s.extend([t("a renommé l'emoji "), b(emoji_code(&c.before)), t(" en "), b(emoji_code(&c.after))])
+                s.extend([seg("a renommé l'emoji "), b(emoji_code(&c.before)), seg(" en "), b(emoji_code(&c.after))])
             }
-            None => s.extend([t("a modifié l'emoji "), b(emoji_code(&target()))]),
+            None => s.extend([seg("a modifié l'emoji "), b(emoji_code(&target()))]),
         },
-        "emoji_delete" => s.extend([t("a supprimé l'emoji "), b(emoji_code(&target()))]),
+        "emoji_delete" => s.extend([seg("a supprimé l'emoji "), b(emoji_code(&target()))]),
         "message_delete" => {
-            s.extend([t("a supprimé un message de "), b(target())]);
+            s.extend([seg("a supprimé un message de "), b(target())]);
             if let Some(c) = detail(e, "channel") {
-                s.extend([t(" dans le salon "), b(format!("#{c}"))]);
+                s.extend([seg(" dans le salon "), b(format!("#{c}"))]);
             }
         }
         "message_pin" | "message_unpin" => {
-            s.push(t(if e.action == "message_pin" { "a épinglé un message" } else { "a désépinglé un message" }));
+            s.push(seg(if e.action == "message_pin" {
+                "a épinglé un message"
+            } else {
+                "a désépinglé un message"
+            }));
             if let Some(c) = detail(e, "channel") {
-                s.extend([t(" dans "), b(format!("#{c}"))]);
+                s.extend([seg(" dans "), b(format!("#{c}"))]);
             }
         }
         "guild_update" => match (change(e, "name"), detail(e, "icon")) {
-            (Some(c), _) => s.extend([t("a renommé le serveur « "), b(&c.before), t(" » en « "), b(&c.after), t(" »")]),
-            (None, Some("removed")) => s.push(t("a retiré l'icône du serveur")),
-            (None, Some(_)) => s.push(t("a changé l'icône du serveur")),
-            (None, None) => s.push(t("a modifié le serveur")),
+            (Some(c), _) => {
+                s.extend([seg("a renommé le serveur « "), b(&c.before), seg(" » en « "), b(&c.after), seg(" »")])
+            }
+            (None, Some("removed")) => s.push(seg("a retiré l'icône du serveur")),
+            (None, Some(_)) => s.push(seg("a changé l'icône du serveur")),
+            (None, None) => s.push(seg("a modifié le serveur")),
         },
-        other => s.extend([t("a effectué une action que cette version ne connaît pas ("), b(other), t(")")]),
+        other => s.extend([seg("a effectué une action que cette version ne connaît pas ("), b(other), seg(")")]),
     }
     s
 }
@@ -224,7 +229,7 @@ fn extra(e: &AuditEntry) -> Option<String> {
             let age = detail(e, "max_age_s").and_then(|v| v.parse::<u64>().ok());
             let uses = detail(e, "max_uses").and_then(|v| v.parse::<u32>().ok()).filter(|n| *n > 0);
             let first = match age {
-                Some(a) => format!("Valable {}", span::duration(a)),
+                Some(a) => format!("Valable {}", crate::i18n::duration(a)),
                 None => "Sans date limite".into(),
             };
             Some(match uses {
@@ -317,12 +322,12 @@ fn long_date(ms: i64, weekday: bool) -> String {
     for (key, value) in parts {
         let _ = js_sys::Reflect::set(&options, &JsValue::from_str(key), &JsValue::from_str(value));
     }
-    js_date(ms).to_locale_date_string("fr-FR", &options).into()
+    js_date(ms).to_locale_date_string(&crate::i18n::locale(), &options).into()
 }
 
 /// « mercredi 12 novembre 2026 à 14:30 » : l'heure suit le choix 12 / 24 h.
 fn full_date(ms: i64) -> String {
-    format!("{} à {}", long_date(ms, true), clock(ms))
+    crate::i18n::tf("{date} à {heure}", &[("date", &long_date(ms, true)), ("heure", &clock(ms))])
 }
 
 /// Le jour, pour regrouper : la date locale sans l'heure.
@@ -336,9 +341,9 @@ fn day_label(ms: i64, now: i64) -> String {
     yesterday.set_date(today.get_date() - 1);
     let key = day_key(ms);
     if today.to_date_string() == key {
-        "Aujourd'hui".into()
+        crate::i18n::t("Aujourd'hui")
     } else if yesterday.to_date_string() == key {
-        "Hier".into()
+        crate::i18n::t("Hier")
     } else {
         long_date(ms, true)
     }
@@ -366,7 +371,7 @@ fn by_day(entries: &[AuditEntry], now: i64) -> Vec<Day> {
 /// L'heure d'un événement : « il y a 5 min » s'il est tout récent, sinon l'heure du jour (12 ou 24 h selon
 /// le choix). La date et l'heure complètes sont en infobulle et lues telles quelles par un lecteur d'écran.
 fn when_view(ms: i64) -> impl IntoView {
-    let shown = span::ago(now_ms() - ms).unwrap_or_else(|| clock(ms));
+    let shown = crate::i18n::ago(now_ms() - ms).unwrap_or_else(|| clock(ms));
     let full = full_date(ms);
     let title = full.clone();
     view! {
@@ -633,7 +638,7 @@ fn Row(entry: AuditEntry) -> impl IntoView {
     };
     let sentence = {
         let mut s = vec![b(who)];
-        s.push(t(" "));
+        s.push(seg(" "));
         s.extend(predicate(&entry));
         s
     };

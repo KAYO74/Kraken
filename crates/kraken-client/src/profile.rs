@@ -26,7 +26,7 @@ fn long_date(ms: i64) -> String {
     for (key, value) in [("day", "numeric"), ("month", "long"), ("year", "numeric")] {
         let _ = js_sys::Reflect::set(&options, &JsValue::from_str(key), &JsValue::from_str(value));
     }
-    date.to_locale_date_string("fr-FR", &options).into()
+    date.to_locale_date_string(&crate::i18n::locale(), &options).into()
 }
 
 fn capital(s: &str) -> String {
@@ -133,7 +133,7 @@ fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: 
             </p>
             <p class="app-card-status">
                 <span class="app-dot-inline"><StatusDot status=dot/></span>
-                {move || capital(dot.get().label())}
+                {move || capital(&dot.get().label())}
             </p>
             <PlayAnimation/>
             {move || user.get().bio.filter(|b| !b.is_empty()).map(|b| view! {

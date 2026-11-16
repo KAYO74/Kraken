@@ -751,14 +751,15 @@ test('S12-H6 souligner les liens : un interrupteur, appliqué tout de suite et g
 
 // ───────── S14 : Langue et heure ─────────
 
-test('S14-H1 langue et heure : Français seul, format 12 h ou 24 h avec un exemple en direct', async ({ user }) => {
+test('S14-H1 langue et heure : le choix de la langue, format 12 h ou 24 h avec un exemple en direct', async ({ user }) => {
   const { page } = await user('heura');
   await page.goto('/settings/language');
   await expect(page.getByRole('heading', { name: 'Langue et heure', level: 2 })).toBeVisible();
   await a11y(page);
   const language = page.getByRole('combobox', { name: 'Langue' });
-  expect(await language.locator('option').allTextContents()).toEqual(['Français']);
-  await expect(language).toHaveAccessibleDescription("D'autres langues arrivent.");
+  expect(await language.locator('option').allTextContents()).toEqual(["Langue de l'appareil", 'Français', 'English']);
+  await expect(language).toHaveValue('auto');
+  await expect(language).toHaveAccessibleDescription('Le changement recharge la page.');
   expect(await group(page, "Format de l'heure").getByRole('radio').evaluateAll((r) => r.map((x) => document.getElementById(x.getAttribute('aria-labelledby')!)!.textContent)))
     .toEqual(['Automatique', '12 h', '24 h']);
   await expect(radio(page, "Format de l'heure", 'Automatique')).toBeChecked();

@@ -8,22 +8,25 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::{use_navigate, use_params_map};
 
+use crate::i18n::{t, tf};
 use crate::icons::{Icon, lu};
 use crate::store::store;
+use crate::tk;
 use crate::ui::{Avatar, modal};
 
+/// (groupe, adresse, titre, écran). Le groupe et le titre sont des textes français que l'affichage traduit.
 const SECTIONS: &[(&str, &str, &str, &str)] = &[
-    ("Toi", "account", "Mon compte", "S06"),
-    ("Toi", "profiles", "Mon profil", "S20"),
-    ("Toi", "privacy", "Tes données", "S07"),
-    ("Toi", "messaging", "Qui peut t'écrire", "S08"),
-    ("Toi", "apps", "Applications liées", "S15"),
-    ("Préférences", "notifications", "Notifications", "S09"),
-    ("Préférences", "voice", "Voix et vidéo", "S10"),
-    ("Préférences", "appearance", "Apparence", "S11"),
-    ("Préférences", "accessibility", "Accessibilité", "S12"),
-    ("Préférences", "keybinds", "Raccourcis clavier", "S13"),
-    ("Préférences", "language", "Langue et heure", "S14"),
+    (tk!("Toi"), "account", tk!("Mon compte"), "S06"),
+    (tk!("Toi"), "profiles", tk!("Mon profil"), "S20"),
+    (tk!("Toi"), "privacy", tk!("Tes données"), "S07"),
+    (tk!("Toi"), "messaging", tk!("Qui peut t'écrire"), "S08"),
+    (tk!("Toi"), "apps", tk!("Applications liées"), "S15"),
+    (tk!("Préférences"), "notifications", tk!("Notifications"), "S09"),
+    (tk!("Préférences"), "voice", tk!("Voix et vidéo"), "S10"),
+    (tk!("Préférences"), "appearance", tk!("Apparence"), "S11"),
+    (tk!("Préférences"), "accessibility", tk!("Accessibilité"), "S12"),
+    (tk!("Préférences"), "keybinds", tk!("Raccourcis clavier"), "S13"),
+    (tk!("Préférences"), "language", tk!("Langue et heure"), "S14"),
 ];
 
 /// Le champ d'un formulaire du compte qu'une réponse d'erreur met en cause : la nouvelle valeur
@@ -56,21 +59,21 @@ pub fn Settings() -> impl IntoView {
     modal(root, close.clone());
     let mut group = "";
     let nav = SECTIONS.iter().map(|(g, slug, label, _)| {
-        let head = (*g != group).then(|| view! { <h3>{*g}</h3> });
+        let head = (*g != group).then(|| view! { <h3>{t(g)}</h3> });
         group = g;
         view! {
             {head}
-            <a class="k-navitem" href=format!("/settings/{slug}") aria-current=move || (section() == *slug).then_some("page")>{*label}</a>
+            <a class="k-navitem" href=format!("/settings/{slug}") aria-current=move || (section() == *slug).then_some("page")>{t(label)}</a>
         }
     }).collect_view();
     view! {
         <div class="k-scrim app-settings" node_ref=root>
-            <div class="k-settings" role="dialog" aria-modal="true" aria-label="Réglages">
-                <nav aria-label="Sections des réglages">{nav}</nav>
+            <div class="k-settings" role="dialog" aria-modal="true" aria-label=t("Réglages")>
+                <nav aria-label=t("Sections des réglages")>{nav}</nav>
                 <main>
                     <div class="app-settings-top">
-                        <h2>{move || SECTIONS.iter().find(|s| s.1 == section()).map(|s| s.2).unwrap_or("Réglages")}</h2>
-                        <button class="k-btn k-btn--icon" aria-label="Fermer les réglages (Échap)" on:click=move |_| close2() autofocus>
+                        <h2>{move || t(SECTIONS.iter().find(|s| s.1 == section()).map(|s| s.2).unwrap_or(tk!("Réglages")))}</h2>
+                        <button class="k-btn k-btn--icon" aria-label=t("Fermer les réglages (Échap)") on:click=move |_| close2() autofocus>
                             <Icon icon=lu::LuX/>
                         </button>
                     </div>
@@ -86,7 +89,7 @@ pub fn Settings() -> impl IntoView {
                         "keybinds" => view! { <crate::shortcuts::KeybindSettings/> }.into_any(),
                         other => {
                             let id = SECTIONS.iter().find(|s| s.1 == other).map(|s| s.3).unwrap_or("—");
-                            view! { <div class="k-empty"><b>"Bientôt ici"</b>{format!("Section {id} prévue, pas encore construite.")}</div> }.into_any()
+                            view! { <div class="k-empty"><b>{t("Bientôt ici")}</b>{tf("Section {id} prévue, pas encore construite.", &[("id", id)])}</div> }.into_any()
                         }
                     }}
                 </main>
