@@ -15,11 +15,13 @@ use wasm_bindgen::JsCast;
 use crate::call::{DmCall, StartCall, VoiceRoom};
 use crate::emoji::{EmojiImg, EmojiPicker, Picked, ReactionFace, reaction_name};
 use crate::files::{self, MessageMedia, Tray, TrayView, Viewer, ViewerState};
+use crate::i18n::{t, tf, tn, tnf};
 use crate::icons::{Icon, lu};
 use crate::markdown::Body;
 use crate::pins::PinsPanel;
 use crate::shell::first_text;
 use crate::store::{Conn, Pending, store};
+use crate::tk;
 use crate::ui::{Avatar, Header, Stub, clock, iso, modal, when};
 
 thread_local! {
@@ -57,7 +59,7 @@ fn run_wait(channel: Id, wait: RwSignal<u32>, said: RwSignal<String>) {
                 return;
             }
             if n == 0 {
-                said.try_set("Tu peux de nouveau écrire.".into());
+                said.try_set(t("Tu peux de nouveau écrire."));
                 return;
             }
         }
@@ -89,7 +91,7 @@ fn Loading() -> impl IntoView {
     let s = store();
     view! {
         {move || if s.conn.get() == Conn::Ready {
-            view! { <Stub id="—" title="Introuvable"/> }.into_any()
+            view! { <Stub id="—" title=tk!("Introuvable")/> }.into_any()
         } else {
             view! { <div class="app-fill" aria-busy="true"><div class="k-skeleton app-skel-block"></div></div> }.into_any()
         }}
@@ -122,7 +124,7 @@ pub fn GuildChannel() -> impl IntoView {
                 None => view! { <Loading/> }.into_any(),
             },
             Some(Shown::Other(c)) if c.kind == ChannelKind::Voice || c.kind == ChannelKind::Stage => view! { <VoiceRoom channel=c/> }.into_any(),
-            Some(Shown::Other(c)) if c.kind == ChannelKind::Forum => view! { <Stub id="S24" title="Forum"/> }.into_any(),
+            Some(Shown::Other(c)) if c.kind == ChannelKind::Forum => view! { <Stub id="S24" title=tk!("Forum")/> }.into_any(),
             Some(Shown::Other(_)) => view! { <Loading/> }.into_any(),
         }}
     }
@@ -306,9 +308,13 @@ fn ChannelView(channel: Channel) -> impl IntoView {
         ChannelKind::Dm | ChannelKind::GroupDm => lu::LuMessageCircle,
         _ => lu::LuHash,
     };
-    let label = move || format!("Messages de {}", title.get());
+    let label = move || tf("Messages de {nom}", &[("nom", &title.get())]);
     let place = Signal::derive(move || {
-        if is_dm { format!("Écrire à {}", title.get()) } else { format!("Écrire dans #{}", title.get()) }
+        if is_dm {
+            tf("Écrire à {nom}", &[("nom", &title.get())])
+        } else {
+            tf("Écrire dans #{nom}", &[("nom", &title.get())])
+        }
     });
     let other_name = other.as_ref().map(|u| u.name().to_string()).unwrap_or_default();
     let other_name2 = other_name.clone();
@@ -411,51 +417,51 @@ fn ChannelView(channel: Channel) -> impl IntoView {
             {move || s.channel(cid).and_then(|c| c.topic).map(|t| { let tip = t.clone(); view! { <span class="app-topic app-ellipsis" title=tip>{t}</span> } })}
             <div class="app-header-tools app-header-tools--chat">
                 {(!is_dm).then(|| view! {
-                    <a class="k-btn k-btn--icon" href=format!("/channels/{}/{cid}/threads", channel.guild_id.unwrap()) aria-label="Fils" title="Fils"><Icon icon=lu::LuMessageSquareText/></a>
+                    <a class="k-btn k-btn--icon" href=format!("/channels/{}/{cid}/threads", channel.guild_id.unwrap()) aria-label=t("Fils") title=t("Fils")><Icon icon=lu::LuMessageSquareText/></a>
                 })}
-                <button type="button" class="k-btn k-btn--icon" aria-label="Messages épinglés" title="Messages épinglés" node_ref=pins_btn
+                <button type="button" class="k-btn k-btn--icon" aria-label=t("Messages épinglés") title=t("Messages épinglés") node_ref=pins_btn
                     aria-expanded=move || pins_open.get().to_string() aria-controls=move || pins_open.get().then_some("pins-panel")
                     on:click=toggle_pins>
                     <Icon icon=lu::LuPin/>
                 </button>
                 {(!is_dm).then(|| view! {
-                    <button class="k-btn k-btn--icon" aria-label="Liste des membres" title="Membres"
+                    <button class="k-btn k-btn--icon" aria-label=t("Liste des membres") title=t("Membres")
                         aria-expanded=move || members_open.get().to_string() on:click=toggle_members>
                         <Icon icon=lu::LuUsers/>
                     </button>
                 })}
                 {is_dm.then(|| view! { <StartCall channel=cid blocked=other_blocked/> })}
                 {(kind == ChannelKind::GroupDm).then(|| view! {
-                    <button class="k-btn k-btn--icon" aria-label="Liste des membres" title="Membres"
+                    <button class="k-btn k-btn--icon" aria-label=t("Liste des membres") title=t("Membres")
                         aria-expanded=move || members_open.get().to_string() on:click=toggle_members>
                         <Icon icon=lu::LuUsers/>
                     </button>
-                    <button class="k-btn k-btn--icon" aria-label="Ajouter des amis au groupe" title="Ajouter des amis"
+                    <button class="k-btn k-btn--icon" aria-label=t("Ajouter des amis au groupe") title=t("Ajouter des amis")
                         on:click=move |_| dialog.set(Some(PrivateDialog::Add))><Icon icon=lu::LuUserPlus/></button>
-                    <button class="k-btn k-btn--icon" aria-label="Renommer le groupe" title="Renommer"
+                    <button class="k-btn k-btn--icon" aria-label=t("Renommer le groupe") title=t("Renommer")
                         on:click=move |_| dialog.set(Some(PrivateDialog::Rename))><Icon icon=lu::LuPencil/></button>
-                    <button class="k-btn k-btn--icon" aria-label="Quitter le groupe" title="Quitter le groupe"
+                    <button class="k-btn k-btn--icon" aria-label=t("Quitter le groupe") title=t("Quitter le groupe")
                         on:click=move |_| dialog.set(Some(PrivateDialog::Leave))><Icon icon=lu::LuLogOut/></button>
                 })}
                 {(kind == ChannelKind::Dm).then(|| { let n = other_name2.clone(); view! {
                     <Show when=move || other_friend.get()>
-                        <button class="k-btn k-btn--icon" aria-label=format!("Créer un groupe avec {n}") title="Créer un groupe"
+                        <button class="k-btn k-btn--icon" aria-label=tf("Créer un groupe avec {nom}", &[("nom", &n)]) title=t("Créer un groupe")
                             on:click=move |_| dialog.set(Some(PrivateDialog::Add))><Icon icon=lu::LuUserPlus/></button>
                     </Show>
                 } })}
                 {
                     let u = crate::unread::ui();
-                    let label = if is_dm { "Notifications de la conversation" } else { "Notifications du salon" };
+                    let label = if is_dm { t("Notifications de la conversation") } else { t("Notifications du salon") };
                     let muted = Memo::new(move |_| s.channel(cid).is_some_and(|c| s.channel_muted(&c)));
                     view! {
-                        <button class="k-btn k-btn--icon" aria-label=label title="Notifications"
+                        <button class="k-btn k-btn--icon" aria-label=label title=t("Notifications")
                             on:click=move |_| u.dialog.set(Some(crate::unread::Target::Channel(cid)))>
                             {move || if muted.get() { view! { <Icon icon=lu::LuBellOff/> } } else { view! { <Icon icon=lu::LuBell/> } }}
                         </button>
                     }
                 }
-                <a class="k-btn k-btn--icon" href="/search" aria-label="Rechercher" title="Rechercher"><Icon icon=lu::LuSearch/></a>
-                <a class="k-btn k-btn--icon" href="/inbox" aria-label="Boîte de réception" title="Boîte de réception"><Icon icon=lu::LuInbox/></a>
+                <a class="k-btn k-btn--icon" href="/search" aria-label=t("Rechercher") title=t("Rechercher")><Icon icon=lu::LuSearch/></a>
+                <a class="k-btn k-btn--icon" href="/inbox" aria-label=t("Boîte de réception") title=t("Boîte de réception")><Icon icon=lu::LuInbox/></a>
             </div>
         </Header>
         <div class="app-body">
@@ -466,19 +472,19 @@ fn ChannelView(channel: Channel) -> impl IntoView {
                 <Show when=move || other_blocked.get() fallback=move || view! { <Composer placeholder=place/> }>
                     <div class="app-dm-blocked" role="status">
                         <Icon icon=lu::LuBan/>
-                        <span>{format!("Tu as bloqué {other_name} : vous ne pouvez plus vous écrire ici. L'historique reste lisible.")}</span>
-                        <button class="k-btn k-btn--sm" on:click=unblock>"Débloquer"</button>
+                        <span>{tf("Tu as bloqué {nom} : vous ne pouvez plus vous écrire ici. L'historique reste lisible.", &[("nom", &other_name)])}</span>
+                        <button class="k-btn k-btn--sm" on:click=unblock>{t("Débloquer")}</button>
                     </div>
                     <Show when=move || unblock_error.get().is_some()><p class="k-error app-compose-note" role="alert">{move || unblock_error.get()}</p></Show>
                     // Les échecs du fil (« Aller au message », une réaction…) se lisent ici aussi : la saisie, qui les porte, est remplacée.
                     {move || chat.notice.get().map(|n| view! {
                         <p class="k-error app-compose-note" role="alert">{n}" "
-                            <button type="button" class="k-btn k-btn--link" on:click=move |_| chat.notice.set(None)>"Fermer"</button></p>
+                            <button type="button" class="k-btn k-btn--link" on:click=move |_| chat.notice.set(None)>{t("Fermer")}</button></p>
                     })}
                 </Show>
                 <files::DropOverlay dragging=chat.dragging place=drop_place/>
                 {move || chat.picker.get().map(|p| {
-                    let title = if matches!(p, Pick::React(_)) { "Réagir avec un emoji" } else { "Insérer un emoji" };
+                    let title = if matches!(p, Pick::React(_)) { tk!("Réagir avec un emoji") } else { tk!("Insérer un emoji") };
                     view! { <EmojiPicker title=title guild=channel.guild_id on_pick=on_pick on_close=on_close/> }
                 })}
             </section>
@@ -596,13 +602,13 @@ fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView
     let intro = move || {
         let title = title.get();
         if is_dm {
-            format!("Ici commence ta conversation avec {title}. Elle reste entre vous.")
+            tf("Ici commence ta conversation avec {nom}. Elle reste entre vous.", &[("nom", &title)])
         } else {
-            format!("Ici commence #{title}. Tout l'historique du salon se lit à partir d'ici.")
+            tf("Ici commence #{nom}. Tout l'historique du salon se lit à partir d'ici.", &[("nom", &title)])
         }
     };
     view! {
-        <div class="app-log" node_ref=scroller on:scroll=on_scroll role="log" tabindex="0" aria-label="Messages" aria-live="polite" aria-busy=move || (!status.get().0).to_string()>
+        <div class="app-log" node_ref=scroller on:scroll=on_scroll role="log" tabindex="0" aria-label=t("Messages") aria-live="polite" aria-busy=move || (!status.get().0).to_string()>
             {move || match status.get() {
                 (false, _) => view! {
                     <div aria-hidden="true">
@@ -610,8 +616,8 @@ fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView
                     </div>
                 }.into_any(),
                 (true, Some(e)) => view! {
-                    <div class="k-empty"><b>"Impossible de charger les messages"</b><span>{e}</span>
-                    <button class="k-btn" on:click=move |_| s.log(channel, |l| l.loaded = false)>"Réessayer"</button></div>
+                    <div class="k-empty"><b>{t("Impossible de charger les messages")}</b><span>{e}</span>
+                    <button class="k-btn" on:click=move |_| s.log(channel, |l| l.loaded = false)>{t("Réessayer")}</button></div>
                 }.into_any(),
                 (true, None) => view! {
                     <div class="app-intro">
@@ -619,7 +625,7 @@ fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView
                         <div><h2>{move || title.get()}</h2><p>{intro}</p></div>
                     </div>
                     <For each=move || rows.get() key=|(m, cont, new)| row_key(m, *cont, *new) children=move |(m, cont, new)| view! {
-                        {new.then(|| view! { <div class="k-newline" role="separator" aria-label="Nouveaux messages"><span aria-hidden="true">"Nouveaux messages"</span></div> })}
+                        {new.then(|| view! { <div class="k-newline" role="separator" aria-label=t("Nouveaux messages")><span aria-hidden="true">{t("Nouveaux messages")}</span></div> })}
                         <MessageRow msg=m cont=cont/>
                     }/>
                     <For each=move || pending.get() key=|p| (p.nonce.clone(), p.error.clone()) children=move |p| {
@@ -631,13 +637,13 @@ fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView
                             <article class="k-msg" data-pending=pending_attr data-failed=failed_attr>
                                 {me.clone().map(|u| view! { <Avatar user=u/> })}
                                 <div>
-                                    <header><b>{me.map(|u| u.name().to_string())}</b><time>{if failed.is_some() { "pas envoyé" } else { "envoi…" }}</time></header>
+                                    <header><b><bdi>{me.map(|u| u.name().to_string())}</bdi></b><time>{if failed.is_some() { t("pas envoyé") } else { t("envoi…") }}</time></header>
                                     {(!p.content.is_empty()).then(|| view! { <Body content=p.content.clone() mentions=vec![] everyone=false guild=None/> })}
                                     {(!p.files.is_empty()).then(|| view! { <files::Attachments channel=channel files=p.files.clone() viewer=chat().viewer/> })}
                                     {failed.map(|e| view! {
                                         <p class="k-error" role="alert">{e}" "
-                                            <button class="k-btn k-btn--link" on:click=move |_| retry(again.clone())>"Réessayer"</button>" · "
-                                            <button class="k-btn k-btn--link app-link-danger" on:click=move |_| forget(nonce.clone())>"Supprimer"</button>
+                                            <button class="k-btn k-btn--link" on:click=move |_| retry(again.clone())>{t("Réessayer")}</button>" · "
+                                            <button class="k-btn k-btn--link app-link-danger" on:click=move |_| forget(nonce.clone())>{t("Supprimer")}</button>
                                         </p>
                                     })}
                                 </div>
@@ -653,11 +659,16 @@ fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView
 /// « Lou », « Lou et Sam », « Lou, Sam, Noa et 2 autres ».
 fn people(names: Vec<String>) -> String {
     match names.as_slice() {
-        [] => "Personne".into(),
+        [] => t("Personne"),
         [a] => a.clone(),
-        [a, b] => format!("{a} et {b}"),
-        [a, b, c] => format!("{a}, {b} et {c}"),
-        [a, b, c, rest @ ..] => format!("{a}, {b}, {c} et {} autres", rest.len()),
+        [a, b] => tf("{a} et {b}", &[("a", a), ("b", b)]),
+        [a, b, c] => tf("{a}, {b} et {c}", &[("a", a), ("b", b), ("c", c)]),
+        [a, b, c, rest @ ..] => tnf(
+            "{a}, {b}, {c} et {n} autre",
+            "{a}, {b}, {c} et {n} autres",
+            rest.len(),
+            &[("a", a), ("b", b), ("c", c)],
+        ),
     }
 }
 
@@ -665,10 +676,9 @@ fn people(names: Vec<String>) -> String {
 fn duration(ms: i64) -> String {
     let minutes = ms.max(0) / 60_000;
     match minutes {
-        0 => "moins d'une minute".into(),
-        1 => "1 minute".into(),
-        m if m < 60 => format!("{m} minutes"),
-        m => format!("{} h {:02}", m / 60, m % 60),
+        0 => t("moins d'une minute"),
+        m if m < 60 => tn("{n} minute", "{n} minutes", m),
+        m => tf("{h} h {min}", &[("h", &(m / 60).to_string()), ("min", &format!("{:02}", m % 60))]),
     }
 }
 
@@ -678,23 +688,27 @@ fn CallNote(msg: Message) -> impl IntoView {
     let me = my_id();
     let info = msg.call.clone().unwrap_or_default();
     let author = msg.author.as_ref().map(|a| a.id);
-    let name = msg.author.as_ref().map(|u| u.name().to_string()).unwrap_or_else(|| "Compte supprimé".into());
+    let name = msg.author.as_ref().map(|u| u.name().to_string()).unwrap_or_else(|| t("Compte supprimé"));
     let mine = me.is_some() && author == me;
     let at = msg.created_at;
     let (icon, missed, text): (_, bool, String) = match info.ended_at {
-        None if mine => (lu::LuPhoneOutgoing, false, "Tu as lancé un appel.".to_string()),
-        None => (lu::LuPhoneIncoming, false, format!("{name} a lancé un appel.")),
+        None if mine => (lu::LuPhoneOutgoing, false, t("Tu as lancé un appel.")),
+        None => (lu::LuPhoneIncoming, false, tf("{nom} a lancé un appel.", &[("nom", &name)])),
         Some(end) => {
             let took = duration(end - at);
             let alone = info.participants.iter().all(|u| Some(*u) == author);
             if mine && alone {
-                (lu::LuPhoneMissed, true, "Personne n'a répondu à ton appel.".to_string())
+                (lu::LuPhoneMissed, true, t("Personne n'a répondu à ton appel."))
             } else if mine {
-                (lu::LuPhoneOutgoing, false, format!("Tu as lancé un appel qui a duré {took}."))
+                (lu::LuPhoneOutgoing, false, tf("Tu as lancé un appel qui a duré {duree}.", &[("duree", &took)]))
             } else if me.is_some_and(|m| !info.participants.contains(&m)) {
-                (lu::LuPhoneMissed, true, format!("Appel manqué de {name}."))
+                (lu::LuPhoneMissed, true, tf("Appel manqué de {nom}.", &[("nom", &name)]))
             } else {
-                (lu::LuPhoneIncoming, false, format!("{name} a lancé un appel qui a duré {took}."))
+                (
+                    lu::LuPhoneIncoming,
+                    false,
+                    tf("{nom} a lancé un appel qui a duré {duree}.", &[("nom", &name), ("duree", &took)]),
+                )
             }
         }
     };
@@ -717,7 +731,7 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
     let chat = chat();
     let me = my_id();
     let id = msg.id;
-    let name = msg.author.as_ref().map(|u| u.name().to_string()).unwrap_or_else(|| "Compte supprimé".into());
+    let name = msg.author.as_ref().map(|u| u.name().to_string()).unwrap_or_else(|| t("Compte supprimé"));
     let handle = msg.author.as_ref().map(|u| format!("@{}", u.username));
     let at = msg.created_at;
     let mine = me.is_some() && msg.author.as_ref().map(|a| a.id) == me;
@@ -727,7 +741,7 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
         !chat.blocked.get() && chat.guild.is_none_or(|g| s.guild_perms(g) & perms::MANAGE_MESSAGES != 0)
     });
     let pinned = msg.pinned;
-    let pin_label = if pinned { "Désépingler le message" } else { "Épingler le message" };
+    let pin_label = if pinned { tk!("Désépingler le message") } else { tk!("Épingler le message") };
     let mentioned = msg.mention_everyone || msg.mentions.iter().any(|u| Some(u.id) == me);
     let class = match (cont, mentioned) {
         (true, true) => "k-msg k-msg--cont k-msg--mention",
@@ -737,20 +751,20 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
     };
     let reply = msg.reply.clone().map(|r| match (r.id, r.author.clone()) {
         (Some(rid), author) => {
-            let who = author.map(|a| a.name().to_string()).unwrap_or_else(|| "Compte supprimé".into());
+            let who = author.map(|a| a.name().to_string()).unwrap_or_else(|| t("Compte supprimé"));
             let mut excerpt = kraken_core::markdown::summary(&r.content);
             if excerpt.is_empty() {
-                excerpt = "Fichier joint".into();
+                excerpt = t("Fichier joint");
             }
-            let label = format!("Aller au message d'origine, de {who}");
+            let label = tf("Aller au message d'origine, de {nom}", &[("nom", &who)]);
             view! {
                 <button type="button" class="k-reply app-reply" aria-label=label title=excerpt.clone() on:click=move |_| jump(chat, rid)>
-                    <Icon icon=lu::LuCornerDownRight small=true/><b>{format!("@{who}")}</b><span class="app-ellipsis">{excerpt.clone()}</span>
+                    <Icon icon=lu::LuCornerDownRight small=true/><b><bdi>{format!("@{who}")}</bdi></b><span class="app-ellipsis" dir="auto">{excerpt.clone()}</span>
                 </button>
             }.into_any()
         }
         (None, _) => view! {
-            <p class="k-reply app-reply"><Icon icon=lu::LuCornerDownRight small=true/><span>"Le message d'origine a été supprimé."</span></p>
+            <p class="k-reply app-reply"><Icon icon=lu::LuCornerDownRight small=true/><span>{t("Le message d'origine a été supprimé.")}</span></p>
         }.into_any(),
     });
     let reactions = msg.reactions.clone();
@@ -758,17 +772,34 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
         let buttons = reactions.into_iter().map(|r| {
             let n = r.users.len();
             let by_me = me.is_some_and(|me| r.users.contains(&me));
-            let names = r.users.iter().map(|u| s.name_of(chat.guild, *u).unwrap_or_else(|| "quelqu'un".into())).collect();
+            let names = r.users.iter().map(|u| s.name_of(chat.guild, *u).unwrap_or_else(|| t("quelqu'un"))).collect();
             let who = people(names);
-            let verb = if n > 1 { "ont réagi" } else { "a réagi" };
             // Un emoji perso retiré n'a plus d'image : la réaction le dit.
             let gone = RwSignal::new(false);
             let said = {
                 let emoji = r.emoji.clone();
-                move || if gone.get() { "emoji supprimé".to_string() } else { reaction_name(&emoji) }
+                move || if gone.get() { t("emoji supprimé") } else { reaction_name(&emoji) }
             };
-            let title = { let said = said.clone(); move || format!("{who} {verb} avec {}", said()) };
-            let label = move || format!("{} : {n} {}{}", said(), if n > 1 { "réactions" } else { "réaction" }, if by_me { ", dont la tienne" } else { "" });
+            let title = {
+                let said = said.clone();
+                move || {
+                    tnf(
+                        "{qui} a réagi avec {emoji}",
+                        "{qui} ont réagi avec {emoji}",
+                        n,
+                        &[("qui", &who), ("emoji", &said())],
+                    )
+                }
+            };
+            let label = move || {
+                let emoji = said();
+                let vars = [("emoji", emoji.as_str())];
+                if by_me {
+                    tnf("{emoji} : {n} réaction, dont la tienne", "{emoji} : {n} réactions, dont la tienne", n, &vars)
+                } else {
+                    tnf("{emoji} : {n} réaction", "{emoji} : {n} réactions", n, &vars)
+                }
+            };
             let emoji = r.emoji.clone();
             view! {
                 <button type="button" class="k-reaction" aria-pressed=by_me.to_string() aria-label=label title=title
@@ -778,9 +809,9 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
             }
         }).collect_view();
         view! {
-            <div class="k-reactions" role="group" aria-label="Réactions">
+            <div class="k-reactions" role="group" aria-label=t("Réactions")>
                 {buttons}
-                <button type="button" class="k-reaction" aria-label="Autre réaction" title="Autre réaction"
+                <button type="button" class="k-reaction" aria-label=t("Autre réaction") title=t("Autre réaction")
                     on:click=move |_| chat.picker.set(Some(Pick::React(id)))><Icon icon=lu::LuSmilePlus small=true/></button>
             </div>
         }
@@ -798,10 +829,10 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
         <Show when=move || blocked.get()>
             <div class="app-blocked">
                 <Icon icon=lu::LuEyeOff small=true/>
-                <span>"Message d'un compte que tu as bloqué."</span>
+                <span>{t("Message d'un compte que tu as bloqué.")}</span>
                 <button type="button" class="k-btn k-btn--link" aria-expanded=move || shown.get().to_string() aria-controls=format!("msg-{id}")
                     on:click=move |_| shown.update(|v| *v = !*v)>
-                    {move || if shown.get() { "Masquer" } else { "Afficher" }}
+                    {move || if shown.get() { t("Masquer") } else { t("Afficher") }}
                 </button>
             </div>
         </Show>
@@ -829,16 +860,16 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
                 {(!cont).then(|| {
                     let open = msg.author.clone().map(|u| move |_: leptos::ev::MouseEvent| crate::profile::open_card(u.clone(), chat.guild));
                     let label = match open {
-                        Some(open) => view! { <button type="button" class="app-who-name" aria-haspopup="dialog" on:click=open>{name.clone()}</button> }.into_any(),
-                        None => name.clone().into_any(),
+                        Some(open) => view! { <button type="button" class="app-who-name" aria-haspopup="dialog" on:click=open><bdi>{name.clone()}</bdi></button> }.into_any(),
+                        None => view! { <bdi>{name.clone()}</bdi> }.into_any(),
                     };
-                    view! { <header><b title=handle data-role-color=move || author_id.and_then(|a| s.role_color(chat.guild, a)).map(|c| c.to_string())>{label}</b><time datetime=iso(at)>{when(at)}</time>{pinned.then(|| view! { <span class="app-pinned"><Icon icon=lu::LuPin small=true/><span class="k-sr">"Épinglé"</span></span> })}</header> }
+                    view! { <header><b title=handle data-role-color=move || author_id.and_then(|a| s.role_color(chat.guild, a)).map(|c| c.to_string())>{label}</b><time datetime=iso(at)>{when(at)}</time>{pinned.then(|| view! { <span class="app-pinned"><Icon icon=lu::LuPin small=true/><span class="k-sr">{t("Épinglé")}</span></span> })}</header> }
                 })}
                 {move || if editing() {
                     view! { <EditBox msg=body.get_value()/> }.into_any()
                 } else {
                     let m = body.get_value();
-                    let edited = m.edited_at.map(|e| view! { <span class="app-edited" title=format!("Modifié le {}", when(e))>"(édité)"</span> });
+                    let edited = m.edited_at.map(|e| view! { <span class="app-edited" title=tf("Modifié le {date}", &[("date", &when(e))])>{t("(édité)")}</span> });
                     let media = m.clone();
                     let text = (!m.content.is_empty()).then(|| view! { <Body content=m.content mentions=m.mentions everyone=m.mention_everyone guild=chat.guild/>{edited} });
                     view! { {text}<MessageMedia msg=media mine=mine viewer=chat.viewer notice=chat.notice/> }.into_any()
@@ -846,23 +877,23 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
                 {reaction_bar}
             </div>
             <Show when=move || !editing()>
-                <div class="k-msg-actions" role="toolbar" aria-label="Actions sur le message">
-                    <button type="button" class="k-btn k-btn--icon" aria-label="Ajouter une réaction" title="Réagir"
+                <div class="k-msg-actions" role="toolbar" aria-label=t("Actions sur le message")>
+                    <button type="button" class="k-btn k-btn--icon" aria-label=t("Ajouter une réaction") title=t("Réagir")
                         on:click=move |_| chat.picker.set(Some(Pick::React(id)))><Icon icon=lu::LuSmilePlus/></button>
-                    <button type="button" class="k-btn k-btn--icon" aria-label="Répondre" title="Répondre"
+                    <button type="button" class="k-btn k-btn--icon" aria-label=t("Répondre") title=t("Répondre")
                         on:click={ let m = for_reply.clone(); move |_| start_reply(chat, m.clone()) }><Icon icon=lu::LuReply/></button>
                     <Show when=move || can_pin.get()>
-                        <button type="button" class="k-btn k-btn--icon" aria-label=pin_label title=pin_label
+                        <button type="button" class="k-btn k-btn--icon" aria-label=t(pin_label) title=t(pin_label)
                             on:click=move |_| toggle_pin(chat, id, !pinned)>
                             {if pinned { view! { <Icon icon=lu::LuPinOff/> }.into_any() } else { view! { <Icon icon=lu::LuPin/> }.into_any() }}
                         </button>
                     </Show>
                     {mine.then(|| { let c = content.clone(); view! {
-                        <button type="button" class="k-btn k-btn--icon" aria-label="Modifier le message" title="Modifier"
+                        <button type="button" class="k-btn k-btn--icon" aria-label=t("Modifier le message") title=t("Modifier")
                             on:click=move |_| { chat.edit_text.set(crate::emoji::collapse(&c, chat.guild)); chat.editing.set(Some(id)); }><Icon icon=lu::LuPencil/></button>
                     } })}
                     {(mine || manage).then(|| { let m = for_delete.clone(); view! {
-                        <button type="button" class="k-btn k-btn--icon app-link-danger" aria-label="Supprimer le message" title="Supprimer"
+                        <button type="button" class="k-btn k-btn--icon app-link-danger" aria-label=t("Supprimer le message") title=t("Supprimer")
                             on:click=move |_| chat.deleting.set(Some(m.clone()))><Icon icon=lu::LuTrash2/></button>
                     } })}
                 </div>
@@ -951,14 +982,14 @@ fn EditBox(msg: Message) -> impl IntoView {
     let cancel = move || chat.editing.set(None);
     view! {
         <form class="k-msg-edit" on:submit=move |e| { e.prevent_default(); save(); }>
-            <textarea class="k-input" rows="2" aria-label="Modifier le message" node_ref=area bind:value=chat.edit_text
+            <textarea class="k-input" rows="2" aria-label=t("Modifier le message") node_ref=area bind:value=chat.edit_text
                 on:keydown=move |e| {
                     if e.key() == "Escape" { e.prevent_default(); e.stop_propagation(); cancel(); }
                     else if e.key() == "Enter" && !e.shift_key() && !e.is_composing() { e.prevent_default(); save2(); }
                 }></textarea>
-            <p class="k-hint">"Entrée enregistre, Échap annule. "
-                <button type="button" class="k-btn k-btn--link" on:click=move |_| cancel()>"Annuler"</button>" · "
-                <button type="submit" class="k-btn k-btn--link" aria-busy=move || busy.get().to_string()>"Enregistrer"</button>
+            <p class="k-hint">{t("Entrée enregistre, Échap annule.")}" "
+                <button type="button" class="k-btn k-btn--link" on:click=move |_| cancel()>{t("Annuler")}</button>" · "
+                <button type="submit" class="k-btn k-btn--link" aria-busy=move || busy.get().to_string()>{t("Enregistrer")}</button>
             </p>
         </form>
     }
@@ -1000,20 +1031,20 @@ fn DeleteDialog(msg: Message) -> impl IntoView {
     view! {
         <div class="k-scrim" node_ref=root>
             <div class="k-dialog" role="alertdialog" aria-modal="true" aria-labelledby="msg-del-t" aria-describedby="msg-del-d">
-                <header><h2 id="msg-del-t">"Supprimer ce message ?"</h2></header>
+                <header><h2 id="msg-del-t">{t("Supprimer ce message ?")}</h2></header>
                 <form on:submit=confirm>
                     <div>
                         <p id="msg-del-d">{if theirs {
-                            "Il disparaîtra pour tout le monde, sans retour possible. Son auteur n'en sera pas prévenu."
+                            t("Il disparaîtra pour tout le monde, sans retour possible. Son auteur n'en sera pas prévenu.")
                         } else {
-                            "Il disparaîtra pour tout le monde, sans retour possible."
+                            t("Il disparaîtra pour tout le monde, sans retour possible.")
                         }}</p>
                         <blockquote class="app-quote app-del-preview">{preview}</blockquote>
                         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
                     </div>
                     <footer>
-                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| chat.deleting.set(None) autofocus>"Annuler"</button>
-                        <button type="submit" class="k-btn k-btn--danger" aria-busy=move || busy.get().to_string()>"Supprimer"</button>
+                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| chat.deleting.set(None) autofocus>{t("Annuler")}</button>
+                        <button type="submit" class="k-btn k-btn--danger" aria-busy=move || busy.get().to_string()>{t("Supprimer")}</button>
                     </footer>
                 </form>
             </div>
@@ -1047,8 +1078,8 @@ const JUMP_PAGES: usize = 20;
 fn jump_missing(capped: bool, failed: Option<String>) -> String {
     match (failed, capped) {
         (Some(e), _) => e,
-        (None, true) => "Ce message est trop ancien pour être chargé ici.".into(),
-        (None, false) => "Ce message n'est plus disponible.".into(),
+        (None, true) => t("Ce message est trop ancien pour être chargé ici."),
+        (None, false) => t("Ce message n'est plus disponible."),
     }
 }
 
@@ -1242,13 +1273,13 @@ fn suggestions(chat: Chat, sign: char, q: &str) -> Vec<Suggestion> {
         out.truncate(8);
         if chat.guild.is_some_and(|g| s.guild_perms(g) & perms::MENTION_EVERYONE != 0) {
             for (word, what) in
-                [("everyone", "Tous ceux qui voient ce salon"), ("here", "Ceux qui sont là en ce moment")]
+                [("everyone", tk!("Tous ceux qui voient ce salon")), ("here", tk!("Ceux qui sont là en ce moment"))]
             {
                 if word.starts_with(q) {
                     out.push(Suggestion {
                         insert: format!("@{word} "),
                         label: format!("@{word}"),
-                        detail: what.into(),
+                        detail: t(what),
                         emoji: None,
                     });
                 }
@@ -1307,7 +1338,7 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
     // Exclu temporairement : on lit, on n'écrit pas. Un seul minuteur lève l'interdit à l'heure dite.
     let excluded = crate::ui::still(move || chat.guild.and_then(|g| s.my_timeout(g)));
     let locked = move || excluded.get().is_some();
-    let lock_text = move || excluded.get().map(|t| format!("Exclu jusqu'à {}", when(t)));
+    let lock_text = move || excluded.get().map(|until| tf("Exclu jusqu'à {date}", &[("date", &when(until))]));
     // Autocomplétion des mentions : le mot sous le curseur, la suggestion choisie, refermée par Échap.
     let at = RwSignal::new(0usize);
     let active = RwSignal::new(0usize);
@@ -1336,39 +1367,48 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
         if locked() {
             return;
         }
-        let t = text.get_untracked();
+        let typed = text.get_untracked();
         let (busy, failed, ready) = files::tray_status(chat.tray);
-        if (t.trim().is_empty() && ready == 0 && busy == 0 && failed == 0) || too_long() {
+        if (typed.trim().is_empty() && ready == 0 && busy == 0 && failed == 0) || too_long() {
             return;
         }
         if busy > 0 {
-            chat.notice.set(Some("Patiente : l'envoi des fichiers n'est pas terminé.".into()));
+            chat.notice.set(Some(t("Patiente : l'envoi des fichiers n'est pas terminé.")));
             return;
         }
         if failed > 0 {
-            chat.notice.set(Some("Retire les fichiers dont l'envoi a échoué avant d'envoyer le message.".into()));
+            chat.notice.set(Some(t("Retire les fichiers dont l'envoi a échoué avant d'envoyer le message.")));
             return;
         }
-        if t.trim().is_empty() && ready == 0 {
+        if typed.trim().is_empty() && ready == 0 {
             return;
         }
         // `:nom:` devient le jeton de l'emoji ; le message envoyé est plus long que ce qui est écrit.
-        let t = crate::emoji::expand(t.trim(), chat.guild);
-        if t.chars().count() > MAX_MESSAGE_LEN {
-            chat.notice.set(Some(format!("Une fois les emojis écrits en entier, ton message dépasse {MAX_MESSAGE_LEN} caractères : raccourcis-le.")));
+        let typed = crate::emoji::expand(typed.trim(), chat.guild);
+        if typed.chars().count() > MAX_MESSAGE_LEN {
+            chat.notice.set(Some(tf(
+                "Une fois les emojis écrits en entier, ton message dépasse {max} caractères : raccourcis-le.",
+                &[("max", &MAX_MESSAGE_LEN.to_string())],
+            )));
             return;
         }
         let delay = slow.get_untracked();
         if delay > 0 && !exempt() {
             let left = slow_left(chat.channel);
             if left > 0 {
-                chat.notice.set(Some(format!("Mode lent : attends encore {left} s avant d'envoyer un autre message.")));
+                chat.notice.set(Some(tf(
+                    "Mode lent : attends encore {reste} s avant d'envoyer un autre message.",
+                    &[("reste", &left.to_string())],
+                )));
                 return;
             }
             // Un peu de marge : le serveur compte à partir de l'arrivée du message.
             let until = js_sys::Date::now() as i64 + i64::from(delay) * 1000 + 500;
             SLOW_UNTIL.with_borrow_mut(|m| m.insert(chat.channel, until));
-            said.set(format!("Mode lent : tu pourras écrire de nouveau dans {}.", crate::channels::slow_label(delay)));
+            said.set(tf(
+                "Mode lent : tu pourras écrire de nouveau dans {delai}.",
+                &[("delai", &crate::channels::slow_label(delay))],
+            ));
             run_wait(chat.channel, wait, said);
         }
         at.set(0);
@@ -1377,7 +1417,7 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
         chat.replying.set(None);
         chat.since.set(None);
         let attached = files::take_done(chat.tray);
-        send(chat.channel, t, reply, None, attached);
+        send(chat.channel, typed, reply, None, attached);
     };
     let picker = NodeRef::<html::Input>::new();
     let can_attach = move || !locked() && chat.guild.is_none_or(|g| s.guild_perms(g) & perms::ATTACH_FILES != 0);
@@ -1444,15 +1484,15 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
         <div class="app-compose">
             {move || chat.notice.get().map(|n| view! {
                 <p class="k-error app-compose-note" role="alert">{n}" "
-                    <button type="button" class="k-btn k-btn--link" on:click=move |_| chat.notice.set(None)>"Fermer"</button></p>
+                    <button type="button" class="k-btn k-btn--link" on:click=move |_| chat.notice.set(None)>{t("Fermer")}</button></p>
             })}
             <Show when=move || { slow.get() > 0 && !exempt() }>
                 <p class="app-slow" data-wait=move || waiting().then_some("")>
                     <Icon icon=lu::LuTimer small=true/>
                     <span aria-hidden="true">{move || if waiting() {
-                        format!("Mode lent : encore {} s avant ton prochain message", wait.get())
+                        tf("Mode lent : encore {reste} s avant ton prochain message", &[("reste", &wait.get().to_string())])
                     } else {
-                        format!("Mode lent : {} entre deux messages", crate::channels::slow_label(slow.get()))
+                        tf("Mode lent : {delai} entre deux messages", &[("delai", &crate::channels::slow_label(slow.get()))])
                     }}</span>
                     <span class="k-sr" role="status">{move || said.get()}</span>
                 </p>
@@ -1461,14 +1501,17 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
                 <p class="app-slow" data-timeout>
                     <Icon icon=lu::LuTimer small=true/>
                     <span>{lock_text}</span>
-                    <span class="app-slow-more">"Tu peux lire, pas écrire."</span>
+                    <span class="app-slow-more">{t("Tu peux lire, pas écrire.")}</span>
                 </p>
             </Show>
             <Show when=too_long>
-                <p class="k-error app-compose-note" role="alert">{move || format!("{} caractères sur {MAX_MESSAGE_LEN} : raccourcis un peu.", text.with(|t| t.chars().count()))}</p>
+                <p class="k-error app-compose-note" role="alert">{move || tf(
+                    "{n} caractères sur {max} : raccourcis un peu.",
+                    &[("n", &text.with(|v| v.chars().count()).to_string()), ("max", &MAX_MESSAGE_LEN.to_string())],
+                )}</p>
             </Show>
             {move || found.get().map(|(_, list)| view! {
-                <ul class="k-autocomplete app-suggest" role="listbox" id=list_id.clone() aria-label="Suggestions">
+                <ul class="k-autocomplete app-suggest" role="listbox" id=list_id.clone() aria-label=t("Suggestions")>
                     {list.into_iter().enumerate().map(|(i, sg)| view! {
                         <li role="option" id=opt_id(i) aria-selected=move || (active.get() == i).to_string()
                             on:mousedown=move |e| { e.prevent_default(); pick(i); }>
@@ -1479,12 +1522,12 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
                 </ul>
             })}
             {move || chat.replying.get().map(|m| {
-                let who = m.author.as_ref().map(|a| a.name().to_string()).unwrap_or_else(|| "Compte supprimé".into());
+                let who = m.author.as_ref().map(|a| a.name().to_string()).unwrap_or_else(|| t("Compte supprimé"));
                 view! {
                     <div class="app-replying">
                         <Icon icon=lu::LuReply small=true/>
-                        <span class="app-ellipsis">"Tu réponds à "<b>{who}</b></span>
-                        <button type="button" class="k-btn k-btn--icon" aria-label="Annuler la réponse" title="Annuler la réponse (Échap)"
+                        <span class="app-ellipsis">{t("Tu réponds à")}" "<b><bdi>{who}</bdi></b></span>
+                        <button type="button" class="k-btn k-btn--icon" aria-label=t("Annuler la réponse") title=t("Annuler la réponse (Échap)")
                             on:click=move |_| chat.replying.set(None)><Icon icon=lu::LuX small=true/></button>
                     </div>
                 }
@@ -1493,8 +1536,8 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
             <form class="k-composer" on:submit=move |e| { e.prevent_default(); submit(); }>
                 <input type="file" multiple class="k-sr app-file" tabindex="-1" aria-hidden="true" node_ref=picker on:change=on_pick_files/>
                 <button type="button" class="k-btn k-btn--icon" disabled=move || !can_attach()
-                    aria-label=move || if can_attach() { "Joindre un fichier" } else { "Joindre un fichier (non autorisé ici)" }
-                    title="Joindre un fichier" on:click=move |_| { if let Some(i) = picker.get_untracked() { i.click() } }>
+                    aria-label=move || if can_attach() { t("Joindre un fichier") } else { t("Joindre un fichier (non autorisé ici)") }
+                    title=t("Joindre un fichier") on:click=move |_| { if let Some(i) = picker.get_untracked() { i.click() } }>
                     <Icon icon=lu::LuPaperclip/>
                 </button>
                 <textarea rows="1" disabled=locked
@@ -1509,9 +1552,9 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
                         if matches!(e.key().as_str(), "ArrowLeft" | "ArrowRight" | "Home" | "End") { track() }
                     }
                     on:keydown=keydown></textarea>
-                <button type="button" class="k-btn k-btn--icon" aria-label="Insérer un emoji" title="Emoji" disabled=locked
+                <button type="button" class="k-btn k-btn--icon" aria-label=t("Insérer un emoji") title=t("Emoji") disabled=locked
                     on:click=move |_| chat.picker.set(Some(Pick::Insert))><Icon icon=lu::LuSmile/></button>
-                <button type="submit" class="k-btn k-btn--icon" aria-label="Envoyer" disabled=locked><Icon icon=lu::LuSendHorizontal/></button>
+                <button type="submit" class="k-btn k-btn--icon" aria-label=t("Envoyer") disabled=locked><Icon icon=lu::LuSendHorizontal/></button>
             </form>
         </div>
     }
@@ -1568,8 +1611,8 @@ fn Members(guild: Id) -> impl IntoView {
     });
     let my = my_id();
     view! {
-        <aside class="app-aside app-aside--members" aria-label="Membres">
-            <h2 class="k-category">"Membres "<span class="k-badge k-badge--neutral">{total}</span></h2>
+        <aside class="app-aside app-aside--members" aria-label=t("Membres")>
+            <h2 class="k-category">{t("Membres")}" "<span class="k-badge k-badge--neutral">{total}</span></h2>
             <Show when=move || note.get().is_some()><p class="k-error app-compose-note" role="alert">{move || note.get()}</p></Show>
             <For each=move || groups.get()
                 key=|(r, ms)| (
@@ -1581,12 +1624,12 @@ fn Members(guild: Id) -> impl IntoView {
                 {
                     let (role, members) = group;
                     let count = members.len();
-                    let head = role.as_ref().map(|r| (r.name.clone(), r.color)).or_else(|| groups.with_untracked(|g| (g.len() > 1).then(|| ("Membres".to_string(), None))));
+                    let head = role.as_ref().map(|r| (r.name.clone(), r.color)).or_else(|| groups.with_untracked(|g| (g.len() > 1).then(|| (t("Membres"), None))));
                     view! {
                         {head.map(|(name, color)| view! {
                             <h3 class="app-group" data-role-color=color.map(|c| c.to_string())>{format!("{name} — {count}")}</h3>
                         })}
-                        <ul class="app-members" aria-label=role.as_ref().map(|r| format!("Membres : {}", r.name))>
+                        <ul class="app-members" aria-label=role.as_ref().map(|r| tf("Membres : {role}", &[("role", &r.name)]))>
                             <For each=move || members.clone() key=|m| (m.user.id, m.user.display_name.clone(), m.user.avatar.clone(), m.nick.clone()) let:m>
                                 {
                                     let uid = m.user.id;
@@ -1616,45 +1659,45 @@ fn Members(guild: Id) -> impl IntoView {
                                     let open = { let u = m.user.clone(); move |_| crate::profile::open_card(u.clone(), Some(guild)) };
                                     view! {
                                         <li class="k-dm" on:contextmenu=context>
-                                            <button type="button" class="app-who" aria-haspopup="dialog" title="Ouvrir le profil" on:click=open>
+                                            <button type="button" class="app-who" aria-haspopup="dialog" title=t("Ouvrir le profil") on:click=open>
                                                 <Avatar user=m.user.clone() size="md" status=dot/>
                                                 <span class="app-ellipsis" data-role-color=move || s.role_color(Some(guild), uid).map(|c| c.to_string())>
-                                                    {name.clone()}
+                                                    <bdi>{name.clone()}</bdi>
                                                     <Show when=is_owner>
-                                                        <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" (propriétaire)"</span></span>
+                                                        <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" "{t("(propriétaire)")}</span></span>
                                                     </Show>
                                                     <small>{format!("@{}", m.user.username)}</small>
                                                     <Show when=move || excluded.get().is_some()>
                                                         <small class="app-timeout">
                                                             <Icon icon=lu::LuTimer small=true/>
-                                                            {move || excluded.get().map(|t| format!("Exclu jusqu'à {}", crate::ui::when(t)))}
+                                                            {move || excluded.get().map(|until| tf("Exclu jusqu'à {date}", &[("date", &crate::ui::when(until))]))}
                                                         </small>
                                                     </Show>
                                                 </span>
                                             </button>
-                                            <MoreMenu label=format!("Plus d'actions pour {name}")>
+                                            <MoreMenu label=tf("Plus d'actions pour {nom}", &[("nom", &name)])>
                                                 <button class="k-menuitem" on:click=move |_| profile.set(Some(uid))>
-                                                    <Icon icon=lu::LuShield/>"Profil et rôles"
+                                                    <Icon icon=lu::LuShield/>{t("Profil et rôles")}
                                                 </button>
                                                 <Show when=move || can_exclude() || can_kick() || can_ban()><hr/></Show>
                                                 <Show when=move || can_exclude() && excluded.get().is_none()>
                                                     <button class="k-menuitem" on:click={ let u = for_timeout.clone(); move |e| { crate::ui::focus_menu_trigger(&e); excluding.set(Some(u.clone())) } }>
-                                                        <Icon icon=lu::LuTimer/>"Exclure temporairement…"
+                                                        <Icon icon=lu::LuTimer/>{t("Exclure temporairement…")}
                                                     </button>
                                                 </Show>
                                                 <Show when=move || can_exclude() && excluded.get().is_some()>
                                                     <button class="k-menuitem" on:click=move |_| lift(uid)>
-                                                        <Icon icon=lu::LuTimerOff/>"Lever l'exclusion"
+                                                        <Icon icon=lu::LuTimerOff/>{t("Lever l'exclusion")}
                                                     </button>
                                                 </Show>
                                                 <Show when=can_kick>
                                                     <button class="k-menuitem is-danger" on:click={ let u = for_kick.clone(); move |_| confirm.set(Some(Confirm::Kick(guild, u.clone()))) }>
-                                                        <Icon icon=lu::LuUserMinus/>"Expulser"
+                                                        <Icon icon=lu::LuUserMinus/>{t("Expulser")}
                                                     </button>
                                                 </Show>
                                                 <Show when=can_ban>
                                                     <button class="k-menuitem is-danger" on:click={ let u = for_ban.clone(); move |_| confirm.set(Some(Confirm::Ban(guild, u.clone()))) }>
-                                                        <Icon icon=lu::LuBan/>"Bannir"
+                                                        <Icon icon=lu::LuBan/>{t("Bannir")}
                                                     </button>
                                                 </Show>
                                             </MoreMenu>
@@ -1693,8 +1736,8 @@ fn GroupMembers(channel: Id) -> impl IntoView {
     });
     let i_own = move || owner.get().is_some() && owner.get() == my_id();
     view! {
-        <aside class="app-aside app-aside--members" aria-label="Membres du groupe">
-            <h2 class="k-category">"Membres "<span class="k-badge k-badge--neutral">{move || members.with(Vec::len)}</span></h2>
+        <aside class="app-aside app-aside--members" aria-label=t("Membres du groupe")>
+            <h2 class="k-category">{t("Membres")}" "<span class="k-badge k-badge--neutral">{move || members.with(Vec::len)}</span></h2>
             <ul class="app-members">
                 <For each=move || members.get() key=move |u| (u.id, u.display_name.clone(), u.avatar.clone(), owner.get(), i_own()) let:u>
                     {
@@ -1707,20 +1750,20 @@ fn GroupMembers(channel: Id) -> impl IntoView {
                         let open = { let u = u.clone(); move |_| crate::profile::open_card(u.clone(), None) };
                         view! {
                             <li class="k-dm">
-                                <button type="button" class="app-who" aria-haspopup="dialog" title="Ouvrir le profil" on:click=open>
+                                <button type="button" class="app-who" aria-haspopup="dialog" title=t("Ouvrir le profil") on:click=open>
                                     <Avatar user=u.clone() size="md" status=dot/>
                                     <span class="app-ellipsis">
-                                        {name.clone()}
+                                        <bdi>{name.clone()}</bdi>
                                         {is_owner.then(|| view! {
-                                            <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" (propriétaire)"</span></span>
+                                            <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" "{t("(propriétaire)")}</span></span>
                                         })}
                                         <small>{format!("@{}", u.username)}</small>
                                     </span>
                                 </button>
                                 {removable.then(|| view! {
-                                    <MoreMenu label=format!("Plus d'actions pour {name}")>
+                                    <MoreMenu label=tf("Plus d'actions pour {nom}", &[("nom", &name)])>
                                         <button class="k-menuitem is-danger" on:click=move |_| removing.set(Some(target.clone()))>
-                                            <Icon icon=lu::LuUserMinus/>"Retirer du groupe"
+                                            <Icon icon=lu::LuUserMinus/>{t("Retirer du groupe")}
                                         </button>
                                     </MoreMenu>
                                 })}

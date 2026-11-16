@@ -7,6 +7,7 @@ use kraken_core::markdown::{self, Block, Inline};
 use kraken_proto::{Id, User};
 use leptos::prelude::*;
 
+use crate::i18n::t;
 use crate::store::store;
 
 /// Ce qu'il faut pour dessiner mentions et salons.
@@ -37,8 +38,11 @@ pub fn Body(content: String, mentions: Vec<User>, everyone: bool, guild: Option<
     let blocks = markdown::parse(&content)
         .into_iter()
         .map(|b| match b {
-            Block::Text(v) => view! { <p>{inline(v, &lk)}</p> }.into_any(),
-            Block::Quote(v) => view! { <blockquote class="app-quote">{inline(v, &lk)}</blockquote> }.into_any(),
+            // `dir="auto"` : un paragraphe ou une citation prend le sens d'écriture de son propre texte (contenu de l'utilisateur).
+            Block::Text(v) => view! { <p dir="auto">{inline(v, &lk)}</p> }.into_any(),
+            Block::Quote(v) => {
+                view! { <blockquote class="app-quote" dir="auto">{inline(v, &lk)}</blockquote> }.into_any()
+            }
             Block::Code { lang, text } => {
                 view! { <pre class="app-code" data-lang=lang><code>{text}</code></pre> }.into_any()
             }
@@ -106,7 +110,7 @@ fn Spoiler(inner: Vec<Inline>, lk: Rc<Lookup>) -> impl IntoView {
         } else {
             let hidden = hidden.clone();
             view! {
-                <span class="app-spoiler" role="button" tabindex="0" aria-label="Afficher le contenu masqué" title="Contenu masqué"
+                <span class="app-spoiler" role="button" tabindex="0" aria-label=t("Afficher le contenu masqué") title=t("Contenu masqué")
                     on:click=move |_| shown.set(true)
                     on:keydown=move |e| if e.key() == "Enter" || e.key() == " " { e.prevent_default(); shown.set(true) }>
                     <span aria-hidden="true">{hidden}</span>

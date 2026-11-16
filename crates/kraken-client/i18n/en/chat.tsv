@@ -1,1 +1,309 @@
 # Catalogue anglais, groupe « chat » : une ligne « français<TAB>anglais » par texte (voir ../README.md).
+
+# Salon, en-tête et barre d'outils (chat.rs)
+Introuvable	Not found
+Forum	Forum
+Fils	Threads
+Messages de {nom}	Messages in {nom}
+Écrire à {nom}	Message {nom}
+Écrire dans #{nom}	Message #{nom}
+Messages épinglés	Pinned messages
+Liste des membres	Member list
+Membres	Members
+Ajouter des amis au groupe	Add friends to the group
+Ajouter des amis	Add friends
+Renommer le groupe	Rename group
+Renommer	Rename
+Quitter le groupe	Leave group
+Créer un groupe avec {nom}	Create a group with {nom}
+Créer un groupe	Create a group
+Notifications de la conversation	Conversation notifications
+Notifications du salon	Channel notifications
+Rechercher	Search
+Boîte de réception	Inbox
+Tu as bloqué {nom} : vous ne pouvez plus vous écrire ici. L'historique reste lisible.	You blocked {nom}, so neither of you can write here. The history is still readable.
+Débloquer	Unblock
+Réagir avec un emoji	React with an emoji
+Insérer un emoji	Insert an emoji
+
+# Fil de messages (chat.rs)
+Ici commence ta conversation avec {nom}. Elle reste entre vous.	This is the start of your conversation with {nom}. It stays between the two of you.
+Ici commence #{nom}. Tout l'historique du salon se lit à partir d'ici.	This is the start of #{nom}. The channel's full history starts here.
+Messages	Messages
+Impossible de charger les messages	Couldn't load messages
+Réessayer	Retry
+Nouveaux messages	New messages
+pas envoyé	not sent
+envoi…	sending…
+Supprimer	Delete
+Compte supprimé	Deleted account
+Message d'un compte que tu as bloqué.	Message from an account you blocked.
+Masquer	Hide
+Afficher	Show
+Épinglé	Pinned
+Modifié le {date}	Edited {date}
+(édité)	(edited)
+Fichier joint	Attached file
+Aller au message d'origine, de {nom}	Go to the original message from {nom}
+Le message d'origine a été supprimé.	The original message was deleted.
+Ce message est trop ancien pour être chargé ici.	This message is too old to load here.
+Ce message n'est plus disponible.	This message is no longer available.
+
+# Appels dans le fil (chat.rs)
+{h} h {min}	{h} h {min} min
+{n} minute	{n} minute
+{n} minutes	{n} minutes
+Tu as lancé un appel.	You started a call.
+{nom} a lancé un appel.	{nom} started a call.
+Personne n'a répondu à ton appel.	Nobody answered your call.
+Tu as lancé un appel qui a duré {duree}.	You started a call that lasted {duree}.
+Appel manqué de {nom}.	Missed call from {nom}.
+{nom} a lancé un appel qui a duré {duree}.	{nom} started a call that lasted {duree}.
+
+# Réactions (chat.rs, emoji.rs)
+Personne	Nobody
+{a} et {b}	{a} and {b}
+{a}, {b} et {c}	{a}, {b} and {c}
+{a}, {b}, {c} et {n} autre	{a}, {b}, {c} and {n} other
+{a}, {b}, {c} et {n} autres	{a}, {b}, {c} and {n} others
+quelqu'un	someone
+emoji supprimé	deleted emoji
+emoji personnalisé	custom emoji
+{qui} a réagi avec {emoji}	{qui} reacted with {emoji}
+{qui} ont réagi avec {emoji}	{qui} reacted with {emoji}
+{emoji} : {n} réaction	{emoji}: {n} reaction
+{emoji} : {n} réactions	{emoji}: {n} reactions
+{emoji} : {n} réaction, dont la tienne	{emoji}: {n} reaction, including yours
+{emoji} : {n} réactions, dont la tienne	{emoji}: {n} reactions, including yours
+Réactions	Reactions
+Autre réaction	Add another reaction
+
+# Actions sur un message, modification, suppression (chat.rs)
+Actions sur le message	Message actions
+Ajouter une réaction	Add a reaction
+Réagir	React
+Répondre	Reply
+Épingler le message	Pin message
+Désépingler le message	Unpin message
+Modifier le message	Edit message
+Modifier	Edit
+Supprimer le message	Delete message
+Entrée enregistre, Échap annule.	Enter saves, Esc cancels.
+Annuler	Cancel
+Supprimer ce message ?	Delete this message?
+Il disparaîtra pour tout le monde, sans retour possible. Son auteur n'en sera pas prévenu.	It will disappear for everyone and can't be undone. Its author won't be notified.
+Il disparaîtra pour tout le monde, sans retour possible.	It will disappear for everyone and can't be undone.
+
+# Saisie, mode lent, exclusion (chat.rs)
+Tu peux de nouveau écrire.	You can send messages again.
+Tous ceux qui voient ce salon	Everyone who can see this channel
+Ceux qui sont là en ce moment	Everyone who is online right now
+Exclu jusqu'à {date}	Timed out until {date}
+Patiente : l'envoi des fichiers n'est pas terminé.	Hold on, your files haven't finished uploading.
+Retire les fichiers dont l'envoi a échoué avant d'envoyer le message.	Remove the files that failed to upload before sending your message.
+Une fois les emojis écrits en entier, ton message dépasse {max} caractères : raccourcis-le.	With emojis written out in full, your message is over {max} characters. Shorten it.
+Mode lent : attends encore {reste} s avant d'envoyer un autre message.	Slow mode: you can send another message in {reste} s.
+Mode lent : tu pourras écrire de nouveau dans {delai}.	Slow mode: you can write again in {delai}.
+Mode lent : encore {reste} s avant ton prochain message	Slow mode: {reste} s until your next message
+Mode lent : {delai} entre deux messages	Slow mode: {delai} between messages
+Tu peux lire, pas écrire.	You can read but not write.
+{n} caractères sur {max} : raccourcis un peu.	{n} out of {max} characters: shorten it a bit.
+Suggestions	Suggestions
+Tu réponds à	You're replying to
+Annuler la réponse	Cancel reply
+Annuler la réponse (Échap)	Cancel reply (Esc)
+Joindre un fichier	Attach a file
+Joindre un fichier (non autorisé ici)	Attach a file (not allowed here)
+Emoji	Emoji
+Envoyer	Send
+
+# Liste des membres (chat.rs)
+Membres : {role}	Members: {role}
+Membres du groupe	Group members
+Ouvrir le profil	Open profile
+(propriétaire)	(owner)
+Plus d'actions pour {nom}	More actions for {nom}
+Profil et rôles	Profile and roles
+Exclure temporairement…	Time out…
+Lever l'exclusion	Remove timeout
+Expulser	Kick
+Bannir	Ban
+Retirer du groupe	Remove from group
+
+# Sélecteur d'emojis (emoji.rs)
+Chercher un emoji	Search emojis
+Emojis de {nom}	Emojis from {nom}
+Emojis standards	Standard emojis
+Emojis	Emojis
+Aucun emoji de la sélection ne correspond.	No emoji in the selection matches.
+
+# Fichiers joints, visionneuse, aperçus de liens (files.rs)
+{n} o	{n} B
+{n} Ko	{n} KB
+{n} Mo	{n} MB
+{n} Go	{n} GB
+{max} fichiers au plus par message.	At most {max} files per message.
+« {nom} » est vide.	"{nom}" is empty.
+« {nom} » pèse {taille} : {max} au plus.	"{nom}" is {taille}. The limit is {max}.
+Fichiers à joindre	Files to attach
+Retirer {nom}	Remove {nom}
+Retirer	Remove
+Envoi de {nom}	Uploading {nom}
+Description	Description
+Texte alternatif de {nom}	Alt text for {nom}
+Dépose pour joindre à {lieu}	Drop to attach to {lieu}
+Ouvrir l'image {nom}	Open image {nom}
+Télécharger {nom}	Download {nom}
+Télécharger	Download
+Visionneuse d'images	Image viewer
+{taille} · {n} sur {total}	{taille} · {n} of {total}
+Ouvrir l'original	Open original
+Image précédente	Previous image
+Précédente (←)	Previous (←)
+Image suivante	Next image
+Suivante (→)	Next (→)
+Aperçu de {nom}	Preview of {nom}
+Retirer l'aperçu	Remove preview
+
+# Markdown (markdown.rs)
+Afficher le contenu masqué	Show hidden content
+Contenu masqué	Hidden content
+
+# Messages épinglés (pins.rs)
+Message épinglé.	Message pinned.
+Message désépinglé.	Message unpinned.
+Fermer les messages épinglés	Close pinned messages
+Chargement des messages épinglés…	Loading pinned messages…
+Du plus récemment épinglé au plus ancien.	Most recently pinned first.
+Impossible de charger les messages épinglés	Couldn't load pinned messages
+Aucun message épinglé	No pinned messages
+Épingle un message depuis ses actions pour le retrouver ici.	Pin a message from its actions to find it here.
+Les modérateurs peuvent en épingler.	Moderators can pin messages.
+Aller au message de {nom}	Go to message from {nom}
+Désépingler le message de {nom}	Unpin message from {nom}
+Aller au message	Go to message
+Désépingler	Unpin
+
+# Non-lus, mentions, sourdine, notifications (unread.rs)
+{qui} dans {groupe}	{qui} in {groupe}
+Actions pour {nom}	Actions for {nom}
+Marquer comme lu	Mark as read
+Retirer la sourdine	Unmute
+Mettre en sourdine…	Mute…
+Notifications…	Notifications…
+Notifications de {nom}	Notifications for {nom}
+Sourdine	Mute
+Pas de sourdine	Not muted
+En sourdine, sans fin	Muted indefinitely
+En sourdine jusqu'à {date}	Muted until {date}
+Pendant 15 minutes	For 15 minutes
+Pendant 1 heure	For 1 hour
+Pendant 8 heures	For 8 hours
+Pendant 24 heures	For 24 hours
+Jusqu'à ce que je la retire	Until I unmute
+En sourdine : ni gras, ni notification. Les mentions restent comptées.	When muted, nothing turns bold and you get no notifications. Mentions are still counted.
+Me prévenir pour	Notify me for
+Par défaut : tous les messages	Default: all messages
+Comme le serveur	Same as the server
+Tous les messages	All messages
+Les mentions seulement (par défaut)	Mentions only (default)
+Les mentions seulement	Mentions only
+Rien	Nothing
+Aujourd'hui : {niveau}	Currently: {niveau}
+tous les messages	all messages
+les mentions seulement	mentions only
+rien	nothing
+Chaque nouveau message peut s'afficher sur le bureau.	Every new message can show up on your desktop.
+Seulement quand on te nomme, répond à ton message ou appelle tout le monde.	Only when someone mentions you, replies to your message or pings everyone.
+Aucune notification, et plus de compteur de mentions.	No notifications and no mention counter.
+Ignorer @everyone et @here	Ignore @everyone and @here
+Ces appels à tout le serveur ne comptent plus comme des mentions.	These server-wide pings no longer count as mentions.
+en sourdine	muted
+
+# Noms des emojis du sélecteur (kraken-core/src/emoji.rs : recherche et nom accessible, traduits à l'affichage)
+pouce levé, d'accord	thumbs up, agree
+pouce baissé, pas d'accord	thumbs down, disagree
+cœur rouge	red heart
+pleurer de rire	tears of joy, laughing
+sourire timide	smiling face, blush
+grand sourire	big smile
+clin d'œil	wink
+yeux en cœur	heart eyes
+visage aux cœurs	smiling face with hearts
+lunettes de soleil, cool	sunglasses, cool
+réfléchir, hmm	thinking, hmm
+bouche bée, surpris	open mouth, surprised
+larme, triste	tear, sad
+sanglots	sobbing
+en colère	angry
+dormir, sommeil	sleeping, sleep
+tête qui explose	exploding head, mind blown
+fête, cotillons	party, party hat
+sourire gêné, sueur	nervous smile, sweat
+tête à l'envers	upside-down face
+auréole, ange	halo, angel
+câlin	hug
+poignée de main	handshake
+applaudir, bravo	clap, well done
+mains levées, hourra	raised hands, hooray
+mains jointes, merci	folded hands, thanks
+coucou, salut	wave, hello
+biceps, force	biceps, strength
+yeux, regarder	eyes, look
+salut militaire	salute
+coche, fait	check mark, done
+croix, non	cross, no
+question	question
+exclamation	exclamation
+cent, parfait	hundred, perfect
+feu, génial	fire, awesome
+étincelles	sparkles
+étoile	star
+confettis, bravo	confetti, congratulations
+gâteau d'anniversaire	birthday cake
+cadeau	gift
+trophée	trophy
+fusée, lancement	rocket, launch
+ampoule, idée	light bulb, idea
+punaise, épingle	pushpin, pin
+trombone	paperclip
+cloche	bell
+réveil, heure	alarm clock, time
+bulle, discussion	speech bubble, chat
+zzz, sommeil	zzz, sleep
+cœur brisé	broken heart
+cœur bleu	blue heart
+cœur vert	green heart
+cœur jaune	yellow heart
+cœur violet	purple heart
+cœur noir	black heart
+pieuvre, kraken	octopus, kraken
+calmar	squid
+poisson tropical	tropical fish
+poisson	fish
+dauphin	dolphin
+baleine	whale
+requin	shark
+tortue	turtle
+crabe	crab
+coquillage	shell
+vague, mer	wave, sea
+ancre	anchor
+chat	cat
+chien	dog
+renard	fox
+pousse, plante	sprout, plant
+arc-en-ciel	rainbow
+soleil	sun
+lune, nuit	moon, night
+café	coffee
+pizza	pizza
+part de gâteau	slice of cake
+pop-corn	popcorn
+manette, jeu	controller, game
+note de musique	musical note
+casque audio	headphones
+appareil photo	camera
+ordinateur	laptop, computer
+bogue, insecte	bug, insect
+clé à molette, réparer	wrench, fix

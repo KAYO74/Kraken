@@ -16,6 +16,7 @@ use leptos::html;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
+use crate::i18n::{t, tf};
 use crate::photo::Photo;
 use crate::store::store;
 use crate::ui::{GuildIcon, modal};
@@ -77,7 +78,7 @@ pub fn EmojiImg(id: Id, #[prop(into)] name: String) -> impl IntoView {
 pub fn reaction_name(emoji: &str) -> String {
     match kraken_core::emoji::custom_key(emoji) {
         None => emoji.to_string(),
-        Some(id) => store().emoji(id).map_or_else(|| "emoji personnalisé".into(), |e| shortcode(&e.name)),
+        Some(id) => store().emoji(id).map_or_else(|| t("emoji personnalisé"), |e| shortcode(&e.name)),
     }
 }
 
@@ -90,7 +91,7 @@ pub fn ReactionFace(emoji: String, gone: RwSignal<bool>) -> impl IntoView {
     let alt = reaction_name(&emoji);
     view! {
         <span class="app-emoji" data-broken=move || gone.get().then_some("")>
-            <Show when=move || !gone.get() fallback=|| view! { <span class="app-emoji-gone">"emoji supprimé"</span> }>
+            <Show when=move || !gone.get() fallback=|| view! { <span class="app-emoji-gone">{t("emoji supprimé")}</span> }>
                 <Photo class="app-emoji-img" src=crate::api::emoji_url(id) alt=alt.clone() cap=128 on_error=move |()| gone.set(true)/>
             </Show>
         </span>
@@ -100,7 +101,7 @@ pub fn ReactionFace(emoji: String, gone: RwSignal<bool>) -> impl IntoView {
 
 #[component]
 pub fn EmojiPicker(
-    /// Nom accessible du sélecteur.
+    /// Nom accessible du sélecteur (une clé de traduction : `tk!("…")`).
     title: &'static str,
     /// Le serveur du salon : ses emojis passent en premier.
     guild: Option<Id>,
@@ -122,7 +123,8 @@ pub fn EmojiPicker(
     let query = move || q.get().trim().to_lowercase();
     let found = move || {
         let q = query();
-        EMOJIS.iter().filter(|(e, n)| q.is_empty() || n.contains(&q) || *e == q).copied().collect::<Vec<_>>()
+        // La recherche porte sur le nom dans la langue de l'interface.
+        EMOJIS.iter().filter(|(e, n)| q.is_empty() || t(n).contains(&q) || *e == q).copied().collect::<Vec<_>>()
     };
     // Les emojis perso dont le nom contient la recherche (écrite avec ou sans les deux-points).
     let custom = move || -> Vec<(Guild, Vec<Emoji>)> {
@@ -195,8 +197,8 @@ pub fn EmojiPicker(
             .or_else(|| found().first().map(|(e, _)| Picked::Unicode(e.to_string())))
     };
     view! {
-        <div class="k-menu app-picker" role="dialog" aria-label=title node_ref=root>
-            <input class="k-input" type="search" placeholder="Chercher un emoji" aria-label="Chercher un emoji" autofocus bind:value=q
+        <div class="k-menu app-picker" role="dialog" aria-label=t(title) node_ref=root>
+            <input class="k-input" type="search" placeholder=t("Chercher un emoji") aria-label=t("Chercher un emoji") autofocus bind:value=q
                 on:keydown=move |e: leptos::ev::KeyboardEvent| match crate::shortcuts::is_key(&e).then(|| e.key()).as_deref() {
                     Some("Enter") => {
                         e.prevent_default();
@@ -220,7 +222,7 @@ pub fn EmojiPicker(
                                 <GuildIcon guild=g.clone() size="sm" cap=64/>
                                 <span class="app-ellipsis">{g.name.clone()}</span>
                             </h3>
-                            <div class="app-picker-grid" role="group" aria-label=format!("Emojis de {}", g.name)>
+                            <div class="app-picker-grid" role="group" aria-label=tf("Emojis de {nom}", &[("nom", &g.name)])>
                                 {es.into_iter().enumerate().map(|(n, e)| {
                                     let label = shortcode(&e.name);
                                     let (id, name) = (e.id, e.name.clone());
@@ -239,14 +241,15 @@ pub fn EmojiPicker(
                 }).collect_view() }}
                 <Show when=move || !found().is_empty()>
                     <section class="app-picker-sec" aria-labelledby="emojis-unicode">
-                        <h3 class="app-picker-title" id="emojis-unicode" data-only=move || custom().is_empty().then_some("")>"Emojis standards"</h3>
-                        <div class="app-picker-grid" role="group" aria-label="Emojis">
+                        <h3 class="app-picker-title" id="emojis-unicode" data-only=move || custom().is_empty().then_some("")>{t("Emojis standards")}</h3>
+                        <div class="app-picker-grid" role="group" aria-label=t("Emojis")>
                             {move || {
                                 let base: usize = custom().iter().map(|(_, es)| es.len()).sum();
                                 found().into_iter().enumerate().map(|(n, (emoji, name))| {
                                     let cell = base + n;
+                                    let name = t(name);
                                     view! {
-                                        <button type="button" class="app-picker-emoji" aria-label=name title=name
+                                        <button type="button" class="app-picker-emoji" aria-label=name.clone() title=name
                                             tabindex=move || tab(cell) on:focus=move |_| active.set(cell)
                                             on:click=move |_| on_pick.run(Picked::Unicode(emoji.to_string()))>{emoji}</button>
                                     }
@@ -256,7 +259,7 @@ pub fn EmojiPicker(
                     </section>
                 </Show>
             </div>
-            <Show when=empty><p class="app-hint">"Aucun emoji de la sélection ne correspond."</p></Show>
+            <Show when=empty><p class="app-hint">{t("Aucun emoji de la sélection ne correspond.")}</p></Show>
         </div>
     }
 }

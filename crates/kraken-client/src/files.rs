@@ -8,8 +8,10 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 
 use crate::api;
+use crate::i18n::{t, tf};
 use crate::icons::{Icon, lu};
 use crate::store::store;
+use crate::tk;
 use crate::ui::modal;
 
 /// Où en est un fichier du plateau.
@@ -47,16 +49,34 @@ thread_local! {
     static NEXT_KEY: std::cell::Cell<u32> = const { std::cell::Cell::new(1) };
 }
 
-/// « 850 o », « 12,4 Ko », « 1,2 Mo ».
+/// Le séparateur décimal de la langue de l'interface : « , » en français, « . » en anglais.
+fn decimal_mark() -> String {
+    String::from(js_sys::Number::from(1.5).to_locale_string(&crate::i18n::locale()))
+        .chars()
+        .nth(1)
+        .map_or_else(|| ".".into(), String::from)
+}
+
+/// « 850 o », « 12,4 Ko », « 1,2 Mo » (« 850 B », « 12.4 KB », « 1.2 MB » en anglais).
 pub fn size_label(bytes: u64) -> String {
-    const UNITS: [&str; 4] = ["o", "Ko", "Mo", "Go"];
     let mut v = bytes as f64;
     let mut u = 0;
-    while v >= 1024.0 && u < UNITS.len() - 1 {
+    while v >= 1024.0 && u < 3 {
         v /= 1024.0;
         u += 1;
     }
-    if u == 0 { format!("{bytes} o") } else { format!("{v:.1} {}", UNITS[u]).replace('.', ",") }
+    if u == 0 {
+        return tf("{n} o", &[("n", &bytes.to_string())]);
+    }
+    let n = format!("{v:.1}").replace('.', &decimal_mark());
+    tf(
+        match u {
+            1 => tk!("{n} Ko"),
+            2 => tk!("{n} Mo"),
+            _ => tk!("{n} Go"),
+        },
+        &[("n", &n)],
+    )
 }
 
 fn is_previewable(mime: &str) -> bool {
@@ -76,15 +96,18 @@ pub fn add_files(tray: Tray, channel: Id, files: Vec<web_sys::File>, notice: RwS
             let size = file.size() as u64;
             let name = file.name();
             if tray.with_untracked(Vec::len) >= MAX_ATTACHMENTS {
-                notice.set(Some(format!("{MAX_ATTACHMENTS} fichiers au plus par message.")));
+                notice.set(Some(tf("{max} fichiers au plus par message.", &[("max", &MAX_ATTACHMENTS.to_string())])));
                 break;
             }
             if size == 0 {
-                refused.push(format!("« {name} » est vide."));
+                refused.push(tf("« {nom} » est vide.", &[("nom", &name)]));
                 continue;
             }
             if size > max {
-                refused.push(format!("« {name} » pèse {} : {} au plus.", size_label(size), size_label(max)));
+                refused.push(tf(
+                    "« {nom} » pèse {taille} : {max} au plus.",
+                    &[("nom", &name), ("taille", &size_label(size)), ("max", &size_label(max))],
+                ));
                 continue;
             }
             let preview =
@@ -232,7 +255,7 @@ pub fn TrayView(tray: Tray, channel: Id) -> impl IntoView {
     let keys = Memo::new(move |_| tray.with(|v| v.iter().map(|p| p.key).collect::<Vec<_>>()));
     view! {
         <Show when=move || !keys.with(Vec::is_empty)>
-            <ul class="app-pending" aria-label="Fichiers à joindre">
+            <ul class="app-pending" aria-label=t("Fichiers à joindre")>
                 <For each=move || keys.get() key=|k| *k let:key>
                     <PendingTile tray=tray channel=channel key=key/>
                 </For>
@@ -267,12 +290,12 @@ fn PendingTile(tray: Tray, channel: Id, key: u32) -> impl IntoView {
                         </div>
                     }.into_any(),
                 }}
-                <button type="button" class="k-btn k-btn--icon app-tile-x" aria-label=move || format!("Retirer {}", name())
-                    title="Retirer" on:click=move |_| remove_file(tray, channel, key)>
+                <button type="button" class="k-btn k-btn--icon app-tile-x" aria-label=move || tf("Retirer {nom}", &[("nom", &name())])
+                    title=t("Retirer") on:click=move |_| remove_file(tray, channel, key)>
                     <Icon icon=lu::LuX small=true/>
                 </button>
                 <Show when=uploading>
-                    <div class="app-tile-bar" role="progressbar" aria-label=move || format!("Envoi de {}", name())
+                    <div class="app-tile-bar" role="progressbar" aria-label=move || tf("Envoi de {nom}", &[("nom", &name())])
                         aria-valuemin="0" aria-valuemax="100" aria-valuenow=move || (progress() * 100.0).round().to_string()>
                         <span style=move || format!("width: {}%", (progress() * 100.0).round())></span>
                     </div>
@@ -280,8 +303,8 @@ fn PendingTile(tray: Tray, channel: Id, key: u32) -> impl IntoView {
                 {move || failed().map(|e| { let t = e.clone(); view! { <p class="app-tile-error" role="alert" title=t>{e}</p> } })}
             </div>
             <Show when=move || preview().is_some()>
-                <input type="text" class="k-input app-alt" maxlength="1024" placeholder="Description"
-                    aria-label=move || format!("Texte alternatif de {}", name()) bind:value=alt/>
+                <input type="text" class="k-input app-alt" maxlength="1024" placeholder=t("Description")
+                    aria-label=move || tf("Texte alternatif de {nom}", &[("nom", &name())]) bind:value=alt/>
             </Show>
         </li>
     }
@@ -294,7 +317,7 @@ pub fn DropOverlay(dragging: RwSignal<bool>, place: Signal<String>) -> impl Into
         <Show when=move || dragging.get()>
             <div class="app-drop" aria-hidden="true">
                 <Icon icon=lu::LuUpload/>
-                <p>{move || format!("Dépose pour joindre à {}", place.get())}</p>
+                <p>{move || tf("Dépose pour joindre à {lieu}", &[("lieu", &place.get())])}</p>
             </div>
         </Show>
     }
@@ -317,7 +340,7 @@ pub fn Attachments(channel: Id, files: Vec<Attachment>, viewer: RwSignal<Option<
     let multi = images.len() > 1;
     let thumbs = images.iter().cloned().enumerate().map(|(i, a)| {
         let all = images.clone();
-        let label = format!("Ouvrir l'image {}", a.filename);
+        let label = tf("Ouvrir l'image {nom}", &[("nom", &a.filename)]);
         let alt = a.alt.clone().unwrap_or_else(|| a.filename.clone());
         let src = format!("{}/preview", api::attachment_url(channel, a.id));
         view! {
@@ -330,7 +353,7 @@ pub fn Attachments(channel: Id, files: Vec<Attachment>, viewer: RwSignal<Option<
     let cards = others.into_iter().map(|a| {
         let url = api::attachment_url(channel, a.id);
         let download = format!("{url}?download=1");
-        let label = format!("Télécharger {}", a.filename);
+        let label = tf("Télécharger {nom}", &[("nom", &a.filename)]);
         view! {
             <div class="k-attachment">
                 <span class="k-attachment__icon"><Icon icon=lu::LuFile/></span>
@@ -338,7 +361,7 @@ pub fn Attachments(channel: Id, files: Vec<Attachment>, viewer: RwSignal<Option<
                     <a href=download.clone() download=a.filename.clone()>{a.filename.clone()}</a>
                     <div class="type-xs text-muted">{size_label(a.size)}</div>
                 </div>
-                <a class="k-btn k-btn--sm" href=download download=a.filename.clone() aria-label=label>"Télécharger"</a>
+                <a class="k-btn k-btn--sm" href=download download=a.filename.clone() aria-label=label>{t("Télécharger")}</a>
             </div>
         }
     }).collect_view();
@@ -384,36 +407,40 @@ pub fn Viewer(state: ViewerState, viewer: RwSignal<Option<ViewerState>>) -> impl
     };
     view! {
         <div class="k-scrim app-viewer-scrim" node_ref=root on:click=on_backdrop>
-            <div class="k-dialog app-viewer" role="dialog" aria-modal="true" aria-label="Visionneuse d'images">
+            <div class="k-dialog app-viewer" role="dialog" aria-modal="true" aria-label=t("Visionneuse d'images")>
                 <header class="app-viewer-bar">
                     <div class="app-viewer-name">
                         <b class="app-ellipsis">{move || current().map(|a| a.filename).unwrap_or_default()}</b>
                         <small>{move || {
                             let size = current().map(|a| size_label(a.size)).unwrap_or_default();
-                            if count > 1 { format!("{size} · {} sur {count}", index.get() + 1) } else { size }
+                            if count > 1 {
+                                tf("{taille} · {n} sur {total}", &[("taille", &size), ("n", &(index.get() + 1).to_string()), ("total", &count.to_string())])
+                            } else {
+                                size
+                            }
                         }}</small>
                     </div>
                     <a class="k-btn k-btn--ghost k-btn--sm" href=url target="_blank" rel="noopener noreferrer"
-                        aria-label="Ouvrir l'original">
-                        <Icon icon=lu::LuExternalLink small=true/><span>"Ouvrir l'original"</span>
+                        aria-label=t("Ouvrir l'original")>
+                        <Icon icon=lu::LuExternalLink small=true/><span>{t("Ouvrir l'original")}</span>
                     </a>
                     <a class="k-btn k-btn--ghost k-btn--sm" href=move || format!("{}?download=1", url())
-                        download=move || current().map(|a| a.filename).unwrap_or_default() aria-label="Télécharger">
-                        <Icon icon=lu::LuDownload small=true/><span>"Télécharger"</span>
+                        download=move || current().map(|a| a.filename).unwrap_or_default() aria-label=t("Télécharger")>
+                        <Icon icon=lu::LuDownload small=true/><span>{t("Télécharger")}</span>
                     </a>
-                    <button type="button" class="k-btn k-btn--ghost k-btn--sm" autofocus aria-label="Fermer"
+                    <button type="button" class="k-btn k-btn--ghost k-btn--sm" autofocus aria-label=t("Fermer")
                         on:click=move |_| viewer.set(None)>
-                        <Icon icon=lu::LuX small=true/><span>"Fermer"</span>
+                        <Icon icon=lu::LuX small=true/><span>{t("Fermer")}</span>
                     </button>
                 </header>
                 <div class="app-viewer-stage">
-                    <button type="button" class="k-btn k-btn--icon app-viewer-nav" aria-label="Image précédente" title="Précédente (←)"
+                    <button type="button" class="k-btn k-btn--icon app-viewer-nav" aria-label=t("Image précédente") title=t("Précédente (←)")
                         disabled=move || index.get() == 0 hidden={count < 2} on:click=move |_| step(-1)>
                         <Icon icon=lu::LuChevronLeft/>
                     </button>
                     <img src=move || format!("{}/preview", url())
                         alt=move || current().map(|a| a.alt.unwrap_or(a.filename)).unwrap_or_default()/>
-                    <button type="button" class="k-btn k-btn--icon app-viewer-nav" aria-label="Image suivante" title="Suivante (→)"
+                    <button type="button" class="k-btn k-btn--icon app-viewer-nav" aria-label=t("Image suivante") title=t("Suivante (→)")
                         disabled=move || { index.get() + 1 >= count } hidden={count < 2} on:click=move |_| step(1)>
                         <Icon icon=lu::LuChevronRight/>
                     </button>
@@ -462,7 +489,7 @@ pub fn EmbedCard(
         });
     };
     let title = embed.title.clone().unwrap_or_else(|| embed.url.clone());
-    let label = format!("Aperçu de {}", host.clone().unwrap_or_default());
+    let label = tf("Aperçu de {nom}", &[("nom", &host.clone().unwrap_or_default())]);
     let img = move || image.clone().map(|src| view! { <img src=src alt="" loading="lazy" decoding="async"/> });
     view! {
         <article class=class aria-label=label>
@@ -475,7 +502,7 @@ pub fn EmbedCard(
             {embed.description.clone().map(|d| view! { <p>{d}</p> })}
             {(!is_wide).then(img)}
             {mine.then(|| view! {
-                <button type="button" class="k-btn k-btn--icon app-embed-x" aria-label="Retirer l'aperçu" title="Retirer l'aperçu"
+                <button type="button" class="k-btn k-btn--icon app-embed-x" aria-label=t("Retirer l'aperçu") title=t("Retirer l'aperçu")
                     on:click=remove>
                     <Icon icon=lu::LuX small=true/>
                 </button>
