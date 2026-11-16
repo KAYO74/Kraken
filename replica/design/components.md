@@ -300,8 +300,10 @@ Panneau « En appel »            .k-voicebar
 
 Panneau « Messages épinglés »    .app-aside--pins, .app-sheet (sous 640 px)
   variants  colonne à côté du fil (comme « Membres », jamais ensemble), feuille pleine page dans un Portal sous 640 px
+  scroll    colonne : l'en-tête (titre, compteur, Fermer) reste en haut, seule la liste (.app-pins-body) défile ; feuille : idem
   states    chargement (aria-busy, ligne role="status" de hauteur réservée, 3 squelettes), vide (icône Pin, « Aucun message épinglé », aide selon le droit),
             erreur (role="alert" + « Réessayer »), liste (« 12 / 50 », récent d'abord, texte sur 4 lignes, « Aller au message », « Désépingler » avec le droit)
+            auteur bloqué : la ligne se replie comme dans le fil (« Message d'un compte que tu as bloqué. », « Afficher » / « Masquer » avec aria-expanded)
   tokens    surface, surface-raised, border, text-strong, text-muted, radius lg, size-option-row-mobile (cibles de 44 px)
   a11y      bouton d'en-tête aria-expanded + aria-controls ; h2 en tabindex -1 qui prend le focus à l'ouverture ; Échap ferme et rend le focus au bouton ;
             feuille role="dialog" aria-modal avec Tab piégé et « Fermer » visible ; focus d'une ligne qui disparaît : la suivante, sinon le h2 ;
@@ -314,6 +316,11 @@ Panneau « Messages épinglés »    .app-aside--pins, .app-sheet (sous 640 px)
 ```
 
 ## Écrans non capturés
+
+Zone d'information de la coquille    .app-notice (role="status", toujours présente)
+  variants  confirmations (« Message épinglé. ») et échecs d'icône : toast flottant, hors flux, en haut de .app-main, z-index popover
+  states    vide au repos ; sinon une .k-banner à fond opaque et son bouton « Fermer l'information » ; elle repart seule au bout de 6 s
+  a11y      annoncée par les lecteurs d'écran ; ne prend pas les clics (sauf « Fermer ») ; rien ne se décale quand elle vient ou repart
 
 S18 à S30 réutilisent ces primitives. Faits au build : tuile de participant vocal, barre de commandes d'appel, panneau « En appel » (ci-dessus). Prévus, avec les mêmes jetons : popout de profil (bannière + avatar lg), liste de membres (groupes par rôle), Quick Switcher (combobox plein écran).
 

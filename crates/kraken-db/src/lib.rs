@@ -885,6 +885,27 @@ impl Db {
         self.send_message(cid, author, Draft { content, nonce, ..Default::default() }).await
     }
 
+    /// Écrire dans ce MP (un message, une épingle) : un blocage, dans un sens ou dans l'autre, le ferme
+    /// (l'historique et la liste des épingles restent lisibles). `dm_blocked` si `user` a bloqué
+    /// l'autre, `dm_refused` si c'est l'autre qui l'a bloqué.
+    pub async fn dm_writable(&self, cid: Id, user: Id) -> Result<()> {
+        let blocked: Option<bool> = sqlx::query_scalar(
+            "select bool_or(r.user_id = $2) from channel_recipients cr join relationships r
+               on r.kind = 'blocked' and ((r.user_id = $2 and r.target_id = cr.user_id)
+                                       or (r.user_id = cr.user_id and r.target_id = $2))
+             where cr.channel_id = $1 and cr.user_id <> $2",
+        )
+        .bind(cid)
+        .bind(user)
+        .fetch_one(&self.pool)
+        .await?;
+        match blocked {
+            Some(true) => Err(DbError::Forbidden("dm_blocked")),
+            Some(false) => Err(DbError::Forbidden("dm_refused")),
+            None => Ok(()),
+        }
+    }
+
     /// Envoie un message, éventuellement en réponse à un autre du même salon. Les mentions
     /// `@pseudo` ne retiennent que ceux qui voient le salon.
     pub async fn send_message(&self, cid: Id, author: Id, d: Draft<'_>) -> Result<(Message, bool)> {
@@ -901,22 +922,7 @@ impl Db {
             return Err(DbError::NotFound);
         };
         if channel.kind == ChannelKind::Dm {
-            // Un blocage, dans un sens ou dans l'autre, ferme le MP (l'historique reste lisible).
-            let blocked: Option<bool> = sqlx::query_scalar(
-                "select bool_or(r.user_id = $2) from channel_recipients cr join relationships r
-                   on r.kind = 'blocked' and ((r.user_id = $2 and r.target_id = cr.user_id)
-                                           or (r.user_id = cr.user_id and r.target_id = $2))
-                 where cr.channel_id = $1 and cr.user_id <> $2",
-            )
-            .bind(cid)
-            .bind(author)
-            .fetch_one(&self.pool)
-            .await?;
-            match blocked {
-                Some(true) => return Err(DbError::Forbidden("dm_blocked")),
-                Some(false) => return Err(DbError::Forbidden("dm_refused")),
-                None => {}
-            }
+            self.dm_writable(cid, author).await?;
         }
         if let Some(r) = d.reply_to {
             let here: bool =

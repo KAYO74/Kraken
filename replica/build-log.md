@@ -80,6 +80,8 @@ Limites : appli de bureau : même API web, rien d'ajouté dans la coquille Tauri
 
 Vérifié : `kraken-db` (`tests_pins` : idempotence, ordre, modification et suppression, format de l'historique, autre salon, appel refusé, limite de 50 et demandes simultanées, audit sans texte et sans doublon, MP sans audit), `kraken-server/tests/pins.rs` (403 sans le droit, 404 hors du salon, MP et groupe, 400 en français à 51, événement et absence d'événement, audit, 429), `e2e/specs/pins.spec.ts` (barre d'outils, repère, panneau, états, aller au message, droits, deux clients en direct, MP, clavier, axe, 390 px).
 
+Retours de relecture : la confirmation « Message épinglé. » (zone `role="status"` de la coquille, `.app-notice`) flotte hors flux en haut de `.app-main`, sans décaler le salon ; sur bureau, seule la liste du panneau défile (l'en-tête reste) ; une ligne retirée à distance ne refait plus les autres (états chargement, erreur et vide dérivés en `Memo`, seul le `For` suit les lignes : le focus reste) ; « Aller au message » distingue « Ce message est trop ancien pour être chargé ici. » (20 pages de 100 remontées sans le trouver) de « Ce message n'est plus disponible. » (historique lu jusqu'avant lui) ; un auteur bloqué est replié dans le panneau comme dans le fil ; dans un MP bloqué, épingler et désépingler sont refusés (403 `dm_blocked` ou `dm_refused`) comme écrire, la liste reste lisible.
+
 Limites : pas de message système « X a épinglé un message » (le type `system_pin` existe dans le schéma, rien d'autre ne l'écrit encore, comme `system_join`) ; le bouton suit les droits du serveur, pas les surcharges de salon.
 
 ## Écarts à savoir

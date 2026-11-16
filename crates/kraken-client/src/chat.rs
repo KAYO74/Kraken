@@ -1020,27 +1020,54 @@ fn react(chat: Chat, mid: Id, emoji: String) {
     });
 }
 
-/// Fait défiler jusqu'au message (en chargeant l'historique plus ancien s'il le faut) et le
-/// met en évidence un instant.
+/// Combien de pages de 100 messages « Aller au message » remonte au plus pour retrouver un message ancien.
+const JUMP_PAGES: usize = 20;
+
+/// Pourquoi un message qu'on voulait rejoindre n'est pas à l'écran : `capped` si la remontée s'est arrêtée à
+/// [`JUMP_PAGES`] pages sans l'atteindre (il existe sans doute, plus loin dans l'historique), `failed` avec le message
+/// du serveur si une page n'a pas pu être lue. Sinon l'historique est lu jusqu'avant lui et il n'y est pas : il n'existe plus.
+fn jump_missing(capped: bool, failed: Option<String>) -> String {
+    match (failed, capped) {
+        (Some(e), _) => e,
+        (None, true) => "Ce message est trop ancien pour être chargé ici.".into(),
+        (None, false) => "Ce message n'est plus disponible.".into(),
+    }
+}
+
+/// Fait défiler jusqu'au message (en chargeant l'historique plus ancien s'il le faut, sur [`JUMP_PAGES`] pages au
+/// plus) et le met en évidence un instant.
 fn jump(chat: Chat, id: Id) {
     let s = store();
+    // Le plus ancien message chargé, tant que `id` reste à rejoindre : pas encore chargé, et plus ancien que lui.
+    let to_reach = move || {
+        s.logs.with_untracked(|l| {
+            let l = l.get(&chat.channel)?;
+            let oldest = l.items.first()?.id;
+            (oldest > id && !l.items.iter().any(|m| m.id == id)).then_some(oldest)
+        })
+    };
     spawn_local(async move {
-        for _ in 0..20 {
-            let (here, oldest) = s.logs.with_untracked(|l| {
-                let l = l.get(&chat.channel);
-                (l.is_some_and(|l| l.items.iter().any(|m| m.id == id)), l.and_then(|l| l.items.first().map(|m| m.id)))
-            });
+        let (mut capped, mut failed) = (true, None);
+        for _ in 0..JUMP_PAGES {
             // Ids triés par date : plus récent que le plus ancien chargé et absent, il n'existe plus.
-            let Some(oldest) = oldest.filter(|o| !here && *o > id) else { break };
+            let Some(oldest) = to_reach() else {
+                capped = false;
+                break;
+            };
             match crate::api::messages_before(chat.channel, oldest).await {
                 Ok(v) if !v.is_empty() => s.log(chat.channel, |l| v.into_iter().for_each(|m| l.insert(m))),
-                _ => break,
+                // Rien de plus ancien, ou une page illisible : la remontée s'arrête là.
+                r => {
+                    (capped, failed) = (false, r.err().map(|e| e.message));
+                    break;
+                }
             }
         }
         // Après le rendu et le recalage du défilement.
         TimeoutFuture::new(80).await;
         let Some(el) = document().get_element_by_id(&format!("msg-{id}")) else {
-            chat.notice.set(Some("Ce message n'est plus disponible.".into()));
+            // Les pages sont épuisées et il reste à remonter : le message existe sans doute, mais trop loin d'ici.
+            chat.notice.set(Some(jump_missing(capped && to_reach().is_some(), failed)));
             return;
         };
         let opts = web_sys::ScrollIntoViewOptions::new();

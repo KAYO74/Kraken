@@ -281,3 +281,27 @@ async fn pins_in_a_private_conversation_work_for_both_and_leave_no_audit(pool: P
         "pas de journal en MP"
     );
 }
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_blocked_private_conversation_refuses_pins_like_messages(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let (lou, sam) = (user(&db, "lou").await, user(&db, "sam").await);
+    guild_with(&db, &lou, &[&sam]).await;
+    let (dm, _) = db.open_dm(lou.id, sam.id).await.unwrap();
+    let (a, b) = (say(&db, dm, lou.id, "de lou").await, say(&db, dm, sam.id, "de sam").await);
+    db.set_pinned(dm, a.id, sam.id, true).await.unwrap();
+
+    // Lou bloque sam : mêmes refus que l'envoi, dans les deux sens, et rien ne change ; la liste reste lisible.
+    db.block(lou.id, sam.id).await.unwrap();
+    for (who, refusal) in [(sam.id, "dm_refused"), (lou.id, "dm_blocked")] {
+        assert_eq!(db.create_message(dm, who, "x", None).await.err(), Some(DbError::Forbidden(refusal)));
+        assert_eq!(db.set_pinned(dm, b.id, who, true).await.err(), Some(DbError::Forbidden(refusal)));
+        assert_eq!(db.set_pinned(dm, a.id, who, false).await.err(), Some(DbError::Forbidden(refusal)));
+    }
+    assert_eq!(ids(&db.pinned_messages(dm).await.unwrap()), [a.id]);
+
+    // Le blocage levé, le MP se rouvre : on épingle de nouveau.
+    db.remove_relationship(lou.id, sam.id).await.unwrap();
+    db.set_pinned(dm, b.id, sam.id, true).await.unwrap();
+    assert_eq!(ids(&db.pinned_messages(dm).await.unwrap()), [b.id, a.id]);
+}

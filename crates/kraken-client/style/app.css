@@ -34,9 +34,15 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
 .app-sidebar .k-channel > .app-ellipsis, .k-dm > div { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-sidebar .k-channel, .app-sidebar .k-dm { text-decoration: none; }
 .app-scrim { display: none; }
-.app-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); outline: none;
+.app-main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); outline: none;
   border-top-left-radius: var(--radius-lg); border: 1px solid var(--border); border-right: 0; border-bottom: 0; }
 .app-conn { margin: var(--space-3) var(--space-3) 0; }
+/* La zone `status` de la coquille (confirmations, échecs d'icône) flotte en haut de la colonne, hors flux : rien ne
+   descend quand elle vient ou repart. Elle ne prend pas les clics, sauf son bouton Fermer ; le fond est opaque. */
+.app-notice { position: absolute; top: 0; left: 0; right: 0; z-index: var(--z-popover); display: grid; justify-items: center; pointer-events: none; }
+.app-notice > .k-banner { width: max-content; max-width: calc(100% - 2 * var(--space-3)); box-shadow: var(--shadow-pop);
+  background-color: var(--surface); background-image: linear-gradient(var(--info-soft), var(--info-soft)); }
+.app-notice .k-btn { pointer-events: auto; }
 
 .app-header { display: flex; align-items: center; gap: var(--space-3); flex: none; min-width: 0; height: var(--size-header);
   padding: 0 var(--space-5); border-bottom: 1px solid var(--border); color: var(--text-muted); }
@@ -1064,19 +1070,23 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 
 /* Messages épinglés : le repère dans l'en-tête d'un message, le panneau (colonne, ou feuille pleine page sous 640 px). */
 .app-pinned { display: inline-flex; align-items: center; align-self: center; color: var(--text-muted); }
-.app-pins { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+.app-pins { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; min-height: 0; }
+/* Colonne : l'en-tête reste en haut, seule la liste défile. */
+.app-aside--pins { overflow: hidden; }
 .app-pins-head { display: flex; align-items: center; gap: var(--space-3); min-height: var(--size-option-row-mobile); padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--border); }
 .app-pins-head h2 { flex: 1; min-width: 0; margin: 0; font-size: var(--text-base-size); color: var(--text-strong); }
 .app-pins-head h2:focus { outline: none; }
 .app-pins-head h2:focus-visible { outline: var(--size-focus) solid var(--accent-text); outline-offset: var(--space-1); border-radius: var(--radius-xs); }
 .app-pins-close { flex: none; }
-.app-pins-body { display: grid; align-content: start; gap: var(--space-3); min-height: 0; padding-top: var(--space-3); }
+.app-pins-body { display: grid; align-content: start; gap: var(--space-3); min-height: 0; overflow-y: auto; padding-top: var(--space-3); }
 /* Toujours là, de hauteur réservée : « Chargement… » vient sans rien décaler. */
 .app-pins-status { min-height: var(--text-sm-line); margin: 0; }
 .app-pins-list { list-style: none; display: grid; gap: var(--space-3); margin: 0; padding: 0; }
 .app-pin { display: grid; gap: var(--space-2); min-width: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg);
   background: var(--surface-raised); }
+.app-pin-body { display: grid; gap: var(--space-2); min-width: 0; }
+.app-pin .app-blocked { margin: 0; padding: 0; }
 .app-pin-head { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
 .app-pin-head b { min-width: 0; font-weight: var(--weight-semibold); color: var(--text-strong); }
 .app-pin-head time { flex: none; font-size: var(--text-xs-size); color: var(--text-muted); }

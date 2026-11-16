@@ -3,6 +3,7 @@
 //! `kraken-server` ; ici, la limite de 50 tient même si deux épinglages arrivent ensemble (un verrou par
 //! salon), et chaque changement dans un serveur laisse sa trace dans le journal d'audit (salon et message,
 //! jamais le texte). Épingler un message déjà épinglé, ou désépingler un autre, ne change rien et n'écrit rien.
+//! Dans un MP où l'un a bloqué l'autre, épingler et désépingler sont refusés comme écrire ; lire la liste reste permis.
 
 use kraken_proto::*;
 use serde_json::json;
@@ -16,6 +17,10 @@ impl Db {
     /// `Invalid("pin_limit")` au-delà de [`MAX_PINS`] ; `Invalid("pin_kind")` pour un message qui n'est ni
     /// un texte ni une réponse (appel).
     pub async fn set_pinned(&self, cid: Id, mid: Id, by: Id, pin: bool) -> Result<(Message, Changed)> {
+        // Épingler est une écriture : dans un MP bloqué, le même refus que pour envoyer un message.
+        if self.channel(cid).await?.is_some_and(|c| c.kind == ChannelKind::Dm) {
+            self.dm_writable(cid, by).await?;
+        }
         let mut tx = self.pool.begin().await?;
         // Un verrou par salon : deux épinglages simultanés se comptent l'un après l'autre.
         sqlx::query("select pg_advisory_xact_lock(hashtextextended('pins:' || $1::text, 0))")

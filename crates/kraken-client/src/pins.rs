@@ -89,7 +89,12 @@ pub fn PinsPanel(
             });
         });
     });
-    let loading = move || !list.with(|l| l.loaded);
+    // Des booléens dérivés, pas la liste : le bloc des états ne se refait que quand l'état change, pas à chaque
+    // message épinglé ou retiré. Seul le `For` suit les lignes, et les autres gardent leur focus.
+    let loading = Memo::new(move |_| list.with(|l| !l.loaded));
+    let failure = Memo::new(move |_| list.with(|l| l.error.clone()));
+    let empty = Memo::new(move |_| list.with(|l| l.items.is_empty()));
+    let count = Memo::new(move |_| list.with(|l| l.items.len()));
 
     let root = NodeRef::<html::Div>::new();
     let title = NodeRef::<html::H2>::new();
@@ -167,31 +172,31 @@ pub fn PinsPanel(
         view! {
             <header class="app-pins-head">
                 <h2 id="pins-title" tabindex="-1" node_ref=title>"Messages épinglés"</h2>
-                <Show when=move || !loading() && list.with(|l| l.error.is_none())>
-                    <span class="k-badge k-badge--neutral">{move || format!("{} / {MAX_PINS}", list.with(|l| l.items.len()))}</span>
+                <Show when=move || !loading.get() && failure.with(Option::is_none)>
+                    <span class="k-badge k-badge--neutral">{move || format!("{} / {MAX_PINS}", count.get())}</span>
                 </Show>
                 <button type="button" class="k-btn k-btn--icon app-pins-close" aria-label="Fermer les messages épinglés" title="Fermer"
                     on:click=move |_| close.run(())><Icon icon=lu::LuX/></button>
             </header>
-            <div class="app-pins-body" aria-busy=move || loading().to_string()>
+            <div class="app-pins-body" aria-busy=move || loading.get().to_string()>
                 // Toujours là, de hauteur réservée : le texte vient sans rien décaler.
                 <p class="k-hint app-pins-status" role="status">{move || {
-                    if loading() { "Chargement des messages épinglés…" }
-                    else if list.with(|l| l.error.is_none() && !l.items.is_empty()) { "Du plus récemment épinglé au plus ancien." }
+                    if loading.get() { "Chargement des messages épinglés…" }
+                    else if failure.with(Option::is_none) && !empty.get() { "Du plus récemment épinglé au plus ancien." }
                     else { "" }
                 }}</p>
                 <Show when=move || error.get().is_some()>
                     <p class="k-error" role="alert">{move || error.get()}</p>
                 </Show>
                 {move || {
-                    if loading() {
+                    if loading.get() {
                         return view! {
                             <ul class="app-pins-list" aria-hidden="true">
                                 {(0..3).map(|_| view! { <li><div class="k-skeleton app-pin-skel"></div></li> }).collect_view()}
                             </ul>
                         }.into_any();
                     }
-                    if let Some(e) = list.with(|l| l.error.clone()) {
+                    if let Some(e) = failure.get() {
                         return view! {
                             <div class="k-empty" role="alert">
                                 <b>"Impossible de charger les messages épinglés"</b>
@@ -200,7 +205,7 @@ pub fn PinsPanel(
                             </div>
                         }.into_any();
                     }
-                    if list.with(|l| l.items.is_empty()) {
+                    if empty.get() {
                         return view! {
                             <div class="k-empty">
                                 <Icon icon=lu::LuPin/>
@@ -223,24 +228,41 @@ pub fn PinsPanel(
                                     let (go_label, unpin_label) =
                                         (format!("Aller au message de {who}"), format!("Désépingler le message de {who}"));
                                     let text = excerpt(&m);
+                                    // Un auteur bloqué est replié comme dans le fil : même ligne, même bouton, dépliable au clic.
+                                    let author_id = m.author.as_ref().map(|a| a.id);
+                                    let blocked = Memo::new(move |_| author_id.is_some_and(|a| s.is_blocked(a)));
+                                    let shown = RwSignal::new(false);
                                     view! {
                                         <li class="app-pin" data-pin=id.to_string()
                                             on:focusin=move |_| {
                                                 on_row.set_value(Some(id));
                                                 row_at.set_value(list.with_untracked(|l| l.items.iter().position(|x| x.id == id)).unwrap_or(0));
                                             }>
-                                            <div class="app-pin-head">
-                                                <b class="app-ellipsis">{who}</b>
-                                                <time datetime=iso(m.created_at)>{when(m.created_at)}</time>
-                                            </div>
-                                            <p class="app-pin-text">{text}</p>
-                                            <div class="app-pin-actions">
-                                                <button type="button" class="k-btn k-btn--sm" aria-label=go_label
-                                                    on:click=move |_| goto.run(id)>"Aller au message"</button>
-                                                <Show when=move || can_manage.get()>
-                                                    <button type="button" class="k-btn k-btn--sm" aria-label=unpin_label.clone()
-                                                        on:click=move |_| unpin(id)>"Désépingler"</button>
-                                                </Show>
+                                            <Show when=move || blocked.get()>
+                                                <div class="app-blocked">
+                                                    <Icon icon=lu::LuEyeOff small=true/>
+                                                    <span>"Message d'un compte que tu as bloqué."</span>
+                                                    <button type="button" class="k-btn k-btn--link" aria-expanded=move || shown.get().to_string()
+                                                        aria-controls=format!("pin-body-{id}")
+                                                        on:click=move |_| shown.update(|v| *v = !*v)>
+                                                        {move || if shown.get() { "Masquer" } else { "Afficher" }}
+                                                    </button>
+                                                </div>
+                                            </Show>
+                                            <div id=format!("pin-body-{id}") class="app-pin-body" hidden=move || blocked.get() && !shown.get()>
+                                                <div class="app-pin-head">
+                                                    <b class="app-ellipsis">{who}</b>
+                                                    <time datetime=iso(m.created_at)>{when(m.created_at)}</time>
+                                                </div>
+                                                <p class="app-pin-text">{text}</p>
+                                                <div class="app-pin-actions">
+                                                    <button type="button" class="k-btn k-btn--sm" aria-label=go_label
+                                                        on:click=move |_| goto.run(id)>"Aller au message"</button>
+                                                    <Show when=move || can_manage.get()>
+                                                        <button type="button" class="k-btn k-btn--sm" aria-label=unpin_label.clone()
+                                                            on:click=move |_| unpin(id)>"Désépingler"</button>
+                                                    </Show>
+                                                </div>
                                             </div>
                                         </li>
                                     }

@@ -140,7 +140,7 @@ pub fn Shell() -> impl IntoView {
                     </div>
                 </Show>
                 // Zone `status` toujours présente : un message qui arrive dans une zone déjà là est annoncé.
-                <div role="status">
+                <div class="app-notice" role="status">
                     <Show when=move || s.notice.get().is_some()>
                         <div class="k-banner app-conn">
                             <Icon icon=lu::LuInfo/>

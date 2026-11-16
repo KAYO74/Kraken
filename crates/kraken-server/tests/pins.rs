@@ -2,7 +2,7 @@
 //! /channels/{id}/pins/{mid}`, `GET /channels/{id}/pins`, droit « Gérer les messages » dans un serveur (403), 404
 //! hors du salon, MP et groupes ouverts à tous leurs participants, 50 au plus par salon (400 en français),
 //! sans effet quand rien ne change (ni événement ni journal), événement `MESSAGE_UPDATE` en direct, journal
-//! d'audit dans un serveur seulement, limite de débit.
+//! d'audit dans un serveur seulement, MP bloqué refusé comme l'envoi (403), limite de débit.
 
 use futures_util::{SinkExt, StreamExt};
 use kraken_core::perms;
@@ -302,6 +302,48 @@ async fn both_people_of_a_dm_and_every_member_of_a_group_can_pin_without_audit(p
     assert_eq!(noa.unpin(group.id, m).await.0, StatusCode::OK);
     assert_eq!(kim.pin(group.id, m).await.0, StatusCode::NOT_FOUND);
     assert!(lou.pins(group.id).await.is_empty());
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn a_blocked_dm_refuses_pinning_like_writing_but_still_lists(pool: PgPool) {
+    let base = spawn(pool).await;
+    let (lou, sam) = (Who::new(&base, "lou").await, Who::new(&base, "sam").await);
+    lou.befriend(&sam).await;
+    let (s, v) = lou.call(Method::POST, "/users/@me/channels", Some(json!({"recipients": [sam.user.id]}))).await;
+    assert_eq!(s, StatusCode::CREATED, "{v}");
+    let dm: Channel = serde_json::from_value(v).unwrap();
+    let (a, b) = (lou.say(dm.id, "de lou").await, sam.say(dm.id, "de sam").await);
+    assert_eq!(sam.pin(dm.id, a).await.0, StatusCode::OK);
+    let mut gw = sam.gateway().await;
+
+    // Lou bloque sam : l'envoi est refusé (403), et épingler ou désépingler de même, pour chacun des deux.
+    let path = format!("/users/@me/relationships/{}", sam.user.id);
+    assert_eq!(lou.call(Method::PUT, &path, Some(json!({"kind": "blocked"}))).await.0, StatusCode::OK);
+    let code = |v: &Value| v["code"].as_str().unwrap_or_default().to_string();
+    let send = json!({"content": "hé"});
+    let (s, v) = sam.call(Method::POST, &format!("/channels/{}/messages", dm.id), Some(send.clone())).await;
+    assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_refused"));
+    let (s, v) = sam.pin(dm.id, b).await;
+    assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_refused"));
+    let (s, v) = sam.unpin(dm.id, a).await;
+    assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_refused"));
+    let (s, v) = lou.call(Method::POST, &format!("/channels/{}/messages", dm.id), Some(send)).await;
+    assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_blocked"));
+    let (s, v) = lou.pin(dm.id, b).await;
+    assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_blocked"));
+    let (s, v) = lou.unpin(dm.id, a).await;
+    assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_blocked"));
+    // Rien n'a changé, et personne n'en est averti.
+    gw.no_update().await;
+    // La lecture reste permise des deux côtés.
+    assert_eq!(sam.pins(dm.id).await, [a]);
+    assert_eq!(lou.pins(dm.id).await, [a]);
+
+    // Débloqué, le MP se rouvre : on épingle de nouveau.
+    assert!(lou.call(Method::DELETE, &path, None).await.0.is_success());
+    assert_eq!(sam.pin(dm.id, b).await.0, StatusCode::OK);
+    assert_eq!(lou.unpin(dm.id, a).await.0, StatusCode::OK);
+    assert_eq!(lou.pins(dm.id).await, [b]);
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]
