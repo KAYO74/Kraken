@@ -14,6 +14,7 @@ mod invites;
 mod jobs;
 mod moderation;
 mod perm;
+mod pins;
 mod profile;
 mod reads;
 mod seed;
@@ -229,7 +230,7 @@ fn message_sql(filter: &str) -> String {
         "select m.id, m.channel_id, m.content, m.nonce, m.kind, m.reply_to_id, m.mention_everyone,
                 m.call_participants, (extract(epoch from m.call_ended_at) * 1000)::int8 as call_ended_ms,
                 (extract(epoch from m.created_at) * 1000)::int8 as created_ms,
-                (extract(epoch from m.edited_at) * 1000)::int8 as edited_ms, {}, {},
+                (extract(epoch from m.edited_at) * 1000)::int8 as edited_ms, m.pinned_at is not null as pinned, {}, {},
                 left(r.content, {REPLY_FETCH}) as reply_content,
                 coalesce((select json_agg(json_build_object('emoji', x.emoji_key, 'users', x.users) order by x.first)
                           from (select emoji_key, array_agg(user_id order by created_at, user_id) as users,
@@ -285,6 +286,7 @@ fn message_from(r: &PgRow) -> sqlx::Result<Message> {
         call,
         attachments: r.try_get::<Json<Vec<Attachment>>, _>("attachments")?.0,
         embeds: r.try_get::<Json<Vec<Embed>>, _>("embeds")?.0,
+        pinned: r.try_get("pinned")?,
     })
 }
 
@@ -883,6 +885,27 @@ impl Db {
         self.send_message(cid, author, Draft { content, nonce, ..Default::default() }).await
     }
 
+    /// Écrire dans ce MP (un message, une épingle) : un blocage, dans un sens ou dans l'autre, le ferme
+    /// (l'historique et la liste des épingles restent lisibles). `dm_blocked` si `user` a bloqué
+    /// l'autre, `dm_refused` si c'est l'autre qui l'a bloqué.
+    pub async fn dm_writable(&self, cid: Id, user: Id) -> Result<()> {
+        let blocked: Option<bool> = sqlx::query_scalar(
+            "select bool_or(r.user_id = $2) from channel_recipients cr join relationships r
+               on r.kind = 'blocked' and ((r.user_id = $2 and r.target_id = cr.user_id)
+                                       or (r.user_id = cr.user_id and r.target_id = $2))
+             where cr.channel_id = $1 and cr.user_id <> $2",
+        )
+        .bind(cid)
+        .bind(user)
+        .fetch_one(&self.pool)
+        .await?;
+        match blocked {
+            Some(true) => Err(DbError::Forbidden("dm_blocked")),
+            Some(false) => Err(DbError::Forbidden("dm_refused")),
+            None => Ok(()),
+        }
+    }
+
     /// Envoie un message, éventuellement en réponse à un autre du même salon. Les mentions
     /// `@pseudo` ne retiennent que ceux qui voient le salon.
     pub async fn send_message(&self, cid: Id, author: Id, d: Draft<'_>) -> Result<(Message, bool)> {
@@ -899,22 +922,7 @@ impl Db {
             return Err(DbError::NotFound);
         };
         if channel.kind == ChannelKind::Dm {
-            // Un blocage, dans un sens ou dans l'autre, ferme le MP (l'historique reste lisible).
-            let blocked: Option<bool> = sqlx::query_scalar(
-                "select bool_or(r.user_id = $2) from channel_recipients cr join relationships r
-                   on r.kind = 'blocked' and ((r.user_id = $2 and r.target_id = cr.user_id)
-                                           or (r.user_id = cr.user_id and r.target_id = $2))
-                 where cr.channel_id = $1 and cr.user_id <> $2",
-            )
-            .bind(cid)
-            .bind(author)
-            .fetch_one(&self.pool)
-            .await?;
-            match blocked {
-                Some(true) => return Err(DbError::Forbidden("dm_blocked")),
-                Some(false) => return Err(DbError::Forbidden("dm_refused")),
-                None => {}
-            }
+            self.dm_writable(cid, author).await?;
         }
         if let Some(r) = d.reply_to {
             let here: bool =
@@ -1312,5 +1320,7 @@ mod tests_emojis;
 mod tests_guild;
 #[cfg(test)]
 mod tests_guild_edit;
+#[cfg(test)]
+mod tests_pins;
 #[cfg(test)]
 mod tests_profile;

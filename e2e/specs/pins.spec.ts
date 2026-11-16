@@ -1,0 +1,914 @@
+// Messages épinglés (v0.20.0) : le bouton de la barre d'outils (droit « Gérer les messages » dans un serveur, tout le
+// monde en MP), le repère dans l'en-tête, le panneau « Messages épinglés » (états, aller au message, désépingler,
+// focus), le temps réel entre deux clients, la limite de 50, le clavier, axe et 390 px.
+import { test, expect, a11y, createGuild, messages, API, type User } from '../fixtures';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
+
+type Api = (t?: string) => Promise<APIRequestContext>;
+
+/** `a` crée un serveur, `b` le rejoint par invitation ; les deux sont sur #général. */
+async function together(a: User, b: User, name: string) {
+  const [gid, cid] = await createGuild(a.page, name);
+  const res = await a.context.request.post(`${API}/channels/${cid}/invites`, {
+    data: {},
+    headers: { Authorization: `Session ${a.token}` },
+  });
+  const { code } = await res.json();
+  await b.page.goto(`/invite/${code}`);
+  await b.page.getByRole('button', { name: 'Rejoindre le serveur' }).click();
+  await expect(b.page.getByRole('heading', { name: 'général', level: 1 })).toBeVisible();
+  return [gid, cid];
+}
+
+/** Écrit un message par l'API et rend son id. */
+async function post(as: APIRequestContext, cid: string, content: string): Promise<string> {
+  const res = await as.post(`${API}/channels/${cid}/messages`, { data: { content } });
+  expect(res.status(), await res.text()).toBe(201);
+  return (await res.json()).id;
+}
+
+async function befriend(api: Api, a: User, b: User) {
+  expect((await (await api(a.token)).post(`${API}/users/@me/relationships`, { data: { username: b.name } })).status()).toBe(201);
+  expect((await (await api(b.token)).put(`${API}/users/@me/relationships/${a.id}`, { data: { kind: 'friend' } })).status()).toBe(200);
+}
+
+/** Le message qui contient `text`, une fois confirmé par le serveur. */
+async function sent(page: Page, text: string) {
+  const m = messages(page).filter({ hasText: text });
+  await expect(m).toHaveCount(1);
+  await expect(m).not.toHaveAttribute('data-pending', '');
+  return m;
+}
+
+const toolbar = (m: Locator) => m.getByRole('toolbar', { name: 'Actions sur le message' });
+/** Les noms des boutons de la barre d'outils, dans l'ordre. */
+const actions = (m: Locator) => toolbar(m).getByRole('button').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+/** Survole le message et clique l'action de sa barre d'outils. */
+async function act(page: Page, text: string, action: string) {
+  const m = await sent(page, text);
+  await m.hover();
+  await toolbar(m).getByRole('button', { name: action, exact: true }).click();
+}
+/** La zone `status` de la coquille, avec ce texte (il y a d'autres zones `status`). */
+const said = (page: Page, text: string) => page.getByRole('status').filter({ hasText: text });
+/** Le message d'erreur du salon (au-dessus de la saisie), avec ce texte. */
+const alerted = (page: Page, text: string) => page.getByRole('alert').filter({ hasText: text });
+const opener = (page: Page) => page.getByRole('button', { name: 'Messages épinglés', exact: true });
+const panel = (page: Page) => page.getByRole('complementary', { name: 'Messages épinglés' });
+const sheet = (page: Page) => page.getByRole('dialog', { name: 'Messages épinglés' });
+/** Les lignes du panneau (ou de la feuille) ouvert, de la plus récente à la plus ancienne. */
+const rows = (p: Locator) => p.getByRole('listitem');
+const noOverflow = (p: Page) => p.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+/** Plus aucun envoi en cours : les lignes confirmées sont redessinées, on attend qu'elles aient fini. */
+const settled = (p: Page) => expect(p.locator('article[data-pending]')).toHaveCount(0);
+
+/** La couleur calculée d'un jeton du thème. */
+const token = (page: Page, name: string) =>
+  page.evaluate((n) => {
+    const probe = document.createElement('i');
+    probe.style.color = `var(${n})`;
+    document.body.append(probe);
+    const c = getComputedStyle(probe).color;
+    probe.remove();
+    return c;
+  }, name);
+
+/** Où sont la colonne, l'en-tête, le fil et le composeur : la confirmation ne doit rien déplacer. */
+const layout = (p: Page) =>
+  p.evaluate(() => {
+    const r = (sel: string) => {
+      const b = document.querySelector(sel)!.getBoundingClientRect();
+      return [b.x, b.y, b.width, b.height].map((n) => Math.round(n * 10) / 10);
+    };
+    return { main: r('.app-main'), header: r('.app-main .app-header'), log: r('.app-log'), composer: r('.k-composer') };
+  });
+
+test('pins-H1 la barre d’outils épingle et désépingle, le repère suit, un simple membre n’a pas le bouton', async ({ user, api }) => {
+  const a = await user('chef');
+  const b = await user('lec');
+  const [, cid] = await together(a, b, 'Atelier des épingles');
+  const id = await post(await api(a.token), cid, 'Règle numéro un');
+  const mine = await sent(a.page, 'Règle numéro un');
+  await expect(await sent(b.page, 'Règle numéro un')).toBeVisible();
+
+  // Le bouton vient après « Répondre » et avant « Modifier » et « Supprimer » (le danger reste en dernier).
+  await mine.hover();
+  expect(await actions(mine)).toEqual(['Ajouter une réaction', 'Répondre', 'Épingler le message', 'Modifier le message', 'Supprimer le message']);
+  // Le propriétaire de serveur ne voit pas de repère tant que rien n'est épinglé.
+  await expect(mine.getByText('Épinglé', { exact: true })).toHaveCount(0);
+
+  await toolbar(mine).getByRole('button', { name: 'Épingler le message', exact: true }).click();
+  await expect(said(a.page, 'Message épinglé.')).toBeVisible();
+  // Le repère : une icône dans l'en-tête, à côté de l'heure, dite aux lecteurs d'écran.
+  const pinned = await sent(a.page, 'Règle numéro un');
+  const mark = pinned.locator('header .app-pinned');
+  await expect(mark).toHaveCount(1);
+  await expect(mark.getByText('Épinglé', { exact: true })).toHaveCount(1);
+  const icon = await mark.locator('svg').boundingBox();
+  expect([Math.round(icon!.width), Math.round(icon!.height)]).toEqual([16, 16]);
+  await expect(mark).toHaveCSS('color', await token(a.page, '--text-muted'));
+  // Le libellé change (pas d'aria-pressed) ; le clavier garde sa place : le focus revient sur le message.
+  await expect(pinned).toBeFocused();
+  await expect(toolbar(pinned).getByRole('button', { name: 'Désépingler le message', exact: true })).toHaveCount(1);
+  await expect(toolbar(pinned).getByRole('button', { name: 'Désépingler le message', exact: true })).not.toHaveAttribute('aria-pressed', /.*/);
+  // L'autre le voit en direct, mais n'a pas le bouton : il est absent, pas grisé.
+  const theirs = await sent(b.page, 'Règle numéro un');
+  await expect(theirs.locator('header .app-pinned')).toHaveCount(1);
+  await theirs.hover();
+  expect(await actions(theirs)).toEqual(['Ajouter une réaction', 'Répondre']);
+  const refused = await (await api(b.token)).put(`${API}/channels/${cid}/pins/${id}`);
+  expect(refused.status()).toBe(403);
+
+  // Modifier le texte garde l'épingle.
+  await act(a.page, 'Règle numéro un', 'Modifier le message');
+  const box = a.page.getByRole('textbox', { name: 'Modifier le message' });
+  await box.fill('Règle numéro un, corrigée');
+  await box.press('Enter');
+  const edited = await sent(a.page, 'corrigée');
+  await expect(edited.locator('header .app-pinned')).toHaveCount(1);
+
+  // Désépingler : le repère part chez les deux, le status le dit.
+  await act(a.page, 'corrigée', 'Désépingler le message');
+  await expect(said(a.page, 'Message désépinglé.')).toBeVisible();
+  await expect(edited.locator('header .app-pinned')).toHaveCount(0);
+  await expect(messages(b.page).filter({ hasText: 'corrigée' }).locator('header .app-pinned')).toHaveCount(0);
+  await settled(a.page);
+  await a11y(a.page);
+});
+
+test('pins-H2 le panneau : états vide, chargement et erreur, liste récente d’abord, focus, Échap, temps réel et droits', async ({ user, api }) => {
+  const a = await user('chef');
+  const b = await user('lec');
+  const [, cid] = await together(a, b, 'Atelier du panneau');
+  const asA = await api(a.token);
+  const one = await post(asA, cid, 'Premier message à retenir');
+  const two = await post(asA, cid, 'Deuxième message à retenir');
+  await sent(a.page, 'Deuxième message');
+  await sent(b.page, 'Deuxième message');
+
+  // Vide : une icône, un titre, et de quoi faire ; sans le droit, une autre phrase.
+  const ba = opener(a.page);
+  await expect(ba).toHaveAttribute('aria-expanded', 'false');
+  await expect(ba).not.toHaveAttribute('aria-controls', /.+/);
+  await ba.click();
+  await expect(ba).toHaveAttribute('aria-expanded', 'true');
+  await expect(ba).toHaveAttribute('aria-controls', 'pins-panel');
+  const pa = panel(a.page);
+  await expect(pa.getByRole('heading', { name: 'Messages épinglés', level: 2 })).toBeFocused();
+  await expect(pa.getByText('Aucun message épinglé')).toBeVisible();
+  await expect(pa.getByText('Épingle un message depuis ses actions pour le retrouver ici.')).toBeVisible();
+  await expect(pa.getByText('0 / 50')).toBeVisible();
+  await opener(b.page).click();
+  const pb = panel(b.page);
+  await expect(pb.getByText('Aucun message épinglé')).toBeVisible();
+  await expect(pb.getByText('Les modérateurs peuvent en épingler.')).toBeVisible();
+  await expect(pb.getByText('Épingle un message depuis ses actions')).toHaveCount(0);
+  await a11y(a.page);
+
+  // Épingler en direct : les deux panneaux ouverts reçoivent la ligne, le plus récent d'abord.
+  const pinPath = (id: string) => `${API}/channels/${cid}/pins/${id}`;
+  expect((await asA.put(pinPath(one))).status()).toBe(200);
+  await expect(rows(pb)).toHaveCount(1);
+  expect((await asA.put(pinPath(two))).status()).toBe(200);
+  await expect(rows(pa)).toHaveCount(2);
+  await expect(rows(pb)).toHaveCount(2);
+  await expect(rows(pa).nth(0)).toContainText('Deuxième message à retenir');
+  await expect(rows(pa).nth(1)).toContainText('Premier message à retenir');
+  await expect(pa.getByText('2 / 50')).toBeVisible();
+  await expect(rows(pa).nth(0)).toContainText(a.name);
+  // Un simple membre : « Aller au message », pas « Désépingler ».
+  await expect(rows(pb).nth(0).getByRole('button', { name: `Aller au message de ${a.name}` })).toBeVisible();
+  await expect(pb.getByRole('button', { name: /Désépingler/ })).toHaveCount(0);
+  await expect(rows(pa).nth(0).getByRole('button', { name: `Désépingler le message de ${a.name}` })).toBeVisible();
+  await settled(a.page);
+  await a11y(a.page);
+
+  // Une modification du texte arrive dans la ligne.
+  expect((await asA.patch(`${API}/channels/${cid}/messages/${one}`, { data: { content: 'Premier message, corrigé' } })).status()).toBe(200);
+  await expect(rows(pb).nth(1)).toContainText('Premier message, corrigé');
+  await expect(pb.getByText('2 / 50')).toBeVisible();
+
+  // Désépingler depuis le panneau : la ligne part chez les deux, le focus passe à la suivante.
+  await rows(pa).nth(0).getByRole('button', { name: /^Désépingler/ }).click();
+  await expect(said(a.page, 'Message désépinglé.')).toBeVisible();
+  await expect(rows(pa)).toHaveCount(1);
+  await expect(rows(pb)).toHaveCount(1);
+  await expect(rows(pa).nth(0).getByRole('button', { name: /^Aller au message/ })).toBeFocused();
+  // La dernière : le focus va au titre.
+  await rows(pa).nth(0).getByRole('button', { name: /^Désépingler/ }).click();
+  await expect(pa.getByText('Aucun message épinglé')).toBeVisible();
+  await expect(pa.getByRole('heading', { name: 'Messages épinglés', level: 2 })).toBeFocused();
+  // Le message lui-même ne porte plus le repère.
+  await expect(messages(a.page).filter({ hasText: 'Premier message' }).locator('header .app-pinned')).toHaveCount(0);
+
+  // Supprimer un message épinglé le retire du panneau d'un autre ; son focus passe à la ligne suivante, ou au titre.
+  expect((await asA.put(pinPath(one))).status()).toBe(200);
+  expect((await asA.put(pinPath(two))).status()).toBe(200);
+  await expect(rows(pb)).toHaveCount(2);
+  await rows(pb).nth(0).getByRole('button', { name: /^Aller au message/ }).focus();
+  expect((await asA.delete(`${API}/channels/${cid}/messages/${two}`)).status()).toBe(204);
+  await expect(rows(pb)).toHaveCount(1);
+  await expect(pb.getByText('1 / 50')).toBeVisible();
+  await expect(rows(pb).nth(0).getByRole('button', { name: /^Aller au message/ })).toBeFocused();
+  await rows(pb).nth(0).getByRole('button', { name: /^Aller au message/ }).focus();
+  expect((await asA.delete(pinPath(one))).status()).toBe(200);
+  await expect(pb.getByText('Aucun message épinglé')).toBeVisible();
+  await expect(pb.getByRole('heading', { name: 'Messages épinglés', level: 2 })).toBeFocused();
+
+  // Échap ferme et rend le focus au bouton ; le bouton ferme aussi, et rouvre sur une liste relue.
+  await a.page.keyboard.press('Escape');
+  await expect(pa).toHaveCount(0);
+  await expect(ba).toBeFocused();
+  await expect(ba).toHaveAttribute('aria-expanded', 'false');
+  await ba.click();
+  await expect(panel(a.page)).toBeVisible();
+  await ba.click();
+  await expect(panel(a.page)).toHaveCount(0);
+  // L'un ou l'autre : ouvrir les épingles ferme la liste des membres.
+  const members = a.page.getByRole('button', { name: 'Liste des membres' });
+  await members.click();
+  await expect(a.page.getByRole('complementary', { name: 'Membres' })).toBeVisible();
+  await ba.click();
+  await expect(a.page.getByRole('complementary', { name: 'Membres' })).toHaveCount(0);
+  await expect(panel(a.page)).toBeVisible();
+  await members.click();
+  await expect(panel(a.page)).toHaveCount(0);
+  await expect(a.page.getByRole('complementary', { name: 'Membres' })).toBeVisible();
+});
+
+test('pins-H3 chargement sans saut puis erreur avec « Réessayer »', async ({ user, api, allow }) => {
+  allow.push(/status of 403/);
+  const a = await user('chef');
+  const [, cid] = await (async () => {
+    const [gid, cid] = await createGuild(a.page, 'Atelier des états');
+    return [gid, cid];
+  })();
+  const asA = await api(a.token);
+  const id = await post(asA, cid, 'Un message sous réserve');
+  expect((await asA.put(`${API}/channels/${cid}/pins/${id}`)).status()).toBe(200);
+  await sent(a.page, 'Un message sous réserve');
+
+  // Chargement : la ligne status est réservée (même hauteur avant et après), la zone est occupée.
+  let release!: () => void;
+  const held = new Promise<void>((r) => (release = r));
+  await a.page.route(`**/channels/${cid}/pins`, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await opener(a.page).click();
+  const pa = panel(a.page);
+  const status = pa.getByRole('status');
+  await expect(status).toHaveText('Chargement des messages épinglés…');
+  await expect(pa.locator('.app-pins-body')).toHaveAttribute('aria-busy', 'true');
+  const during = (await status.boundingBox())!;
+  await a11y(a.page);
+  release();
+  await expect(rows(pa)).toHaveCount(1);
+  await expect(pa.locator('.app-pins-body')).toHaveAttribute('aria-busy', 'false');
+  await expect(status).not.toHaveText('Chargement des messages épinglés…');
+  const after = (await status.boundingBox())!;
+  expect([Math.round(after.y), Math.round(after.height)]).toEqual([Math.round(during.y), Math.round(during.height)]);
+  await a.page.unroute(`**/channels/${cid}/pins`);
+
+  // Erreur : un message en role alert et « Réessayer », qui relit la liste.
+  await a.page.keyboard.press('Escape');
+  await a.page.route(`**/channels/${cid}/pins`, (route) => route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ code: 'forbidden', message: 'Tu n’as pas la permission de faire ça.' }) }));
+  await opener(a.page).click();
+  const failure = panel(a.page).getByRole('alert');
+  await expect(failure).toContainText('Impossible de charger les messages épinglés');
+  await expect(failure).toContainText('Tu n’as pas la permission de faire ça.');
+  await a11y(a.page);
+  await a.page.unroute(`**/channels/${cid}/pins`);
+  await failure.getByRole('button', { name: 'Réessayer' }).click();
+  await expect(rows(panel(a.page))).toHaveCount(1);
+  await expect(panel(a.page).getByRole('heading', { name: 'Messages épinglés', level: 2 })).toBeFocused();
+});
+
+test('pins-H4 « Aller au message » charge l’ancien, défile, met le contour 2 s et prend le focus', async ({ user, api }) => {
+  const a = await user('chef');
+  const [, cid] = await (async () => createGuild(a.page, 'Atelier du saut'))();
+  const asA = await api(a.token);
+  const old = await post(asA, cid, 'Le tout premier message épinglé');
+  expect((await asA.put(`${API}/channels/${cid}/pins/${old}`)).status()).toBe(200);
+  // Assez de messages derrière lui pour qu'il ne soit plus dans la première page de l'historique (50).
+  for (let i = 0; i < 130; i++) await post(asA, cid, `remplissage ${i}`);
+  await a.page.reload();
+  await expect(a.page.getByRole('heading', { name: 'général', level: 1 })).toBeVisible();
+  await expect(messages(a.page).filter({ hasText: 'remplissage 129' })).toHaveCount(1);
+  await expect(messages(a.page).filter({ hasText: 'Le tout premier' })).toHaveCount(0);
+
+  await opener(a.page).click();
+  const pa = panel(a.page);
+  await expect(rows(pa)).toHaveCount(1);
+  await rows(pa).getByRole('button', { name: `Aller au message de ${a.name}` }).click();
+  const target = a.page.locator(`#msg-${old}`);
+  await expect(target).toBeFocused();
+  await expect(target).toHaveAttribute('data-flash', '');
+  await expect(target).toHaveCSS('outline-width', '2px');
+  await expect(target).toBeInViewport();
+  // Le contour part après 2 secondes.
+  await expect(target).not.toHaveAttribute('data-flash', '', { timeout: 4_000 });
+  // Le panneau reste ouvert à côté du fil (grand écran).
+  await expect(pa).toBeVisible();
+
+  // Un message déjà affiché : même chose, sans rien charger.
+  const recent = await post(asA, cid, 'Un message récent épinglé');
+  expect((await asA.put(`${API}/channels/${cid}/pins/${recent}`)).status()).toBe(200);
+  await expect(rows(pa)).toHaveCount(2);
+  await rows(pa).nth(0).getByRole('button', { name: /^Aller au message/ }).click();
+  await expect(a.page.locator(`#msg-${recent}`)).toBeFocused();
+});
+
+test('pins-H5 mouvement réduit : le contour reste, sans animation', async ({ api, browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, locale: 'fr-FR', reducedMotion: 'reduce', viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const name = `rm_${Date.now().toString(36).slice(-6)}`;
+  const reg = await context.request.post(`${API}/auth/register`, { data: { username: name, email: `${name}@example.org`, password: 'motdepasse-solide' } });
+  const { token } = await reg.json();
+  await page.goto('/login');
+  await page.evaluate(() => localStorage.setItem('kraken.signed_in', '1'));
+  await page.goto('/channels/@me');
+  const [, cid] = await createGuild(page, 'Atelier du mouvement réduit');
+  const asA = await api(token);
+  const id = await post(asA, cid, 'Un message au contour');
+  expect((await asA.put(`${API}/channels/${cid}/pins/${id}`)).status()).toBe(200);
+  await opener(page).click();
+  await rows(panel(page)).getByRole('button', { name: /^Aller au message/ }).click();
+  const target = page.locator(`#msg-${id}`);
+  await expect(target).toHaveAttribute('data-flash', '');
+  const motion = await target.evaluate((e) => {
+    const c = getComputedStyle(e);
+    return { animation: c.animationName, transition: c.transitionDuration, outline: c.outlineWidth };
+  });
+  expect(motion.animation).toBe('none');
+  expect(motion.outline).toBe('2px');
+  await context.close();
+});
+
+test('pins-H6 la limite de 50 : le bouton reste actif et l’erreur est lue', async ({ user, api, allow }) => {
+  allow.push(/status of 400/);
+  const a = await user('chef');
+  const [, cid] = await (async () => createGuild(a.page, 'Atelier de la limite'))();
+  const asA = await api(a.token);
+  const ids: string[] = [];
+  for (let i = 0; i < 51; i++) ids.push(await post(asA, cid, `message ${String(i).padStart(2, '0')} de la pile`));
+  for (const id of ids.slice(0, 50)) expect((await asA.put(`${API}/channels/${cid}/pins/${id}`)).status()).toBe(200);
+  await expect(messages(a.page).filter({ hasText: 'message 50 de la pile' })).toHaveCount(1);
+
+  // Depuis la barre d'outils : l'alerte dit pourquoi, rien n'est grisé, rien n'est épinglé.
+  const last = await sent(a.page, 'message 50 de la pile');
+  await last.hover();
+  const pin = toolbar(last).getByRole('button', { name: 'Épingler le message', exact: true });
+  await expect(pin).toBeEnabled();
+  await pin.click();
+  const alert = a.page.getByRole('alert').filter({ hasText: 'Ce salon a déjà 50 messages épinglés : désépingles-en un d\'abord.' });
+  await expect(alert).toBeVisible();
+  await expect(a.page.getByText('Message épinglé.')).toHaveCount(0);
+  await expect(last.locator('header .app-pinned')).toHaveCount(0);
+  await last.hover();
+  await expect(toolbar(last).getByRole('button', { name: 'Épingler le message', exact: true })).toBeEnabled();
+  // Le panneau compte jusqu'à 50.
+  await opener(a.page).click();
+  await expect(rows(panel(a.page))).toHaveCount(50);
+  await expect(panel(a.page).getByText('50 / 50')).toBeVisible();
+  // Désépingler une ligne libère une place : la barre d'outils réussit.
+  await rows(panel(a.page)).nth(49).getByRole('button', { name: /^Désépingler/ }).click();
+  await expect(rows(panel(a.page))).toHaveCount(49);
+  await last.hover();
+  await toolbar(last).getByRole('button', { name: 'Épingler le message', exact: true }).click();
+  await expect(rows(panel(a.page))).toHaveCount(50);
+  await expect(rows(panel(a.page)).nth(0)).toContainText('message 50 de la pile');
+});
+
+test('pins-H7 un rôle « Gérer les messages » donne le bouton, le retirer le reprend', async ({ user, api }) => {
+  const a = await user('chef');
+  const b = await user('lec');
+  const [gid, cid] = await together(a, b, 'Atelier des rôles');
+  const asA = await api(a.token);
+  await post(asA, cid, 'Un message du chef');
+  const theirs = await sent(b.page, 'Un message du chef');
+  await theirs.hover();
+  expect(await actions(theirs)).toEqual(['Ajouter une réaction', 'Répondre']);
+
+  const role = await (await asA.post(`${API}/guilds/${gid}/roles`, { data: { name: 'Gérants', permissions: 1 << 8 } })).json();
+  expect((await asA.put(`${API}/guilds/${gid}/members/${b.id}/roles/${role.id}`)).status()).toBe(200);
+  // Le droit arrive par le gateway : le bouton apparaît sans recharger la page.
+  await theirs.hover();
+  await expect(toolbar(theirs).getByRole('button', { name: 'Épingler le message', exact: true })).toBeVisible();
+  await toolbar(theirs).getByRole('button', { name: 'Épingler le message', exact: true }).click();
+  await expect(said(b.page, 'Message épinglé.')).toBeVisible();
+  await expect(messages(a.page).filter({ hasText: 'Un message du chef' }).locator('header .app-pinned')).toHaveCount(1);
+  // Le panneau montre « Désépingler » à celui qui a le droit.
+  await opener(b.page).click();
+  await expect(rows(panel(b.page)).getByRole('button', { name: /^Désépingler/ })).toHaveCount(1);
+});
+
+test('pins-H8 en MP, chacun des deux épingle et désépingle, sans journal ; un groupe aussi', async ({ user, api }) => {
+  const a = await user('alix');
+  const b = await user('bruno');
+  const c = await user('chloe');
+  await befriend(api, a, b);
+  await befriend(api, a, c);
+  const asA = await api(a.token);
+  const asB = await api(b.token);
+  const dm = await (await asA.post(`${API}/users/@me/channels`, { data: { recipients: [b.id] } })).json();
+  await post(asA, dm.id, 'Le code est 4242');
+  await post(asB, dm.id, 'Merci, je note');
+  await a.page.goto(`/channels/@me/${dm.id}`);
+  await b.page.goto(`/channels/@me/${dm.id}`);
+  const mineA = await sent(a.page, 'Le code est 4242');
+  const mineB = await sent(b.page, 'Le code est 4242');
+
+  // Le message de l'autre : bruno épingle celui d'alix, et lui-même (les deux ont le bouton).
+  await mineB.hover();
+  expect(await actions(mineB)).toEqual(['Ajouter une réaction', 'Répondre', 'Épingler le message']);
+  await toolbar(mineB).getByRole('button', { name: 'Épingler le message', exact: true }).click();
+  await expect(said(b.page, 'Message épinglé.')).toBeVisible();
+  await expect(mineA.locator('header .app-pinned')).toHaveCount(1);
+  // Le panneau : même phrase d'aide pour les deux (tous les deux peuvent), désépingler pour les deux.
+  await opener(a.page).click();
+  const pa = panel(a.page);
+  await expect(rows(pa)).toHaveCount(1);
+  await expect(rows(pa).getByRole('button', { name: /^Désépingler/ })).toHaveCount(1);
+  await rows(pa).getByRole('button', { name: /^Désépingler/ }).click();
+  await expect(said(a.page, 'Message désépinglé.')).toBeVisible();
+  await expect(pa.getByText('Épingle un message depuis ses actions pour le retrouver ici.')).toBeVisible();
+  await expect(mineB.locator('header .app-pinned')).toHaveCount(0);
+  await settled(a.page);
+  await a11y(a.page);
+
+  // Un groupe : un participant quelconque.
+  const group = await (await asA.post(`${API}/users/@me/channels`, { data: { recipients: [b.id, c.id], name: 'Les trois' } })).json();
+  await post(asA, group.id, 'Rendez-vous samedi');
+  await c.page.goto(`/channels/@me/${group.id}`);
+  const inGroup = await sent(c.page, 'Rendez-vous samedi');
+  await inGroup.hover();
+  await toolbar(inGroup).getByRole('button', { name: 'Épingler le message', exact: true }).click();
+  await expect(said(c.page, 'Message épinglé.')).toBeVisible();
+  await expect(inGroup.locator('header .app-pinned')).toHaveCount(1);
+});
+
+test('pins-H9 au clavier : barre d’outils, bouton d’en-tête, panneau, Tab et Échap', async ({ user, api }) => {
+  const a = await user('chef');
+  const [, cid] = await (async () => createGuild(a.page, 'Atelier du clavier'))();
+  const asA = await api(a.token);
+  await post(asA, cid, 'Un message au clavier');
+  const m = await sent(a.page, 'Un message au clavier');
+
+  // Le message prend le focus : sa barre d'outils s'affiche, le bouton s'atteint puis s'active à Entrée.
+  await m.focus();
+  const pin = toolbar(m).getByRole('button', { name: 'Épingler le message', exact: true });
+  await pin.focus();
+  await a.page.keyboard.press('Enter');
+  await expect(said(a.page, 'Message épinglé.')).toBeVisible();
+  await expect(m.locator('header .app-pinned')).toHaveCount(1);
+  // Le focus revient sur le message (la ligne a été redessinée), pas sur le corps de la page.
+  await expect(m).toBeFocused();
+
+  // Le bouton d'en-tête s'ouvre à Entrée ; le focus va au titre, Tab au bouton « Fermer », puis à la ligne.
+  await opener(a.page).focus();
+  await a.page.keyboard.press('Enter');
+  const pa = panel(a.page);
+  const title = pa.getByRole('heading', { name: 'Messages épinglés', level: 2 });
+  await expect(title).toBeFocused();
+  // La liste est chargée avant de tabuler : pendant le chargement, il n'y a encore rien à atteindre après « Fermer ».
+  await expect(rows(pa)).toHaveCount(1);
+  await a.page.keyboard.press('Tab');
+  await expect(pa.getByRole('button', { name: 'Fermer les messages épinglés' })).toBeFocused();
+  await a.page.keyboard.press('Tab');
+  await expect(rows(pa).getByRole('button', { name: /^Aller au message/ })).toBeFocused();
+  await a.page.keyboard.press('Tab');
+  await expect(rows(pa).getByRole('button', { name: /^Désépingler/ })).toBeFocused();
+  // « Aller au message » au clavier : le message prend le focus.
+  await rows(pa).getByRole('button', { name: /^Aller au message/ }).focus();
+  await a.page.keyboard.press('Enter');
+  await expect(m).toBeFocused();
+  // Échap depuis le panneau le ferme et rend le focus au bouton.
+  await rows(pa).getByRole('button', { name: /^Désépingler/ }).focus();
+  await a.page.keyboard.press('Escape');
+  await expect(pa).toHaveCount(0);
+  await expect(opener(a.page)).toBeFocused();
+  // Rouvrir au clavier, fermer par le bouton « Fermer » : même retour.
+  await a.page.keyboard.press('Enter');
+  await expect(panel(a.page)).toBeVisible();
+  await panel(a.page).getByRole('button', { name: 'Fermer les messages épinglés' }).click();
+  await expect(panel(a.page)).toHaveCount(0);
+  await expect(opener(a.page)).toBeFocused();
+});
+
+test('pins-H10 le journal d’audit écrit « a épinglé un message dans #salon », une seule fois', async ({ user, api }) => {
+  const a = await user('chef');
+  const [gid, cid] = await (async () => createGuild(a.page, 'Atelier du journal'))();
+  const asA = await api(a.token);
+  const id = await post(asA, cid, 'Un secret très secret');
+  expect((await asA.put(`${API}/channels/${cid}/pins/${id}`)).status()).toBe(200);
+  expect((await asA.put(`${API}/channels/${cid}/pins/${id}`)).status()).toBe(200);
+  expect((await asA.delete(`${API}/channels/${cid}/pins/${id}`)).status()).toBe(200);
+  expect((await asA.delete(`${API}/channels/${cid}/pins/${id}`)).status()).toBe(200);
+
+  await a.page.goto(`/guilds/${gid}/settings/audit`);
+  const log = a.page.getByRole('dialog', { name: 'Paramètres du serveur' });
+  const list = log.getByRole('list', { name: 'Événements du journal' });
+  await expect(list.getByRole('listitem').filter({ hasText: 'a épinglé un message dans #général' })).toHaveCount(1);
+  await expect(list.getByRole('listitem').filter({ hasText: 'a désépinglé un message dans #général' })).toHaveCount(1);
+  await expect(list).not.toContainText('secret');
+});
+
+test('pins-N1 la confirmation flotte hors flux : rien ne descend quand elle vient ni quand elle repart', async ({ user, api }) => {
+  const a = await user('chef');
+  const [, cid] = await (async () => createGuild(a.page, 'Atelier du toast'))();
+  await post(await api(a.token), cid, 'Une règle à épingler');
+  await sent(a.page, 'Une règle à épingler');
+  await settled(a.page);
+  const before = await layout(a.page);
+
+  await act(a.page, 'Une règle à épingler', 'Épingler le message');
+  const toast = said(a.page, 'Message épinglé.');
+  await expect(toast).toBeVisible();
+  // Hors flux, en haut de la colonne, devant : la zone `status` reste là pour les lecteurs d'écran.
+  const zone = a.page.locator('.app-main > .app-notice');
+  await expect(zone).toHaveCSS('position', 'absolute');
+  await expect(zone).toHaveAttribute('role', 'status');
+  // Juste sous l'en-tête : il reste entièrement à découvert.
+  const banner = (await toast.locator('.k-banner').boundingBox())!;
+  const header = (await a.page.locator('.app-main .app-header').boundingBox())!;
+  expect(banner.y).toBeGreaterThanOrEqual(header.y + header.height);
+  expect(banner.y).toBeLessThan(header.y + header.height + 40);
+  expect(banner.x + banner.width).toBeLessThanOrEqual(1440);
+  expect(await layout(a.page)).toEqual(before);
+  // Elle ne prend pas les clics : le bouton de l'en-tête dessous reste atteignable ; « Fermer » marche.
+  await opener(a.page).click();
+  await expect(panel(a.page)).toBeVisible();
+  await toast.getByRole('button', { name: "Fermer l'information" }).click();
+  await expect(toast).toHaveCount(0);
+  await expect(a.page.locator('.app-main > .app-notice')).toHaveCount(1);
+  await settled(a.page);
+  await a11y(a.page);
+  expect(await layout(a.page)).toEqual(before);
+
+  // Elle repart seule au bout de quelques secondes, sans rien décaler non plus.
+  await act(a.page, 'Une règle à épingler', 'Désépingler le message');
+  const gone = said(a.page, 'Message désépinglé.');
+  await expect(gone).toBeVisible();
+  expect(await layout(a.page)).toEqual(before);
+  await expect(gone).toHaveCount(0, { timeout: 9_000 });
+  expect(await layout(a.page)).toEqual(before);
+});
+
+test('pins-N2 sur bureau, 50 épinglés : l’en-tête du panneau reste en haut, seule la liste défile', async ({ user, api }) => {
+  const a = await user('chef');
+  const [, cid] = await (async () => createGuild(a.page, 'Atelier de la pile'))();
+  const asA = await api(a.token);
+  const ids: string[] = [];
+  for (let i = 0; i < 50; i++) ids.push(await post(asA, cid, `message ${String(i).padStart(2, '0')} de la pile`));
+  for (const id of ids) expect((await asA.put(`${API}/channels/${cid}/pins/${id}`)).status()).toBe(200);
+  await expect(messages(a.page).filter({ hasText: 'message 49 de la pile' })).toHaveCount(1);
+  await opener(a.page).click();
+  const p = panel(a.page);
+  await expect(rows(p)).toHaveCount(50);
+  const head = p.getByRole('heading', { name: 'Messages épinglés', level: 2 });
+  const close = p.getByRole('button', { name: 'Fermer les messages épinglés' });
+  const frame = (await p.boundingBox())!;
+
+  // La liste défile dans son corps, pas la colonne : le titre, le compteur et « Fermer » ne bougent pas.
+  const body = p.locator('.app-pins-body');
+  expect(await body.evaluate((e) => e.scrollHeight > e.clientHeight + 200)).toBe(true);
+  expect(await p.evaluate((e) => e.scrollHeight <= e.clientHeight + 1)).toBe(true);
+  const top = (await head.boundingBox())!.y;
+  await body.evaluate((e) => { e.scrollTop = e.scrollHeight; });
+  await expect(rows(p).nth(49)).toBeInViewport();
+  await expect(rows(p).nth(0)).not.toBeInViewport();
+  await expect(head).toBeInViewport();
+  await expect(close).toBeInViewport();
+  await expect(p.getByText('50 / 50')).toBeInViewport();
+  await settled(a.page);
+  expect((await head.boundingBox())!.y).toBe(top);
+  expect((await p.boundingBox())!).toEqual(frame);
+  // Le clavier aussi : atteindre la dernière ligne ne fait pas remonter l'en-tête hors de vue.
+  await rows(p).nth(49).getByRole('button', { name: /^Aller au message/ }).focus();
+  await expect(head).toBeInViewport();
+  await a11y(a.page);
+});
+
+test('pins-N3 une autre ligne retirée à distance : le focus reste où il était, les autres lignes ne sont pas refaites', async ({ user, api }) => {
+  const a = await user('chef');
+  const b = await user('mod');
+  const [, cid] = await together(a, b, 'Atelier du retrait');
+  const asA = await api(a.token);
+  const ids = [await post(asA, cid, 'Première épingle'), await post(asA, cid, 'Deuxième épingle'), await post(asA, cid, 'Troisième épingle')];
+  for (const id of ids) expect((await asA.put(`${API}/channels/${cid}/pins/${id}`)).status()).toBe(200);
+  await sent(b.page, 'Troisième épingle');
+  await opener(b.page).click();
+  const p = panel(b.page);
+  await expect(rows(p)).toHaveCount(3);
+  // De la plus récente à la plus ancienne : Troisième, Deuxième, Première.
+  const goto = (n: number) => rows(p).nth(n).getByRole('button', { name: /^Aller au message/ });
+  await goto(0).focus();
+  await expect(goto(0)).toBeFocused();
+  // Un repère sur la ligne du milieu : s'il survit, la ligne n'a pas été refaite.
+  await rows(p).nth(1).evaluate((e) => e.setAttribute('data-keep', 'oui'));
+
+  // Un autre modérateur désépingle la plus ancienne : la ligne du focus et celle du milieu restent, intactes.
+  expect((await asA.delete(`${API}/channels/${cid}/pins/${ids[0]}`)).status()).toBe(200);
+  await expect(rows(p)).toHaveCount(2);
+  await expect(p.getByText('2 / 50')).toBeVisible();
+  await expect(goto(0)).toBeFocused();
+  expect(await b.page.evaluate(() => document.activeElement?.tagName)).toBe('BUTTON');
+  await expect(rows(p).nth(1)).toHaveAttribute('data-keep', 'oui');
+  // Retirer la ligne du milieu pendant que le focus est sur la première : même chose.
+  expect((await asA.delete(`${API}/channels/${cid}/pins/${ids[1]}`)).status()).toBe(200);
+  await expect(rows(p)).toHaveCount(1);
+  await expect(goto(0)).toBeFocused();
+});
+
+test('pins-N5 « Aller au message » : trop ancien pour les 20 pages chargées, ou vraiment disparu, deux phrases différentes', async ({ user, api }) => {
+  test.setTimeout(150_000);
+  const a = await user('chef');
+  const [gid, cid] = await (async () => createGuild(a.page, 'Atelier du fond'))();
+  const asA = await api(a.token);
+  const first = await post(asA, cid, 'Le tout premier message');
+  expect((await asA.put(`${API}/channels/${cid}/pins/${first}`)).status()).toBe(200);
+  // 2 100 messages après lui : « Aller au message » remonte 20 pages de 100 au plus, il reste hors d'atteinte.
+  for (let i = 0; i < 2100; i += 100) await Promise.all(Array.from({ length: 100 }, (_, k) => post(asA, cid, `suite ${i + k}`)));
+  await a.page.goto(`/channels/${gid}/${cid}`);
+  await expect(messages(a.page).filter({ hasText: 'suite' }).first()).toBeVisible();
+  await opener(a.page).click();
+  await expect(rows(panel(a.page))).toHaveCount(1);
+  await rows(panel(a.page)).getByRole('button', { name: /^Aller au message/ }).click();
+  await expect(alerted(a.page, 'Ce message est trop ancien pour être chargé ici.')).toBeVisible({ timeout: 30_000 });
+  await expect(alerted(a.page, 'plus disponible')).toHaveCount(0);
+  await expect(a.page.locator(`#msg-${first}`)).toHaveCount(0);
+
+  // Un message vraiment disparu (la liste lue est périmée) : l'historique est lu jusqu'avant lui, il n'y est pas.
+  const [, cid2] = await (async () => createGuild(a.page, 'Atelier du vide'))();
+  const gone = await post(asA, cid2, 'Un message qui va disparaître');
+  expect((await asA.put(`${API}/channels/${cid2}/pins/${gone}`)).status()).toBe(200);
+  const stale = await (await asA.get(`${API}/channels/${cid2}/pins`)).json();
+  await post(asA, cid2, 'Un message resté');
+  expect((await asA.delete(`${API}/channels/${cid2}/messages/${gone}`)).status()).toBe(204);
+  await a.page.route('**/api/v1/channels/*/pins', (route) => route.fulfill({ json: stale }));
+  await sent(a.page, 'Un message resté');
+  await opener(a.page).click();
+  await expect(rows(panel(a.page))).toHaveCount(1);
+  await rows(panel(a.page)).getByRole('button', { name: /^Aller au message/ }).click();
+  await expect(alerted(a.page, "Ce message n'est plus disponible.")).toBeVisible();
+  await expect(alerted(a.page, 'trop ancien')).toHaveCount(0);
+});
+
+test('pins-N6 un auteur bloqué est replié dans le panneau comme dans le fil, dépliable au clavier', async ({ user, api }) => {
+  const a = await user('chef');
+  const b = await user('gene');
+  const [, cid] = await together(a, b, 'Atelier du repli');
+  const asA = await api(a.token);
+  const asB = await api(b.token);
+  const hers = await post(asB, cid, 'Un texte que je ne veux plus lire');
+  const mine = await post(asA, cid, 'Un texte de moi');
+  for (const id of [hers, mine]) expect((await asA.put(`${API}/channels/${cid}/pins/${id}`)).status()).toBe(200);
+  await sent(a.page, 'Un texte que je ne veux plus lire');
+  await opener(a.page).click();
+  const p = panel(a.page);
+  await expect(rows(p)).toHaveCount(2);
+  // Avant le blocage : tout est lisible.
+  await expect(rows(p).nth(1)).toContainText('Un texte que je ne veux plus lire');
+  await expect(rows(p).nth(1)).toContainText(b.name);
+
+  // Le blocage arrive en direct : la ligne se replie, son texte et son nom ne se lisent plus ni ne s'entendent.
+  expect((await asA.put(`${API}/users/@me/relationships/${b.id}`, { data: { kind: 'blocked' } })).status()).toBe(200);
+  const folded = rows(p).nth(1);
+  await expect(folded.getByText("Message d'un compte que tu as bloqué.")).toBeVisible();
+  await expect(folded.getByText('Un texte que je ne veux plus lire')).toBeHidden();
+  await expect(folded.getByText(b.name)).toBeHidden();
+  await expect(folded.getByRole('button', { name: /^Aller au message/ })).toBeHidden();
+  // La ligne de l'autre reste entière ; le fil replie aussi.
+  await expect(rows(p).nth(0)).toContainText('Un texte de moi');
+  await expect(rows(p).nth(0).getByText("Message d'un compte que tu as bloqué.")).toHaveCount(0);
+  await expect(messages(a.page).filter({ hasText: 'Un texte que je ne veux plus lire' })).toBeHidden();
+  await a11y(a.page);
+
+  // Au clavier : « Afficher » est un vrai bouton, qui dit son état ; Entrée déplie, un second Entrée replie.
+  const toggle = folded.getByRole('button', { name: 'Afficher', exact: true });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle).toHaveAttribute('aria-controls', /^pin-body-/);
+  await toggle.focus();
+  await a.page.keyboard.press('Enter');
+  const less = folded.getByRole('button', { name: 'Masquer', exact: true });
+  await expect(less).toHaveAttribute('aria-expanded', 'true');
+  await expect(less).toBeFocused();
+  await expect(folded.getByText('Un texte que je ne veux plus lire')).toBeVisible();
+  await expect(folded.getByRole('button', { name: `Aller au message de ${b.name}` })).toBeVisible();
+  await settled(a.page);
+  await a11y(a.page);
+  await a.page.keyboard.press('Enter');
+  await expect(folded.getByText('Un texte que je ne veux plus lire')).toBeHidden();
+  await expect(folded.getByRole('button', { name: 'Afficher', exact: true })).toBeFocused();
+
+  // Débloqué : la ligne se déplie d'elle-même, sans le repli.
+  expect((await asA.delete(`${API}/users/@me/relationships/${b.id}`)).ok()).toBe(true);
+  await expect(folded.getByText("Message d'un compte que tu as bloqué.")).toHaveCount(0);
+  await expect(folded.getByText('Un texte que je ne veux plus lire')).toBeVisible();
+});
+
+test('pins-N7 MP bloqué : plus de bouton pour celui qui a bloqué, ses erreurs se lisent malgré la saisie remplacée, l’autre a une phrase d’épingles', async ({ user, api, allow }) => {
+  allow.push(/status of 403/);
+  const a = await user('alix');
+  const b = await user('bruno');
+  await befriend(api, a, b);
+  const asA = await api(a.token);
+  const asB = await api(b.token);
+  const dm = await (await asA.post(`${API}/users/@me/channels`, { data: { recipients: [b.id] } })).json();
+  const keep = await post(asA, dm.id, 'Un message à garder');
+  const gone = await post(asA, dm.id, 'Un message qui va disparaître');
+  await post(asB, dm.id, 'Une réponse de bruno');
+  expect((await asA.put(`${API}/channels/${dm.id}/pins/${keep}`)).status()).toBe(200);
+  expect((await asA.put(`${API}/channels/${dm.id}/pins/${gone}`)).status()).toBe(200);
+  // Une liste lue avant la disparition d'un message : « Aller au message » y échouera.
+  const stale = await (await asA.get(`${API}/channels/${dm.id}/pins`)).json();
+  expect((await asA.delete(`${API}/channels/${dm.id}/messages/${gone}`)).status()).toBe(204);
+  await a.page.goto(`/channels/@me/${dm.id}`);
+  await b.page.goto(`/channels/@me/${dm.id}`);
+  const ofA = await sent(a.page, 'Un message à garder');
+  const ofB = await sent(b.page, 'Un message à garder');
+  await sent(b.page, 'Une réponse de bruno');
+
+  // Avant le blocage : les deux ont le bouton.
+  await ofA.hover();
+  expect(await actions(ofA)).toContain('Désépingler le message');
+
+  // Alix bloque bruno : la saisie est remplacée, le bouton de la barre d'outils disparaît, le panneau n'a plus « Désépingler ».
+  expect((await asA.put(`${API}/users/@me/relationships/${b.id}`, { data: { kind: 'blocked' } })).status()).toBe(200);
+  await expect(a.page.getByRole('status').filter({ hasText: `Tu as bloqué ${b.name}` })).toBeVisible();
+  await ofA.hover();
+  expect(await actions(ofA)).not.toContain('Désépingler le message');
+  expect(await actions(ofA)).toContain('Modifier le message');
+  expect(await actions(ofA)).not.toContain('Épingler le message');
+  await opener(a.page).click();
+  const pa = panel(a.page);
+  await expect(rows(pa)).toHaveCount(1);
+  await expect(pa.getByRole('button', { name: /Désépingler/ })).toHaveCount(0);
+
+  // Une erreur du fil se lit malgré la saisie remplacée (la zone d'erreur est là aussi).
+  await a.page.route('**/api/v1/channels/*/pins', (route) => route.fulfill({ json: stale }));
+  await opener(a.page).click();
+  await opener(a.page).click();
+  await expect(rows(panel(a.page))).toHaveCount(2);
+  await rows(panel(a.page)).getByRole('button', { name: /^Aller au message/ }).first().click();
+  const note = alerted(a.page, "Ce message n'est plus disponible.");
+  await expect(note).toBeVisible();
+  await expect(a.page.getByRole('status').filter({ hasText: `Tu as bloqué ${b.name}` })).toBeVisible();
+  await note.getByRole('button', { name: 'Fermer' }).click();
+  await expect(note).toHaveCount(0);
+  await a11y(a.page);
+
+  // Bruno ne sait pas qu'il est bloqué : il a encore le bouton, le refus dit pourquoi, sans parler d'envoi.
+  await ofB.hover();
+  await toolbar(ofB).getByRole('button', { name: 'Désépingler le message', exact: true }).click();
+  const refused = alerted(b.page, 'Tu ne peux pas épingler ni désépingler ici : la conversation est bloquée.');
+  await expect(refused).toBeVisible();
+  await expect(b.page.getByText("Ton message n'a pas pu être remis")).toHaveCount(0);
+  await expect(ofB.locator('header .app-pinned')).toHaveCount(1);
+});
+
+test.describe('à 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('pins-M1 l’en-tête garde des cibles de 44 px sans déborder, la feuille est pleine page, fermable, et mène au message', async ({ user, api }) => {
+    const a = await user('chef');
+    const asA = await api(a.token);
+    const made = await (await asA.post(`${API}/guilds`, { data: { name: 'Abysse' } })).json();
+    const gid: string = made.guild.id;
+    const cid: string = made.channels.find((c: { kind: string }) => c.kind === 'text').id;
+    const first = await post(asA, cid, 'Un message à retrouver');
+    expect((await asA.put(`${API}/channels/${cid}/pins/${first}`)).status()).toBe(200);
+    for (let i = 0; i < 25; i++) await post(asA, cid, `remplissage ${i}`);
+    await a.page.goto(`/channels/${gid}/${cid}`);
+    await expect(a.page.getByRole('heading', { name: 'général', level: 1 })).toBeVisible();
+    await settled(a.page);
+
+    // Chaque bouton de l'en-tête : 44 px au moins, dans la page, sans défilement horizontal.
+    const tools = a.page.locator('.app-header-tools').locator('a, button');
+    expect(await tools.count()).toBe(6);
+    for (const box of await tools.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, w: r.width, h: r.height, right: r.right }; }))) {
+      expect(box.w).toBeGreaterThanOrEqual(44);
+      expect(box.h).toBeGreaterThanOrEqual(44);
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(390);
+    }
+    // Le titre reste lisible, sur sa ligne.
+    await expect(a.page.getByRole('heading', { name: 'général', level: 1 })).toBeInViewport();
+    expect(await noOverflow(a.page)).toBe(true);
+    await a11y(a.page);
+
+    // L'ordre : épingles avant membres.
+    const names = await tools.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+    expect(names.indexOf('Messages épinglés')).toBeGreaterThan(-1);
+    expect(names.indexOf('Messages épinglés')).toBeLessThan(names.indexOf('Liste des membres'));
+
+    // La feuille : pleine page, dans un dialogue, avec sa fermeture visible.
+    await opener(a.page).click();
+    const s = sheet(a.page);
+    await expect(s).toBeVisible();
+    const frame = (await s.boundingBox())!;
+    expect([Math.round(frame.x), Math.round(frame.y), Math.round(frame.width), Math.round(frame.height)]).toEqual([0, 0, 390, 844]);
+    await expect(s.getByRole('heading', { name: 'Messages épinglés', level: 2 })).toBeFocused();
+    const close = s.getByRole('button', { name: 'Fermer les messages épinglés' });
+    await expect(close).toBeVisible();
+    const cb = (await close.boundingBox())!;
+    expect(cb.width).toBeGreaterThanOrEqual(44);
+    expect(cb.height).toBeGreaterThanOrEqual(44);
+    await expect(rows(s)).toHaveCount(1);
+    for (const b of await rows(s).getByRole('button').all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await noOverflow(a.page)).toBe(true);
+    await settled(a.page);
+    await a11y(a.page);
+    // La page de dessous n'est plus au clavier : Tab reste dans la feuille.
+    await a.page.keyboard.press('Shift+Tab');
+    expect(await s.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+
+    // Échap ferme et rend le focus au bouton.
+    await a.page.keyboard.press('Escape');
+    await expect(s).toHaveCount(0);
+    await expect(opener(a.page)).toBeFocused();
+
+    // « Aller au message » ferme la feuille, défile jusqu'au message, lui donne le focus et le contour.
+    await opener(a.page).click();
+    await rows(sheet(a.page)).getByRole('button', { name: /^Aller au message/ }).click();
+    await expect(sheet(a.page)).toHaveCount(0);
+    const target = a.page.locator(`#msg-${first}`);
+    await expect(target).toBeFocused();
+    await expect(target).toHaveAttribute('data-flash', '');
+    await expect(target).toBeInViewport();
+    expect(await noOverflow(a.page)).toBe(true);
+
+    // Le bouton « Fermer » ferme aussi.
+    await opener(a.page).click();
+    await sheet(a.page).getByRole('button', { name: 'Fermer les messages épinglés' }).click();
+    await expect(sheet(a.page)).toHaveCount(0);
+    await expect(opener(a.page)).toBeFocused();
+  });
+
+  test('pins-M2 un MP et un groupe : l’en-tête ne déborde pas, cibles de 44 px', async ({ user, api }) => {
+    const a = await user('alix');
+    const b = await user('bruno');
+    const c = await user('chloe');
+    await befriend(api, a, b);
+    await befriend(api, a, c);
+    const asA = await api(a.token);
+    const dm = await (await asA.post(`${API}/users/@me/channels`, { data: { recipients: [b.id] } })).json();
+    const group = await (await asA.post(`${API}/users/@me/channels`, { data: { recipients: [b.id, c.id], name: 'Les trois' } })).json();
+    // Un MP entre amis : appel, groupe, notifications, recherche, boîte, plus les épingles.
+    for (const [channel, count] of [[dm, 6], [group, 9]] as const) {
+      await a.page.goto(`/channels/@me/${channel.id}`);
+      await expect(a.page.getByRole('heading', { level: 1 })).toBeVisible();
+      const tools = a.page.locator('.app-header-tools').locator('a, button');
+      await expect(tools).toHaveCount(count);
+      for (const box of await tools.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x, w: r.width, h: r.height, right: r.right }; }))) {
+        expect(box.w).toBeGreaterThanOrEqual(44);
+        expect(box.h).toBeGreaterThanOrEqual(44);
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(390);
+      }
+      expect(await noOverflow(a.page)).toBe(true);
+      await opener(a.page).click();
+      await expect(sheet(a.page).getByText('Aucun message épinglé')).toBeVisible();
+      expect(await noOverflow(a.page)).toBe(true);
+      await a.page.keyboard.press('Escape');
+      await expect(sheet(a.page)).toHaveCount(0);
+    }
+  });
+
+  test('pins-N4 à 390 px, la confirmation flotte aussi : le salon ne descend pas', async ({ user, api }) => {
+    const a = await user('chef');
+    const asA = await api(a.token);
+    const made = await (await asA.post(`${API}/guilds`, { data: { name: 'Abysse du toast' } })).json();
+    const gid: string = made.guild.id;
+    const cid: string = made.channels.find((c: { kind: string }) => c.kind === 'text').id;
+    await post(asA, cid, 'Une règle à épingler');
+    await a.page.goto(`/channels/${gid}/${cid}`);
+    await sent(a.page, 'Une règle à épingler');
+    await settled(a.page);
+    const before = await layout(a.page);
+    await act(a.page, 'Une règle à épingler', 'Épingler le message');
+    const toast = said(a.page, 'Message épinglé.');
+    await expect(toast).toBeVisible();
+    expect(await layout(a.page)).toEqual(before);
+    const banner = (await toast.locator('.k-banner').boundingBox())!;
+    expect(banner.x).toBeGreaterThanOrEqual(0);
+    expect(banner.x + banner.width).toBeLessThanOrEqual(390);
+    // Sous l'en-tête, qui passe sur deux lignes à cette largeur : ni le titre ni les boutons ne sont recouverts.
+    const header = (await a.page.locator('.app-main .app-header').boundingBox())!;
+    expect(header.height).toBeGreaterThan(60);
+    expect(banner.y).toBeGreaterThanOrEqual(header.y + header.height);
+    for (const b of await a.page.locator('.app-header-tools').locator('a, button').all()) await expect(b).toBeInViewport({ ratio: 1 });
+    const covered = await a.page.evaluate(() => {
+      const note = document.querySelector('.app-notice')!.getBoundingClientRect();
+      return [...document.querySelectorAll('.app-main .app-header :is(h1, a, button)')].filter((e) => {
+        const r = e.getBoundingClientRect();
+        return r.bottom > note.top && r.top < note.bottom && r.right > note.left && r.left < note.right;
+      }).length;
+    });
+    expect(covered).toBe(0);
+    expect(await noOverflow(a.page)).toBe(true);
+    await expect(toast).toHaveCount(0, { timeout: 9_000 });
+    expect(await layout(a.page)).toEqual(before);
+  });
+});

@@ -4,7 +4,7 @@ use axum::response::{IntoResponse, Response};
 use kraken_db::DbError;
 use kraken_proto::{
     ApiError, MAX_CHANNEL_NAME, MAX_CHANNELS, MAX_EMOJIS, MAX_GROUP_MEMBERS, MAX_GROUP_NAME, MAX_INVITE_USES,
-    MAX_INVITES_PER_MEMBER, MAX_OVERWRITES, MAX_PURGE_HOURS, MAX_REASON, MAX_ROLES, MAX_TOPIC,
+    MAX_INVITES_PER_MEMBER, MAX_OVERWRITES, MAX_PINS, MAX_PURGE_HOURS, MAX_REASON, MAX_ROLES, MAX_TOPIC,
     USERNAME_CHANGES_PER_WINDOW,
 };
 
@@ -84,6 +84,16 @@ impl From<DbError> for AppError {
                 StatusCode::BAD_REQUEST,
                 "emoji_limit",
                 format!("Ce serveur a déjà ses {MAX_EMOJIS} emojis : retires-en un pour en ajouter."),
+            ),
+            DbError::Invalid("pin_limit") => Self(
+                StatusCode::BAD_REQUEST,
+                "pin_limit",
+                format!("Ce salon a déjà {MAX_PINS} messages épinglés : désépingles-en un d'abord."),
+            ),
+            DbError::Invalid("pin_kind") => Self(
+                StatusCode::BAD_REQUEST,
+                "pin_kind",
+                "Seuls les messages écrits (texte ou réponse) peuvent être épinglés.".into(),
             ),
             DbError::Invalid("reply_to") => Self::invalid("Le message d'origine n'est plus dans ce salon."),
             DbError::Invalid("self") => Self(StatusCode::BAD_REQUEST, "self", "C'est ton propre pseudo.".into()),
@@ -218,6 +228,18 @@ impl From<DbError> for AppError {
                 StatusCode::FORBIDDEN,
                 "dm_refused",
                 "Ton message n'a pas pu être remis : cette personne ne reçoit pas de message de ta part.".into(),
+            ),
+            // Épingler dans un MP bloqué : mêmes codes que l'envoi, une phrase qui parle d'épingles (et qui ne dit
+            // pas, quand c'est l'autre qui a bloqué, que c'est lui).
+            DbError::Forbidden("pin_blocked") => Self(
+                StatusCode::FORBIDDEN,
+                "dm_blocked",
+                "Tu ne peux pas épingler ni désépingler ici : tu as bloqué cette personne.".into(),
+            ),
+            DbError::Forbidden("pin_refused") => Self(
+                StatusCode::FORBIDDEN,
+                "dm_refused",
+                "Tu ne peux pas épingler ni désépingler ici : la conversation est bloquée.".into(),
             ),
             DbError::Forbidden("dm_stranger") => Self(
                 StatusCode::FORBIDDEN,

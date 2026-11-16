@@ -75,6 +75,8 @@ fn visual(action: &str) -> (icondata_core::Icon, bool) {
         "emoji_delete" => (lu::LuTrash2, true),
         "emoji_create" | "emoji_update" => (lu::LuSmile, false),
         "message_delete" => (lu::LuTrash2, true),
+        "message_pin" => (lu::LuPin, false),
+        "message_unpin" => (lu::LuPinOff, false),
         "guild_update" => (lu::LuPencil, false),
         _ => (lu::LuScrollText, false),
     }
@@ -181,6 +183,12 @@ fn predicate(e: &AuditEntry) -> Vec<Seg> {
             s.extend([t("a supprimé un message de "), b(target())]);
             if let Some(c) = detail(e, "channel") {
                 s.extend([t(" dans le salon "), b(format!("#{c}"))]);
+            }
+        }
+        "message_pin" | "message_unpin" => {
+            s.push(t(if e.action == "message_pin" { "a épinglé un message" } else { "a désépinglé un message" }));
+            if let Some(c) = detail(e, "channel") {
+                s.extend([t(" dans "), b(format!("#{c}"))]);
             }
         }
         "guild_update" => match (change(e, "name"), detail(e, "icon")) {

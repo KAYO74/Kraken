@@ -34,9 +34,19 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
 .app-sidebar .k-channel > .app-ellipsis, .k-dm > div { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-sidebar .k-channel, .app-sidebar .k-dm { text-decoration: none; }
 .app-scrim { display: none; }
-.app-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); outline: none;
+.app-main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); outline: none;
   border-top-left-radius: var(--radius-lg); border: 1px solid var(--border); border-right: 0; border-bottom: 0; }
 .app-conn { margin: var(--space-3) var(--space-3) 0; }
+/* La zone `status` de la coquille (confirmations, échecs d'icône) flotte hors flux, juste sous l'en-tête de la page : rien
+   ne descend quand elle vient ou repart, et les boutons de l'en-tête restent à découvert, même quand il passe sur deux
+   lignes. Elle ne prend pas les clics, sauf son bouton Fermer ; le fond est opaque ; le texte passe à la ligne. Sans
+   ancrage au navigateur, ou sans en-tête, elle se pose à la hauteur d'un en-tête. */
+.app-header { anchor-name: --app-header; }
+.app-notice { position: absolute; top: var(--size-header); top: anchor(--app-header bottom, var(--size-header)); left: 0; right: 0;
+  z-index: var(--z-popover); display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; pointer-events: none; }
+.app-notice > .k-banner { width: fit-content; max-width: calc(100% - 2 * var(--space-3)); box-shadow: var(--shadow-pop);
+  background-color: var(--surface); background-image: linear-gradient(var(--info-soft), var(--info-soft)); }
+.app-notice .k-btn { pointer-events: auto; }
 
 .app-header { display: flex; align-items: center; gap: var(--space-3); flex: none; min-width: 0; height: var(--size-header);
   padding: 0 var(--space-5); border-bottom: 1px solid var(--border); color: var(--text-muted); }
@@ -113,7 +123,8 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
 button.app-reply { cursor: pointer; }
 button.app-reply:hover span { color: var(--text-strong); }
 .app-reply span { min-width: 0; }
-.k-msg[data-flash] { outline: 2px solid var(--accent-text); outline-offset: -2px; border-radius: var(--radius-md); }
+/* Le contour de 2 s d'un message atteint (réponse, épingle) reste visible alors que le message a le focus. */
+.k-msg[data-flash], .k-msg[data-flash]:focus { outline: 2px solid var(--accent-text); outline-offset: -2px; border-radius: var(--radius-md); }
 .k-msg:focus { outline: none; }
 .k-msg:focus-visible { outline: var(--size-focus) solid var(--accent-text); outline-offset: -2px; }
 .k-msg-edit textarea { display: block; width: 100%; resize: vertical; field-sizing: content; max-height: calc(var(--vh) * .5); font-family: inherit; }
@@ -340,7 +351,7 @@ button.app-reply:hover span { color: var(--text-strong); }
   .app-aside { display: none; }
   /* La liste des membres passe par-dessus le fil, sous l'en-tête et son bouton. */
   .app-body { position: relative; }
-  .app-aside--members { display: block; position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-popover);
+  .app-aside--members, .app-aside--pins { display: block; position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-popover);
     max-width: 100%; box-shadow: var(--shadow-pop); }
 }
 
@@ -1059,4 +1070,46 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
   .app-ng .app-avatar-edit { flex-direction: column; align-items: flex-start; }
   .app-ng .app-avatar-side { align-self: stretch; }
   .app-ng .app-avatar-actions > .k-btn { flex: 1 1 auto; justify-content: center; }
+}
+
+/* Messages épinglés : le repère dans l'en-tête d'un message, le panneau (colonne, ou feuille pleine page sous 640 px). */
+.app-pinned { display: inline-flex; align-items: center; align-self: center; color: var(--text-muted); }
+.app-pins { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; min-height: 0; }
+/* Colonne : l'en-tête reste en haut, seule la liste défile. */
+.app-aside--pins { overflow: hidden; }
+.app-pins-head { display: flex; align-items: center; gap: var(--space-3); min-height: var(--size-option-row-mobile); padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border); }
+.app-pins-head h2 { flex: 1; min-width: 0; margin: 0; font-size: var(--text-base-size); color: var(--text-strong); }
+.app-pins-head h2:focus { outline: none; }
+.app-pins-head h2:focus-visible { outline: var(--size-focus) solid var(--accent-text); outline-offset: var(--space-1); border-radius: var(--radius-xs); }
+.app-pins-close { flex: none; }
+.app-pins-body { display: grid; align-content: start; gap: var(--space-3); min-height: 0; overflow-y: auto; padding-top: var(--space-3); }
+/* Toujours là, de hauteur réservée : « Chargement… » vient sans rien décaler. */
+.app-pins-status { min-height: var(--text-sm-line); margin: 0; }
+.app-pins-list { list-style: none; display: grid; gap: var(--space-3); margin: 0; padding: 0; }
+.app-pin { display: grid; gap: var(--space-2); min-width: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface-raised); }
+.app-pin-body { display: grid; gap: var(--space-2); min-width: 0; }
+.app-pin .app-blocked { margin: 0; padding: 0; }
+.app-pin-head { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
+.app-pin-head b { min-width: 0; font-weight: var(--weight-semibold); color: var(--text-strong); }
+.app-pin-head time { flex: none; font-size: var(--text-xs-size); color: var(--text-muted); }
+.app-pin-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; margin: 0; overflow: hidden;
+  color: var(--text); overflow-wrap: anywhere; }
+.app-pin-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.app-pin-skel { height: var(--space-11); border-radius: var(--radius-lg); }
+/* Petit écran : une feuille pleine page, au-dessus de tout (tiroir compris). */
+.app-sheet { position: fixed; inset: 0; z-index: calc(var(--z-modal) + 2); display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0;
+  padding: var(--space-3) var(--space-5) 0; background: var(--surface); }
+.app-sheet .app-pins-body { overflow-y: auto; padding-bottom: var(--space-5); }
+@media (max-width: 639px), (pointer: coarse) {
+  .app-pins-close, .app-pin-actions .k-btn { min-width: var(--size-option-row-mobile); min-height: var(--size-option-row-mobile); }
+  .app-pin-actions .k-btn { flex: 1 1 auto; justify-content: center; }
+  /* En-tête d'un salon : des cibles de 44 px au moins. */
+  .app-header-tools--chat .k-btn--icon { width: var(--size-option-row-mobile); height: var(--size-option-row-mobile); }
+}
+@media (max-width: 639px) {
+  /* Le titre garde sa ligne ; les boutons passent dessous, serrés, sans rien qui déborde (jusqu'à 9 dans un groupe). */
+  .app-header:has(.app-header-tools--chat) { flex-wrap: wrap; height: auto; min-height: var(--size-header); column-gap: var(--space-3); row-gap: 0; }
+  .app-header-tools--chat { flex: 1 0 100%; flex-wrap: wrap; justify-content: flex-end; gap: 0; margin-left: 0; }
 }

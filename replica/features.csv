@@ -38,7 +38,7 @@ Envoyer modifier supprimer un message,messages,must,yes,yes,"S05 F10 ; envoi opt
 Markdown mentions et spoilers,messages,must,yes,yes,"S05 S11 ; gras, italique, souligné, barré, code, blocs, citations, liens, spoilers ; @pseudo, @everyone/@here selon MENTION_EVERYONE, #salon ; autocomplétion"
 Répondre à un message,messages,must,yes,yes,"S05 ; citation au-dessus, clic pour y aller (charge l'historique plus ancien)"
 Réactions emoji,messages,must,yes,yes,"S05 ; emojis Unicode, sélecteur de 86 emojis, 20 différents au plus par message ; emojis perso de ses serveurs aussi (l'id fait la réaction)"
-Épingler un message,messages,should,yes,no,S05
+Épingler un message,messages,should,yes,yes,"S05 ; barre d'actions (« Gérer les messages » en serveur, tous en MP et groupe), repère dans l'en-tête, panneau « Messages épinglés » (aller au message, désépingler), 50 par salon, journal d'audit"
 Transférer un message,messages,could,yes,no,S13
 Aperçus de liens (embeds),messages,must,yes,yes,"S05 ; carte avec site, titre, description et image gardée en local, retirable par l'auteur ; page récupérée par le serveur sans jamais viser le réseau local ; selon le droit « Aperçu des liens »"
 Pièces jointes images vidéos fichiers,messages,must,yes,yes,"S05 ; trombone, glisser-déposer ou coller, 10 par message, taille maximale réglée par l'instance ; vignettes d'images et visionneuse au clavier, carte de téléchargement pour les autres fichiers"

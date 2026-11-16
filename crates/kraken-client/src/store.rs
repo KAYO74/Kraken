@@ -104,6 +104,29 @@ impl Log {
     }
 }
 
+/// Les messages épinglés d'un salon dont j'ai ouvert le panneau, le plus récemment épinglé d'abord. Le
+/// gateway (`MessageUpdate`, `MessageDelete`) les tient à jour.
+#[derive(Clone, Default, PartialEq)]
+pub struct PinList {
+    pub loaded: bool,
+    pub error: Option<String>,
+    pub items: Vec<Message>,
+}
+
+impl PinList {
+    /// Un message mis à jour : épinglé, il prend sa place (en tête s'il vient de l'être) ; sinon il sort.
+    fn apply(&mut self, m: &Message) {
+        match self.items.iter().position(|x| x.id == m.id) {
+            Some(i) if m.pinned => self.items[i] = m.clone(),
+            Some(i) => {
+                self.items.remove(i);
+            }
+            None if m.pinned => self.items.insert(0, m.clone()),
+            None => {}
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Store {
     pub signed_in: RwSignal<bool>,
@@ -145,6 +168,8 @@ pub struct Store {
     /// Une information sans urgence à montrer en haut de la zone principale (« le serveur est créé, mais son
     /// icône n'est pas partie »), jusqu'à ce qu'on la ferme.
     pub notice: RwSignal<Option<String>>,
+    /// Messages épinglés des salons dont le panneau a été ouvert.
+    pub pins: RwSignal<HashMap<Id, PinList>>,
 }
 
 /// La personne dont on ouvre la carte, et le serveur d'où on la regarde (ses rôles, depuis quand
@@ -186,6 +211,7 @@ impl Store {
             statuses: RwSignal::new(HashMap::new()),
             card: RwSignal::new(None),
             notice: RwSignal::new(None),
+            pins: RwSignal::new(HashMap::new()),
         }
     }
 
@@ -208,6 +234,7 @@ impl Store {
         self.dms.set(vec![]);
         self.friends.set(vec![]);
         self.logs.set(HashMap::new());
+        self.pins.set(HashMap::new());
         self.calls.set(vec![]);
         self.call_states.set(vec![]);
         self.reads.set(HashMap::new());
@@ -295,6 +322,17 @@ impl Store {
 
     pub fn log(&self, channel: Id, f: impl FnOnce(&mut Log)) {
         self.logs.update(|l| f(l.entry(channel).or_default()));
+    }
+
+    /// Un message épinglé, modifié ou désépinglé : la liste du panneau de son salon, si elle est ouverte, le suit.
+    pub fn pin_changed(&self, m: &Message) {
+        if self.pins.with_untracked(|p| p.contains_key(&m.channel_id)) {
+            self.pins.update(|p| {
+                if let Some(l) = p.get_mut(&m.channel_id) {
+                    l.apply(m);
+                }
+            });
+        }
     }
 
     /// Comme [`Self::log`], seulement pour un salon déjà ouvert.
@@ -572,6 +610,9 @@ impl Store {
         self.last.update(|l| {
             l.remove(&id);
         });
+        self.pins.update(|p| {
+            p.remove(&id);
+        });
         if self.viewing.get_untracked() == Some(id) {
             self.viewing.set(None);
         }
@@ -595,8 +636,18 @@ impl Store {
                     l.insert(*m);
                 })
             }
-            Event::MessageUpdate(m) => self.log_if_open(m.channel_id, |l| l.update(*m)),
+            Event::MessageUpdate(m) => {
+                self.pin_changed(&m);
+                self.log_if_open(m.channel_id, |l| l.update(*m))
+            }
             Event::MessageDelete { channel_id, id } => {
+                if self.pins.with_untracked(|p| p.contains_key(&channel_id)) {
+                    self.pins.update(|p| {
+                        if let Some(l) = p.get_mut(&channel_id) {
+                            l.items.retain(|x| x.id != id);
+                        }
+                    });
+                }
                 self.log_if_open(channel_id, |l| l.remove(id));
                 self.forget_last(channel_id, id);
             }
@@ -799,6 +850,7 @@ async fn run(store: Store) {
                 store.dms.with_untracked(|d| store.note_last(d));
                 // Des messages ont pu passer pendant la coupure : on recharge à l'affichage.
                 store.logs.update(|l| l.values_mut().for_each(|x| x.loaded = false));
+                store.pins.update(|p| p.values_mut().for_each(|x| x.loaded = false));
                 store.conn.set(Conn::Ready);
             }
             ServerOp::Dispatch { seq: s, event } => {

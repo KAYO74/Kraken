@@ -172,8 +172,9 @@ Dialogue de confirmation        .k-dialog
 
 Message                         .k-msg
   variants  normal (avatar + en-tête), suite (--cont), compact (--compact), réponse (.k-reply), système (--system)
-  states    survol (fond surface-raised + barre d'actions), en édition (.k-msg-edit), mentionné (--mention : fond accent-soft arrondi, sans barre latérale), épinglé, envoi en attente (opacité .5), échec (texte danger + Réessayer)
+  states    survol (fond surface-raised + barre d'actions), en édition (.k-msg-edit), mentionné (--mention : fond accent-soft arrondi, sans barre latérale), épinglé (repère `.app-pinned` : icône Pin 16 px en text-muted et « Épinglé » en k-sr, à côté de l'heure ; le message garde son en-tête), envoi en attente (opacité .5), échec (texte danger + Réessayer)
   tokens    text, text-strong (auteur, couleur de rôle si présente), text-faint (heure), accent-soft (mention)
+  actions   Réagir, Répondre, Épingler / Désépingler (selon l'état ; absent sans « Gérer les messages » en serveur, présent pour tous en MP), Modifier, Supprimer (danger, toujours en dernier)
   a11y      <article> avec aria-labelledby auteur ; barre d'actions role="toolbar", visible au focus ; raccourcis E/R/P du S13 ; heure dans <time datetime>
   used on   S05, S19, S24, S12 (aperçu)
 
@@ -297,12 +298,29 @@ Panneau « En appel »            .k-voicebar
   used on   coquille, en bas de la barre latérale, seulement pendant un appel (les bascules micro et son n'existent qu'ici
             et dans la barre de l'appel)
 
+Panneau « Messages épinglés »    .app-aside--pins, .app-sheet (sous 640 px)
+  variants  colonne à côté du fil (comme « Membres », jamais ensemble), feuille pleine page dans un Portal sous 640 px
+  scroll    colonne : l'en-tête (titre, compteur, Fermer) reste en haut, seule la liste (.app-pins-body) défile ; feuille : idem
+  states    chargement (aria-busy, ligne role="status" de hauteur réservée, 3 squelettes), vide (icône Pin, « Aucun message épinglé », aide selon le droit),
+            erreur (role="alert" + « Réessayer »), liste (« 12 / 50 », récent d'abord, texte sur 4 lignes, « Aller au message », « Désépingler » avec le droit)
+            auteur bloqué : la ligne se replie comme dans le fil (« Message d'un compte que tu as bloqué. », « Afficher » / « Masquer » avec aria-expanded)
+  tokens    surface, surface-raised, border, text-strong, text-muted, radius lg, size-option-row-mobile (cibles de 44 px)
+  a11y      bouton d'en-tête aria-expanded + aria-controls ; h2 en tabindex -1 qui prend le focus à l'ouverture ; Échap ferme et rend le focus au bouton ;
+            feuille role="dialog" aria-modal avec Tab piégé et « Fermer » visible ; focus d'une ligne qui disparaît : la suivante, sinon le h2 ;
+            contour 2 px (data-flash) sur le message atteint, sans animation
+  used on   S05, S19 (MP et groupes)
+
 États vides et chargement       .k-empty, .k-skeleton
   a11y      skeleton aria-hidden + aria-busy sur la zone ; animation coupée en mouvement réduit
   used on   S01 (« rien pour l'instant »), S13, S16, toutes les listes au chargement
 ```
 
 ## Écrans non capturés
+
+Zone d'information de la coquille    .app-notice (role="status", toujours présente)
+  variants  confirmations (« Message épinglé. ») et échecs d'icône : toast flottant, hors flux, ancré au bas de l'en-tête (anchor-name --app-header ; à défaut --size-header), z-index popover ; texte à la ligne (fit-content)
+  states    vide au repos ; sinon une .k-banner à fond opaque et son bouton « Fermer l'information » ; elle repart seule au bout de 6 s
+  a11y      annoncée par les lecteurs d'écran ; ne prend pas les clics (sauf « Fermer ») ; rien ne se décale quand elle vient ou repart
 
 S18 à S30 réutilisent ces primitives. Faits au build : tuile de participant vocal, barre de commandes d'appel, panneau « En appel » (ci-dessus). Prévus, avec les mêmes jetons : popout de profil (bannière + avatar lg), liste de membres (groupes par rôle), Quick Switcher (combobox plein écran).
 

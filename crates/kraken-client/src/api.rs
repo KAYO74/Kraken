@@ -234,6 +234,17 @@ pub async fn delete_message(channel: Id, id: Id) -> ApiResult<()> {
     call(Method::DELETE, &format!("/channels/{channel}/messages/{id}"), NO_BODY).await
 }
 
+/// Les messages épinglés du salon, le plus récemment épinglé d'abord.
+pub async fn pins(channel: Id) -> ApiResult<Vec<Message>> {
+    call(Method::GET, &format!("/channels/{channel}/pins"), NO_BODY).await
+}
+
+/// Épingle (`on`) ou désépingle un message ; rend le message tel qu'il est maintenant.
+pub async fn set_pin(channel: Id, id: Id, on: bool) -> ApiResult<Message> {
+    let method = if on { Method::PUT } else { Method::DELETE };
+    call(method, &format!("/channels/{channel}/pins/{id}"), NO_BODY).await
+}
+
 /// Ajoute (`on`) ou retire ma réaction.
 pub async fn react(channel: Id, id: Id, emoji: &str, on: bool) -> ApiResult<()> {
     let e = String::from(js_sys::encode_uri_component(emoji));

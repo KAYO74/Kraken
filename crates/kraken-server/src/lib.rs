@@ -238,6 +238,13 @@ pub fn app(state: AppState) -> Router {
             limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(api::REACTIONS_PER_MIN)),
             limit::check,
         ));
+    // Épingles : un clic chacune, diffusées à tout le salon et écrites au journal d'audit ; compteur à part.
+    let pins = Router::new()
+        .route("/channels/{id}/pins/{mid}", put(api::pin_message).delete(api::unpin_message))
+        .route_layer(axum::middleware::from_fn_with_state(
+            limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(api::PINS_PER_MIN)),
+            limit::check,
+        ));
     // Photo de profil : un envoi coûte un décodage d'image ; même limite que les connexions,
     // compteur à part. Le corps fait jusqu'à MAX_AVATAR_BYTES, que le gestionnaire borne lui-même.
     let avatars = Router::new()
@@ -311,6 +318,7 @@ pub fn app(state: AppState) -> Router {
         .merge(voice_join)
         .merge(call_decline)
         .merge(reactions)
+        .merge(pins)
         .merge(reads)
         .merge(notify)
         .merge(avatars)
@@ -356,6 +364,7 @@ pub fn app(state: AppState) -> Router {
         .route("/channels/{id}/messages", get(api::messages).post(api::create_message))
         .route("/channels/{id}/messages/{mid}", patch(api::edit_message).delete(api::delete_message))
         .route("/channels/{id}/messages/{mid}/embeds", delete(api::remove_embed))
+        .route("/channels/{id}/pins", get(api::pins))
         .route("/channels/{id}/attachments/{aid}", get(attach::get).delete(attach::remove))
         .route("/channels/{id}/attachments/{aid}/preview", get(attach::preview))
         .route("/channels/{id}/embeds/{key}", get(attach::embed_image))

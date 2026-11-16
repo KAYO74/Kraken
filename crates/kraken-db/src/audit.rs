@@ -43,7 +43,9 @@ fn target_kind(action: &str) -> Option<AuditTargetKind> {
         | "member_timeout"
         | "member_timeout_remove"
         | "owner_transfer"
-        | "message_delete" => User,
+        | "message_delete"
+        | "message_pin"
+        | "message_unpin" => User,
         "role_create" | "role_update" | "role_delete" => Role,
         "channel_create" | "channel_update" | "channel_delete" | "channel_move" | "overwrite_update" => Channel,
         "emoji_create" | "emoji_update" | "emoji_delete" => Emoji,
@@ -113,7 +115,7 @@ fn shape(action: &str, changes: &Value) -> (BTreeMap<String, String>, Vec<AuditC
             put(&mut details, changes, "animated");
             &[]
         }
-        "message_delete" => {
+        "message_delete" | "message_pin" | "message_unpin" => {
             put(&mut details, changes, "channel");
             &[]
         }
