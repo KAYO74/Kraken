@@ -8,6 +8,7 @@
 
 use kraken_core::templates::{self, SlotKind, Template};
 use kraken_proto::GuildState;
+use leptos::html;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
@@ -99,6 +100,24 @@ pub fn CreateGuild() -> impl IntoView {
     let code = RwSignal::new(String::new());
     let busy = RwSignal::new(false);
     let error = RwSignal::new(None::<String>);
+    // Seule une erreur de nom marque le champ Nom (une faute, un champ) ; les autres (réseau, serveur) n'en marquent aucun.
+    let name_error = RwSignal::new(false);
+    let name_input = NodeRef::<html::Input>::new();
+    let retry = NodeRef::<html::Button>::new();
+    // Une erreur apparaît pendant que le bouton « Créer le serveur » est grisé (donc sans focus) : le focus va au champ
+    // fautif, ou à « Réessayer ».
+    Effect::new(move || {
+        if error.get().is_none() {
+            return;
+        }
+        if name_error.get_untracked() {
+            if let Some(i) = name_input.get() {
+                let _ = i.focus();
+            }
+        } else if let Some(b) = retry.get() {
+            let _ = b.focus();
+        }
+    });
     let join_error = RwSignal::new(None::<String>);
     let staged = RwSignal::new(None::<Staged>);
     let icon_error = RwSignal::new(None::<String>);
@@ -131,6 +150,7 @@ pub fn CreateGuild() -> impl IntoView {
         }
         busy.set(true);
         error.set(None);
+        name_error.set(false);
         let nav = nav.clone();
         spawn_local(async move {
             let made: Result<GuildState, _> =
@@ -152,6 +172,7 @@ pub fn CreateGuild() -> impl IntoView {
                     nav(&to, Default::default());
                 }
                 Err(e) => {
+                    name_error.try_set(matches!(e.code.as_str(), "invalid" | "invalid_chars"));
                     error.try_set(Some(e.message));
                 }
             }
@@ -203,8 +224,9 @@ pub fn CreateGuild() -> impl IntoView {
                     <label class="k-field">
                         <span class="k-label">"Nom du serveur"</span>
                         <input class="k-input" required minlength="2" maxlength="100" bind:value=name
-                            on:input=move |_| typed.set(true)
-                            aria-invalid=move || error.get().is_some().then_some("true") aria-describedby="ng-err"/>
+                            node_ref=name_input on:input=move |_| typed.set(true)
+                            aria-invalid=move || (error.get().is_some() && name_error.get()).then_some("true")
+                            aria-describedby=move || (error.get().is_some() && name_error.get()).then_some("ng-err")/>
                     </label>
                 </section>
                 <section aria-labelledby="ng-icon-h" class="app-ng-sec">
@@ -224,7 +246,7 @@ pub fn CreateGuild() -> impl IntoView {
                     <div class="k-banner k-banner--warning app-ng-error" id="ng-err" role="alert">
                         <Icon icon=lu::LuCircleAlert/>
                         <span>{move || error.get()}</span>
-                        <button class="k-btn" type="button" on:click={ let again = create2.clone(); move |_| again() }>"Réessayer"</button>
+                        <button class="k-btn" type="button" node_ref=retry on:click={ let again = create2.clone(); move |_| again() }>"Réessayer"</button>
                     </div>
                 </Show>
                 <div class="app-ng-actions">

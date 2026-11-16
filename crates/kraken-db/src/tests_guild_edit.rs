@@ -263,3 +263,52 @@ async fn the_icon_file_goes_with_the_deleted_server(pool: PgPool) {
     let out = db.delete_guild(gid, own.id, "Abysse").await.unwrap();
     assert!(out.files.iter().all(|f| !f.starts_with("avatars/")));
 }
+
+/// Tabulation, sauts de ligne, séparateurs U+2028 / U+2029, NUL et autres caractères de contrôle : refusés dans un
+/// nom de serveur, à la création comme au renommage, y compris en bout de nom (où `trim` les aurait enlevés). Les
+/// espaces ordinaires et les emojis passent.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn server_names_refuse_control_characters_and_line_separators(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let own = user(&db, "lou").await;
+    let gid = guild_with(&db, &own, &[]).await;
+    let bad = [
+        "Le\tRécif",
+        "Le\nRécif",
+        "Le\r\nRécif",
+        "Le\u{2028}Récif",
+        "Le\u{2029}Récif",
+        "Le\u{0}Récif",
+        "Le\u{1}Récif",
+        "Le\u{7F}Récif",
+        "Le\u{85}Récif",
+        "\tLe Récif",
+        "Le Récif\n",
+        "\u{2028}",
+        "\n",
+    ];
+    for name in bad {
+        assert_eq!(
+            db.create_guild(own.id, name, None).await.map(|_| ()),
+            Err(DbError::Invalid("guild_name_chars")),
+            "création : {name:?}"
+        );
+        assert_eq!(
+            db.rename_guild(gid, own.id, name).await.map(|_| ()),
+            Err(DbError::Invalid("guild_name_chars")),
+            "renommage : {name:?}"
+        );
+    }
+    // Rien n'a été écrit : un seul serveur, sous son nom d'origine, et rien au journal.
+    let count: i64 = sqlx::query_scalar("select count(*) from guilds").fetch_one(&db.pool).await.unwrap();
+    assert_eq!(count, 1);
+    assert_eq!(db.guild_state(gid, own.id).await.unwrap().unwrap().guild.name, "Abysse");
+    assert!(audit_of(&db, gid, own.id, "guild_update").await.is_empty());
+
+    // Les espaces ordinaires (autour comme au milieu) et les emojis restent permis.
+    let ok = db.create_guild(own.id, "  Le Récif 🐙  ", None).await.unwrap();
+    assert_eq!(ok.guild.name, "Le Récif 🐙");
+    assert_eq!(db.rename_guild(gid, own.id, "Mer  de  Corail").await.unwrap().name, "Mer  de  Corail");
+    // Les autres refus gardent leur code.
+    assert_eq!(db.rename_guild(gid, own.id, "A").await.map(|_| ()), Err(DbError::Invalid("guild_name")));
+}

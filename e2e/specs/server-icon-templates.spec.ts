@@ -86,7 +86,16 @@ test('modeles-H2 le modèle par défaut est « Vide », et l’API refuse un mod
   const http = await api(a.token);
   const bad = await http.post(`${API}/guilds`, { data: { name: 'Quelque chose', template: 'n-importe-quoi' } });
   expect(bad.status()).toBe(400);
+  // Tabulation, saut de ligne, U+2028 et NUL dans un nom : refusés avec un message clair, à la création comme au renommage.
+  for (const name of ['Le\tRécif', 'Le\nRécif', 'Le\u2028Récif', 'Le\u0000Récif']) {
+    const refused = await http.post(`${API}/guilds`, { data: { name } });
+    expect(refused.status(), JSON.stringify(name)).toBe(400);
+    expect((await refused.json()).message).toBe('Le nom du serveur contient un caractère interdit (tabulation, saut de ligne ou autre caractère de contrôle).');
+  }
   const [gid] = await createGuild(a.page, 'Sans modèle choisi');
+  const renamed = await http.patch(`${API}/guilds/${gid}`, { data: { name: 'Le\u0000Récif' } });
+  expect(renamed.status()).toBe(400);
+  expect((await renamed.json()).code).toBe('invalid_chars');
   expect(await structure(api, a, gid)).toEqual([
     ['category', 'Salons textuels'],
     ['text', 'général'],
@@ -168,12 +177,18 @@ test('icone-H1 envoyer, voir, renommer, retirer : le rail et les membres suivent
   // Renommer : le rail, le titre des réglages et l'autre membre suivent.
   const field = dlg.getByLabel('Nom du serveur');
   await expect(dlg.getByRole('button', { name: 'Enregistrer' })).toBeDisabled();
+  // Les messages de réussite (un par bloc) ne restent pas à côté d'une erreur ni d'un message de l'autre bloc.
+  const notes = dlg.locator('.app-ov-note');
+  await expect(notes).toHaveText(['Icône mise à jour.', '']);
   await field.fill('R');
+  await expect(notes).toHaveText(['', '']); // modifier le nom efface la note de l'icône
   await field.press('Enter');
   await expect(a.page.locator('#ov-name-err')).toBeVisible();
+  await expect(notes).toHaveText(['', '']);
   await field.fill('Grand Récif');
   await field.press('Enter');
   await expect(dlg.getByRole('status').filter({ hasText: 'Nom du serveur enregistré' })).toBeVisible();
+  await expect(notes).toHaveText(['', 'Nom du serveur enregistré.']);
   await expect(rail(a.page, 'Grand Récif')).toBeVisible();
   await expect(rail(b.page, 'Grand Récif')).toBeVisible();
   await expect(rail(b.page, 'Grand Récif').locator('img')).toHaveCount(1);
@@ -181,11 +196,17 @@ test('icone-H1 envoyer, voir, renommer, retirer : le rail et les membres suivent
   // Retirer : retour aux initiales, le fichier n'est plus servi.
   await dlg.getByRole('button', { name: "Retirer l'icône" }).click();
   await expect(dlg.getByRole('status').filter({ hasText: 'Icône mise à jour' })).toBeVisible();
+  await expect(notes).toHaveText(['Icône mise à jour.', '']); // l'action sur l'icône efface la note du nom
   await expect(rail(a.page, 'Grand Récif').locator('img')).toHaveCount(0);
   await expect(rail(b.page, 'Grand Récif').locator('img')).toHaveCount(0);
   await expect(rail(b.page, 'Grand Récif')).toContainText('GR');
   expect(await iconKey(api, a, gid)).toBeNull();
   expect((await (await api()).get(`${API}/guild-icons/${key}`)).status()).toBe(404);
+
+  // Un fichier refusé : l'erreur, et plus aucune note de réussite à côté.
+  await dlg.getByLabel('Choisir une image').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('pas une image') });
+  await expect(dlg.getByRole('alert').filter({ hasText: 'pas une image lisible' })).toBeVisible();
+  await expect(notes).toHaveText(['', '']);
 
   // Le journal d'audit : qui a fait quoi.
   await dlg.getByRole('link', { name: "Journal d'audit" }).click();
@@ -285,4 +306,108 @@ test('icone-N1 sans « Gérer le serveur » : ni rubrique, ni droit de changer l
   const ok = await asCrew.patch(`${API}/guilds/${gid}`, { data: { name: 'Pirates' } });
   expect(ok.status()).toBe(200);
   await expect(rail(owner.page, 'Pirates')).toBeVisible();
+});
+
+test('modeles-E2 la création échoue : seul un nom fautif est marqué, le focus va au bon endroit, « Réessayer » crée', async ({ user, allow }) => {
+  allow.push(/ERR_FAILED|status of 400/);
+  const a = await user('rene');
+  await a.page.goto('/guilds/new');
+  const name = a.page.getByLabel('Nom du serveur');
+  await expect(name).toHaveValue(/^Serveur de /);
+
+  // Erreur réseau : le champ Nom n'est pas marqué, le focus arrive sur « Réessayer », rien n'est créé.
+  await a.page.route('**/api/v1/guilds', (r) => (r.request().method() === 'POST' ? r.abort('failed') : r.fallback()));
+  await a.page.getByRole('button', { name: 'Créer le serveur', exact: true }).click();
+  const alert = a.page.getByRole('alert').filter({ has: a.page.getByRole('button', { name: 'Réessayer' }) });
+  await expect(alert).toBeVisible();
+  await expect(name).not.toHaveAttribute('aria-invalid', 'true');
+  await expect(name).not.toHaveAttribute('aria-describedby', /.+/);
+  await expect(a.page.getByRole('button', { name: 'Réessayer' })).toBeFocused();
+  await expect(a.page.getByRole('button', { name: 'Créer le serveur', exact: true })).toBeEnabled();
+  await expect(a.page).toHaveURL(/\/guilds\/new$/);
+  await a11y(a.page);
+
+  // « Réessayer » une fois le réseau revenu : le serveur est créé, la page s'ouvre dessus.
+  await a.page.unroute('**/api/v1/guilds');
+  await a.page.getByRole('button', { name: 'Réessayer' }).click();
+  await a.page.waitForURL(/\/channels\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+  await expect(a.page.getByRole('heading', { name: 'général', level: 1 })).toBeVisible();
+
+  // Un nom refusé par le serveur : lui seul est marqué (et relié à l'erreur), et c'est lui qui prend le focus.
+  await a.page.goto('/guilds/new');
+  await expect(name).toHaveValue(/^Serveur de /);
+  await name.fill('x');
+  await a.page.getByRole('button', { name: 'Créer le serveur', exact: true }).click();
+  await expect(a.page.getByRole('alert').filter({ hasText: 'de 2 à 100 caractères' })).toBeVisible();
+  await expect(name).toHaveAttribute('aria-invalid', 'true');
+  await expect(name).toHaveAttribute('aria-describedby', 'ng-err');
+  await expect(name).toBeFocused();
+});
+
+test('modeles-E3 l’icône ne part pas après la création : le serveur existe, une information le dit (zone status)', async ({ user, allow }) => {
+  allow.push(/status of 400/);
+  const a = await user('sacha');
+  await a.page.goto('/guilds/new');
+  await expect(a.page.getByLabel('Nom du serveur')).toHaveValue(/^Serveur de /);
+  await a.page.getByLabel('Nom du serveur').fill('Archipel');
+  await a.page.getByLabel('Choisir une image').setInputFiles({ name: 'archipel.png', mimeType: 'image/png', buffer: png(64, 64) });
+  await a.page.getByRole('dialog', { name: "Recadrer l'icône" }).getByRole('button', { name: 'Appliquer' }).click();
+  await expect(a.page.getByRole('img', { name: 'Icône choisie' })).toBeVisible();
+  await a.page.route('**/api/v1/guilds/*/icon', (r) =>
+    r.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ code: 'invalid', message: 'Cette image est refusée.' }) }),
+  );
+  await a.page.getByRole('button', { name: 'Créer le serveur', exact: true }).click();
+  await a.page.waitForURL(/\/channels\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+  await expect(rail(a.page, 'Archipel')).toBeVisible();
+  const info = a.page.getByRole('status').filter({ hasText: "Le serveur est créé, mais son icône n'a pas pu être envoyée" });
+  await expect(info).toBeVisible();
+  await expect(info).toContainText('Vue d\'ensemble');
+  await a11y(a.page);
+  await info.getByRole('button', { name: "Fermer l'information" }).click();
+  await expect(info).toHaveCount(0);
+});
+
+test('modeles-E4 l’aperçu de l’icône reste un carré de 96 px, à 390 px comme à 1440 px, à côté des boutons en large', async ({ user }) => {
+  const a = await user('tania');
+  const box = (l: ReturnType<Page['locator']>) => l.evaluate((e) => e.getBoundingClientRect().toJSON());
+  await a.page.setViewportSize({ width: 390, height: 844 });
+  await a.page.goto('/guilds/new');
+  const preview = a.page.locator('.app-gicon-preview');
+  await expect(preview).toBeVisible();
+  const small = await box(preview);
+  expect([small.width, small.height]).toEqual([96, 96]);
+  // Les boutons, eux, prennent la largeur.
+  const pick = await box(a.page.locator('label.k-btn', { hasText: 'Choisir une image' }));
+  expect(pick.width).toBeGreaterThan(300);
+  expect(await a.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+
+  await a.page.setViewportSize({ width: 1440, height: 900 });
+  await a.page.goto('/guilds/new');
+  await expect(preview).toBeVisible();
+  const wide = await box(preview);
+  expect([wide.width, wide.height]).toEqual([96, 96]);
+  const btn = await box(a.page.locator('label.k-btn', { hasText: 'Choisir une image' }));
+  expect(btn.left).toBeGreaterThanOrEqual(wide.right); // côte à côte, pas empilés
+  expect(Math.abs(btn.top - wide.top)).toBeLessThan(wide.height);
+
+  // Pareil dans Réglages › Vue d'ensemble.
+  const [gid] = await createGuild(a.page, 'Cap Vert');
+  await a.page.goto(`/guilds/${gid}/settings/overview`);
+  const p2 = await box(settings(a.page).locator('.app-gicon-preview'));
+  const b2 = await box(settings(a.page).locator('label.k-btn', { hasText: 'Choisir une image' }));
+  expect([p2.width, p2.height]).toEqual([96, 96]);
+  expect(b2.left).toBeGreaterThanOrEqual(p2.right);
+});
+
+test('modeles-E5 la page d’invitation laisse de l’air sous « 1 membre », avant les boutons', async ({ user, api }) => {
+  const a = await user('uriel');
+  const b = await user('vera');
+  const [, cid] = await createGuild(a.page, 'Phalène');
+  const { code } = await (await (await api(a.token)).post(`${API}/channels/${cid}/invites`, { data: {} })).json();
+  await b.page.goto(`/invite/${code}`);
+  const count = b.page.getByText('1 membre');
+  await expect(count).toBeVisible();
+  const text = await count.evaluate((e) => e.getBoundingClientRect().bottom);
+  const foot = await b.page.locator('.app-auth-card > footer').evaluate((e) => e.getBoundingClientRect().top);
+  expect(foot - text).toBeGreaterThanOrEqual(15);
 });

@@ -35,7 +35,6 @@ async fn take(
     error: RwSignal<Option<String>>,
     on_pick: Callback<IconFile>,
 ) {
-    error.try_set(None);
     // Une image fixe est recadrée et réduite avant l'envoi : seule la source peut peser lourd.
     if file.size() > Which::Icon.max_bytes() as f64 {
         error.try_set(Some(too_big(Which::Icon)));
@@ -89,8 +88,17 @@ pub fn IconPicker(
     error: RwSignal<Option<String>>,
     on_pick: Callback<IconFile>,
     on_remove: Callback<()>,
+    /// Appelé au début de chaque action (choisir, déposer, retirer), avant tout résultat : l'appelant y efface
+    /// ses messages de réussite, qui ne doivent pas rester à côté d'une erreur ou d'un autre message.
+    #[prop(optional, into)]
+    on_action: Option<Callback<()>>,
     children: Children,
 ) -> impl IntoView {
+    let started = move || {
+        if let Some(f) = on_action {
+            f.run(());
+        }
+    };
     let input = NodeRef::<html::Input>::new();
     let crop = RwSignal::new(None::<String>);
     let dragging = RwSignal::new(false);
@@ -103,6 +111,7 @@ pub fn IconPicker(
         spawn_local(take(file, crop, error, on_pick));
     };
     let on_change = move |_| {
+        started();
         error.set(None);
         let Some(input) = input.get_untracked() else { return };
         let Some(file) = input.files().and_then(|f| f.get(0)) else { return };
@@ -111,6 +120,7 @@ pub fn IconPicker(
         pick(file);
     };
     let remove = move |_| {
+        started();
         error.set(None);
         on_remove.run(());
         // Le bouton disparaît avec l'icône : le focus passe au choix d'une image.
@@ -153,6 +163,7 @@ pub fn IconPicker(
             return;
         }
         e.prevent_default();
+        started();
         error.set(None);
         let files = crate::files::files_of(e.data_transfer().and_then(|d| d.files()));
         let many = files.len() > 1;

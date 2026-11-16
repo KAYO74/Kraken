@@ -11,8 +11,20 @@ use sqlx::Row;
 use crate::moderation::{Tx, actor, audit_changes, lock};
 use crate::{Db, DbError, Result};
 
-/// Le nom d'un serveur : 2 à 100 caractères, rien d'invisible. Rend le nom nettoyé de ses espaces autour.
+/// Un caractère qui n'a pas sa place dans un nom de serveur : un caractère de contrôle (tabulation, saut de ligne,
+/// NUL…), comme dans un nom de salon, et les séparateurs de ligne et de paragraphe U+2028 / U+2029, qui coupent une
+/// ligne sans en être un pour `char::is_control`.
+fn forbidden_in_guild_name(c: char) -> bool {
+    c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')
+}
+
+/// Le nom d'un serveur : 2 à 100 caractères, rien d'invisible, aucun caractère de contrôle ni saut de ligne (jugés
+/// avant de retirer les espaces autour : une tabulation en bout de nom est refusée comme une autre). Rend le nom
+/// nettoyé de ses espaces autour.
 pub(crate) fn clean_guild_name(name: &str) -> Result<&str> {
+    if name.chars().any(forbidden_in_guild_name) {
+        return Err(DbError::Invalid("guild_name_chars"));
+    }
     let name = name.trim();
     if !(2..=100).contains(&name.chars().count()) {
         return Err(DbError::Invalid("guild_name"));

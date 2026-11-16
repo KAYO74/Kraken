@@ -388,6 +388,31 @@ async fn renaming_is_live_logged_and_follows_the_name_rules(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn a_server_name_with_a_control_character_gets_a_clear_french_400(pool: PgPool) {
+    let (base, _) = spawn(pool.clone()).await;
+    let lou = Who::new(&base, "lou").await;
+    let g = lou.new_guild().await;
+    let gid = g.guild.id;
+    let guilds =
+        || async { sqlx::query_scalar::<_, i64>("select count(*) from guilds").fetch_one(&pool).await.unwrap() };
+    let before = guilds().await;
+    let said =
+        "Le nom du serveur contient un caractère interdit (tabulation, saut de ligne ou autre caractère de contrôle).";
+    for bad in ["Le\u{0}Récif", "Le\tRécif", "Le\nRécif", "Le\u{2028}Récif", "Le\u{2029}Récif", "Récif\r"] {
+        let (s, v) = lou.guild(bad, None).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "création {bad:?}");
+        assert_eq!((v["code"].as_str(), v["message"].as_str()), (Some("invalid_chars"), Some(said)), "{bad:?}");
+        let (s, v) = lou.call(Method::PATCH, &format!("/guilds/{gid}"), Some(json!({ "name": bad }))).await;
+        assert_eq!(s, StatusCode::BAD_REQUEST, "renommage {bad:?}");
+        assert_eq!((v["code"].as_str(), v["message"].as_str()), (Some("invalid_chars"), Some(said)), "{bad:?}");
+    }
+    assert_eq!(guilds().await, before, "un refus ne crée rien");
+    assert!(lou.audit(gid).await.is_empty(), "un refus n'écrit rien au journal");
+    let (_, v) = lou.call(Method::GET, &format!("/guilds/{gid}"), None).await;
+    assert_eq!(v["guild"]["name"], "Abysse");
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
 async fn only_those_who_manage_the_server_edit_it(pool: PgPool) {
     let (base, dir) = spawn(pool).await;
     let (lou, sam, ada, noa) = (

@@ -139,15 +139,18 @@ pub fn Shell() -> impl IntoView {
                         <span>{move || if s.conn.get() == Conn::Connecting { "Connexion au serveur…" } else { "Connexion perdue, nouvelle tentative…" }}</span>
                     </div>
                 </Show>
-                <Show when=move || s.notice.get().is_some()>
-                    <div class="k-banner app-conn" role="status">
-                        <Icon icon=lu::LuInfo/>
-                        <span>{move || s.notice.get()}</span>
-                        <button type="button" class="k-btn k-btn--icon" aria-label="Fermer l'information" on:click=move |_| s.notice.set(None)>
-                            <Icon icon=lu::LuX small=true/>
-                        </button>
-                    </div>
-                </Show>
+                // Zone `status` toujours présente : un message qui arrive dans une zone déjà là est annoncé.
+                <div role="status">
+                    <Show when=move || s.notice.get().is_some()>
+                        <div class="k-banner app-conn">
+                            <Icon icon=lu::LuInfo/>
+                            <span>{move || s.notice.get()}</span>
+                            <button type="button" class="k-btn k-btn--icon" aria-label="Fermer l'information" on:click=move |_| s.notice.set(None)>
+                                <Icon icon=lu::LuX small=true/>
+                            </button>
+                        </div>
+                    </Show>
+                </div>
                 <Outlet/>
             </main>
             <CallAudio/>

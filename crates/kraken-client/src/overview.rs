@@ -34,13 +34,24 @@ pub fn Overview(guild: Id) -> impl IntoView {
         }
         icon_busy.try_set(false);
     };
+    let name_busy = RwSignal::new(false);
+    let name_error = RwSignal::new(None::<String>);
+    let name_note = RwSignal::new(None::<&'static str>);
+    // Un message de réussite ne reste jamais à côté d'une erreur ou d'un autre message : chaque action
+    // (sur l'icône ou sur le nom) efface ceux de l'autre bloc comme le sien.
+    let on_action = Callback::new(move |()| {
+        icon_note.set(None);
+        name_note.set(None);
+    });
     let on_pick = Callback::new(move |f: IconFile| {
+        on_action.run(());
         icon_busy.set(true);
         icon_error.set(None);
         icon_note.set(None);
         spawn_local(async move { done(crate::api::set_guild_icon(guild, &f.bytes, f.mime).await) });
     });
     let on_remove = Callback::new(move |()| {
+        on_action.run(());
         icon_busy.set(true);
         icon_error.set(None);
         icon_note.set(None);
@@ -49,18 +60,15 @@ pub fn Overview(guild: Id) -> impl IntoView {
 
     // ───────── nom ─────────
     let draft = RwSignal::new(name_now.get_untracked());
-    let name_busy = RwSignal::new(false);
-    let name_error = RwSignal::new(None::<String>);
-    let name_note = RwSignal::new(None::<&'static str>);
     let unchanged = Memo::new(move |_| draft.with(|d| d.trim() == name_now.get()));
     let save = move |e: leptos::ev::SubmitEvent| {
         e.prevent_default();
         if name_busy.get_untracked() || unchanged.get_untracked() {
             return;
         }
+        on_action.run(());
         name_busy.set(true);
         name_error.set(None);
-        name_note.set(None);
         let name = draft.get_untracked();
         spawn_local(async move {
             match crate::api::rename_guild(guild, &name).await {
@@ -82,7 +90,7 @@ pub fn Overview(guild: Id) -> impl IntoView {
             <section aria-labelledby="ov-icon-h" class="app-ov-sec">
                 <h3 id="ov-icon-h" class="app-ov-h">"Icône du serveur"</h3>
                 <p class="app-hint">"Elle remplace les initiales du serveur dans la liste de gauche, chez tous ses membres."</p>
-                <IconPicker id="ov-icon" has_icon=has_icon busy=icon_busy error=icon_error on_pick=on_pick on_remove=on_remove>
+                <IconPicker id="ov-icon" has_icon=has_icon busy=icon_busy error=icon_error on_pick=on_pick on_remove=on_remove on_action=on_action>
                     <span class="app-gicon-preview" role="img"
                         aria-label=move || if has_icon.get() { "Icône actuelle du serveur" } else { "Pas d'icône : les initiales du serveur" }>
                         {move || current.get().map(|g| view! { <GuildIcon guild=g cap=256/> })}
@@ -97,6 +105,7 @@ pub fn Overview(guild: Id) -> impl IntoView {
                     <label class="k-field">
                         <span class="k-label">"Nom du serveur"</span>
                         <input class="k-input" required minlength="2" maxlength="100" bind:value=draft
+                            on:input=move |_| { on_action.run(()); name_error.set(None); }
                             aria-invalid=move || name_error.get().is_some().then_some("true") aria-describedby="ov-name-err"/>
                     </label>
                     <button class="k-btn k-btn--primary" type="submit" disabled=move || unchanged.get() || name_busy.get()
