@@ -50,6 +50,10 @@ pub async fn join(
     if p & perms::CONNECT == 0 {
         return Err(crate::api::denied(&state, uid, cid, perms::CONNECT).await);
     }
+    // Un client à trois lignes (sans caméra) ne peut plus entrer : message clair plutôt qu'une offre refusée.
+    if req.mids.camera.is_empty() {
+        return Err(AppError::invalid("Ton application est trop ancienne pour les appels : mets-la à jour."));
+    }
     let Some(sfu) = state.voice.clone() else { return Err(unavailable()) };
     if req.sdp.len() > 64 * 1024 {
         return Err(AppError::invalid("Offre WebRTC trop longue."));
@@ -64,6 +68,7 @@ pub async fn join(
         self_deaf: req.self_deaf,
         can_speak: p & perms::SPEAK != 0,
         can_stream: p & perms::STREAM != 0,
+        can_video: p & perms::VIDEO != 0,
     };
     let call = match guild_id {
         None => crate::call::prepare(&state, cid, uid).await?,
@@ -224,7 +229,14 @@ async fn broadcast(db: &Db, hub: &Hub, s: VoiceState, before: Option<Id>) -> Res
         Some(b) => db.channel_audience(b).await?.into_iter().filter(|u| !viewers.contains(u)).collect(),
         None => vec![],
     };
-    let hidden = VoiceState { channel_id: None, self_mute: false, self_deaf: false, streaming: false, ..s.clone() };
+    let hidden = VoiceState {
+        channel_id: None,
+        self_mute: false,
+        self_deaf: false,
+        streaming: false,
+        camera: false,
+        ..s.clone()
+    };
     hub.send(&viewers, Event::VoiceStateUpdate(s));
     hub.send(&left, Event::VoiceStateUpdate(hidden));
     Ok(())

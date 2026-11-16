@@ -1,7 +1,8 @@
 //! Le SFU pour de vrai : des « navigateurs » str0m sur 127.0.0.1, en UDP, rejoignent un salon.
 //! Le micro de l'un arrive chez l'autre ; l'écran partagé n'arrive qu'à qui le regarde (avec une
-//! image clé demandée à celui qui partage) ; chaque piste reçue porte le flux `<id>.mic` ou
-//! `<id>.screen` ; regarder, arrêter de regarder et partir renégocient par le canal de données.
+//! image clé demandée à celui qui partage) ; la caméra allumée arrive à tout le salon, sans
+//! demande ; chaque piste reçue porte le flux `<id>.mic`, `<id>.screen` ou `<id>.camera` ;
+//! regarder, arrêter de regarder et partir renégocient par le canal de données.
 
 use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use std::sync::{Arc, Mutex};
@@ -23,18 +24,19 @@ use str0m::{Candidate, Event, Input, Output, Rtc};
 const MIC: [u8; 4] = [0xa0, 1, 2, 3];
 const KEYFRAME: [u8; 12] = [0x10, 0x02, 0x00, 0x9d, 0x01, 0x2a, 0x80, 0x02, 0xe0, 0x01, 7, 7];
 
-/// Un navigateur réduit à l'essentiel : trois pistes envoyées, le canal `kraken`, et il répond
+/// Un navigateur réduit à l'essentiel : quatre pistes envoyées, le canal `kraken`, et il répond
 /// à chaque offre du serveur comme le client web.
 struct Browser {
     rtc: Rtc,
     socket: UdpSocket,
     local: SocketAddr,
-    /// Micro, image et son de l'écran.
-    mids: [Mid; 3],
+    /// Micro, image et son de l'écran, caméra.
+    mids: [Mid; 4],
     channel: Option<ChannelId>,
     connected: bool,
     send_mic: bool,
     send_screen: bool,
+    send_camera: bool,
     last_frame: Instant,
     frames: u64,
     /// Offres reçues du serveur.
@@ -44,6 +46,7 @@ struct Browser {
     /// Trames reçues : flux (msid) de la piste, nature, contenu.
     received: Vec<(String, MediaKind, Vec<u8>)>,
     keyframe_requests: usize,
+    camera_keyframe_requests: usize,
     next: Instant,
 }
 
@@ -59,25 +62,32 @@ impl Browser {
         let mic = api.add_media(MediaKind::Audio, Direction::SendOnly, None, None, None);
         let screen = api.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
         let screen_audio = api.add_media(MediaKind::Audio, Direction::SendOnly, None, None, None);
+        let camera = api.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
         api.add_channel(VOICE_DATA_CHANNEL.into());
         let (offer, pending) = api.apply().unwrap();
-        let mids =
-            VoiceMids { mic: mic.to_string(), screen: screen.to_string(), screen_audio: screen_audio.to_string() };
+        let mids = VoiceMids {
+            mic: mic.to_string(),
+            screen: screen.to_string(),
+            screen_audio: screen_audio.to_string(),
+            camera: camera.to_string(),
+        };
         let b = Self {
             rtc,
             socket,
             local,
-            mids: [mic, screen, screen_audio],
+            mids: [mic, screen, screen_audio, camera],
             channel: None,
             connected: false,
             send_mic: false,
             send_screen: false,
+            send_camera: false,
             last_frame: now,
             frames: 0,
             offers: Vec::new(),
             inbox: Vec::new(),
             received: Vec::new(),
             keyframe_requests: 0,
+            camera_keyframe_requests: 0,
             next: now,
         };
         (b, offer.to_sdp_string(), mids, pending)
@@ -85,8 +95,15 @@ impl Browser {
 
     /// Rejoint `room` (serveur `guild`) avec tous les droits.
     fn join(sfu: &Sfu, guild: Id, room: Id, user: Id) -> Self {
+        Self::join_with(sfu, guild, room, user, |_| {})
+    }
+
+    /// Rejoint `room` avec les droits que `rights` retouche.
+    fn join_with(sfu: &Sfu, guild: Id, room: Id, user: Id, rights: impl FnOnce(&mut Join)) -> Self {
         let (mut b, offer, mids, pending) = Self::new();
-        let answer = sfu.join(join(guild, room, user, offer, mids)).unwrap();
+        let mut j = join(guild, room, user, offer, mids);
+        rights(&mut j);
+        let answer = sfu.join(j).unwrap();
         assert!(answer.contains("a=ice-lite"), "le serveur est ICE-lite");
         b.rtc.sdp_api().accept_answer(pending, SdpAnswer::from_sdp_string(&answer).unwrap()).unwrap();
         b
@@ -134,6 +151,7 @@ impl Browser {
                 self.received.push((m.stream_id().to_string(), m.kind(), d.data.to_vec()));
             }
             Event::KeyframeRequest(r) if r.mid == self.mids[1] => self.keyframe_requests += 1,
+            Event::KeyframeRequest(r) if r.mid == self.mids[3] => self.camera_keyframe_requests += 1,
             _ => {}
         }
     }
@@ -152,6 +170,9 @@ impl Browser {
         if self.send_screen {
             self.write(1, Codec::Vp8, MediaTime::new(self.frames * 3000, Frequency::NINETY_KHZ), &KEYFRAME);
             self.write(2, Codec::Opus, audio, &MIC);
+        }
+        if self.send_camera {
+            self.write(3, Codec::Vp8, MediaTime::new(self.frames * 3000, Frequency::NINETY_KHZ), &KEYFRAME);
         }
     }
 
@@ -194,6 +215,7 @@ fn join(guild: Id, room: Id, user: Id, offer: String, mids: VoiceMids) -> Join {
         self_deaf: false,
         can_speak: true,
         can_stream: true,
+        can_video: true,
     }
 }
 
@@ -255,7 +277,7 @@ fn voice_and_screen_round_trip() {
     assert_eq!(b.got(&a_screen, MediaKind::Video), 0, "pas de partage annoncé : rien à regarder");
 
     // A annonce le partage ; B regarde : image (après une image clé demandée à A) et son.
-    a.send(&VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: true });
+    a.send(&VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: true, camera: false });
     until(&mut [&mut a, &mut b], "partage annoncé", |_| sfu.state(ua).is_some_and(|s| s.streaming));
     assert_eq!(b.got(&a_screen, MediaKind::Video), 0, "personne ne regarde sans le demander");
     b.send(&VoiceClientMsg::Watch { user_id: ua, on: true });
@@ -279,7 +301,7 @@ fn voice_and_screen_round_trip() {
     assert_eq!(b.got(&a_screen, MediaKind::Video), before, "écran plus relayé");
 
     // B coupe son micro mais l'envoie quand même : plus rien ne part.
-    b.send(&VoiceClientMsg::State { self_mute: true, self_deaf: false, streaming: false });
+    b.send(&VoiceClientMsg::State { self_mute: true, self_deaf: false, streaming: false, camera: false });
     until(&mut [&mut a, &mut b], "micro coupé", |_| sfu.state(ub).is_some_and(|s| s.self_mute));
     let t = Instant::now();
     until(&mut [&mut a, &mut b], "fin du flux", |_| t.elapsed() > Duration::from_millis(200));
@@ -302,6 +324,101 @@ fn voice_and_screen_round_trip() {
     assert_eq!(sfu.states(guild).iter().map(|s| s.user_id).collect::<Vec<_>>(), [ub]);
     let last = log.lock().unwrap().iter().rev().find(|s| s.user_id == ua).cloned().unwrap();
     assert_eq!(last.channel_id, None);
+}
+
+/// La caméra : relayée à tout le salon dès qu'elle est annoncée, sans `watch`, y compris à qui
+/// arrive après ; arrêtée à l'extinction ; jamais renvoyée à celui qui la filme.
+#[test]
+fn camera_relay() {
+    let (sfu, log) = sfu(25);
+    let (guild, room, elsewhere) = (id(1), id(2), id(3));
+    let (ua, ub, uc, ud) = (id(10), id(11), id(12), id(13));
+    let mut a = Browser::join(&sfu, guild, room, ua);
+    let mut b = Browser::join(&sfu, guild, room, ub);
+    let mut d = Browser::join(&sfu, guild, elsewhere, ud);
+    until(&mut [&mut a, &mut b, &mut d], "connexions", |bs| bs.iter().all(|x| x.ready()));
+    let a_camera = format!("{ua}.camera");
+    let on = |camera| VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: false, camera };
+
+    // A envoie sa caméra sans l'avoir annoncée : rien ne part.
+    a.send_camera = true;
+    wait(&mut [&mut a, &mut b, &mut d], 300);
+    assert_eq!(b.got(&a_camera, MediaKind::Video), 0, "caméra non annoncée : rien à relayer");
+    assert!(b.offers.iter().all(|o| !o.contains("camera")), "aucune piste ouverte");
+
+    // Annoncée : B la reçoit tout de suite (image clé demandée à A), pas besoin de regarder.
+    a.send(&on(true));
+    until(&mut [&mut a, &mut b, &mut d], "caméra annoncée", |_| sfu.state(ua).is_some_and(|s| s.camera));
+    until(&mut [&mut a, &mut b, &mut d], "caméra relayée", |bs| bs[1].got(&a_camera, MediaKind::Video) > 0);
+    assert!(a.camera_keyframe_requests > 0, "image clé demandée à celui qui filme");
+    assert_eq!(a.keyframe_requests, 0, "l'écran n'est pas concerné");
+    assert!(b.received.iter().any(|(s, k, d)| *s == a_camera && *k == MediaKind::Video && d[..] == KEYFRAME));
+    assert!(!sfu.state(ua).unwrap().streaming, "pas de partage d'écran pour autant");
+    assert_eq!(a.got(&a_camera, MediaKind::Video), 0, "pas renvoyée à celui qui la filme");
+    assert_eq!(d.got(&a_camera, MediaKind::Video), 0, "un autre salon ne la voit pas");
+
+    // C arrive après : il la reçoit aussi.
+    let mut c = Browser::join(&sfu, guild, room, uc);
+    until(&mut [&mut a, &mut b, &mut c, &mut d], "caméra pour le nouveau", |bs| {
+        bs[2].got(&a_camera, MediaKind::Video) > 0
+    });
+    assert!(log.lock().unwrap().iter().any(|s| s.user_id == ua && s.camera), "état diffusé avec la caméra");
+
+    // A l'éteint : les lignes sont arrêtées, plus rien n'arrive, l'état suit.
+    let offers = b.offers.len();
+    a.send(&on(false));
+    until(&mut [&mut a, &mut b, &mut c, &mut d], "caméra éteinte", |bs| {
+        bs[1].offers.len() > offers && sfu.state(ua).is_some_and(|s| !s.camera)
+    });
+    assert!(b.offers.last().unwrap().contains("m=video 0 "), "ligne vidéo arrêtée (port 0)");
+    wait(&mut [&mut a, &mut b, &mut c, &mut d], 200);
+    let before = b.got(&a_camera, MediaKind::Video);
+    wait(&mut [&mut a, &mut b, &mut c, &mut d], 300);
+    assert_eq!(b.got(&a_camera, MediaKind::Video), before, "caméra éteinte : plus relayée");
+    assert!(log.lock().unwrap().iter().rev().find(|s| s.user_id == ua).is_some_and(|s| !s.camera));
+
+    // Rallumée, puis A part : l'état parti n'a plus de caméra et la piste est arrêtée chez B.
+    a.send(&on(true));
+    until(&mut [&mut a, &mut b, &mut c, &mut d], "caméra rallumée", |bs| {
+        sfu.state(ua).is_some_and(|s| s.camera) && bs[1].got(&a_camera, MediaKind::Video) > before
+    });
+    let offers = b.offers.len();
+    assert!(sfu.leave(ua));
+    until(&mut [&mut a, &mut b, &mut c, &mut d], "départ renégocié", |bs| bs[1].offers.len() > offers);
+    let last = log.lock().unwrap().iter().rev().find(|s| s.user_id == ua).cloned().unwrap();
+    assert!(last.channel_id.is_none() && !last.camera);
+}
+
+/// Le droit « Caméra » (VIDEO) commande la caméra, pas « Partager son écran » (STREAM) : sans
+/// VIDEO, même avec STREAM, rien n'est relayé et l'état annoncé n'a pas de caméra ; avec VIDEO
+/// mais sans STREAM, la caméra passe.
+#[test]
+fn camera_follows_the_video_right() {
+    let (sfu, _log) = sfu(25);
+    let (guild, room) = (id(1), id(2));
+    let (ua, ub, uw) = (id(10), id(11), id(12));
+    let on = |camera| VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: false, camera };
+
+    // A : STREAM sans VIDEO.
+    let mut a = Browser::join_with(&sfu, guild, room, ua, |j| j.can_video = false);
+    // W : VIDEO sans STREAM.
+    let mut w = Browser::join_with(&sfu, guild, room, uw, |j| j.can_stream = false);
+    let mut b = Browser::join(&sfu, guild, room, ub);
+    until(&mut [&mut a, &mut w, &mut b], "connexions", |bs| bs.iter().all(|x| x.ready()));
+    let (a_camera, w_camera) = (format!("{ua}.camera"), format!("{uw}.camera"));
+
+    a.send_camera = true;
+    a.send(&on(true));
+    w.send_camera = true;
+    w.send(&on(true));
+    until(&mut [&mut a, &mut w, &mut b], "caméra de W relayée", |bs| {
+        sfu.state(uw).is_some_and(|s| s.camera) && bs[2].got(&w_camera, MediaKind::Video) > 0
+    });
+    wait(&mut [&mut a, &mut w, &mut b], 300);
+    assert!(!sfu.state(ua).unwrap().camera, "sans VIDEO : pas de caméra dans l'état annoncé");
+    assert_eq!(b.got(&a_camera, MediaKind::Video), 0, "sans VIDEO : rien n'est relayé");
+    assert!(b.offers.iter().all(|o| !o.contains(&a_camera)), "sans VIDEO : aucune piste ouverte chez les autres");
+    assert!(!sfu.state(uw).unwrap().streaming, "W n'a pas pour autant de partage d'écran");
 }
 
 #[test]
@@ -338,6 +455,9 @@ fn full_room_moves_and_bad_offers() {
     assert!(bad(&|j| j.mids.mic = j.mids.screen.clone()), "vidéo à la place du micro");
     assert!(bad(&|j| j.mids.screen_audio = j.mids.mic.clone()), "mid en double");
     assert!(bad(&|j| j.mids.screen = "a b".into()), "mid invalide");
+    assert!(bad(&|j| j.mids.camera = j.mids.mic.clone()), "son à la place de la caméra");
+    assert!(bad(&|j| j.mids.camera = j.mids.screen.clone()), "caméra et écran sur la même ligne");
+    assert!(bad(&|j| j.mids.camera = String::new()), "caméra absente");
     assert!(sfu.state(id(20)).is_none());
 
     // Sans connexion établie en 15 s, la place se libère (ici : départ demandé).
@@ -422,8 +542,9 @@ fn remote_control_relay() {
     let request = |user_id| VoiceClientMsg::ControlRequest { user_id };
     let answer = |user_id, accept| VoiceClientMsg::ControlAnswer { user_id, accept, reason: None };
     let end = |user_id| VoiceServerMsg::ControlEnd { user_id };
-    let start_share =
-        |a: &mut Browser| a.send(&VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: true });
+    let start_share = |a: &mut Browser| {
+        a.send(&VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: true, camera: false })
+    };
 
     // A partage. B ne le regarde pas encore : sa demande et ses actions ne vont nulle part.
     start_share(&mut a);
@@ -505,7 +626,7 @@ fn remote_control_relay() {
     until(&mut [&mut a, &mut b, &mut c], "deuxième demande", |bs| count(bs[0], &asked_b) == 2);
     a.send(&answer(ub, true));
     until(&mut [&mut a, &mut b, &mut c], "deuxième accord", |bs| count(bs[1], &granted) == 2);
-    a.send(&VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: false });
+    a.send(&VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: false, camera: false });
     until(&mut [&mut a, &mut b, &mut c], "fin (partage arrêté)", |bs| {
         count(bs[0], &end(ub)) > ends_a && count(bs[1], &end(ua)) > ends_b
     });

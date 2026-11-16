@@ -250,7 +250,7 @@ test('F04-C3 sonnerie sans réponse : elle s’arrête seule, « Appel manqué �
   await a11y(b.page);
 
   // Hors de la conversation : rien à rejoindre ni à refuser.
-  const join = { sdp: 'v=0', mids: { mic: '0', screen: '1', screen_audio: '2' } };
+  const join = { sdp: 'v=0', mids: { mic: '0', screen: '1', screen_audio: '2', camera: '3' } };
   const asStranger = await api(stranger.token);
   expect((await asStranger.post(`${API}/channels/${dm}/voice`, { data: join })).status()).toBe(404);
   expect((await asStranger.post(`${API}/channels/${dm}/call/decline`)).status()).toBe(404);

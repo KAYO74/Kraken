@@ -29,6 +29,8 @@ async function sent(page: Page, text: string) {
 }
 
 const sizeOf = async (el: Locator) => {
+  // Un message qui vient d'être confirmé est redessiné : on mesure une fois l'image revenue à l'écran.
+  await expect(el).toBeVisible();
   const box = await el.boundingBox();
   expect(box).not.toBeNull();
   return { w: Math.round(box!.width), h: Math.round(box!.height) };
@@ -143,8 +145,11 @@ test('emojis-H1 Réglages › Emojis : ajouter (recadrage, nom), refuser un nom,
   expect(emojis.map((e) => [e.name, e.animated])).toEqual([['Poulpe_2', false], ['danse', true]]);
 
   // Supprimer : confirmation (Échap et Annuler gardent l'emoji), puis il disparaît et son image n'est plus servie.
-  await dance.getByRole('button', { name: 'Actions pour :danse:' }).click();
-  await dance.getByRole('button', { name: 'Supprimer' }).click();
+  // Le menu peut se refermer si la liste se rafraîchit au même moment (événement du serveur) : on le rouvre.
+  await expect(async () => {
+    await dance.getByRole('button', { name: 'Actions pour :danse:' }).click();
+    await dance.getByRole('button', { name: 'Supprimer' }).click({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
   const confirm = page.getByRole('alertdialog', { name: 'Supprimer :danse: ?' });
   await expect(confirm.getByRole('button', { name: 'Annuler' })).toBeFocused();
   await page.keyboard.press('Escape');

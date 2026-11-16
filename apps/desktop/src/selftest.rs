@@ -85,15 +85,15 @@ fn voice(server: &Server, api: SocketAddr, token: &str) -> Result<(), String> {
     let mut rtc =
         Rtc::builder().set_crypto_provider(Arc::new(str0m::crypto::from_feature_flags())).build(Instant::now());
     rtc.add_local_candidate(Candidate::host(local, "udp").map_err(|e| e.to_string())?);
-    // Micro, image et son de l'écran, puis le canal `kraken` : l'offre du client web.
+    // Micro, image et son de l'écran, caméra, puis le canal `kraken` : l'offre du client web.
     let mut sdp = rtc.sdp_api();
-    let [mic, screen, screen_audio] = [MediaKind::Audio, MediaKind::Video, MediaKind::Audio]
+    let [mic, screen, screen_audio, camera] = [MediaKind::Audio, MediaKind::Video, MediaKind::Audio, MediaKind::Video]
         .map(|kind| sdp.add_media(kind, Direction::SendOnly, None, None, None).to_string());
     sdp.add_channel(VOICE_DATA_CHANNEL.into());
     let (offer, pending) = sdp.apply().ok_or("vocal : offre WebRTC impossible")?;
     let join = VoiceJoin {
         sdp: offer.to_sdp_string(),
-        mids: VoiceMids { mic, screen, screen_audio },
+        mids: VoiceMids { mic, screen, screen_audio, camera },
         self_mute: true,
         self_deaf: false,
     };

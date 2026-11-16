@@ -222,6 +222,11 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-tiles { list-style: none; width: 100%; max-width: calc(2 * var(--size-card) + var(--space-4)); margin: 0 auto; padding: 0;
   display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(min(var(--size-tile), 100%), 1fr)); }
 .app-stage ~ .app-tiles { max-width: none; justify-content: center; grid-template-columns: repeat(auto-fill, var(--size-tile)); }
+/* Trois ou quatre tuiles (sans écran regardé) : deux par ligne dès que la place le permet, jamais trois puis une seule. */
+@media (min-width: 640px) {
+  .app-call-main:not(:has(.app-stage)) .app-tiles:has(> li:nth-child(3)):not(:has(> li:nth-child(5))) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-dmcall .app-call-main:not(:has(.app-stage)) .app-tiles:has(> li:nth-child(3)):not(:has(> li:nth-child(5))) { grid-template-columns: repeat(2, var(--size-tile)); }
+}
 .app-stage { position: relative; display: grid; place-items: center; margin: 0; aspect-ratio: 16 / 9; max-height: calc(var(--dvh) * .7); overflow: hidden;
   border-radius: var(--radius-lg); background: var(--media); color: var(--on-media); }
 .app-stage video { width: 100%; height: 100%; object-fit: contain; }
@@ -250,6 +255,9 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-remote-wait { color: var(--text-muted); }
 .app-push { margin-left: auto; }
 .app-call-why { padding: 0 var(--space-4) var(--space-4); text-align: center; }
+/* Le message de la caméra au-dessus de la barre : une ligne réservée (deux sur mobile), vide ou pleine. */
+.app-call-note { flex: none; min-height: var(--text-sm-line); padding: 0 var(--space-4); text-align: center; }
+.app-call-note > p { margin: 0; line-height: var(--text-sm-line); }
 .app-voice-users { list-style: none; margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-8); display: grid; gap: var(--space-1); }
 .app-voice-users li { display: flex; align-items: center; gap: var(--space-3); min-width: 0; min-height: var(--space-8); padding: 0 var(--space-3);
   border-radius: var(--radius-md); color: var(--text-muted); font-size: var(--text-sm-size); font-weight: var(--weight-medium); }
@@ -361,6 +369,8 @@ button.app-reply:hover span { color: var(--text-strong); }
   .k-tile > .k-btn { top: var(--space-2); right: var(--space-2); padding: 0 var(--space-3); }
   .k-tile > .k-btn > span { display: none; }
   .k-callbtn > span { display: none; }
+  .app-call-ptt { flex: 1 1 100%; justify-content: center; }
+  .app-call-note { min-height: calc(2 * var(--text-sm-line)); }
   .k-settings { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; width: var(--vw); height: var(--dvh); border-radius: 0; border: 0; }
   .k-settings nav { display: flex; overflow-x: auto; padding: var(--space-3); }
   .k-settings nav h3 { display: none; }
@@ -806,6 +816,31 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
   background: var(--surface-overlay); color: var(--text-secondary); }
 .app-example time { color: var(--text-strong); font-size: var(--text-lg-size); font-weight: var(--weight-semibold); }
 @media (max-height: 600px) { .app-preview { position: static; } }
+
+/* Réglages › Voix et vidéo : appareils, test du micro (jauge de 8 px), aperçu de la caméra (16/9, en miroir), touche pour parler. */
+.app-prefs-title { margin: 0 0 var(--space-3); font-size: var(--text-base-size); font-weight: var(--weight-semibold); color: var(--text-strong); }
+.app-device-select { width: min(100%, var(--size-card)); }
+/* 16 px d'un menu au libellé suivant, contre 8 px d'un libellé à son menu : on voit les groupes. */
+.app-device-select ~ .app-device-select, .app-meter-row { margin-top: var(--space-3); }
+.app-device-btn { justify-self: start; }
+.app-meter-row { display: grid; gap: var(--space-3); }
+.app-meter { width: min(100%, var(--size-card)); height: var(--space-3); border-radius: var(--radius-pill); background: var(--control); overflow: hidden; }
+.app-meter > span { display: block; height: 100%; background: var(--accent-text); transition: width var(--motion-fast) linear; }
+:root[data-motion="reduce"] .app-meter > span { transition: none; }
+.app-cam { width: min(100%, var(--size-card)); aspect-ratio: 16 / 9; border-radius: var(--radius-lg); background: var(--media); overflow: hidden; }
+.app-cam video { object-fit: cover; }
+.k-setting > .k-error, .app-ptt-err { grid-column: 1 / -1; margin: 0; color: var(--danger); font-size: var(--text-sm-size); }
+.app-ptt-key > .k-btn[data-capturing] { box-shadow: inset 0 0 0 var(--size-focus) var(--accent-text); }
+/* Appuyer pour parler, dans la barre de l'appel : la touche, et l'accent quand elle est tenue (le micro est ouvert). */
+.app-call-ptt { display: inline-flex; align-items: center; gap: var(--space-3); min-height: var(--space-10); padding: 0 var(--space-5); border-radius: var(--radius-pill);
+  background: var(--surface-overlay); color: var(--text-secondary); font-size: var(--text-sm-size); }
+.app-call-ptt[data-on] { background: var(--accent); color: var(--on-accent); }
+/* Tenue : « Micro ouvert » et un micro plein, en plus de la couleur. Les deux textes se partagent une case, la plus large
+   donne la taille : la barre ne bouge pas quand on tient ou relâche. */
+.app-call-ptt-text { display: grid; }
+.app-call-ptt-text > * { grid-area: 1 / 1; display: inline-flex; align-items: center; gap: var(--space-3); white-space: nowrap; }
+.app-call-ptt:not([data-on]) .app-call-ptt-held, .app-call-ptt[data-on] .app-call-ptt-idle { visibility: hidden; }
+.app-call-ptt[data-on] .k-icon > path:first-child { fill: currentColor; }
 
 /* Contraste élevé : les boutons, interrupteurs et choix gardent un contour net, en plus des couleurs (components.css). */
 :root[data-contrast="high"] :is(.k-btn:not(.k-btn--link, .k-btn--ghost, .k-btn--icon), .k-radio, .k-switch, .k-select) { box-shadow: inset 0 0 0 1px var(--border-input); }

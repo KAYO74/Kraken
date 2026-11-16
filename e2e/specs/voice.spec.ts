@@ -7,7 +7,7 @@ import type { Page } from '@playwright/test';
 // marche aussi sans affichage. Ce fichier seul en a besoin, d'où un navigateur lancé pour lui.
 test.use({ launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] } });
 
-const JOIN = { sdp: 'v=0', mids: { mic: '0', screen: '1', screen_audio: '2' } };
+const JOIN = { sdp: 'v=0', mids: { mic: '0', screen: '1', screen_audio: '2', camera: '3' } };
 
 /** Les tuiles de l'appel affiché. */
 const tiles = (page: Page) => page.getByRole('list', { name: 'Participants' }).getByRole('listitem');

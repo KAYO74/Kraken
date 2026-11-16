@@ -89,6 +89,8 @@ test('S02-H1 non-lu et mention en direct, ligne « Nouveaux messages », lecture
   // La ligne reste tant que le salon est ouvert, et disparaît quand on écrit.
   await say(b.page, 'général', 'Me voilà');
   await expect(divider).toHaveCount(0);
+  // Pas pendant l'envoi : un message en cours est atténué, et le contraste n'est mesuré que sur du définitif.
+  await expect(b.page.locator('article[data-pending]')).toHaveCount(0);
   await a11y(b.page);
 });
 
