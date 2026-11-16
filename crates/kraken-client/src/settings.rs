@@ -1,6 +1,7 @@
 //! Réglages utilisateur (S06 à S15) dans la modale `k-settings`. Mon compte (pseudo, e-mail, mot
 //! de passe), Mon profil, la liste des comptes bloqués (S08), les notifications (S09) et les réglages
-//! d'affichage de l'appareil (Apparence, Accessibilité, Langue et heure : `display.rs`) sont branchés ;
+//! d'affichage de l'appareil (Apparence, Accessibilité, Langue et heure : `display.rs`) et Voix et vidéo
+//! (`voice_settings.rs`) sont branchés ;
 //! les autres sections ont leur route et leur place dans la navigation.
 
 use leptos::prelude::*;
@@ -18,7 +19,7 @@ const SECTIONS: &[(&str, &str, &str, &str)] = &[
     ("Toi", "messaging", "Qui peut t'écrire", "S08"),
     ("Toi", "apps", "Applications liées", "S15"),
     ("Préférences", "notifications", "Notifications", "S09"),
-    ("Préférences", "voice", "Micro, son et caméra", "S10"),
+    ("Préférences", "voice", "Voix et vidéo", "S10"),
     ("Préférences", "appearance", "Apparence", "S11"),
     ("Préférences", "accessibility", "Accessibilité", "S12"),
     ("Préférences", "keybinds", "Raccourcis clavier", "S13"),
@@ -81,6 +82,7 @@ pub fn Settings() -> impl IntoView {
                         "language" => view! { <crate::display::Language/> }.into_any(),
                         "messaging" => view! { <Messaging/> }.into_any(),
                         "notifications" => view! { <Notifications/> }.into_any(),
+                        "voice" => view! { <crate::voice_settings::VoiceSettings/> }.into_any(),
                         other => {
                             let id = SECTIONS.iter().find(|s| s.1 == other).map(|s| s.3).unwrap_or("—");
                             view! { <div class="k-empty"><b>"Bientôt ici"</b>{format!("Section {id} prévue, pas encore construite.")}</div> }.into_any()

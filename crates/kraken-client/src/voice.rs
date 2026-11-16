@@ -35,6 +35,7 @@ use web_sys::{
 };
 
 use crate::store::Store;
+use crate::voice_settings::{self as vs, PttKey};
 
 /// Page en HTTP ailleurs que sur cet ordinateur : le navigateur ne donne ni micro ni écran.
 pub const INSECURE: &str = "Connexion non sécurisée : tu peux écouter et regarder, mais parler et partager ton écran \
@@ -48,8 +49,7 @@ const CAM_MISSING: &str = "Aucune caméra n'a été trouvée sur cet appareil.";
 const CAM_BUSY: &str = "La caméra n'a pas pu démarrer : une autre application l'utilise peut-être.";
 const CAM_ENDED: &str = "La caméra s'est arrêtée : elle a été débranchée ou reprise par une autre application.";
 const CAM_INSECURE: &str = "La caméra demande l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).";
-/// Clé du stockage local où les réglages mémorisent la caméra choisie (identifiant d'appareil).
-const CAM_KEY: &str = "kraken.cam";
+const MIC_SWITCH: &str = "Le micro choisi n'a pas pu démarrer : l'appel garde celui qui était utilisé.";
 
 /// Le salon vocal de la session : un salon de serveur, ou l'appel d'un MP ou d'un groupe
 /// (`guild` à `None`).
@@ -132,6 +132,14 @@ pub struct Voice {
     pub camera_preview: RwSignal<Option<MediaStream>, LocalStorage>,
     /// Pourquoi la caméra ne s'allume pas (ou s'est éteinte), sous la barre de l'appel.
     pub camera_error: RwSignal<Option<String>>,
+    /// Appuyer pour parler : le réglage, la touche choisie, la touche tenue en ce moment, et ce que
+    /// l'annonce vocale dit du micro (vide tant qu'il n'a pas bougé).
+    pub ptt: RwSignal<bool>,
+    pub ptt_key: RwSignal<Option<PttKey>>,
+    pub ptt_held: RwSignal<bool>,
+    pub ptt_say: RwSignal<&'static str>,
+    /// Sortie audio choisie dans les réglages (identifiant d'appareil ; vide : celle du système).
+    pub speaker: RwSignal<String>,
     /// Avertissement pendant l'appel (micro refusé, page en HTTP…).
     pub notice: RwSignal<Option<String>>,
     /// Échec en rejoignant ce salon (complet, vocal indisponible…).
@@ -214,6 +222,8 @@ thread_local! {
     static PUMPING: Cell<bool> = const { Cell::new(false) };
     /// La caméra est demandée au navigateur (fenêtre d'autorisation ouverte) : pas de seconde demande.
     static CAMERA_ASKED: Cell<bool> = const { Cell::new(false) };
+    /// Numéro du dernier changement de micro demandé par les réglages : le plus récent l'emporte.
+    static MIC_SEQ: Cell<u64> = const { Cell::new(0) };
 }
 
 fn bump() -> u64 {
@@ -255,7 +265,7 @@ fn track(s: &MediaStream, kind: &str) -> Option<MediaStreamTrack> {
     list.get(0).dyn_into().ok()
 }
 
-fn stop_all(s: &MediaStream) {
+pub(crate) fn stop_all(s: &MediaStream) {
     s.get_tracks().iter().filter_map(|t| t.dyn_into::<MediaStreamTrack>().ok()).for_each(|t| t.stop());
 }
 
@@ -279,15 +289,35 @@ fn parse_stream(id: &str) -> Option<(Id, Feed)> {
     Some((user.parse().ok()?, feed))
 }
 
-async fn microphone(d: &MediaDevices) -> Result<MediaStream, JsValue> {
+/// Le micro demandé, avec les trois traitements du son réglés dans Voix et vidéo (tous trois actifs par
+/// défaut). `device` vide : n'importe lequel.
+async fn microphone_with(d: &MediaDevices, device: Option<&str>) -> Result<MediaStream, JsValue> {
+    let mut audio = serde_json::json!({
+        "echoCancellation": vs::flag(vs::ECHO, true),
+        "noiseSuppression": vs::flag(vs::NOISE, true),
+        "autoGainControl": vs::flag(vs::AGC, true),
+    });
+    if let (Some(id), Some(map)) = (device, audio.as_object_mut()) {
+        map.insert("deviceId".into(), serde_json::json!({ "exact": id }));
+    }
     let wanted: MediaStreamConstraints =
-        js_sys::JSON::parse(r#"{"audio":{"echoCancellation":true,"noiseSuppression":true,"autoGainControl":true}}"#)?
-            .unchecked_into();
+        js_sys::JSON::parse(&serde_json::json!({ "audio": audio }).to_string())?.unchecked_into();
     Ok(JsFuture::from(d.get_user_media_with_constraints(&wanted)?).await?.unchecked_into())
 }
 
+/// Le micro choisi dans les réglages (`kraken.mic`), s'il est encore là ; sinon celui par défaut du système.
+pub(crate) async fn microphone(d: &MediaDevices) -> Result<MediaStream, JsValue> {
+    if let Some(id) = vs::stored(vs::MIC) {
+        match microphone_with(d, Some(&id)).await {
+            Err(e) if matches!(error_name(&e).as_deref(), Some("OverconstrainedError" | "NotFoundError")) => {}
+            other => return other,
+        }
+    }
+    microphone_with(d, None).await
+}
+
 /// Le nom de l'erreur JavaScript (`NotAllowedError`, `NotFoundError`…).
-fn error_name(e: &JsValue) -> Option<String> {
+pub(crate) fn error_name(e: &JsValue) -> Option<String> {
     js_sys::Reflect::get(e, &"name".into()).ok().and_then(|n| n.as_string())
 }
 
@@ -307,12 +337,8 @@ async fn camera_with(d: &MediaDevices, device: Option<&str>) -> Result<MediaStre
 
 /// La caméra choisie dans les réglages (`kraken.cam`), si elle est encore là ; sinon celle par
 /// défaut du système.
-async fn camera(d: &MediaDevices) -> Result<MediaStream, JsValue> {
-    let stored = web_sys::window()
-        .and_then(|w| w.local_storage().ok().flatten())
-        .and_then(|s| s.get_item(CAM_KEY).ok().flatten())
-        .filter(|id| !id.is_empty());
-    if let Some(id) = stored {
+pub(crate) async fn camera(d: &MediaDevices) -> Result<MediaStream, JsValue> {
+    if let Some(id) = vs::stored(vs::CAM) {
         match camera_with(d, Some(&id)).await {
             Err(e) if matches!(error_name(&e).as_deref(), Some("OverconstrainedError" | "NotFoundError")) => {}
             other => return other,
@@ -322,7 +348,7 @@ async fn camera(d: &MediaDevices) -> Result<MediaStream, JsValue> {
 }
 
 /// Ce que la caméra refusée ou absente dit à la personne.
-fn camera_failure(e: &JsValue) -> &'static str {
+pub(crate) fn camera_failure(e: &JsValue) -> &'static str {
     match error_name(e).as_deref() {
         Some("NotFoundError" | "OverconstrainedError" | "DevicesNotFoundError") => CAM_MISSING,
         Some("NotReadableError" | "AbortError" | "TrackStartError") => CAM_BUSY,
@@ -423,6 +449,11 @@ impl Voice {
             camera: RwSignal::new(false),
             camera_preview: RwSignal::new_local(None),
             camera_error: RwSignal::new(None),
+            ptt: RwSignal::new(vs::flag(vs::PTT, false)),
+            ptt_key: RwSignal::new(vs::stored_key()),
+            ptt_held: RwSignal::new(false),
+            ptt_say: RwSignal::new(""),
+            speaker: RwSignal::new(vs::stored(vs::SPEAKER).unwrap_or_default()),
             notice: RwSignal::new(None),
             error: RwSignal::new(None),
             speaking: RwSignal::new(Vec::new()),
@@ -438,6 +469,28 @@ impl Voice {
 
     fn mic_off(&self) -> bool {
         self.mute.get_untracked() || self.deaf.get_untracked()
+    }
+
+    /// Appuyer pour parler est en marche : le réglage est actif et une touche est choisie (suit les signaux).
+    pub fn ptt_armed(&self) -> bool {
+        self.ptt.get() && self.ptt_key.with(Option::is_some)
+    }
+
+    /// La piste du micro laisse passer le son : ni coupé par moi, ni fermé par appuyer pour parler (la touche
+    /// n'est pas tenue). `self_mute`, lui, n'est que ma sourdine : appuyer pour parler ne la change pas.
+    fn mic_open(&self) -> bool {
+        let gated = self.ptt.get_untracked() && self.ptt_key.with_untracked(Option::is_some);
+        !self.mic_off() && (!gated || self.ptt_held.get_untracked())
+    }
+
+    /// Pose l'état ouvert ou fermé sur la piste du micro de la session.
+    fn apply_mic(&self) {
+        let open = self.mic_open();
+        if let Some(t) =
+            SESSION.with_borrow(|s| s.as_ref().and_then(|s| s.mic.as_ref()).and_then(|m| track(m, "audio")))
+        {
+            t.set_enabled(open);
+        }
     }
 
     /// En vocal, ou en train d'y entrer : il y a une connexion à quitter.
@@ -498,7 +551,7 @@ impl Voice {
         let mic_track = mic.as_ref().and_then(|m| track(m, "audio"));
         let t_mic = match &mic_track {
             Some(t) => {
-                t.set_enabled(!self.mic_off());
+                t.set_enabled(self.mic_open());
                 pc.add_transceiver_with_media_stream_track_and_init(t, &init)
             }
             None => pc.add_transceiver_with_str_and_init("audio", &init),
@@ -731,6 +784,8 @@ impl Voice {
         self.preview.set(None);
         self.camera_preview.set(None);
         self.speaking.set(Vec::new());
+        self.ptt_held.set(false);
+        self.ptt_say.set("");
     }
 
     fn lost(self, why: &str) {
@@ -815,7 +870,7 @@ impl Voice {
                 Ok(m) if current(n) => {
                     let t = track(&m, "audio");
                     if let Some(t) = &t {
-                        t.set_enabled(!self.mic_off());
+                        t.set_enabled(self.mic_open());
                     }
                     if let Some(sender) = with_session(|s| {
                         s.mic = Some(Clone::clone(&m));
@@ -831,6 +886,45 @@ impl Voice {
                     self.notice.set(Some(MIC_DENIED.into()));
                 }
             }
+        });
+    }
+
+    /// Le micro ou ses traitements ont changé dans les réglages pendant l'appel : une nouvelle piste prend
+    /// la place de l'ancienne par `replaceTrack`, sans renégocier et sans toucher à ma sourdine. Un micro
+    /// refusé au départ n'en a pas à remplacer : `ensure_mic` le redemande au réveil du micro.
+    pub fn switch_mic(self) {
+        if with_session(|s| s.mic.is_none()) != Some(false) {
+            return;
+        }
+        let Some(d) = devices() else { return };
+        let (n, seq) = (GEN.with(Cell::get), MIC_SEQ.with(|c| c.replace(c.get() + 1) + 1));
+        spawn_local(async move {
+            let stream = match microphone(&d).await {
+                Ok(m) => m,
+                Err(_) => {
+                    if current(n) {
+                        self.notice.set(Some(MIC_SWITCH.into()));
+                    }
+                    return;
+                }
+            };
+            let t = track(&stream, "audio");
+            // Un choix plus récent est déjà en route, ou l'appel est fini : celui-ci ne sert plus.
+            if !current(n) || MIC_SEQ.with(Cell::get) != seq {
+                stop_all(&stream);
+                return;
+            }
+            if let Some(t) = &t {
+                t.set_enabled(self.mic_open());
+            }
+            let swapped = with_session(|s| (s.mic.replace(Clone::clone(&stream)), s.senders[0].clone()));
+            let Some((old, sender)) = swapped else {
+                stop_all(&stream);
+                return;
+            };
+            let _ = JsFuture::from(sender.replace_track(t.as_ref())).await;
+            old.iter().for_each(stop_all);
+            self.notice.set(None);
         });
     }
 
@@ -913,6 +1007,14 @@ impl Voice {
         }
     }
 
+    /// La caméra a changé dans les réglages pendant que la mienne est allumée : la nouvelle prend la place de
+    /// l'ancienne par `replaceTrack`, sans renégocier. Si elle ne démarre pas, l'ancienne reste allumée.
+    pub fn switch_camera(self) {
+        if self.camera.get_untracked() {
+            self.start_camera();
+        }
+    }
+
     fn start_camera(self) {
         if CAMERA_ASKED.get() || !self.active() {
             return;
@@ -953,6 +1055,9 @@ impl Voice {
             video.set_onended(Some(end.as_ref().unchecked_ref()));
             let sender = with_session(|s| {
                 if let Some(old) = s.camera.replace(Clone::clone(&stream)) {
+                    if let Some(v) = track(&old, "video") {
+                        v.set_onended(None);
+                    }
                     stop_all(&old);
                 }
                 s.camera_end = Some(end);
@@ -1208,15 +1313,16 @@ pub fn init(store: Store) {
     let v = store.voice;
     Effect::new(move || {
         // Les quatre sont lus à chaque fois : chacun doit relancer l'envoi.
-        let (mute, deaf, _, _) = (v.mute.get(), v.deaf.get(), v.streaming.get(), v.camera.get());
-        let off = mute || deaf;
-        if let Some(t) =
-            SESSION.with_borrow(|s| s.as_ref().and_then(|s| s.mic.as_ref()).and_then(|m| track(m, "audio")))
-        {
-            t.set_enabled(!off);
-        }
+        let (_, _, _, _) = (v.mute.get(), v.deaf.get(), v.streaming.get(), v.camera.get());
+        v.apply_mic();
         v.send_state();
     });
+    // Appuyer pour parler : la touche ouvre et ferme la piste, sans rien dire de plus au serveur.
+    Effect::new(move || {
+        let (_, _, _) = (v.ptt.get(), v.ptt_key.get(), v.ptt_held.get());
+        v.apply_mic();
+    });
+    vs::init_ptt(v);
     Effect::new(move || {
         let (Some(user), Some(room)) = (v.watching.get(), v.room.get()) else { return };
         let streams = store.present(room.guild, room.channel).iter().any(|s| s.user_id == user && s.streaming);

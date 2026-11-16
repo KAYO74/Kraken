@@ -34,7 +34,7 @@ web-sys = { version = "0.3", features = [
     "RtcRtpTransceiverInit", "RtcRtpTransceiverDirection", "RtcRtpSender", "RtcDataChannel", "RtcDataChannelState",
     "RtcSessionDescription", "RtcSessionDescriptionInit", "RtcSdpType", "RtcTrackEvent", "MessageEvent",
     "MediaDevices", "MediaStream", "MediaStreamTrack", "MediaStreamTrackState", "MediaStreamConstraints",
-    "DisplayMediaStreamConstraints", "HtmlMediaElement", "HtmlVideoElement", "HtmlAudioElement",
+    "DisplayMediaStreamConstraints", "MediaDeviceInfo", "MediaDeviceKind", "HtmlMediaElement", "HtmlVideoElement", "HtmlAudioElement",
     "AudioContext", "BaseAudioContext", "AudioNode", "AnalyserNode", "MediaStreamAudioSourceNode",
     # Contrôle à distance : souris, molette, clavier sur l'écran regardé ; réglages de la piste.
     "PointerEvent", "MouseEvent", "WheelEvent", "FocusEvent", "DomRect", "MediaTrackSettings",

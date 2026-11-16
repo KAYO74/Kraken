@@ -242,6 +242,22 @@ Info-bulle                      .k-tooltip
   a11y      role="tooltip", liée par aria-describedby ; apparaît au focus comme au survol ; jamais seul porteur d'une info
   used on   partout
 
+Jauge de niveau                 .app-meter (role="meter", remplissage en span)
+  states    niveau 0 à 100 (aria-valuenow) ; sans transition en mouvement réduit
+  tokens    barre de 8 px (space-3), fond control, remplissage accent-text (--accent ne fait que 2,5:1 sur control en thème sombre ; accent-text, 6:1 ou plus) ; rayon pill
+  a11y      nom visible lié par aria-labelledby (« Niveau du micro »), valeurs min/max/now
+  used on   S10 (test du micro)
+
+Aperçu de la caméra             .app-cam (vidéo .k-tile-video[data-mirror])
+  states    absent tant qu'on ne l'a pas demandé ; 16/9, miroir, sans son
+  tokens    radius-lg, media ; largeur de la colonne, jamais plus que size-card
+  used on   S10
+
+Indicateur appuyer pour parler  .app-call-ptt (dans .k-callbar)
+  states    armé (« Appuyer pour parler : » + .k-kbd), touche tenue (data-on : accent)
+  a11y      texte seul, pas une zone live : l'annonce polie « Micro ouvert / fermé » est à part (.k-sr, role="status")
+  used on   S10, S18
+
 Toast                           .k-toast
   variants  succès, erreur
   a11y      role="status" (erreur : role="alert") ; reste au moins 5 s, pause au survol

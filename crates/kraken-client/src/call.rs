@@ -23,6 +23,7 @@ use crate::icons::{Icon, lu};
 use crate::store::{Store, store};
 use crate::ui::{Avatar, Header, initials};
 use crate::voice::{self, Control, ControlNote, Feed, ShareNote, Status};
+use crate::voice_settings;
 
 /// Qui est dans ce salon vocal (ou cet appel), dans l'ordre d'arrivée.
 fn present(s: Store, guild: Option<Id>, channel: Id) -> Vec<VoiceState> {
@@ -65,7 +66,7 @@ fn face(user: Option<User>, name: &str, size: &'static str) -> AnyView {
 
 /// Branche un flux reçu (ou mon écran) sur un élément `<audio>` ou `<video>`, et le lance : le
 /// clic sur « Rejoindre » ou « Regarder » autorise la lecture avec le son.
-fn attach(el: &web_sys::HtmlMediaElement, stream: Option<&web_sys::MediaStream>) {
+pub fn attach(el: &web_sys::HtmlMediaElement, stream: Option<&web_sys::MediaStream>) {
     if el.src_object().as_ref() == stream {
         return;
     }
@@ -351,6 +352,8 @@ fn Stage(guild: Option<Id>, user: Id) -> impl IntoView {
     let playing = RwSignal::new(false);
     Effect::new(move || {
         let Some(e) = el.get() else { return };
+        // La sortie audio choisie dans Voix et vidéo, sur cet élément comme sur ceux créés plus tard.
+        voice_settings::apply_sink(&e, &v.speaker.get());
         v.remote.with(|r| attach(&e, r.iter().find(|x| x.user == user && x.feed == Feed::Screen).map(|x| &x.stream)));
     });
     let controlling = Memo::new(move |_| v.control.get() == Control::On(user));
@@ -657,6 +660,13 @@ fn CallBar(private: bool) -> impl IntoView {
                     </button>
                 }.into_any()
             }}
+            {move || v.ptt_armed().then(|| view! {
+                <span class="app-call-ptt" data-on=move || v.ptt_held.get().then_some("")>
+                    <Icon icon=lu::LuMic small=true/>
+                    "Appuyer pour parler : "
+                    <span class="k-kbd"><kbd>{move || v.ptt_key.with(|k| k.as_ref().map(|k| k.label.clone()).unwrap_or_default())}</kbd></span>
+                </span>
+            })}
         </div>
         {(!share_ok).then(|| view! { <p class="app-hint app-call-why" id="call-share-why">{why}</p> })}
         {move || v.camera_error.get().map(|e| view! { <p class="k-error app-call-why" role="alert">{e}</p> })}
@@ -749,19 +759,24 @@ pub fn VoicePanel() -> impl IntoView {
     }
 }
 
-/// Le son des micros reçus : un `<audio>` caché par personne, coupé avec le son.
+/// Le son des micros reçus : un `<audio>` caché par personne, coupé avec le son (et envoyé sur la sortie
+/// audio choisie dans les réglages).
 #[component]
 pub fn CallAudio() -> impl IntoView {
     let v = store().voice;
     let mics = Memo::new(move |_| {
         v.remote.with(|r| r.iter().filter(|x| x.feed == Feed::Mic).map(|x| x.user).collect::<Vec<_>>())
     });
+    // Appuyer pour parler : l'état du micro dit à voix basse quand la touche se tient ou se relâche. La zone
+    // n'existe que pendant un appel où le mode est armé ; elle est hors de « Connexion vocale ».
+    let announce = move || v.room.with(Option::is_some) && v.ptt_armed();
     view! {
         <div hidden>
             <For each=move || mics.get() key=|u| *u let:u>
                 <RemoteAudio user=u/>
             </For>
         </div>
+        {move || announce().then(|| view! { <p class="k-sr" role="status" aria-live="polite">{move || v.ptt_say.get()}</p> })}
     }
 }
 
@@ -771,6 +786,7 @@ fn RemoteAudio(user: Id) -> impl IntoView {
     let el = NodeRef::<html::Audio>::new();
     Effect::new(move || {
         let Some(e) = el.get() else { return };
+        voice_settings::apply_sink(&e, &v.speaker.get());
         v.remote.with(|r| attach(&e, r.iter().find(|x| x.user == user && x.feed == Feed::Mic).map(|x| &x.stream)));
     });
     view! { <audio node_ref=el autoplay prop:muted=move || v.deaf.get()></audio> }
