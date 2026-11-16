@@ -318,7 +318,7 @@ Panneau « Messages épinglés »    .app-aside--pins, .app-sheet (sous 640 px)
 ## Écrans non capturés
 
 Zone d'information de la coquille    .app-notice (role="status", toujours présente)
-  variants  confirmations (« Message épinglé. ») et échecs d'icône : toast flottant, hors flux, en haut de .app-main, z-index popover
+  variants  confirmations (« Message épinglé. ») et échecs d'icône : toast flottant, hors flux, ancré au bas de l'en-tête (anchor-name --app-header ; à défaut --size-header), z-index popover ; texte à la ligne (fit-content)
   states    vide au repos ; sinon une .k-banner à fond opaque et son bouton « Fermer l'information » ; elle repart seule au bout de 6 s
   a11y      annoncée par les lecteurs d'écran ; ne prend pas les clics (sauf « Fermer ») ; rien ne se décale quand elle vient ou repart
 

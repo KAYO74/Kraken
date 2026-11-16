@@ -229,6 +229,18 @@ impl From<DbError> for AppError {
                 "dm_refused",
                 "Ton message n'a pas pu être remis : cette personne ne reçoit pas de message de ta part.".into(),
             ),
+            // Épingler dans un MP bloqué : mêmes codes que l'envoi, une phrase qui parle d'épingles (et qui ne dit
+            // pas, quand c'est l'autre qui a bloqué, que c'est lui).
+            DbError::Forbidden("pin_blocked") => Self(
+                StatusCode::FORBIDDEN,
+                "dm_blocked",
+                "Tu ne peux pas épingler ni désépingler ici : tu as bloqué cette personne.".into(),
+            ),
+            DbError::Forbidden("pin_refused") => Self(
+                StatusCode::FORBIDDEN,
+                "dm_refused",
+                "Tu ne peux pas épingler ni désépingler ici : la conversation est bloquée.".into(),
+            ),
             DbError::Forbidden("dm_stranger") => Self(
                 StatusCode::FORBIDDEN,
                 "dm_stranger",

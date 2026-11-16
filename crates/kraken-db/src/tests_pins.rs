@@ -293,10 +293,10 @@ async fn a_blocked_private_conversation_refuses_pins_like_messages(pool: PgPool)
 
     // Lou bloque sam : mêmes refus que l'envoi, dans les deux sens, et rien ne change ; la liste reste lisible.
     db.block(lou.id, sam.id).await.unwrap();
-    for (who, refusal) in [(sam.id, "dm_refused"), (lou.id, "dm_blocked")] {
+    for (who, refusal, pin_refusal) in [(sam.id, "dm_refused", "pin_refused"), (lou.id, "dm_blocked", "pin_blocked")] {
         assert_eq!(db.create_message(dm, who, "x", None).await.err(), Some(DbError::Forbidden(refusal)));
-        assert_eq!(db.set_pinned(dm, b.id, who, true).await.err(), Some(DbError::Forbidden(refusal)));
-        assert_eq!(db.set_pinned(dm, a.id, who, false).await.err(), Some(DbError::Forbidden(refusal)));
+        assert_eq!(db.set_pinned(dm, b.id, who, true).await.err(), Some(DbError::Forbidden(pin_refusal)));
+        assert_eq!(db.set_pinned(dm, a.id, who, false).await.err(), Some(DbError::Forbidden(pin_refusal)));
     }
     assert_eq!(ids(&db.pinned_messages(dm).await.unwrap()), [a.id]);
 

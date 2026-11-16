@@ -529,10 +529,12 @@ test('pins-N1 la confirmation flotte hors flux : rien ne descend quand elle vien
   const zone = a.page.locator('.app-main > .app-notice');
   await expect(zone).toHaveCSS('position', 'absolute');
   await expect(zone).toHaveAttribute('role', 'status');
-  const main = (await a.page.locator('.app-main').boundingBox())!;
+  // Juste sous l'en-tête : il reste entièrement à découvert.
   const banner = (await toast.locator('.k-banner').boundingBox())!;
-  expect(banner.y).toBeGreaterThanOrEqual(main.y);
-  expect(banner.y + banner.height).toBeLessThan(main.y + 100);
+  const header = (await a.page.locator('.app-main .app-header').boundingBox())!;
+  expect(banner.y).toBeGreaterThanOrEqual(header.y + header.height);
+  expect(banner.y).toBeLessThan(header.y + header.height + 40);
+  expect(banner.x + banner.width).toBeLessThanOrEqual(1440);
   expect(await layout(a.page)).toEqual(before);
   // Elle ne prend pas les clics : le bouton de l'en-tête dessous reste atteignable ; « Fermer » marche.
   await opener(a.page).click();
@@ -706,6 +708,66 @@ test('pins-N6 un auteur bloqué est replié dans le panneau comme dans le fil, d
   await expect(folded.getByText('Un texte que je ne veux plus lire')).toBeVisible();
 });
 
+test('pins-N7 MP bloqué : plus de bouton pour celui qui a bloqué, ses erreurs se lisent malgré la saisie remplacée, l’autre a une phrase d’épingles', async ({ user, api, allow }) => {
+  allow.push(/status of 403/);
+  const a = await user('alix');
+  const b = await user('bruno');
+  await befriend(api, a, b);
+  const asA = await api(a.token);
+  const asB = await api(b.token);
+  const dm = await (await asA.post(`${API}/users/@me/channels`, { data: { recipients: [b.id] } })).json();
+  const keep = await post(asA, dm.id, 'Un message à garder');
+  const gone = await post(asA, dm.id, 'Un message qui va disparaître');
+  await post(asB, dm.id, 'Une réponse de bruno');
+  expect((await asA.put(`${API}/channels/${dm.id}/pins/${keep}`)).status()).toBe(200);
+  expect((await asA.put(`${API}/channels/${dm.id}/pins/${gone}`)).status()).toBe(200);
+  // Une liste lue avant la disparition d'un message : « Aller au message » y échouera.
+  const stale = await (await asA.get(`${API}/channels/${dm.id}/pins`)).json();
+  expect((await asA.delete(`${API}/channels/${dm.id}/messages/${gone}`)).status()).toBe(204);
+  await a.page.goto(`/channels/@me/${dm.id}`);
+  await b.page.goto(`/channels/@me/${dm.id}`);
+  const ofA = await sent(a.page, 'Un message à garder');
+  const ofB = await sent(b.page, 'Un message à garder');
+  await sent(b.page, 'Une réponse de bruno');
+
+  // Avant le blocage : les deux ont le bouton.
+  await ofA.hover();
+  expect(await actions(ofA)).toContain('Désépingler le message');
+
+  // Alix bloque bruno : la saisie est remplacée, le bouton de la barre d'outils disparaît, le panneau n'a plus « Désépingler ».
+  expect((await asA.put(`${API}/users/@me/relationships/${b.id}`, { data: { kind: 'blocked' } })).status()).toBe(200);
+  await expect(a.page.getByRole('status').filter({ hasText: `Tu as bloqué ${b.name}` })).toBeVisible();
+  await ofA.hover();
+  expect(await actions(ofA)).not.toContain('Désépingler le message');
+  expect(await actions(ofA)).toContain('Modifier le message');
+  expect(await actions(ofA)).not.toContain('Épingler le message');
+  await opener(a.page).click();
+  const pa = panel(a.page);
+  await expect(rows(pa)).toHaveCount(1);
+  await expect(pa.getByRole('button', { name: /Désépingler/ })).toHaveCount(0);
+
+  // Une erreur du fil se lit malgré la saisie remplacée (la zone d'erreur est là aussi).
+  await a.page.route('**/api/v1/channels/*/pins', (route) => route.fulfill({ json: stale }));
+  await opener(a.page).click();
+  await opener(a.page).click();
+  await expect(rows(panel(a.page))).toHaveCount(2);
+  await rows(panel(a.page)).getByRole('button', { name: /^Aller au message/ }).first().click();
+  const note = alerted(a.page, "Ce message n'est plus disponible.");
+  await expect(note).toBeVisible();
+  await expect(a.page.getByRole('status').filter({ hasText: `Tu as bloqué ${b.name}` })).toBeVisible();
+  await note.getByRole('button', { name: 'Fermer' }).click();
+  await expect(note).toHaveCount(0);
+  await a11y(a.page);
+
+  // Bruno ne sait pas qu'il est bloqué : il a encore le bouton, le refus dit pourquoi, sans parler d'envoi.
+  await ofB.hover();
+  await toolbar(ofB).getByRole('button', { name: 'Désépingler le message', exact: true }).click();
+  const refused = alerted(b.page, 'Tu ne peux pas épingler ni désépingler ici : la conversation est bloquée.');
+  await expect(refused).toBeVisible();
+  await expect(b.page.getByText("Ton message n'a pas pu être remis")).toHaveCount(0);
+  await expect(ofB.locator('header .app-pinned')).toHaveCount(1);
+});
+
 test.describe('à 390 px', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
@@ -832,6 +894,19 @@ test.describe('à 390 px', () => {
     const banner = (await toast.locator('.k-banner').boundingBox())!;
     expect(banner.x).toBeGreaterThanOrEqual(0);
     expect(banner.x + banner.width).toBeLessThanOrEqual(390);
+    // Sous l'en-tête, qui passe sur deux lignes à cette largeur : ni le titre ni les boutons ne sont recouverts.
+    const header = (await a.page.locator('.app-main .app-header').boundingBox())!;
+    expect(header.height).toBeGreaterThan(60);
+    expect(banner.y).toBeGreaterThanOrEqual(header.y + header.height);
+    for (const b of await a.page.locator('.app-header-tools').locator('a, button').all()) await expect(b).toBeInViewport({ ratio: 1 });
+    const covered = await a.page.evaluate(() => {
+      const note = document.querySelector('.app-notice')!.getBoundingClientRect();
+      return [...document.querySelectorAll('.app-main .app-header :is(h1, a, button)')].filter((e) => {
+        const r = e.getBoundingClientRect();
+        return r.bottom > note.top && r.top < note.bottom && r.right > note.left && r.left < note.right;
+      }).length;
+    });
+    expect(covered).toBe(0);
     expect(await noOverflow(a.page)).toBe(true);
     await expect(toast).toHaveCount(0, { timeout: 9_000 });
     expect(await layout(a.page)).toEqual(before);

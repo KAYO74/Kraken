@@ -367,6 +367,59 @@ test('modeles-E3 l’icône ne part pas après la création : le serveur existe,
   await expect(info).toHaveCount(0);
 });
 
+/** Crée un serveur dont l'icône ne part pas (500) : la page s'ouvre dessus, avec l'information dans la zone `status`. */
+async function iconFailure(a: { page: Page }) {
+  await a.page.goto('/guilds/new');
+  await expect(a.page.getByLabel('Nom du serveur')).toHaveValue(/^Serveur de /);
+  await a.page.getByLabel('Nom du serveur').fill('Archipel');
+  await a.page.getByLabel('Choisir une image').setInputFiles({ name: 'archipel.png', mimeType: 'image/png', buffer: png(64, 64) });
+  await a.page.getByRole('dialog', { name: "Recadrer l'icône" }).getByRole('button', { name: 'Appliquer' }).click();
+  await expect(a.page.getByRole('img', { name: 'Icône choisie' })).toBeVisible();
+  await a.page.route('**/api/v1/guilds/*/icon', (r) => r.fulfill({ status: 500, contentType: 'application/json', body: '{"code":"internal","message":"Erreur."}' }));
+  await a.page.getByRole('button', { name: 'Créer le serveur', exact: true }).click();
+  await a.page.waitForURL(/\/channels\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+  return a.page.getByRole('status').filter({ hasText: "Le serveur est créé, mais son icône n'a pas pu être envoyée" });
+}
+
+/** L'information tient dans la fenêtre : texte entier (il passe à la ligne), « Fermer » à portée, rien ne déborde, sous l'en-tête. */
+async function fitsTheWindow(page: Page, info: ReturnType<Page['locator']>, width: number) {
+  await expect(info).toBeVisible();
+  await expect(info).toContainText("Vue d'ensemble");
+  const banner = info.locator('.k-banner');
+  const box = (await banner.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(width);
+  const text = banner.locator('span');
+  expect(await text.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
+  const lines = await text.evaluate((e) => (e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)));
+  if (width < 640) expect(Math.round(lines)).toBeGreaterThanOrEqual(3);
+  else expect(Math.round(lines)).toBeGreaterThanOrEqual(1);
+  const close = info.getByRole('button', { name: "Fermer l'information" });
+  await expect(close).toBeInViewport({ ratio: 1 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  const header = (await page.locator('.app-main .app-header').boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(header.y + header.height);
+  await a11y(page);
+  await close.click();
+  await expect(info).toHaveCount(0);
+}
+
+test('modeles-E5 l’information d’icône échouée tient dans la fenêtre à 1440 px : texte entier, « Fermer » visible', async ({ user, allow }) => {
+  allow.push(/500/);
+  const a = await user('sacha');
+  await fitsTheWindow(a.page, await iconFailure(a), 1440);
+});
+
+test.describe('information d’icône à 390 px', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('modeles-E6 l’information d’icône échouée passe à la ligne à 390 px : texte entier, « Fermer » dans la fenêtre', async ({ user, allow }) => {
+    allow.push(/500/);
+    const a = await user('sacha');
+    await fitsTheWindow(a.page, await iconFailure(a), 390);
+  });
+});
+
 test('modeles-E4 l’aperçu de l’icône reste un carré de 96 px, à 390 px comme à 1440 px, à côté des boutons en large', async ({ user }) => {
   const a = await user('tania');
   const box = (l: ReturnType<Page['locator']>) => l.evaluate((e) => e.getBoundingClientRect().toJSON());

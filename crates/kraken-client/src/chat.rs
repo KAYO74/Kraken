@@ -166,8 +166,10 @@ struct Chat {
     replying: RwSignal<Option<Message>>,
     picker: RwSignal<Option<Pick>>,
     deleting: RwSignal<Option<Message>>,
-    /// Échec d'une action (réaction, modification…), affiché au-dessus de la saisie.
+    /// Échec d'une action (réaction, modification…), affiché au-dessus de la saisie (ou de la bannière du MP bloqué).
     notice: RwSignal<Option<String>>,
+    /// MP bloqué par moi : on n'y écrit plus, ni message ni épingle (l'historique reste lisible).
+    blocked: Memo<bool>,
     /// Les messages plus récents que celui-ci (des autres) sont nouveaux : la ligne « Nouveaux
     /// messages » se place avant le premier. Fixé à l'ouverture, ou quand un message arrive
     /// fenêtre inactive ; effacé quand j'écris.
@@ -229,6 +231,7 @@ fn ChannelView(channel: Channel) -> impl IntoView {
         picker: RwSignal::new(None),
         deleting: RwSignal::new(None),
         notice: RwSignal::new(None),
+        blocked: other_blocked,
         since: RwSignal::new(None),
         tray: files::new_tray(),
         dragging: RwSignal::new(false),
@@ -268,8 +271,10 @@ fn ChannelView(channel: Channel) -> impl IntoView {
     // Messages épinglés : une seule colonne à droite à la fois (membres ou épingles).
     let pins_open = RwSignal::new(false);
     let pins_btn = NodeRef::<html::Button>::new();
-    let can_manage =
-        Memo::new(move |_| channel.guild_id.is_none_or(|g| s.guild_perms(g) & perms::MANAGE_MESSAGES != 0));
+    // Un MP bloqué refuse d'épingler comme d'écrire : ni bouton dans la barre d'outils, ni « Désépingler » dans le panneau.
+    let can_manage = Memo::new(move |_| {
+        !other_blocked.get() && channel.guild_id.is_none_or(|g| s.guild_perms(g) & perms::MANAGE_MESSAGES != 0)
+    });
     let toggle_pins = move |_| {
         if pins_open.get_untracked() {
             pins_open.set(false);
@@ -459,6 +464,11 @@ fn ChannelView(channel: Channel) -> impl IntoView {
                         <button class="k-btn k-btn--sm" on:click=unblock>"Débloquer"</button>
                     </div>
                     <Show when=move || unblock_error.get().is_some()><p class="k-error app-compose-note" role="alert">{move || unblock_error.get()}</p></Show>
+                    // Les échecs du fil (« Aller au message », une réaction…) se lisent ici aussi : la saisie, qui les porte, est remplacée.
+                    {move || chat.notice.get().map(|n| view! {
+                        <p class="k-error app-compose-note" role="alert">{n}" "
+                            <button type="button" class="k-btn k-btn--link" on:click=move |_| chat.notice.set(None)>"Fermer"</button></p>
+                    })}
                 </Show>
                 <files::DropOverlay dragging=chat.dragging place=drop_place/>
                 {move || chat.picker.get().map(|p| {
@@ -706,8 +716,10 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
     let at = msg.created_at;
     let mine = me.is_some() && msg.author.as_ref().map(|a| a.id) == me;
     let manage = chat.guild.is_some_and(|g| s.guild_perms(g) & perms::MANAGE_MESSAGES != 0);
-    // Épingler : « Gérer les messages » dans un serveur, tout le monde dans un MP ou un groupe.
-    let can_pin = Memo::new(move |_| chat.guild.is_none_or(|g| s.guild_perms(g) & perms::MANAGE_MESSAGES != 0));
+    // Épingler : « Gérer les messages » dans un serveur, tout le monde dans un MP ou un groupe, sauf un MP que j'ai bloqué.
+    let can_pin = Memo::new(move |_| {
+        !chat.blocked.get() && chat.guild.is_none_or(|g| s.guild_perms(g) & perms::MANAGE_MESSAGES != 0)
+    });
     let pinned = msg.pinned;
     let pin_label = if pinned { "Désépingler le message" } else { "Épingler le message" };
     let mentioned = msg.mention_everyone || msg.mentions.iter().any(|u| Some(u.id) == me);

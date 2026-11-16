@@ -320,19 +320,22 @@ async fn a_blocked_dm_refuses_pinning_like_writing_but_still_lists(pool: PgPool)
     let path = format!("/users/@me/relationships/{}", sam.user.id);
     assert_eq!(lou.call(Method::PUT, &path, Some(json!({"kind": "blocked"}))).await.0, StatusCode::OK);
     let code = |v: &Value| v["code"].as_str().unwrap_or_default().to_string();
+    let message = |v: &Value| v["message"].as_str().unwrap_or_default().to_string();
     let send = json!({"content": "hé"});
+    // Mêmes codes que l'envoi, mais la phrase parle d'épingles, pas de « message pas remis ».
     let (s, v) = sam.call(Method::POST, &format!("/channels/{}/messages", dm.id), Some(send.clone())).await;
     assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_refused"));
-    let (s, v) = sam.pin(dm.id, b).await;
-    assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_refused"));
-    let (s, v) = sam.unpin(dm.id, a).await;
-    assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_refused"));
+    assert!(message(&v).contains("Ton message n'a pas pu être remis"));
+    for (s, v) in [sam.pin(dm.id, b).await, sam.unpin(dm.id, a).await] {
+        assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_refused"));
+        assert_eq!(message(&v), "Tu ne peux pas épingler ni désépingler ici : la conversation est bloquée.");
+    }
     let (s, v) = lou.call(Method::POST, &format!("/channels/{}/messages", dm.id), Some(send)).await;
     assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_blocked"));
-    let (s, v) = lou.pin(dm.id, b).await;
-    assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_blocked"));
-    let (s, v) = lou.unpin(dm.id, a).await;
-    assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_blocked"));
+    for (s, v) in [lou.pin(dm.id, b).await, lou.unpin(dm.id, a).await] {
+        assert_eq!((s, code(&v).as_str()), (StatusCode::FORBIDDEN, "dm_blocked"));
+        assert_eq!(message(&v), "Tu ne peux pas épingler ni désépingler ici : tu as bloqué cette personne.");
+    }
     // Rien n'a changé, et personne n'en est averti.
     gw.no_update().await;
     // La lecture reste permise des deux côtés.

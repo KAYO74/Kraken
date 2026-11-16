@@ -37,10 +37,14 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
 .app-main { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); outline: none;
   border-top-left-radius: var(--radius-lg); border: 1px solid var(--border); border-right: 0; border-bottom: 0; }
 .app-conn { margin: var(--space-3) var(--space-3) 0; }
-/* La zone `status` de la coquille (confirmations, échecs d'icône) flotte en haut de la colonne, hors flux : rien ne
-   descend quand elle vient ou repart. Elle ne prend pas les clics, sauf son bouton Fermer ; le fond est opaque. */
-.app-notice { position: absolute; top: 0; left: 0; right: 0; z-index: var(--z-popover); display: grid; justify-items: center; pointer-events: none; }
-.app-notice > .k-banner { width: max-content; max-width: calc(100% - 2 * var(--space-3)); box-shadow: var(--shadow-pop);
+/* La zone `status` de la coquille (confirmations, échecs d'icône) flotte hors flux, juste sous l'en-tête de la page : rien
+   ne descend quand elle vient ou repart, et les boutons de l'en-tête restent à découvert, même quand il passe sur deux
+   lignes. Elle ne prend pas les clics, sauf son bouton Fermer ; le fond est opaque ; le texte passe à la ligne. Sans
+   ancrage au navigateur, ou sans en-tête, elle se pose à la hauteur d'un en-tête. */
+.app-header { anchor-name: --app-header; }
+.app-notice { position: absolute; top: var(--size-header); top: anchor(--app-header bottom, var(--size-header)); left: 0; right: 0;
+  z-index: var(--z-popover); display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; pointer-events: none; }
+.app-notice > .k-banner { width: fit-content; max-width: calc(100% - 2 * var(--space-3)); box-shadow: var(--shadow-pop);
   background-color: var(--surface); background-image: linear-gradient(var(--info-soft), var(--info-soft)); }
 .app-notice .k-btn { pointer-events: auto; }
 
