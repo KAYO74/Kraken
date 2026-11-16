@@ -209,6 +209,9 @@ test('F04-CAM3 sans le droit « Caméra » : bouton désactivé, avec la raison,
   await expect(button).toBeDisabled();
   await expect(button).toHaveAttribute('title', reason);
   await expect(button).toHaveAccessibleDescription(reason);
+  // La raison est aussi écrite sous la barre, pour qui ne peut ni survoler ni focaliser un bouton désactivé.
+  await expect(b.page.locator('#call-cam-why')).toBeVisible();
+  await expect(b.page.locator('#call-cam-why')).toHaveText(reason);
   await expect(button).toHaveAccessibleName('Caméra');
   await expect(bar(b.page).getByRole('button', { name: 'Partager ton écran' })).toBeEnabled();
   await a11y(b.page);

@@ -39,12 +39,11 @@ pub fn insecure_origin(url: &Url) -> Option<String> {
 
 /// Une page demande le micro ou l'écran : seule l'instance peut l'obtenir, et sous Windows et
 /// macOS le navigateur intégré pose quand même sa question (WebKitGTK n'en pose pas : la
-/// demande ne vient que d'un clic sur « Rejoindre »). La caméra, que le client n'utilise pas,
-/// est refusée. Le reste (notifications…) suit le comportement du navigateur intégré.
+/// demande ne vient que d'un clic sur « Rejoindre » ou sur « Caméra »). La caméra suit la même
+/// règle que le micro. Le reste (notifications…) suit le comportement du navigateur intégré.
 pub fn permission(webview: Webview, kind: PermissionKind) -> PermissionResponse {
     match kind {
-        PermissionKind::Camera => return PermissionResponse::Deny,
-        PermissionKind::Microphone | PermissionKind::DisplayCapture => {}
+        PermissionKind::Camera | PermissionKind::Microphone | PermissionKind::DisplayCapture => {}
         _ => return PermissionResponse::Default,
     }
     match webview.url() {

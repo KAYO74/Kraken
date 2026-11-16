@@ -691,7 +691,7 @@ fn CallBar(private: bool) -> impl IntoView {
             })}
         </div>
         {(!share_ok).then(|| view! { <p class="app-hint app-call-why" id="call-share-why">{why}</p> })}
-        {move || cam_blocked().then(|| view! { <p class="k-sr" id="call-cam-why">{voice::CAM_NO_RIGHT}</p> })}
+        {move || cam_blocked().then(|| view! { <p class="app-hint app-call-why" id="call-cam-why">{voice::CAM_NO_RIGHT}</p> })}
     }
 }
 
