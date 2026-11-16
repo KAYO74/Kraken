@@ -247,10 +247,8 @@ fn Tile(guild: Option<Id>, channel: Id, user: Id) -> impl IntoView {
         let name = name.clone();
         move || face(account.clone(), &name, "lg")
     };
-    let label = {
-        let name = name.clone();
-        move || if me && camera.get() { "Toi".to_string() } else { format!("{name}{}", if me { " (toi)" } else { "" }) }
-    };
+    // Ma légende est « <mon nom> (toi) », caméra allumée ou non.
+    let label = format!("{name}{}", if me { " (toi)" } else { "" });
     let cam_label = if me { "Aperçu de ta caméra".to_string() } else { format!("Caméra de {name}") };
     view! {
         <li class="k-tile" data-live=move || live().then_some("") data-camera=move || camera.get().then_some("")
@@ -628,14 +626,31 @@ fn CallBar(private: bool) -> impl IntoView {
         "Ce navigateur ne permet pas de partager l'écran."
     };
     let share_label = move || if v.streaming.get() { "Arrêter le partage" } else { "Partager ton écran" };
-    let cam_title = move || if v.camera.get() { "Couper la caméra" } else { "Activer la caméra" };
+    // Sans le droit « Caméra » : bouton désactivé, la raison en infobulle et lue par `aria-describedby`.
+    // Une caméra déjà allumée reste éteignable si le droit disparaît en cours d'appel.
+    let cam_blocked = move || !v.camera.get() && v.camera_denied();
+    let cam_title = move || {
+        if cam_blocked() {
+            voice::CAM_NO_RIGHT
+        } else if v.camera.get() {
+            "Couper la caméra"
+        } else {
+            "Activer la caméra"
+        }
+    };
     view! {
+        // Au-dessus de la barre, et la place du message est réservée : en apparaissant, il ne déplace
+        // ni la barre ni les tuiles.
+        <div class="app-call-note">
+            {move || v.camera_error.get().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
+        </div>
         <div class="k-callbar" role="group" aria-label="Commandes de l'appel">
             <MicToggle big=true/>
             <DeafToggle big=true/>
             <button class="k-callbtn" data-on=move || v.camera.get().then_some("")
-                disabled=move || matches!(v.status.get(), Status::Lost(_) | Status::Off)
+                disabled=move || cam_blocked() || matches!(v.status.get(), Status::Lost(_) | Status::Off)
                 aria-label="Caméra" title=cam_title aria-pressed=move || v.camera.get().to_string()
+                aria-describedby=move || cam_blocked().then_some("call-cam-why")
                 on:click=move |_| v.toggle_camera()>
                 {move || if v.camera.get() { view! { <Icon icon=lu::LuVideo/> } } else { view! { <Icon icon=lu::LuVideoOff/> } }}
                 <span>"Caméra"</span>
@@ -660,16 +675,23 @@ fn CallBar(private: bool) -> impl IntoView {
                     </button>
                 }.into_any()
             }}
+            // Touche tenue : « Micro ouvert » et un micro plein, pas seulement la couleur. Les deux textes
+            // occupent la même case, pour que la barre ne bouge pas quand on tient ou relâche.
             {move || v.ptt_armed().then(|| view! {
                 <span class="app-call-ptt" data-on=move || v.ptt_held.get().then_some("")>
                     <Icon icon=lu::LuMic small=true/>
-                    "Appuyer pour parler : "
-                    <span class="k-kbd"><kbd>{move || v.ptt_key.with(|k| k.as_ref().map(|k| k.label.clone()).unwrap_or_default())}</kbd></span>
+                    <span class="app-call-ptt-text">
+                        <span class="app-call-ptt-idle">
+                            "Appuyer pour parler : "
+                            <span class="k-kbd"><kbd>{move || v.ptt_key.with(|k| k.as_ref().map(|k| k.label.clone()).unwrap_or_default())}</kbd></span>
+                        </span>
+                        <span class="app-call-ptt-held">"Micro ouvert"</span>
+                    </span>
                 </span>
             })}
         </div>
         {(!share_ok).then(|| view! { <p class="app-hint app-call-why" id="call-share-why">{why}</p> })}
-        {move || v.camera_error.get().map(|e| view! { <p class="k-error app-call-why" role="alert">{e}</p> })}
+        {move || cam_blocked().then(|| view! { <p class="k-sr" id="call-cam-why">{voice::CAM_NO_RIGHT}</p> })}
     }
 }
 

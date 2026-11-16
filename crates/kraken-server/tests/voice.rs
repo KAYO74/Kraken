@@ -191,6 +191,16 @@ async fn join_rights_and_voice_states(pool: PgPool) {
         assert_eq!(r.send().await.unwrap().status(), 400);
     }
 
+    // Ancien client à trois lignes : pas d'erreur de désérialisation brute, un 400 lisible.
+    let mut old_client = serde_json::to_value(offer()).unwrap();
+    old_client["mids"].as_object_mut().unwrap().remove("camera");
+    let r =
+        c.post(format!("http://{base}/api/v1/channels/{voice}/voice")).header("authorization", &a).json(&old_client);
+    let r = r.send().await.unwrap();
+    assert_eq!(r.status(), 400);
+    let body: serde_json::Value = r.json().await.unwrap();
+    assert_eq!(body["message"], "Ton application est trop ancienne pour les appels : mets-la à jour.");
+
     // Lou rejoint : réponse ICE-lite qui annonce 127.0.0.1 ; Sam le voit arriver.
     let (mut ws, _) = gateway(&base, &b).await;
     let r = join_voice(&c, &base, &a, voice).await;

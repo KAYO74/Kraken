@@ -146,6 +146,13 @@ test('S10-H1 Voix et vidéo : trois listes avec « Par défaut du système », n
   expect(await live(page)).toBe(0);
   await expect(page.getByRole('img', { name: 'Image de ta caméra' })).toHaveCount(0);
 
+  // Les groupes se lisent : d'un menu au libellé suivant, nettement plus que d'un libellé à son menu.
+  const box = async (css: string) => (await page.locator(css).boundingBox())!;
+  const [label, select, next] = [await box('label[for="vv-mic"]'), await box('#vv-mic'), await box('label[for="vv-speaker"]')];
+  const within = select.y - (label.y + label.height);
+  const between = next.y - (select.y + select.height);
+  expect(between).toBeGreaterThanOrEqual(within + 8);
+
   // Sans autorisation les appareils n'ont pas de nom : « Micro 1 »… et un bouton demande l'accès une fois.
   const mic = page.getByLabel('Entrée audio', { exact: true });
   const allow = page.getByRole('button', { name: "Autoriser l'accès" });
@@ -397,8 +404,11 @@ test('S10-H7 appuyer pour parler : choix de la touche, indicateur, micro ouvert 
 
   // En appel : l'indicateur dit la touche, le micro est fermé tant qu'elle n'est pas tenue.
   await join(page, gid, text);
-  const indicator = bar(page).getByText('Appuyer pour parler :');
+  const indicator = bar(page).locator('.app-call-ptt');
+  await expect(indicator.getByText('Appuyer pour parler :')).toBeVisible();
   await expect(indicator).toContainText('Espace');
+  await expect(indicator.getByText('Micro ouvert')).toBeHidden();
+  const idleWidth = (await indicator.boundingBox())!.width;
   await expect.poll(() => enabled(page)).toBe(false);
   await expect(page.getByRole('list', { name: 'Participants' }).getByRole('img', { name: 'micro coupé' })).toHaveCount(0);
   await a11y(page);
@@ -408,12 +418,17 @@ test('S10-H7 appuyer pour parler : choix de la touche, indicateur, micro ouvert 
   await expect.poll(() => enabled(page)).toBe(true);
   await expect(indicator).toHaveAttribute('data-on', '');
   await expect(said('Micro ouvert')).toBeVisible();
+  // Pas seulement la couleur : le texte change (« Micro ouvert » à la place de la touche), la barre ne bouge pas.
+  await expect(indicator.getByText('Micro ouvert')).toBeVisible();
+  await expect(indicator.getByText('Appuyer pour parler :')).toBeHidden();
+  expect((await indicator.boundingBox())!.width).toBe(idleWidth);
   // Une touche qui répète ne fait rien de plus.
   await page.keyboard.down('Space');
   expect(await enabled(page)).toBe(true);
   await page.keyboard.up('Space');
   await expect.poll(() => enabled(page)).toBe(false);
   await expect(indicator).not.toHaveAttribute('data-on', '');
+  await expect(indicator.getByText('Appuyer pour parler :')).toBeVisible();
   await expect(said('Micro fermé')).toBeVisible();
   // Le serveur n'apprend rien : ma sourdine ne bouge pas.
   await expect(page.getByRole('list', { name: 'Participants' }).getByRole('img', { name: 'micro coupé' })).toHaveCount(0);
@@ -467,7 +482,7 @@ test('S10-H7 appuyer pour parler : choix de la touche, indicateur, micro ouvert 
   await page.getByRole('switch', { name: 'Appuyer pour parler' }).uncheck();
   await expect(pttKey(page)).toHaveCount(0);
   await page.goBack();
-  await expect(bar(page).getByText('Appuyer pour parler :')).toHaveCount(0);
+  await expect(bar(page).locator('.app-call-ptt')).toHaveCount(0);
   await expect.poll(() => enabled(page)).toBe(true);
 });
 

@@ -73,6 +73,7 @@ pub(crate) struct Client {
     sources: [Mid; 4],
     can_speak: bool,
     can_stream: bool,
+    can_video: bool,
     /// Micro coupé (ou son coupé) : ce qu'il enverrait quand même n'est pas relayé.
     muted: bool,
     self_deaf: bool,
@@ -162,6 +163,7 @@ impl Client {
             sources,
             can_speak: j.can_speak,
             can_stream: j.can_stream,
+            can_video: j.can_video,
             muted: j.self_mute || j.self_deaf,
             self_deaf: j.self_deaf,
             streaming: false,
@@ -196,7 +198,7 @@ impl Client {
         match kind {
             Kind::Mic => self.can_speak && !self.muted,
             Kind::Screen | Kind::ScreenAudio => self.can_stream && self.streaming,
-            Kind::Camera => self.can_stream && self.camera,
+            Kind::Camera => self.can_video && self.camera,
         }
     }
 
@@ -720,7 +722,7 @@ impl Sfu {
             .clients
             .iter()
             .filter(|c| c.channel.is_some())
-            .map(|c| (c.room, c.user, c.can_speak, c.can_stream && c.streaming, c.can_stream && c.camera))
+            .map(|c| (c.room, c.user, c.can_speak, c.can_stream && c.streaming, c.can_video && c.camera))
             .collect();
         for c in self.clients.iter_mut().filter(|c| c.stale) {
             let mut wanted = HashSet::new();
@@ -760,7 +762,7 @@ impl Sfu {
             Item::State { session, self_mute, self_deaf, streaming, camera } => {
                 let Some(c) = self.clients.iter_mut().find(|c| c.session == session) else { return };
                 let streaming = streaming && c.can_stream;
-                let camera = camera && c.can_stream;
+                let camera = camera && c.can_video;
                 let stopped = c.streaming && !streaming;
                 let changed = c.streaming != streaming || c.camera != camera;
                 c.streaming = streaming;

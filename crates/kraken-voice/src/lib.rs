@@ -70,6 +70,8 @@ pub struct Join {
     pub can_speak: bool,
     /// Droit STREAM : son écran peut être regardé.
     pub can_stream: bool,
+    /// Droit VIDEO : sa caméra est relayée.
+    pub can_video: bool,
 }
 
 #[derive(Debug)]

@@ -55,7 +55,7 @@ test('F04-CAM1 allumer la caméra : aperçu en miroir chez soi, image chez l’a
   await expect(a.page.locator('video[data-camera]')).toHaveCount(0);
   await expect(b.page.locator('video[data-camera]')).toHaveCount(0);
 
-  // A l'allume : le bouton le dit, l'aperçu apparaît (miroir, sans son), la légende est « Toi ».
+  // A l'allume : le bouton le dit, l'aperçu apparaît (miroir, sans son), la légende est « <nom> (toi) ».
   await button.click();
   await expect(button).toHaveAttribute('aria-pressed', 'true');
   await expect(button).toHaveAccessibleName('Caméra');
@@ -65,7 +65,7 @@ test('F04-CAM1 allumer la caméra : aperçu en miroir chez soi, image chez l’a
   expect(await preview.evaluate((v: HTMLVideoElement) => v.muted)).toBe(true);
   await expect.poll(() => preview.evaluate(videoWidth), { timeout: 15_000 }).toBeGreaterThan(0);
   const mine = tiles(a.page).filter({ has: preview });
-  await expect(mine).toContainText('Toi');
+  await expect(mine).toContainText(`${a.name} (toi)`);
 
   // B la voit sans rien demander : une vraie image (taille connue, lecture qui avance), pas en miroir.
   const seen = b.page.getByLabel(`Caméra de ${a.name}`);
@@ -142,7 +142,7 @@ test('F04-CAM1 allumer la caméra : aperçu en miroir chez soi, image chez l’a
   await expect.poll(() => seenByA.evaluate(videoWidth), { timeout: 20_000 }).toBeGreaterThan(0);
 });
 
-test('F04-CAM2 caméra refusée : un message sous la barre, sans fenêtre, puis on peut réessayer', async ({ user, api }) => {
+test('F04-CAM2 caméra refusée : un message au-dessus de la barre, sans fenêtre, puis on peut réessayer', async ({ user, api }) => {
   test.setTimeout(120_000);
   const { a, b } = await room(user, api);
   // Le navigateur refuse la caméra (pas le micro, déjà pris).
@@ -186,4 +186,54 @@ test('F04-CAM2 caméra refusée : un message sous la barre, sans fenêtre, puis 
   await expect(button).toHaveAttribute('aria-pressed', 'false');
   await expect(a.page.getByRole('alert').filter({ hasText: "La caméra s'est arrêtée" })).toBeVisible();
   await expect(b.page.getByLabel(`Caméra de ${a.name}`)).toHaveCount(0);
+});
+
+test('F04-CAM3 sans le droit « Caméra » : bouton désactivé, avec la raison, qui revient quand le droit revient', async ({
+  user,
+  api,
+}) => {
+  test.setTimeout(120_000);
+  const { a, b } = await room(user, api);
+  const guild = a.page.url().split('/channels/')[1].split('/')[0];
+  const owner = await api(a.token);
+  const everyone = (await (await owner.get(`${API}/guilds/${guild}`)).json()).roles.find(
+    (r: { id: string }) => r.id === guild,
+  );
+  const VIDEO = 1 << 12;
+  const reason = "Tu n'as pas le droit d'allumer ta caméra sur ce serveur.";
+  const button = cameraButton(b.page);
+  await expect(button).toBeEnabled();
+
+  // @everyone perd « Caméra » (mais garde le partage d'écran) : le bouton de B se désactive, en disant pourquoi.
+  expect((await owner.patch(`${API}/guilds/${guild}/roles/${guild}`, { data: { permissions: everyone.permissions & ~VIDEO } })).status()).toBe(200);
+  await expect(button).toBeDisabled();
+  await expect(button).toHaveAttribute('title', reason);
+  await expect(button).toHaveAccessibleDescription(reason);
+  await expect(button).toHaveAccessibleName('Caméra');
+  await expect(bar(b.page).getByRole('button', { name: 'Partager ton écran' })).toBeEnabled();
+  await a11y(b.page);
+  // Le propriétaire garde la sienne.
+  await expect(cameraButton(a.page)).toBeEnabled();
+
+  // Le droit revient : le bouton aussi, sans raison.
+  expect((await owner.patch(`${API}/guilds/${guild}/roles/${guild}`, { data: { permissions: everyone.permissions } })).status()).toBe(200);
+  await expect(button).toBeEnabled();
+  await expect(button).not.toHaveAttribute('aria-describedby', /.+/);
+  await expect(button).toHaveAttribute('title', 'Activer la caméra');
+});
+
+test('F04-CAM4 le message de la caméra ne déplace ni la barre ni les tuiles en apparaissant', async ({ user, api }) => {
+  test.setTimeout(120_000);
+  const { a } = await room(user, api);
+  await a.page.evaluate(() => {
+    const media = navigator.mediaDevices;
+    const original = media.getUserMedia.bind(media);
+    media.getUserMedia = (c?: MediaStreamConstraints) =>
+      c?.video ? Promise.reject(new DOMException('refusé', 'NotAllowedError')) : original(c);
+  });
+  const spots = async () => [await bar(a.page).boundingBox(), await tiles(a.page).first().boundingBox()];
+  const before = await spots();
+  await cameraButton(a.page).click();
+  await expect(a.page.getByRole('alert').filter({ hasText: "Le navigateur a refusé l'accès à la caméra" })).toBeVisible();
+  expect(await spots()).toEqual(before);
 });

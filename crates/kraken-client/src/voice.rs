@@ -18,6 +18,7 @@ use std::cell::{Cell, RefCell};
 use futures::StreamExt;
 use futures::channel::mpsc;
 use gloo_timers::future::TimeoutFuture;
+use kraken_core::perms;
 use kraken_proto::{
     ControlRefusal, Id, RemoteInput, User, VOICE_DATA_CHANNEL, VoiceClientMsg, VoiceJoin, VoiceMids, VoiceServerMsg,
     VoiceState,
@@ -49,6 +50,8 @@ const CAM_MISSING: &str = "Aucune caméra n'a été trouvée sur cet appareil.";
 const CAM_BUSY: &str = "La caméra n'a pas pu démarrer : une autre application l'utilise peut-être.";
 const CAM_ENDED: &str = "La caméra s'est arrêtée : elle a été débranchée ou reprise par une autre application.";
 const CAM_INSECURE: &str = "La caméra demande l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).";
+/// Pas de droit « Caméra » sur ce serveur : le bouton le dit, et le refus tient aussi dans le code.
+pub const CAM_NO_RIGHT: &str = "Tu n'as pas le droit d'allumer ta caméra sur ce serveur.";
 const MIC_SWITCH: &str = "Le micro choisi n'a pas pu démarrer : l'appel garde celui qui était utilisé.";
 
 /// Le salon vocal de la session : un salon de serveur, ou l'appel d'un MP ou d'un groupe
@@ -998,10 +1001,19 @@ impl Voice {
         self.requests.set(Vec::new());
     }
 
+    /// Je n'ai pas le droit « Caméra » sur le serveur de ce salon (suivi ; d'après mes rôles, le serveur
+    /// vérifie aussi les salons). Un appel de MP ou de groupe l'accorde toujours.
+    pub fn camera_denied(self) -> bool {
+        let Some(guild) = self.room.with(|r| r.as_ref().and_then(|r| r.guild)) else { return false };
+        crate::store::store().guild_perms(guild) & perms::VIDEO == 0
+    }
+
     /// Allume ma caméra, ou l'éteint. À appeler dans le clic.
     pub fn toggle_camera(self) {
         if self.camera.get_untracked() {
             self.stop_camera();
+        } else if untrack(|| self.camera_denied()) {
+            self.camera_error.set(Some(CAM_NO_RIGHT.into()));
         } else {
             self.start_camera();
         }

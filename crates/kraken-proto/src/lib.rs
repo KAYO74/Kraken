@@ -918,6 +918,8 @@ pub struct VoiceMids {
     pub mic: String,
     pub screen: String,
     pub screen_audio: String,
+    /// Absente chez un ancien client (trois lignes) : refusé à l'entrée dans un appel.
+    #[serde(default)]
     pub camera: String,
 }
 

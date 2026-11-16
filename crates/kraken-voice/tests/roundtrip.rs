@@ -95,8 +95,15 @@ impl Browser {
 
     /// Rejoint `room` (serveur `guild`) avec tous les droits.
     fn join(sfu: &Sfu, guild: Id, room: Id, user: Id) -> Self {
+        Self::join_with(sfu, guild, room, user, |_| {})
+    }
+
+    /// Rejoint `room` avec les droits que `rights` retouche.
+    fn join_with(sfu: &Sfu, guild: Id, room: Id, user: Id, rights: impl FnOnce(&mut Join)) -> Self {
         let (mut b, offer, mids, pending) = Self::new();
-        let answer = sfu.join(join(guild, room, user, offer, mids)).unwrap();
+        let mut j = join(guild, room, user, offer, mids);
+        rights(&mut j);
+        let answer = sfu.join(j).unwrap();
         assert!(answer.contains("a=ice-lite"), "le serveur est ICE-lite");
         b.rtc.sdp_api().accept_answer(pending, SdpAnswer::from_sdp_string(&answer).unwrap()).unwrap();
         b
@@ -208,6 +215,7 @@ fn join(guild: Id, room: Id, user: Id, offer: String, mids: VoiceMids) -> Join {
         self_deaf: false,
         can_speak: true,
         can_stream: true,
+        can_video: true,
     }
 }
 
@@ -379,6 +387,38 @@ fn camera_relay() {
     until(&mut [&mut a, &mut b, &mut c, &mut d], "départ renégocié", |bs| bs[1].offers.len() > offers);
     let last = log.lock().unwrap().iter().rev().find(|s| s.user_id == ua).cloned().unwrap();
     assert!(last.channel_id.is_none() && !last.camera);
+}
+
+/// Le droit « Caméra » (VIDEO) commande la caméra, pas « Partager son écran » (STREAM) : sans
+/// VIDEO, même avec STREAM, rien n'est relayé et l'état annoncé n'a pas de caméra ; avec VIDEO
+/// mais sans STREAM, la caméra passe.
+#[test]
+fn camera_follows_the_video_right() {
+    let (sfu, _log) = sfu(25);
+    let (guild, room) = (id(1), id(2));
+    let (ua, ub, uw) = (id(10), id(11), id(12));
+    let on = |camera| VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: false, camera };
+
+    // A : STREAM sans VIDEO.
+    let mut a = Browser::join_with(&sfu, guild, room, ua, |j| j.can_video = false);
+    // W : VIDEO sans STREAM.
+    let mut w = Browser::join_with(&sfu, guild, room, uw, |j| j.can_stream = false);
+    let mut b = Browser::join(&sfu, guild, room, ub);
+    until(&mut [&mut a, &mut w, &mut b], "connexions", |bs| bs.iter().all(|x| x.ready()));
+    let (a_camera, w_camera) = (format!("{ua}.camera"), format!("{uw}.camera"));
+
+    a.send_camera = true;
+    a.send(&on(true));
+    w.send_camera = true;
+    w.send(&on(true));
+    until(&mut [&mut a, &mut w, &mut b], "caméra de W relayée", |bs| {
+        sfu.state(uw).is_some_and(|s| s.camera) && bs[2].got(&w_camera, MediaKind::Video) > 0
+    });
+    wait(&mut [&mut a, &mut w, &mut b], 300);
+    assert!(!sfu.state(ua).unwrap().camera, "sans VIDEO : pas de caméra dans l'état annoncé");
+    assert_eq!(b.got(&a_camera, MediaKind::Video), 0, "sans VIDEO : rien n'est relayé");
+    assert!(b.offers.iter().all(|o| !o.contains(&a_camera)), "sans VIDEO : aucune piste ouverte chez les autres");
+    assert!(!sfu.state(uw).unwrap().streaming, "W n'a pas pour autant de partage d'écran");
 }
 
 #[test]
