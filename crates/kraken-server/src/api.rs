@@ -203,6 +203,53 @@ pub async fn remove_embed(
     Ok(Json(m))
 }
 
+/// Épingles ajoutées ou retirées par minute et par client.
+pub const PINS_PER_MIN: u32 = 60;
+
+/// Le droit d'épingler et de désépingler : « Gérer les messages » dans un serveur ; en MP ou en groupe, tout
+/// participant. Un salon qu'on ne voit pas n'existe pas (404).
+async fn require_pin_right(state: &AppState, uid: Id, cid: Id) -> ApiResult<()> {
+    let c = state.db.channel(cid).await?.ok_or_else(AppError::not_found)?;
+    let need = if c.guild_id.is_some() { perms::READ_HISTORY | perms::MANAGE_MESSAGES } else { perms::READ_HISTORY };
+    channel_perms(state, uid, cid, need).await?;
+    Ok(())
+}
+
+/// Les messages épinglés du salon, le plus récemment épinglé d'abord.
+pub async fn pins(State(state): State<AppState>, auth: Auth, Path(cid): Path<Id>) -> ApiResult<Json<Vec<Message>>> {
+    require_channel(&state, auth.user.id, cid, perms::READ_HISTORY).await?;
+    Ok(Json(state.db.pinned_messages(cid).await?))
+}
+
+/// Épingler un message (sans effet s'il l'est déjà).
+pub async fn pin_message(
+    State(state): State<AppState>,
+    auth: Auth,
+    Path((cid, mid)): Path<(Id, Id)>,
+) -> ApiResult<Json<Message>> {
+    set_pinned(state, auth, cid, mid, true).await
+}
+
+/// Désépingler un message (sans effet s'il ne l'est pas).
+pub async fn unpin_message(
+    State(state): State<AppState>,
+    auth: Auth,
+    Path((cid, mid)): Path<(Id, Id)>,
+) -> ApiResult<Json<Message>> {
+    set_pinned(state, auth, cid, mid, false).await
+}
+
+async fn set_pinned(state: AppState, auth: Auth, cid: Id, mid: Id, pin: bool) -> ApiResult<Json<Message>> {
+    require_pin_right(&state, auth.user.id, cid).await?;
+    let (m, changed) = state.db.set_pinned(cid, mid, auth.user.id, pin).await?;
+    // Un renvoi sans effet ne dit rien à personne : ni événement, ni journal.
+    if changed {
+        let audience = state.db.channel_audience(cid).await?;
+        state.hub.send(&audience, Event::MessageUpdate(Box::new(m.clone())));
+    }
+    Ok(Json(m))
+}
+
 pub async fn add_reaction(
     State(state): State<AppState>,
     auth: Auth,

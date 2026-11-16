@@ -14,6 +14,7 @@ mod invites;
 mod jobs;
 mod moderation;
 mod perm;
+mod pins;
 mod profile;
 mod reads;
 mod seed;
@@ -229,7 +230,7 @@ fn message_sql(filter: &str) -> String {
         "select m.id, m.channel_id, m.content, m.nonce, m.kind, m.reply_to_id, m.mention_everyone,
                 m.call_participants, (extract(epoch from m.call_ended_at) * 1000)::int8 as call_ended_ms,
                 (extract(epoch from m.created_at) * 1000)::int8 as created_ms,
-                (extract(epoch from m.edited_at) * 1000)::int8 as edited_ms, {}, {},
+                (extract(epoch from m.edited_at) * 1000)::int8 as edited_ms, m.pinned_at is not null as pinned, {}, {},
                 left(r.content, {REPLY_FETCH}) as reply_content,
                 coalesce((select json_agg(json_build_object('emoji', x.emoji_key, 'users', x.users) order by x.first)
                           from (select emoji_key, array_agg(user_id order by created_at, user_id) as users,
@@ -285,6 +286,7 @@ fn message_from(r: &PgRow) -> sqlx::Result<Message> {
         call,
         attachments: r.try_get::<Json<Vec<Attachment>>, _>("attachments")?.0,
         embeds: r.try_get::<Json<Vec<Embed>>, _>("embeds")?.0,
+        pinned: r.try_get("pinned")?,
     })
 }
 
@@ -1312,5 +1314,7 @@ mod tests_emojis;
 mod tests_guild;
 #[cfg(test)]
 mod tests_guild_edit;
+#[cfg(test)]
+mod tests_pins;
 #[cfg(test)]
 mod tests_profile;

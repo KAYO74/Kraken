@@ -74,9 +74,15 @@ pub fn trap_tab(e: &leptos::ev::KeyboardEvent, root: NodeRef<html::Div>) {
     let active = document().active_element();
     let at = |el: &web_sys::HtmlElement| active.as_ref().is_some_and(|a| a.is_same_node(Some(el)));
     let outside = !active.as_ref().is_some_and(|a| root.contains(Some(a)));
-    let target = if e.shift_key() && (at(first) || outside) {
+    // Un élément qu'on ne tabule pas (le titre qui reçoit le focus à l'ouverture) avant le premier ou après le dernier.
+    let precedes = |el: &web_sys::HtmlElement, flag: u16| {
+        active.as_ref().is_some_and(|a| el.compare_document_position(a) & flag != 0)
+    };
+    let before_first = precedes(first, web_sys::Node::DOCUMENT_POSITION_PRECEDING);
+    let after_last = precedes(last, web_sys::Node::DOCUMENT_POSITION_FOLLOWING);
+    let target = if e.shift_key() && (at(first) || outside || before_first) {
         last
-    } else if !e.shift_key() && (at(last) || outside) {
+    } else if !e.shift_key() && (at(last) || outside || after_last) {
         first
     } else {
         return;

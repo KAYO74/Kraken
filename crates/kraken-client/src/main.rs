@@ -22,6 +22,7 @@ mod markdown;
 mod new_guild;
 mod overview;
 mod photo;
+mod pins;
 mod prefs;
 mod profile;
 mod settings;

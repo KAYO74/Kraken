@@ -17,6 +17,7 @@ use crate::emoji::{EmojiImg, EmojiPicker, Picked, ReactionFace, reaction_name};
 use crate::files::{self, MessageMedia, Tray, TrayView, Viewer, ViewerState};
 use crate::icons::{Icon, lu};
 use crate::markdown::Body;
+use crate::pins::PinsPanel;
 use crate::shell::first_text;
 use crate::store::{Conn, Pending, store};
 use crate::ui::{Avatar, Header, Stub, clock, iso, modal, when};
@@ -264,6 +265,31 @@ fn ChannelView(channel: Channel) -> impl IntoView {
     // Ouverte d'office seulement là où elle tient à côté du fil.
     let members_open =
         RwSignal::new(window().match_media("(min-width: 1024px)").ok().flatten().is_some_and(|m| m.matches()));
+    // Messages épinglés : une seule colonne à droite à la fois (membres ou épingles).
+    let pins_open = RwSignal::new(false);
+    let pins_btn = NodeRef::<html::Button>::new();
+    let can_manage =
+        Memo::new(move |_| channel.guild_id.is_none_or(|g| s.guild_perms(g) & perms::MANAGE_MESSAGES != 0));
+    let toggle_pins = move |_| {
+        if pins_open.get_untracked() {
+            pins_open.set(false);
+        } else {
+            members_open.set(false);
+            pins_open.set(true);
+        }
+    };
+    let toggle_members = move |_| {
+        if !members_open.get_untracked() {
+            pins_open.set(false);
+        }
+        members_open.update(|v| *v = !*v);
+    };
+    let close_pins = Callback::new(move |()| {
+        pins_open.set(false);
+        if let Some(b) = pins_btn.get_untracked() {
+            let _ = b.focus();
+        }
+    });
     let header_icon = match channel.kind {
         ChannelKind::Announcement => lu::LuMegaphone,
         ChannelKind::Dm | ChannelKind::GroupDm => lu::LuMessageCircle,
@@ -372,18 +398,25 @@ fn ChannelView(channel: Channel) -> impl IntoView {
             <Icon icon=header_icon/>
             <h1 class="app-title app-ellipsis">{move || title.get()}</h1>
             {move || s.channel(cid).and_then(|c| c.topic).map(|t| { let tip = t.clone(); view! { <span class="app-topic app-ellipsis" title=tip>{t}</span> } })}
-            <div class="app-header-tools">
+            <div class="app-header-tools app-header-tools--chat">
                 {(!is_dm).then(|| view! {
                     <a class="k-btn k-btn--icon" href=format!("/channels/{}/{cid}/threads", channel.guild_id.unwrap()) aria-label="Fils" title="Fils"><Icon icon=lu::LuMessageSquareText/></a>
+                })}
+                <button type="button" class="k-btn k-btn--icon" aria-label="Messages épinglés" title="Messages épinglés" node_ref=pins_btn
+                    aria-expanded=move || pins_open.get().to_string() aria-controls=move || pins_open.get().then_some("pins-panel")
+                    on:click=toggle_pins>
+                    <Icon icon=lu::LuPin/>
+                </button>
+                {(!is_dm).then(|| view! {
                     <button class="k-btn k-btn--icon" aria-label="Liste des membres" title="Membres"
-                        aria-expanded=move || members_open.get().to_string() on:click=move |_| members_open.update(|v| *v = !*v)>
+                        aria-expanded=move || members_open.get().to_string() on:click=toggle_members>
                         <Icon icon=lu::LuUsers/>
                     </button>
                 })}
                 {is_dm.then(|| view! { <StartCall channel=cid blocked=other_blocked/> })}
                 {(kind == ChannelKind::GroupDm).then(|| view! {
                     <button class="k-btn k-btn--icon" aria-label="Liste des membres" title="Membres"
-                        aria-expanded=move || members_open.get().to_string() on:click=move |_| members_open.update(|v| *v = !*v)>
+                        aria-expanded=move || members_open.get().to_string() on:click=toggle_members>
                         <Icon icon=lu::LuUsers/>
                     </button>
                     <button class="k-btn k-btn--icon" aria-label="Ajouter des amis au groupe" title="Ajouter des amis"
@@ -435,6 +468,21 @@ fn ChannelView(channel: Channel) -> impl IntoView {
             </section>
             {(!is_dm).then(|| view! { <Show when=move || members_open.get()><Members guild=channel.guild_id.unwrap()/></Show> })}
             {(kind == ChannelKind::GroupDm).then(|| view! { <Show when=move || members_open.get()><GroupMembers channel=cid/></Show> })}
+            {move || pins_open.get().then(|| {
+                // Petit écran : une feuille pleine page, hors de la mise en page ; sinon une colonne à côté du fil.
+                let sheet = window().match_media("(max-width: 639px)").ok().flatten().is_some_and(|m| m.matches());
+                let goto = Callback::new(move |id: Id| {
+                    if sheet {
+                        pins_open.set(false);
+                    }
+                    jump(chat, id);
+                });
+                if sheet {
+                    view! { <Portal><PinsPanel channel=cid sheet=true can_manage=can_manage close=close_pins goto=goto/></Portal> }.into_any()
+                } else {
+                    view! { <PinsPanel channel=cid sheet=false can_manage=can_manage close=close_pins goto=goto/> }.into_any()
+                }
+            })}
         </div>
         {move || chat.deleting.get().map(|m| view! { <DeleteDialog msg=m/> })}
         {move || chat.viewer.get().map(|st| view! { <Viewer state=st viewer=chat.viewer/> })}
@@ -484,7 +532,9 @@ fn MessageList(channel: Id, title: Signal<String>, is_dm: bool) -> impl IntoView
                     // Le premier message des autres plus récent que ma lecture ouvre les nouveaux.
                     let first_new = !divider && since.is_some_and(|s| m.id > s) && (author.is_none() || author != me);
                     divider |= first_new;
+                    // Un message épinglé garde son en-tête : le repère « Épinglé » y a sa place.
                     let cont = !first_new
+                        && !m.pinned
                         && m.reply.is_none()
                         && m.call.is_none()
                         && prev.is_some_and(|(a, t)| a == author && author.is_some() && m.created_at - t < 7 * 60_000);
@@ -656,6 +706,10 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
     let at = msg.created_at;
     let mine = me.is_some() && msg.author.as_ref().map(|a| a.id) == me;
     let manage = chat.guild.is_some_and(|g| s.guild_perms(g) & perms::MANAGE_MESSAGES != 0);
+    // Épingler : « Gérer les messages » dans un serveur, tout le monde dans un MP ou un groupe.
+    let can_pin = Memo::new(move |_| chat.guild.is_none_or(|g| s.guild_perms(g) & perms::MANAGE_MESSAGES != 0));
+    let pinned = msg.pinned;
+    let pin_label = if pinned { "Désépingler le message" } else { "Épingler le message" };
     let mentioned = msg.mention_everyone || msg.mentions.iter().any(|u| Some(u.id) == me);
     let class = match (cont, mentioned) {
         (true, true) => "k-msg k-msg--cont k-msg--mention",
@@ -760,7 +814,7 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
                         Some(open) => view! { <button type="button" class="app-who-name" aria-haspopup="dialog" on:click=open>{name.clone()}</button> }.into_any(),
                         None => name.clone().into_any(),
                     };
-                    view! { <header><b title=handle data-role-color=move || author_id.and_then(|a| s.role_color(chat.guild, a)).map(|c| c.to_string())>{label}</b><time datetime=iso(at)>{when(at)}</time></header> }
+                    view! { <header><b title=handle data-role-color=move || author_id.and_then(|a| s.role_color(chat.guild, a)).map(|c| c.to_string())>{label}</b><time datetime=iso(at)>{when(at)}</time>{pinned.then(|| view! { <span class="app-pinned"><Icon icon=lu::LuPin small=true/><span class="k-sr">"Épinglé"</span></span> })}</header> }
                 })}
                 {move || if editing() {
                     view! { <EditBox msg=body.get_value()/> }.into_any()
@@ -779,6 +833,12 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
                         on:click=move |_| chat.picker.set(Some(Pick::React(id)))><Icon icon=lu::LuSmilePlus/></button>
                     <button type="button" class="k-btn k-btn--icon" aria-label="Répondre" title="Répondre"
                         on:click={ let m = for_reply.clone(); move |_| start_reply(chat, m.clone()) }><Icon icon=lu::LuReply/></button>
+                    <Show when=move || can_pin.get()>
+                        <button type="button" class="k-btn k-btn--icon" aria-label=pin_label title=pin_label
+                            on:click=move |_| toggle_pin(chat, id, !pinned)>
+                            {if pinned { view! { <Icon icon=lu::LuPinOff/> }.into_any() } else { view! { <Icon icon=lu::LuPin/> }.into_any() }}
+                        </button>
+                    </Show>
                     {mine.then(|| { let c = content.clone(); view! {
                         <button type="button" class="k-btn k-btn--icon" aria-label="Modifier le message" title="Modifier"
                             on:click=move |_| { chat.edit_text.set(crate::emoji::collapse(&c, chat.guild)); chat.editing.set(Some(id)); }><Icon icon=lu::LuPencil/></button>
@@ -792,6 +852,32 @@ fn MessageRow(msg: Message, cont: bool) -> impl IntoView {
         </article>
     }
     .into_any()
+}
+
+/// Épingle (`on`) ou désépingle ce message depuis sa barre d'outils. La ligne se redessine (son bouton change de
+/// libellé) : si le focus y était, il revient sur le message.
+fn toggle_pin(chat: Chat, id: Id, on: bool) {
+    let anchor = format!("msg-{id}");
+    let inside = document()
+        .get_element_by_id(&anchor)
+        .zip(document().active_element())
+        .is_some_and(|(row, here)| row.contains(Some(&here)));
+    let s = store();
+    spawn_local(async move {
+        match crate::pins::set_pinned(s, chat.channel, id, on).await {
+            Ok(()) if inside => {
+                // Après le rendu de la ligne.
+                TimeoutFuture::new(80).await;
+                if let Some(row) =
+                    document().get_element_by_id(&anchor).and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
+                {
+                    let _ = row.focus();
+                }
+            }
+            Ok(()) => {}
+            Err(e) => chat.notice.set(Some(e)),
+        }
+    });
 }
 
 fn start_reply(chat: Chat, m: Message) {

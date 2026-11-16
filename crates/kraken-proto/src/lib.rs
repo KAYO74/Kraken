@@ -471,7 +471,13 @@ pub struct Message {
     /// Aperçus des liens du texte, ajoutés par le serveur après l'envoi.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub embeds: Vec<Embed>,
+    /// Épinglé dans son salon (`PUT /channels/{id}/pins/{mid}`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
 }
+
+/// Messages épinglés au plus par salon.
+pub const MAX_PINS: usize = 50;
 
 /// Fichiers joints à un message au plus.
 pub const MAX_ATTACHMENTS: usize = 10;
@@ -1348,7 +1354,7 @@ impl AuditCategory {
             }
             Self::Invites => &["invite_create", "invite_revoke"],
             Self::Emojis => &["emoji_create", "emoji_update", "emoji_delete"],
-            Self::Guild => &["guild_update", "message_delete"],
+            Self::Guild => &["guild_update", "message_delete", "message_pin", "message_unpin"],
         }
     }
 
