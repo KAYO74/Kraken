@@ -571,7 +571,7 @@ pub fn Switcher() -> impl IntoView {
                     </div>
                     <p class="k-hint" id="sw-hint">"# salons · @ personnes et messages privés · * serveurs"</p>
                 </div>
-                <p class="k-hint app-sw-count" role="status">{status}</p>
+                <p class="k-hint app-sw-count" role="status"><span class:k-sr=move || count.get() == 0>{status}</span></p>
                 <Show when=move || error.get().is_some()>
                     <p class="k-error app-sw-error" role="alert">{move || error.get()}</p>
                 </Show>

@@ -970,6 +970,7 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 
 /* Raccourcis clavier (shortcuts.rs) : la fenêtre « ? » et Réglages › Raccourcis clavier partagent la même liste. */
 .app-help { width: min(var(--size-dialog-wide), var(--vw) - 2 * var(--space-3)); }
+.app-help > footer { position: sticky; bottom: 0; }
 .app-keys { margin-top: var(--space-5); }
 .app-keys-title { margin: 0 0 var(--space-2); font-size: var(--text-sm-size); color: var(--text-muted); font-weight: var(--weight-semibold); }
 .app-keys dl { margin: 0; }

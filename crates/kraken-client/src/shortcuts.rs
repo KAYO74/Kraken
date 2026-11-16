@@ -222,12 +222,12 @@ pub fn ShortcutHelp(close: Callback<()>) -> impl IntoView {
     view! {
         <div class="k-scrim" node_ref=root on:click=move |_| close.run(()) on:keydown=move |e| trap_tab(&e, root)>
             <div class="k-dialog app-help" role="dialog" aria-modal="true" aria-labelledby="help-t" on:click=|e| e.stop_propagation()>
-                <header><h2 id="help-t">"Raccourcis clavier"</h2></header>
+                <header><h2 id="help-t" tabindex="-1" autofocus>"Raccourcis clavier"</h2></header>
                 <div>
                     <p class="k-hint">{NOTE}</p>
                     <ShortcutList prefix="help"/>
                 </div>
-                <footer><button class="k-btn k-btn--primary" on:click=move |_| close.run(()) autofocus>"Fermer"</button></footer>
+                <footer><button class="k-btn k-btn--primary" on:click=move |_| close.run(())>"Fermer"</button></footer>
             </div>
         </div>
     }

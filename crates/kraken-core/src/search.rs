@@ -163,6 +163,10 @@ pub fn find(query: &str, text: &str) -> Option<Match> {
     if let Some(i) = find_at(&t.chars, &q, 0) {
         return hit(Tier::Contains, i);
     }
+    // Les lettres dispersées seulement à partir de trois : en dessous, elles surlignent n'importe quoi.
+    if q.len() < 3 {
+        return None;
+    }
     // Les lettres dans l'ordre, au plus tôt : chacune est son propre passage, ceux qui se touchent fusionnent.
     let mut spans = Vec::with_capacity(q.len());
     let mut at = 0;
@@ -335,6 +339,8 @@ mod tests {
         assert_eq!(find("   ", "général"), None);
         assert!(rank("", vec![(1, vec!["a".to_string()])], 5).is_empty());
         assert_eq!(find("a", ""), None);
+        // Deux lettres ne se cherchent pas dispersées : « gé » ne surligne pas un « g » et un « é » éloignés.
+        assert_eq!(find("gé", "très-long-pour-tester"), None);
     }
 
     #[test]

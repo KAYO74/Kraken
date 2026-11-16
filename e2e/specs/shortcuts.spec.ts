@@ -70,6 +70,9 @@ test('qs-H1 Ctrl+K depuis la saisie : accents ignorés, Entrée dans un autre se
   const option = switcher(page).getByRole('option', { name: /météo/ });
   await expect(option).toBeVisible();
   await expect(option).toContainText('Forge');
+  // La ligne tient dans la fenêtre : le détail (nom du serveur) n'est pas coupé au bord.
+  const [rowBox, dialogBox] = [await option.boundingBox(), await switcher(page).boundingBox()];
+  expect(rowBox!.x + rowBox!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width + 1);
   await expect(switcher(page).getByRole('status')).toHaveText('1 résultat');
   await expect(field(page)).toHaveAttribute('aria-expanded', 'true');
   await expect(field(page)).toHaveAttribute('aria-controls', 'sw-list');
@@ -292,6 +295,10 @@ test('kb-H1 Ctrl+/ et Réglages listent les mêmes raccourcis ; ? seulement hors
   const help = page.getByRole('dialog', { name: 'Raccourcis clavier' });
   await expect(help).toBeVisible();
   await expect(help.getByRole('heading', { level: 3 })).toHaveText(['Navigation', 'Messages', 'Appel', 'Général']);
+  // La fenêtre s'ouvre en haut : titre à l'écran, « Fermer » reste visible sous le contenu défilant.
+  await expect(help.getByRole('heading', { name: 'Raccourcis clavier', level: 2 })).toBeInViewport();
+  await expect(help.getByRole('button', { name: 'Fermer' })).toBeInViewport();
+  expect(await help.evaluate((e) => e.scrollTop)).toBe(0);
   await expect(help.getByText('Lecture seule')).toBeVisible();
   await expect(help.getByText('hors de la fenêtre')).toBeVisible();
   const terms = await help.getByRole('term').allTextContents();
