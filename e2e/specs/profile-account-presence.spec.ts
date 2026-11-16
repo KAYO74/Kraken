@@ -98,7 +98,7 @@ test('S20-H1 bio et pronoms : compteur, aperçu en direct, enregistrés, bornés
   expect((await me(api, a)).bio ?? null).toBeNull();
 
   await page.getByRole('button', { name: 'Enregistrer' }).click();
-  await expect(page.getByRole('status')).toHaveText('Profil enregistré.');
+  await expect(page.getByRole('status').filter({ hasText: 'Profil enregistré.' })).toHaveText('Profil enregistré.');
   const saved = await me(api, a);
   expect([saved.bio, saved.pronouns]).toEqual(['Plongeuse de nuit.\nSans lampe.', 'elle/elles']);
   await page.reload();
@@ -123,7 +123,7 @@ test('S20-H1 bio et pronoms : compteur, aperçu en direct, enregistrés, bornés
   await page.getByLabel('À propos de toi').fill('');
   await page.getByLabel('Pronoms').fill('');
   await page.getByRole('button', { name: 'Enregistrer' }).click();
-  await expect(page.getByRole('status')).toHaveText('Profil enregistré.');
+  await expect(page.getByRole('status').filter({ hasText: 'Profil enregistré.' })).toHaveText('Profil enregistré.');
   const cleared = await me(api, a);
   expect([cleared.bio ?? null, cleared.pronouns ?? null]).toEqual([null, null]);
 });
@@ -226,7 +226,7 @@ test('S20-E2 texte du profil : caractères invisibles refusés, emojis composés
   await page.getByLabel('À propos de toi').fill(bio);
   await page.getByLabel('Pronoms').fill('❤\uFE0F');
   await page.getByRole('button', { name: 'Enregistrer' }).click();
-  await expect(page.getByRole('status')).toHaveText('Profil enregistré.');
+  await expect(page.getByRole('status').filter({ hasText: 'Profil enregistré.' })).toHaveText('Profil enregistré.');
   const saved = await me(api, a);
   expect([saved.bio, saved.pronouns]).toEqual([bio, '❤\uFE0F']);
 });
