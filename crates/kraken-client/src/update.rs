@@ -14,8 +14,10 @@ use leptos::task::spawn_local;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 
+use crate::i18n::{t, tf};
 use crate::icons::{Icon, lu};
 use crate::store::store;
+use crate::tk;
 use crate::voice::{self, Status};
 
 /// Entre deux demandes de l'état, hors installation.
@@ -55,7 +57,7 @@ pub struct Updater {
 
 /// Appelle une commande de l'appli de bureau ; l'erreur est le texte qu'elle renvoie.
 async fn call(cmd: &str) -> Result<wasm_bindgen::JsValue, String> {
-    let broken = || "L'appli de bureau ne répond pas.".to_string();
+    let broken = || t("L'appli de bureau ne répond pas.");
     let (internals, f) = voice::tauri().ok_or_else(broken)?;
     let promise = f.call2(&internals, &cmd.into(), &js_sys::Object::new()).map_err(|_| broken())?;
     let promise: js_sys::Promise = promise.dyn_into().map_err(|_| broken())?;
@@ -197,7 +199,7 @@ pub fn UpdateTile() -> impl IntoView {
     let in_call = move || !matches!(s.voice.status.get(), Status::Off);
     // Le redémarrage ne coupe l'appel que si l'on installe dans l'appli.
     let warn = move || in_call() && !u.download();
-    let label = move || u.available().map(|v| format!("Mise à jour v{v} disponible")).unwrap_or_default();
+    let label = move || u.available().map(|v| tf("Mise à jour v{v} disponible", &[("v", &v)])).unwrap_or_default();
     let phase = move || {
         if u.restarting.get() {
             return "restarting".to_string();
@@ -214,22 +216,22 @@ pub fn UpdateTile() -> impl IntoView {
     };
     let progress_text = move || match phase().as_str() {
         "downloading" => match percent() {
-            Some(p) => format!("Téléchargement… {p} %"),
-            None => "Téléchargement…".to_string(),
+            Some(p) => tf("Téléchargement… {p} %", &[("p", &p.to_string())]),
+            None => t("Téléchargement…"),
         },
-        "installing" => "Installation…".to_string(),
-        _ => "Redémarrage…".to_string(),
+        "installing" => t("Installation…"),
+        _ => t("Redémarrage…"),
     };
     let primary = move || {
-        if u.download() {
-            "Télécharger"
+        t(if u.download() {
+            tk!("Télécharger")
         } else if u.confirm.get() {
-            "Couper l'appel et installer"
+            tk!("Couper l'appel et installer")
         } else if u.error.with(|e| e.is_some()) {
-            "Réessayer"
+            tk!("Réessayer")
         } else {
-            "Installer et redémarrer"
-        }
+            tk!("Installer et redémarrer")
+        })
     };
     let go = move |_| {
         if warn() && !u.confirm.get_untracked() {
@@ -250,17 +252,17 @@ pub fn UpdateTile() -> impl IntoView {
                     <Icon icon=lu::LuDownload/>
                 </button>
                 <Show when=move || u.open.get()>
-                    <div class="k-mecard app-update-card" id="update-card" role="group" aria-label="Mise à jour" node_ref=card>
-                        <p class="app-update-title">{move || format!("KRAKEN v{} est disponible", u.available().unwrap_or_default())}</p>
+                    <div class="k-mecard app-update-card" id="update-card" role="group" aria-label=t("Mise à jour") node_ref=card>
+                        <p class="app-update-title">{move || tf("KRAKEN v{v} est disponible", &[("v", &u.available().unwrap_or_default())])}</p>
                         {move || u.info.with(|i| i.as_ref().and_then(|i| i.notes_url.clone())).map(|url| view! {
-                            <a class="k-btn k-btn--link app-update-link" href=url target="_blank" rel="noopener noreferrer">"Nouveautés"</a>
+                            <a class="k-btn k-btn--link app-update-link" href=url target="_blank" rel="noopener noreferrer">{t("Nouveautés")}</a>
                         })}
                         <Show when=warn>
-                            <p class="app-update-warn" role="alert">"Tu es en appel : le redémarrage va le couper."</p>
+                            <p class="app-update-warn" role="alert">{t("Tu es en appel : le redémarrage va le couper.")}</p>
                         </Show>
                         <Show when=move || u.busy.get() && !u.download()>
                             <div class="app-update-progress">
-                                <div class="app-update-bar" role="progressbar" aria-label="Avancement de la mise à jour" aria-valuemin="0"
+                                <div class="app-update-bar" role="progressbar" aria-label=t("Avancement de la mise à jour") aria-valuemin="0"
                                     aria-valuemax="100" aria-valuenow=move || percent().unwrap_or(0).to_string()>
                                     <span style=move || format!("width: {}%", percent().unwrap_or(0))></span>
                                 </div>
@@ -269,7 +271,7 @@ pub fn UpdateTile() -> impl IntoView {
                         </Show>
                         {move || u.error.get().map(|e| view! { <p class="k-error app-update-note" role="alert">{e}</p> })}
                         <div class="app-update-actions">
-                            <button type="button" class="k-btn k-btn--ghost" disabled=move || u.busy.get() on:click=move |_| close(true)>"Plus tard"</button>
+                            <button type="button" class="k-btn k-btn--ghost" disabled=move || u.busy.get() on:click=move |_| close(true)>{t("Plus tard")}</button>
                             <button type="button" class="k-btn k-btn--primary" disabled=move || u.busy.get() on:click=go>{primary}</button>
                         </div>
                     </div>
@@ -286,7 +288,7 @@ pub fn UpdateEntry(me_open: RwSignal<bool>) -> impl IntoView {
     view! {
         {move || u.and_then(|u| u.available().map(|v| view! {
             <button type="button" class="k-mecard-item" on:click=move |_| { me_open.set(false); u.open.set(true); }>
-                <Icon icon=lu::LuDownload/>{format!("Mettre à jour vers v{v}")}
+                <Icon icon=lu::LuDownload/>{tf("Mettre à jour vers v{v}", &[("v", &v)])}
             </button>
         }))}
     }

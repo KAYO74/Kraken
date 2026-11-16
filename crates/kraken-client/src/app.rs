@@ -6,6 +6,7 @@ use leptos_router::components::{ParentRoute, Redirect, Route, Router, Routes};
 use leptos_router::path;
 
 use crate::store::{Store, keep_connected};
+use crate::tk;
 use crate::ui::{NotFound, Stub};
 use crate::{auth, channels, chat, guild, home, legal, new_guild, settings, shell};
 
@@ -35,18 +36,18 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("channels/@me/:channel") view=chat::DmView/>
                     <Route path=path!("channels/:guild") view=chat::GuildIndex/>
                     <Route path=path!("channels/:guild/:channel") view=chat::GuildChannel/>
-                    <Route path=path!("channels/:guild/:channel/threads") view=|| view! { <Stub id="S24" title="Fils et forum"/> }/>
+                    <Route path=path!("channels/:guild/:channel/threads") view=|| view! { <Stub id="S24" title=tk!("Fils et forum")/> }/>
                     <Route path=path!("channels/:guild/:channel/settings") view=channels::ChannelSettings/>
                     <Route path=path!("channels/:guild/:channel/settings/:section") view=channels::ChannelSettings/>
                     <Route path=path!("guilds/new") view=new_guild::CreateGuild/>
                     // Une seule route, rubrique facultative : passer d'une rubrique à l'autre garde la même fenêtre
                     // (deux routes la remontaient, et Échap ne la fermait plus).
                     <Route path=path!("guilds/:guild/settings/:section?") view=guild::GuildSettings/>
-                    <Route path=path!("guilds/:guild/events") view=|| view! { <Stub id="S27" title="Événements"/> }/>
-                    <Route path=path!("inbox") view=|| view! { <Stub id="S25" title="Boîte de réception"/> }/>
-                    <Route path=path!("search") view=|| view! { <Stub id="S26" title="Recherche de messages"/> }/>
-                    <Route path=path!("discover") view=|| view! { <Stub id="S30" title="Explorer les serveurs"/> }/>
-                    <Route path=path!("users/:user") view=|| view! { <Stub id="S20" title="Profil"/> }/>
+                    <Route path=path!("guilds/:guild/events") view=|| view! { <Stub id="S27" title=tk!("Événements")/> }/>
+                    <Route path=path!("inbox") view=|| view! { <Stub id="S25" title=tk!("Boîte de réception")/> }/>
+                    <Route path=path!("search") view=|| view! { <Stub id="S26" title=tk!("Recherche de messages")/> }/>
+                    <Route path=path!("discover") view=|| view! { <Stub id="S30" title=tk!("Explorer les serveurs")/> }/>
+                    <Route path=path!("users/:user") view=|| view! { <Stub id="S20" title=tk!("Profil")/> }/>
                     <Route path=path!("settings/:section") view=settings::Settings/>
                 </ParentRoute>
             </Routes>

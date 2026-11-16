@@ -563,7 +563,7 @@ test('S12-H2 images animées : fixes dans les listes, animées au survol, au foc
   const { code } = await (await (await api(a.token)).post(`${API}/channels/${cid}/invites`, { data: {} })).json();
   expect((await (await api(b.token)).post(`${API}/invites/${code}`)).status()).toBe(200);
   await page.goto(`/channels/${gid}/${cid}`);
-  await expect(members(page).getByText(b.name)).toBeVisible();
+  await expect(members(page).getByText(b.name, { exact: true })).toBeVisible();
 
   const row = members(page).getByRole('listitem').filter({ hasText: a.name });
   const profile = row.getByRole('button', { name: new RegExp(`^${a.name}`) });

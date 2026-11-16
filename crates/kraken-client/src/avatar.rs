@@ -15,8 +15,10 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement};
 
+use crate::i18n::{t, tf};
 use crate::photo::Photo;
 use crate::store::{Store, store};
+use crate::tk;
 use crate::ui::{Avatar, banner_url, modal};
 
 const MAX_ZOOM: f64 = 4.0;
@@ -73,35 +75,35 @@ impl Which {
         }
     }
 
-    fn saved(self) -> &'static str {
-        match self {
-            Self::Avatar => "Photo enregistrée.",
-            Self::Banner => "Bannière enregistrée.",
-            Self::Emoji => "Emoji ajouté.",
-            Self::Icon => "Icône mise à jour.",
-        }
+    fn saved(self) -> String {
+        t(match self {
+            Self::Avatar => tk!("Photo enregistrée."),
+            Self::Banner => tk!("Bannière enregistrée."),
+            Self::Emoji => tk!("Emoji ajouté."),
+            Self::Icon => tk!("Icône mise à jour."),
+        })
     }
 
-    fn removed(self) -> &'static str {
-        match self {
-            Self::Avatar => "Photo retirée.",
-            Self::Banner => "Bannière retirée.",
-            Self::Emoji => "Emoji retiré.",
-            Self::Icon => "Icône mise à jour.",
-        }
+    fn removed(self) -> String {
+        t(match self {
+            Self::Avatar => tk!("Photo retirée."),
+            Self::Banner => tk!("Bannière retirée."),
+            Self::Emoji => tk!("Emoji retiré."),
+            Self::Icon => tk!("Icône mise à jour."),
+        })
     }
 }
 
 pub(crate) fn not_image() -> String {
-    "Ce fichier n'est pas une image lisible : choisis un PNG, un JPEG, un WebP ou un GIF.".into()
+    t("Ce fichier n'est pas une image lisible : choisis un PNG, un JPEG, un WebP ou un GIF.")
 }
 
 pub(crate) fn too_small() -> String {
-    format!("Cette image est trop petite : {MIN_GUILD_ICON_SIDE} pixels de côté au moins.")
+    tf("Cette image est trop petite : {n} pixels de côté au moins.", &[("n", &MIN_GUILD_ICON_SIDE.to_string())])
 }
 
 pub(crate) fn too_big(which: Which) -> String {
-    format!("Cette image pèse trop lourd : {} Mo au plus.", which.max_bytes() / (1024 * 1024))
+    tf("Cette image pèse trop lourd : {n} Mo au plus.", &[("n", &(which.max_bytes() / (1024 * 1024)).to_string())])
 }
 
 /// PNG, JPEG, WebP ou GIF, d'après les premiers octets du fichier.
@@ -120,7 +122,7 @@ async fn take_file(
     which: Which,
     picked: RwSignal<Option<String>>,
     error: RwSignal<Option<String>>,
-    note: RwSignal<Option<&'static str>>,
+    note: RwSignal<Option<String>>,
     busy: RwSignal<bool>,
 ) {
     if file.size() > which.max_bytes() as f64 {
@@ -179,7 +181,7 @@ pub fn AvatarBlock() -> impl IntoView {
     let input = NodeRef::<html::Input>::new();
     let picked = RwSignal::new(None::<String>);
     let error = RwSignal::new(None::<String>);
-    let note = RwSignal::new(None::<&'static str>);
+    let note = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
     let has_photo = Memo::new(move |_| s.me.with(|m| m.as_ref().is_some_and(|u| u.avatar.is_some())));
     let on_change = move |_| {
@@ -224,12 +226,12 @@ pub fn AvatarBlock() -> impl IntoView {
                 <div class="app-avatar-actions">
                     <input id="avatar-file" class="k-sr app-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif"
                         node_ref=input on:change=on_change aria-describedby="avatar-hint"/>
-                    <label class="k-btn" for="avatar-file">"Changer la photo"</label>
+                    <label class="k-btn" for="avatar-file">{t("Changer la photo")}</label>
                     <Show when=move || has_photo.get()>
-                        <button type="button" class="k-btn k-btn--ghost app-link-danger" disabled=move || busy.get() on:click=remove>"Retirer"</button>
+                        <button type="button" class="k-btn k-btn--ghost app-link-danger" disabled=move || busy.get() on:click=remove>{t("Retirer")}</button>
                     </Show>
                 </div>
-                <p id="avatar-hint" class="k-hint">{format!("PNG, JPEG, WebP ou GIF, {} Mo max. Un GIF ou un WebP animé reste animé (il n'est pas recadré).", MAX_AVATAR_BYTES / (1024 * 1024))}</p>
+                <p id="avatar-hint" class="k-hint">{tf("PNG, JPEG, WebP ou GIF, {n} Mo max. Un GIF ou un WebP animé reste animé (il n'est pas recadré).", &[("n", &(MAX_AVATAR_BYTES / (1024 * 1024)).to_string())])}</p>
                 <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
                 <Show when=move || note.get().is_some()><p class="k-hint" role="status">{move || note.get()}</p></Show>
             </div>
@@ -245,7 +247,7 @@ pub fn BannerBlock() -> impl IntoView {
     let input = NodeRef::<html::Input>::new();
     let picked = RwSignal::new(None::<String>);
     let error = RwSignal::new(None::<String>);
-    let note = RwSignal::new(None::<&'static str>);
+    let note = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
     let banner = Memo::new(move |_| s.me.with(|m| m.as_ref().and_then(|u| u.banner.clone())));
     let on_change = move |_| {
@@ -282,18 +284,18 @@ pub fn BannerBlock() -> impl IntoView {
     view! {
         <div class="app-banner-edit">
             <div class="app-banner-box">
-                {move || banner.get().map(|k| view! { <Photo class="app-banner-img" src=banner_url(&k) alt="Ta bannière actuelle" cap=640/> })}
-                <Show when=move || banner.get().is_none()><span class="app-hint">"Pas de bannière"</span></Show>
+                {move || banner.get().map(|k| view! { <Photo class="app-banner-img" src=banner_url(&k) alt=t("Ta bannière actuelle") cap=640/> })}
+                <Show when=move || banner.get().is_none()><span class="app-hint">{t("Pas de bannière")}</span></Show>
             </div>
             <div class="app-avatar-actions">
                 <input id="banner-file" class="k-sr app-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif"
                     node_ref=input on:change=on_change aria-describedby="banner-hint"/>
-                <label class="k-btn" for="banner-file">"Changer la bannière"</label>
+                <label class="k-btn" for="banner-file">{t("Changer la bannière")}</label>
                 <Show when=move || banner.get().is_some()>
-                    <button type="button" class="k-btn k-btn--ghost app-link-danger" disabled=move || busy.get() on:click=remove>"Retirer la bannière"</button>
+                    <button type="button" class="k-btn k-btn--ghost app-link-danger" disabled=move || busy.get() on:click=remove>{t("Retirer la bannière")}</button>
                 </Show>
             </div>
-            <p id="banner-hint" class="k-hint">{format!("PNG, JPEG, WebP ou GIF, {} Mo max, de forme large (3 pour 1). Un GIF ou un WebP animé reste animé (il n'est pas recadré).", MAX_BANNER_BYTES / (1024 * 1024))}</p>
+            <p id="banner-hint" class="k-hint">{tf("PNG, JPEG, WebP ou GIF, {n} Mo max, de forme large (3 pour 1). Un GIF ou un WebP animé reste animé (il n'est pas recadré).", &[("n", &(MAX_BANNER_BYTES / (1024 * 1024)).to_string())])}</p>
             <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
             <Show when=move || note.get().is_some()><p class="k-hint" role="status">{move || note.get()}</p></Show>
         </div>
@@ -489,7 +491,7 @@ pub(crate) fn CropDialog(
         spawn_local(async move {
             let Some(bytes) = export(&img, c, out).await else {
                 busy.try_set(false);
-                error.try_set(Some("Impossible de préparer l'image. Essaie-en une autre.".into()));
+                error.try_set(Some(t("Impossible de préparer l'image. Essaie-en une autre.")));
                 return;
             };
             if let Some(cropped) = cropped {
@@ -515,38 +517,38 @@ pub(crate) fn CropDialog(
         });
     };
     let (title, title_id) = match which {
-        Which::Avatar => ("Recadrer ta photo", "crop-t"),
-        Which::Banner => ("Recadrer ta bannière", "crop-banner-t"),
-        Which::Emoji => ("Recadrer ton emoji", "crop-emoji-t"),
-        Which::Icon => ("Recadrer l'icône", "crop-icon-t"),
+        Which::Avatar => (tk!("Recadrer ta photo"), "crop-t"),
+        Which::Banner => (tk!("Recadrer ta bannière"), "crop-banner-t"),
+        Which::Emoji => (tk!("Recadrer ton emoji"), "crop-emoji-t"),
+        Which::Icon => (tk!("Recadrer l'icône"), "crop-icon-t"),
     };
     let previews = match which {
         Which::Emoji => view! {
             <div class="app-crop-previews" aria-hidden="true">
-                <figure><canvas node_ref=big class="app-emoji-preview" width="96" height="96"></canvas><figcaption class="k-hint">"Grand"</figcaption></figure>
-                <figure><canvas node_ref=mid class="app-emoji-preview app-emoji-preview--md" width="64" height="64"></canvas><figcaption class="k-hint">"Moyen"</figcaption></figure>
-                <figure><canvas node_ref=small class="app-emoji-preview app-emoji-preview--sm" width="44" height="44"></canvas><figcaption class="k-hint">"Dans un message"</figcaption></figure>
+                <figure><canvas node_ref=big class="app-emoji-preview" width="96" height="96"></canvas><figcaption class="k-hint">{t("Grand")}</figcaption></figure>
+                <figure><canvas node_ref=mid class="app-emoji-preview app-emoji-preview--md" width="64" height="64"></canvas><figcaption class="k-hint">{t("Moyen")}</figcaption></figure>
+                <figure><canvas node_ref=small class="app-emoji-preview app-emoji-preview--sm" width="44" height="44"></canvas><figcaption class="k-hint">{t("Dans un message")}</figcaption></figure>
             </div>
         }
         .into_any(),
         Which::Icon => view! {
             <div class="app-crop-previews" aria-hidden="true">
-                <figure><canvas node_ref=big class="app-gicon-canvas" width="192" height="192"></canvas><figcaption class="k-hint">"Réglages"</figcaption></figure>
-                <figure><canvas node_ref=small class="app-gicon-canvas app-gicon-canvas--rail" width="80" height="80"></canvas><figcaption class="k-hint">"Dans la liste"</figcaption></figure>
+                <figure><canvas node_ref=big class="app-gicon-canvas" width="192" height="192"></canvas><figcaption class="k-hint">{t("Réglages")}</figcaption></figure>
+                <figure><canvas node_ref=small class="app-gicon-canvas app-gicon-canvas--rail" width="80" height="80"></canvas><figcaption class="k-hint">{t("Dans la liste")}</figcaption></figure>
             </div>
         }
         .into_any(),
         Which::Avatar => view! {
             <div class="app-crop-previews" aria-hidden="true">
-                <figure><canvas node_ref=big class="k-avatar k-avatar--xl" width="240" height="240"></canvas><figcaption class="k-hint">"Grand"</figcaption></figure>
-                <figure><canvas node_ref=mid class="k-avatar k-avatar--md" width="64" height="64"></canvas><figcaption class="k-hint">"Moyen"</figcaption></figure>
-                <figure><canvas node_ref=small class="k-avatar k-avatar--sm" width="48" height="48"></canvas><figcaption class="k-hint">"Petit"</figcaption></figure>
+                <figure><canvas node_ref=big class="k-avatar k-avatar--xl" width="240" height="240"></canvas><figcaption class="k-hint">{t("Grand")}</figcaption></figure>
+                <figure><canvas node_ref=mid class="k-avatar k-avatar--md" width="64" height="64"></canvas><figcaption class="k-hint">{t("Moyen")}</figcaption></figure>
+                <figure><canvas node_ref=small class="k-avatar k-avatar--sm" width="48" height="48"></canvas><figcaption class="k-hint">{t("Petit")}</figcaption></figure>
             </div>
         }
         .into_any(),
         Which::Banner => view! {
             <div class="app-crop-previews app-crop-previews--wide" aria-hidden="true">
-                <figure><canvas node_ref=wide class="app-banner-preview" width="480" height="160"></canvas><figcaption class="k-hint">"Aperçu"</figcaption></figure>
+                <figure><canvas node_ref=wide class="app-banner-preview" width="480" height="160"></canvas><figcaption class="k-hint">{t("Aperçu")}</figcaption></figure>
             </div>
         }
         .into_any(),
@@ -554,7 +556,7 @@ pub(crate) fn CropDialog(
     view! {
         <div class="k-scrim" node_ref=root>
             <div class="k-dialog app-dialog-wide" role="dialog" aria-modal="true" aria-labelledby=title_id>
-                <header><h2 id=title_id>{title}</h2></header>
+                <header><h2 id=title_id>{t(title)}</h2></header>
                 <form on:submit=apply>
                     <div>
                         <div class="app-crop" data-wide=(which == Which::Banner).then_some("")>
@@ -562,28 +564,28 @@ pub(crate) fn CropDialog(
                                 <div class="app-crop-stage" aria-busy=move || (!ready.get()).to_string()
                                     style=format!("aspect-ratio: {} / {}", stage_w, stage_h)>
                                     <canvas node_ref=stage width=stage_w.to_string() height=stage_h.to_string() tabindex="0"
-                                        role="application" aria-label="Zone de recadrage : les flèches déplacent l'image, + et − zooment."
+                                        role="application" aria-label=t("Zone de recadrage : les flèches déplacent l'image, + et − zooment.")
                                         on:pointerdown=on_down on:pointermove=on_move on:pointerup=on_up on:pointercancel=on_up
                                         on:keydown=on_key></canvas>
                                     <i class="app-crop-frame" aria-hidden="true"
                                         style=format!("inset: {}% {}%", margin / stage_h * 100.0, margin / stage_w * 100.0)></i>
                                 </div>
                                 <label class="k-field">
-                                    <span class="k-label">"Zoom"</span>
+                                    <span class="k-label">{t("Zoom")}</span>
                                     <input class="app-range" type="range" min="1" max=MAX_ZOOM.to_string() step="0.01"
                                         prop:value=move || zoom.get().to_string()
                                         on:input=move |e| set_zoom(event_target_value(&e).parse().unwrap_or(1.0))/>
                                 </label>
-                                <p class="k-hint">"Glisse l'image pour la placer, ou utilise les flèches du clavier. Le cadre montre ce qui sera gardé."</p>
+                                <p class="k-hint">{t("Glisse l'image pour la placer, ou utilise les flèches du clavier. Le cadre montre ce qui sera gardé.")}</p>
                             </div>
                             {previews}
                         </div>
                         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
                     </div>
                     <footer>
-                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { done.run(None); } autofocus>"Annuler"</button>
+                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { done.run(None); } autofocus>{t("Annuler")}</button>
                         <button type="submit" class="k-btn k-btn--primary" disabled=move || !ready.get() || busy.get()
-                            aria-busy=move || busy.get().to_string()>"Appliquer"</button>
+                            aria-busy=move || busy.get().to_string()>{t("Appliquer")}</button>
                     </footer>
                 </form>
             </div>
