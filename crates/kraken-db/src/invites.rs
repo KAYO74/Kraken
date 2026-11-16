@@ -74,13 +74,21 @@ impl Db {
         .bind(max_age_s.map(|a| a as i32))
         .execute(&mut *tx)
         .await?;
+        let channel: Option<String> = match cid {
+            Some(cid) => sqlx::query_scalar("select name from channels where id = $1")
+                .bind(cid)
+                .fetch_optional(&mut *tx)
+                .await?
+                .flatten(),
+            None => None,
+        };
         audit_changes(
             &mut tx,
             gid,
             inviter,
             "invite_create",
             None,
-            json!({ "code": code, "max_uses": max_uses, "max_age_s": max_age_s }),
+            json!({ "code": code, "max_uses": max_uses, "max_age_s": max_age_s, "channel": channel }),
         )
         .await?;
         tx.commit().await?;

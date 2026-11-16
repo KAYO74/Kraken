@@ -48,9 +48,25 @@ pub fn has_visible(s: &str) -> bool {
     s.chars().any(|c| !c.is_whitespace() && !c.is_control() && !is_hidden(c) && c != ZWJ && c != VS16)
 }
 
+/// Un nom (rôle, salon, serveur) : rien d'invisible dedans (espace de largeur nulle, changement de
+/// sens d'écriture, remplisseur) et au moins un caractère visible.
+pub fn visible_name(s: &str) -> bool {
+    !s.chars().any(is_hidden) && has_visible(s)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_refuse_invisible_and_bidi_characters() {
+        assert!(visible_name("Modérateurs"));
+        assert!(visible_name("annonces 🎉"));
+        assert!(visible_name("👨\u{200D}👩"));
+        assert!(!visible_name("evil\u{202E}tset"), "changement de sens d'écriture");
+        assert!(!visible_name("\u{200B}"), "rien que de la largeur nulle");
+        assert!(!visible_name("a\u{200B}b"));
+    }
 
     #[test]
     fn invisible_code_points_are_hidden() {

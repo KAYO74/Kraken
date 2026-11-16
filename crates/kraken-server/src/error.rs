@@ -145,6 +145,11 @@ impl From<DbError> for AppError {
             DbError::Invalid("mute") => Self::invalid("Une sourdine dure de 1 minute à 30 jours, ou sans fin."),
             DbError::Invalid("target") => Self::invalid("Un serveur ou un salon, l'un des deux."),
             DbError::Invalid("self_target") => Self::invalid("Tu ne peux pas faire ça sur toi-même."),
+            DbError::Invalid("hidden_chars") => Self(
+                StatusCode::BAD_REQUEST,
+                "invalid_chars",
+                "Les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés dans un nom ou un motif.".into(),
+            ),
             DbError::Invalid("role_name") => Self::invalid("Le nom d'un rôle compte de 1 à 100 caractères."),
             DbError::Invalid("color") => Self::invalid("Cette couleur n'existe pas dans la palette."),
             DbError::Invalid("reason") => Self::invalid(format!("La raison tient en {MAX_REASON} caractères au plus.")),

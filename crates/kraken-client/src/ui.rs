@@ -286,8 +286,16 @@ fn automatic_clock(d: &js_sys::Date) -> Option<String> {
     if locale.len() < 2 || !locale.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
         return None;
     }
+    // Une langue qui compte sur 24 h écrit « 04:09 », pas « 4:09 » ; une langue sur 12 h garde « 4:09 PM ».
+    let cycle = {
+        let probe = js_sys::Object::new();
+        js_sys::Reflect::set(&probe, &"hour".into(), &"numeric".into()).ok()?;
+        let format = js_sys::Intl::DateTimeFormat::new(&js_sys::Array::of1(&locale.clone().into()), &probe);
+        js_sys::Reflect::get(&format.resolved_options(), &"hourCycle".into()).ok().and_then(|v| v.as_string())
+    };
+    let hour = if matches!(cycle.as_deref(), Some("h23" | "h24")) { "2-digit" } else { "numeric" };
     let options = js_sys::Object::new();
-    for (key, value) in [("hour", "numeric"), ("minute", "2-digit")] {
+    for (key, value) in [("hour", hour), ("minute", "2-digit")] {
         js_sys::Reflect::set(&options, &key.into(), &value.into()).ok()?;
     }
     Some(d.to_locale_string(&locale, &options).into())

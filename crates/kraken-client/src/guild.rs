@@ -105,12 +105,13 @@ pub(crate) const CATEGORIES: &[(&str, &[Perm])] = &[
 /// Droits sensibles : une icône d'alerte, en plus de leur phrase.
 pub(crate) const SENSITIVE: [u64; 4] = [perms::ADMINISTRATOR, perms::BAN, perms::MANAGE_ROLES, perms::MANAGE_CHANNELS];
 
-const SECTIONS: [(&str, &str); 6] = [
+const SECTIONS: [(&str, &str); 7] = [
     ("roles", "Rôles"),
     ("channels", "Salons"),
     ("emojis", "Emojis"),
     ("invites", "Invitations"),
     ("bans", "Bannis"),
+    ("audit", "Journal d'audit"),
     ("owner", "Propriété"),
 ];
 
@@ -132,6 +133,7 @@ fn allowed(guild: Id) -> Vec<&'static str> {
             // Qui gère le serveur voit toutes les invitations, qui peut seulement en créer voit les siennes.
             "invites" => p & (perms::MANAGE_GUILD | perms::CREATE_INVITE) != 0,
             "bans" => p & perms::BAN != 0,
+            "audit" => p & perms::VIEW_AUDIT_LOG != 0,
             _ => owner,
         })
         .collect()
@@ -163,10 +165,29 @@ pub fn GuildSettings() -> impl IntoView {
     let title = Memo::new(move |_| {
         gid.get().and_then(|g| s.guild(g)).map(|g| g.guild.name).unwrap_or_else(|| "Paramètres du serveur".into())
     });
+    // À 390 px la barre d'onglets défile de côté : l'onglet ouvert vient se placer au centre (sinon le
+    // huitième reste coupé hors de l'écran). Sans effet quand la liste est verticale et tient en entier.
+    let nav = NodeRef::<html::Nav>::new();
+    Effect::new(move || {
+        section.track();
+        open.track();
+        spawn_local(async move {
+            TimeoutFuture::new(0).await;
+            // La fenêtre peut s'être fermée entre-temps : `try_` plutôt que de paniquer sur une référence retirée.
+            if let Some(a) =
+                nav.try_get_untracked().flatten().and_then(|n| n.query_selector("a[aria-current]").ok().flatten())
+            {
+                let opts = web_sys::ScrollIntoViewOptions::new();
+                opts.set_inline(web_sys::ScrollLogicalPosition::Center);
+                opts.set_block(web_sys::ScrollLogicalPosition::Nearest);
+                a.scroll_into_view_with_scroll_into_view_options(&opts);
+            }
+        });
+    });
     view! {
         <div class="k-scrim app-settings" node_ref=root>
             <div class="k-settings" role="dialog" aria-modal="true" aria-label="Paramètres du serveur">
-                <nav aria-label="Sections des paramètres du serveur">
+                <nav aria-label="Sections des paramètres du serveur" node_ref=nav>
                     <h3>{move || title.get()}</h3>
                     {move || gid.get().map(|g| {
                         let open = open.get();
@@ -198,6 +219,7 @@ pub fn GuildSettings() -> impl IntoView {
                             "emojis" => view! { <crate::emoji_settings::EmojiSettings guild=g/> }.into_any(),
                             "invites" => view! { <Invites guild=g/> }.into_any(),
                             "bans" => view! { <Bans guild=g/> }.into_any(),
+                            "audit" => view! { <crate::audit::AuditLog guild=g/> }.into_any(),
                             "owner" => view! { <Ownership guild=g/> }.into_any(),
                             _ => empty("Rien à régler ici", "Tes rôles ne te donnent accès à aucun réglage de ce serveur.").into_any(),
                         }

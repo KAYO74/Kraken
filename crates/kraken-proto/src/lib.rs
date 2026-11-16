@@ -1267,6 +1267,149 @@ pub enum Event {
     NotifySettingsUpdate(NotifySetting),
 }
 
+// ───────── journal d'audit ─────────
+
+/// Lignes par page du journal d'audit quand `limit` n'est pas donné.
+pub const AUDIT_PAGE: u32 = 50;
+/// Lignes par page du journal d'audit, au plus.
+pub const MAX_AUDIT_PAGE: u32 = 100;
+/// Lectures du journal d'audit par minute et par client.
+pub const AUDIT_READS_PER_MIN: u32 = 120;
+/// Au plus ce nombre de personnes dans la liste « qui a agi » d'une première page.
+pub const MAX_AUDIT_ACTORS: usize = 200;
+
+/// Les familles d'actions du journal, pour le filtre `?category=`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AuditCategory {
+    #[serde(rename = "membres")]
+    Members,
+    #[serde(rename = "roles")]
+    Roles,
+    #[serde(rename = "salons")]
+    Channels,
+    #[serde(rename = "invitations")]
+    Invites,
+    #[serde(rename = "emojis")]
+    Emojis,
+    #[serde(rename = "serveur")]
+    Guild,
+}
+
+impl AuditCategory {
+    pub const ALL: [Self; 6] = [Self::Members, Self::Roles, Self::Channels, Self::Invites, Self::Emojis, Self::Guild];
+
+    /// Le mot de l'adresse (`?category=membres`).
+    pub fn slug(self) -> &'static str {
+        match self {
+            Self::Members => "membres",
+            Self::Roles => "roles",
+            Self::Channels => "salons",
+            Self::Invites => "invitations",
+            Self::Emojis => "emojis",
+            Self::Guild => "serveur",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.slug() == s)
+    }
+
+    /// Les actions de cette famille, telles qu'elles sont écrites dans `audit_log.action`.
+    pub fn actions(self) -> &'static [&'static str] {
+        match self {
+            Self::Members => &[
+                "member_role_add",
+                "member_role_remove",
+                "member_kick",
+                "member_ban",
+                "member_unban",
+                "member_timeout",
+                "member_timeout_remove",
+                "owner_transfer",
+            ],
+            Self::Roles => &["role_create", "role_update", "role_delete", "role_reorder"],
+            Self::Channels => {
+                &["channel_create", "channel_update", "channel_delete", "channel_move", "overwrite_update"]
+            }
+            Self::Invites => &["invite_create", "invite_revoke"],
+            Self::Emojis => &["emoji_create", "emoji_update", "emoji_delete"],
+            Self::Guild => &["guild_update", "message_delete"],
+        }
+    }
+
+    /// La famille d'une action ; `None` pour une action que cette version ne connaît pas.
+    pub fn of(action: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.actions().contains(&action))
+    }
+}
+
+/// Qui a agi : son nom affiché (ou son pseudo) et sa photo.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditActor {
+    pub id: Id,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuditTargetKind {
+    User,
+    Role,
+    Channel,
+    Emoji,
+}
+
+/// Ce sur quoi l'action a porté. `name` est lu au moment de la requête, ou à défaut le nom gardé à
+/// l'écriture ; `None` : la cible n'existe plus et son nom n'a pas été gardé (affiché « supprimé »).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditTarget {
+    pub kind: AuditTargetKind,
+    pub id: Id,
+    pub name: Option<String>,
+}
+
+/// Un avant / après lisible. `field` : `name`, `topic`, `slowmode_s`, `private`, `color`, `hoist`
+/// ou `permissions` (un champ de bits écrit en décimal). Une valeur vide : rien (pas de sujet, pas
+/// de couleur).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditChange {
+    pub field: String,
+    pub before: String,
+    pub after: String,
+}
+
+/// Une ligne du journal. Rien n'y passe que la liste blanche de chaque action : `details` porte les faits
+/// de la phrase (`role`, `seconds`, `kind`, `channel`, `max_uses`, `max_age_s`, `animated`, `inviter`,
+/// `allow`, `deny`, `subject`, `subject_kind`), `changes` les avant / après.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditEntry {
+    pub id: Id,
+    /// Quand (ms Unix).
+    pub created_at: i64,
+    /// `None` : son compte n'existe plus.
+    pub actor: Option<AuditActor>,
+    pub action: String,
+    pub target: Option<AuditTarget>,
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub details: std::collections::BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<AuditChange>,
+}
+
+/// `GET /guilds/{id}/audit-log` : du plus récent au plus ancien. `next` : à passer en `before` pour la
+/// page suivante, `None` à la fin. `actors` (première page seulement) : tous ceux qui ont agi dans ce
+/// serveur, par nom, quel que soit le filtre, pour remplir la liste « Membre ».
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditPage {
+    pub entries: Vec<AuditEntry>,
+    pub next: Option<Id>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actors: Vec<AuditActor>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1356,6 +1499,23 @@ mod tests {
         assert!(!ok(RemoteInput::Key { code: "Key A".into(), down: true }));
         assert!(!ok(RemoteInput::Key { code: "K".repeat(33), down: true }));
         assert!(!ok(RemoteInput::Key { code: "Clé".into(), down: true }));
+    }
+
+    #[test]
+    fn audit_categories_cover_each_action_once() {
+        let mut seen = std::collections::HashSet::new();
+        for c in AuditCategory::ALL {
+            assert_eq!(AuditCategory::parse(c.slug()), Some(c), "{c:?}");
+            assert_eq!(serde_json::to_string(&c).unwrap(), format!("\"{}\"", c.slug()));
+            for a in c.actions() {
+                assert!(seen.insert(*a), "{a} est dans deux familles");
+                assert_eq!(AuditCategory::of(a), Some(c));
+            }
+        }
+        assert_eq!(AuditCategory::parse(""), None);
+        assert_eq!(AuditCategory::parse("Roles"), None);
+        assert_eq!(AuditCategory::of("action_de_demain"), None);
+        assert_eq!(AuditCategory::of("message_delete"), Some(AuditCategory::Guild));
     }
 
     #[test]
