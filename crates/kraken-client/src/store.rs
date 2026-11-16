@@ -213,6 +213,7 @@ impl Store {
         self.presence.set(Presence::Online);
         self.statuses.set(HashMap::new());
         self.card.set(None);
+        crate::switcher::forget_recents();
     }
 
     pub fn my_id(&self) -> Option<Id> {

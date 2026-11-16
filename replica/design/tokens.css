@@ -140,6 +140,9 @@
   --size-emoji-row: 32px;
   --size-emoji-row-mobile: 40px;
   --size-emoji-preview: 128px;
+  --size-option-row: 36px;
+  --size-option-row-mobile: 44px;
+  --size-switcher: 560px;
   --z-base: 0;
   --z-sticky: 10;
   --z-popover: 100;

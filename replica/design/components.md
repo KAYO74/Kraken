@@ -218,8 +218,15 @@ Grille de pastilles             .k-swatches, .k-swatch
 
 Ligne de raccourci              .k-shortcut, .k-kbd
   states    défaut ; raccourci perso (bouton modifier / supprimer)
-  a11y      <kbd> ; les touches sont lues dans l'ordre
-  used on   S13, menus
+  a11y      <kbd> ; les touches sont lues dans l'ordre ; un symbole (⌘ ⌥ ⇧ ↑ ↓) est doublé d'un texte k-sr (« Commande », « flèche haut »)
+  used on   S13 (liste de définitions <dl> par groupe : libellé <dt> à gauche, touches <dd> à droite, une seule table `SHORTCUTS` pour lier et afficher), fenêtre « ? » ou Ctrl/Cmd+/, menus
+
+Liste de choix (combobox)       .k-listbox, .k-listbox-group, .k-option (+ mark)
+  variants  options à icône ou avatar 24, nom en gras, détail muet à droite (.app-sw-*) ; groupes titrés (role="group")
+  states    défaut, survol, active (aria-selected : fond surface-hover + barre accent 3 px à gauche ; contraste élevé : contour 3 px, couleurs forcées : Highlight), lettres trouvées en <mark> (gras + souligné, jamais la couleur seule)
+  tokens    surface-hover, accent, accent-text, text-secondary/strong/muted, option-row 36 (44 sous 640), radius sm
+  a11y      champ role="combobox" (aria-expanded, aria-controls, aria-activedescendant), le focus reste dans le champ ; ↑↓ bouclent, Entrée ouvre, Échap ferme ; compteur role="status" « N résultats »
+  used on   S29 (Quick Switcher : .k-scrim + .k-dialog.app-sw, 560 max, à 15 % du haut ; pleine largeur moins 8 px sous 640)
 
 Carte d'application autorisée   .k-card (header + <details>)
   states    repliée, dépliée, retrait (dialogue de confirmation)

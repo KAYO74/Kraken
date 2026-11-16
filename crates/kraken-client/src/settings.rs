@@ -83,6 +83,7 @@ pub fn Settings() -> impl IntoView {
                         "messaging" => view! { <Messaging/> }.into_any(),
                         "notifications" => view! { <Notifications/> }.into_any(),
                         "voice" => view! { <crate::voice_settings::VoiceSettings/> }.into_any(),
+                        "keybinds" => view! { <crate::shortcuts::KeybindSettings/> }.into_any(),
                         other => {
                             let id = SECTIONS.iter().find(|s| s.1 == other).map(|s| s.3).unwrap_or("—");
                             view! { <div class="k-empty"><b>"Bientôt ici"</b>{format!("Section {id} prévue, pas encore construite.")}</div> }.into_any()

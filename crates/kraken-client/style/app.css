@@ -62,6 +62,9 @@ h1, h2, h3 { font-weight: var(--weight-semibold); }
 .app-guild-head h2 { flex: 1; margin: 0; min-width: 0; font-size: var(--text-base-size); color: var(--text-strong);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-find { justify-content: flex-start; gap: var(--space-3); margin-bottom: var(--space-3); background: var(--input); color: var(--text-muted); font-weight: var(--weight-regular); }
+.app-find-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-find-kbd { margin-left: auto; display: inline-flex; }
+@media (max-width: 639px) { .app-find-kbd { display: none; } }
 
 /* Messages */
 /* Début d'un salon : une carte posée sur le fil, pas un grand titre centré sur une pastille. */
@@ -938,3 +941,40 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
   .app-audit-buttons .k-btn { flex: 1 1 0; }
   .app-audit-toggle { height: 36px; }
 }
+
+/* Quick Switcher (switcher.rs) : en haut de la fenêtre (15 %), 560 px au plus ; sous 640, pleine largeur moins 8 px. */
+.app-sw-scrim { align-items: start; padding-top: calc(var(--dvh) * .15); }
+.app-sw { display: flex; flex-direction: column; width: min(var(--size-switcher), var(--vw) - 2 * var(--space-3)); max-height: calc(var(--dvh) * .85 - var(--space-3)); overflow: hidden; }
+.app-sw > .app-sw-top { display: grid; gap: var(--space-3); padding: var(--space-5) var(--space-5) var(--space-3); }
+.app-sw-field { display: flex; align-items: center; gap: var(--space-3); }
+.app-sw-field .k-input { flex: 1; min-width: 0; }
+.app-sw-field .k-btn { flex: none; }
+.app-sw > .app-sw-count { margin: 0; padding: 0 var(--space-5) var(--space-2); min-height: calc(var(--text-sm-line) + var(--space-2)); }
+.app-sw > .app-sw-error { margin: 0; padding: 0 var(--space-5) var(--space-2); }
+.app-sw > .app-sw-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 0; }
+.app-sw-list { max-height: calc(8 * var(--option-row) + 2 * var(--space-8)); padding: 0 var(--space-3) var(--space-3); }
+.app-sw-lead { flex: none; display: inline-grid; place-items: center; width: var(--space-7); height: var(--space-7); }
+.app-sw-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--weight-semibold); color: var(--text-strong); }
+.app-sw-detail { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: var(--text-sm-size); }
+.app-sw-dot { flex: none; width: var(--space-3); height: var(--space-3); border-radius: var(--radius-pill); background: var(--accent-text); }
+.app-sw-dot[hidden] { display: none; }
+.app-sw-typed { overflow-wrap: anywhere; }
+.app-sw > .app-sw-foot { justify-content: flex-start; gap: var(--space-6); padding: var(--space-3) var(--space-5); color: var(--text-muted); font-size: var(--text-xs-size); }
+.app-sw-foot > span { display: inline-flex; align-items: center; gap: var(--space-2); }
+@media (max-width: 639px) {
+  .app-sw-scrim { padding-top: var(--space-3); }
+  .app-sw > .app-sw-foot { display: none; }
+  .app-sw-field .k-input, .app-sw-field .k-btn--icon { height: var(--size-option-row-mobile); }
+  .app-sw-field .k-btn--icon { width: var(--size-option-row-mobile); }
+}
+
+/* Raccourcis clavier (shortcuts.rs) : la fenêtre « ? » et Réglages › Raccourcis clavier partagent la même liste. */
+.app-help { width: min(var(--size-dialog-wide), var(--vw) - 2 * var(--space-3)); }
+.app-help > footer { position: sticky; bottom: 0; }
+.app-keys { margin-top: var(--space-5); }
+.app-keys-title { margin: 0 0 var(--space-2); font-size: var(--text-sm-size); color: var(--text-muted); font-weight: var(--weight-semibold); }
+.app-keys dl { margin: 0; }
+.app-keys .k-shortcut { gap: var(--space-5); }
+.app-keys dt { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.app-keys dd { margin: 0; flex: none; display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-3); }
+.app-keys-or { color: var(--text-muted); font-size: var(--text-sm-size); }

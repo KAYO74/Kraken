@@ -48,6 +48,43 @@ pub fn modal(root: NodeRef<html::Div>, close: impl Fn() + 'static) {
     });
 }
 
+/// Une boîte de dialogue est ouverte (`modal`).
+pub fn modal_open() -> bool {
+    MODALS.with_borrow(|m| !m.is_empty())
+}
+
+/// Piège le focus dans `root` : Tab après le dernier élément revient au premier, Maj+Tab avant le premier
+/// va au dernier. À appeler dans le `keydown` de la fenêtre.
+pub fn trap_tab(e: &leptos::ev::KeyboardEvent, root: NodeRef<html::Div>) {
+    if !crate::shortcuts::is_key(e) || e.key() != "Tab" {
+        return;
+    }
+    let Some(root) = root.get_untracked() else { return };
+    let Ok(found) = root.query_selector_all(
+        "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex=\"-1\"])",
+    ) else {
+        return;
+    };
+    let items: Vec<web_sys::HtmlElement> =
+        (0..found.length()).filter_map(|i| found.item(i)).filter_map(|n| n.dyn_into().ok()).collect();
+    let (Some(first), Some(last)) = (items.first(), items.last()) else {
+        e.prevent_default();
+        return;
+    };
+    let active = document().active_element();
+    let at = |el: &web_sys::HtmlElement| active.as_ref().is_some_and(|a| a.is_same_node(Some(el)));
+    let outside = !active.as_ref().is_some_and(|a| root.contains(Some(a)));
+    let target = if e.shift_key() && (at(first) || outside) {
+        last
+    } else if !e.shift_key() && (at(last) || outside) {
+        first
+    } else {
+        return;
+    };
+    e.prevent_default();
+    let _ = target.focus();
+}
+
 /// Deux lettres pour un nom : initiales des deux premiers mots, sinon deux premières lettres.
 pub fn initials(name: &str) -> String {
     let words: Vec<&str> = name.split_whitespace().collect();

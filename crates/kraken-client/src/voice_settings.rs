@@ -628,6 +628,7 @@ pub fn VoiceSettings() -> impl IntoView {
                             aria-describedby=move || key_error.get().map(|_| "vv-ptt-key-err")
                             aria-invalid=move || key_error.get().map(|_| "true")
                             data-capturing=move || capturing.get().then_some("")
+                            data-no-shortcuts=move || capturing.get().then_some("")
                             on:click=on_key_click on:keydown=on_key on:keyup=on_key_up on:blur=move |_| capturing.set(false)>
                             {move || if capturing.get() {
                                 "En attente…".into_any()

@@ -29,8 +29,11 @@ async function sent(page: Page, text: string) {
 }
 
 const sizeOf = async (el: Locator) => {
-  // Un message qui vient d'être confirmé est redessiné : on mesure une fois l'image revenue à l'écran.
+  // Un message qui vient d'être confirmé est redessiné (l'envoi optimiste est remplacé) : on attend qu'aucun
+  // envoi ne soit en cours, puis qu'une boîte existe, avant de mesurer.
+  await expect(el.page().locator('article[data-pending]')).toHaveCount(0);
   await expect(el).toBeVisible();
+  await expect.poll(async () => (await el.boundingBox()) !== null).toBe(true);
   const box = await el.boundingBox();
   expect(box).not.toBeNull();
   return { w: Math.round(box!.width), h: Math.round(box!.height) };

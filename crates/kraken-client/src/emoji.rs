@@ -1,6 +1,8 @@
 //! Emojis. Le sélecteur propose d'abord les emojis perso des serveurs dont on est membre (celui du salon
 //! en tête), puis la sélection Unicode de `kraken_core::emoji`, dessinée par la police du système.
-//! Recherche par nom, Échap ou clic à côté pour fermer.
+//! Recherche par nom, Échap ou clic à côté pour fermer. La grille est un seul arrêt de Tab (tabindex itinérant) :
+//! la case active a `tabindex="0"`, les autres `-1` ; flèches, Début/Fin et pages déplacent le focus
+//! (`kraken_core::grid`), Entrée ou Espace choisit.
 //!
 //! Un emoji perso est une image (`EmojiImg`), servie à toute session ouverte : un message qui le cite doit
 //! s'afficher chez tous ceux qui le lisent, membres du serveur ou non. S'il n'existe plus, l'image ne se
@@ -8,6 +10,7 @@
 //! ou au focus de sa ligne, comme les photos de profil (voir `photo.rs`).
 
 use kraken_core::emoji::EMOJIS;
+use kraken_core::grid::{Move, step};
 use kraken_proto::{Emoji, Guild, Id};
 use leptos::html;
 use leptos::prelude::*;
@@ -134,6 +137,55 @@ pub fn EmojiPicker(
             .collect()
     };
     let empty = move || found().is_empty() && custom().is_empty();
+    // Tabindex itinérant : la case active (indice parmi toutes les cases, emojis perso d'abord) est le seul arrêt de Tab.
+    let total = Memo::new(move |_| custom().iter().map(|(_, es)| es.len()).sum::<usize>() + found().len());
+    let active = RwSignal::new(0usize);
+    Effect::new(move |_| {
+        q.track();
+        active.set(0);
+    });
+    let tab = move |i: usize| if i == active.get().min(total.get().saturating_sub(1)) { "0" } else { "-1" };
+    let scroll = NodeRef::<html::Div>::new();
+    let cells = move || -> Vec<web_sys::HtmlElement> {
+        let Some(list) = scroll.get_untracked().and_then(|r| r.query_selector_all(".app-picker-emoji").ok()) else {
+            return vec![];
+        };
+        (0..list.length()).filter_map(|i| list.item(i)).filter_map(|n| n.dyn_into().ok()).collect()
+    };
+    let on_grid_key = move |e: leptos::ev::KeyboardEvent| {
+        if !crate::shortcuts::is_key(&e) || e.alt_key() || e.meta_key() {
+            return;
+        }
+        let Some(mv) = Move::from_key(&e.key(), e.ctrl_key()) else { return };
+        let all = cells();
+        let target = e.target().and_then(|t| t.dyn_into::<web_sys::Node>().ok());
+        let Some(from) = target.and_then(|t| all.iter().position(|c| c.is_same_node(Some(&t)))) else { return };
+        let places: Vec<(i32, i32)> = all
+            .iter()
+            .map(|c| {
+                let r = c.get_bounding_client_rect();
+                (r.top().round() as i32, (r.left() + r.width() / 2.0).round() as i32)
+            })
+            .collect();
+        // Les flèches ne font jamais défiler la page ni la liste à la place du focus.
+        e.prevent_default();
+        if let Some(to) = step(&places, from, mv) {
+            active.set(to);
+            let _ = all[to].focus();
+        }
+    };
+    // Flèche bas dans la recherche : on entre dans la grille, sur sa case active.
+    let into_grid = move || {
+        let Some(root) = scroll.get_untracked() else { return };
+        if let Some(cell) = root
+            .query_selector("[tabindex=\"0\"]")
+            .ok()
+            .flatten()
+            .and_then(|c| c.dyn_into::<web_sys::HtmlElement>().ok())
+        {
+            let _ = cell.focus();
+        }
+    };
     let first = move || {
         custom()
             .into_iter()
@@ -145,12 +197,21 @@ pub fn EmojiPicker(
     view! {
         <div class="k-menu app-picker" role="dialog" aria-label=title node_ref=root>
             <input class="k-input" type="search" placeholder="Chercher un emoji" aria-label="Chercher un emoji" autofocus bind:value=q
-                on:keydown=move |e| if e.key() == "Enter" {
-                    e.prevent_default();
-                    if let Some(p) = first() { on_pick.run(p) }
+                on:keydown=move |e: leptos::ev::KeyboardEvent| match crate::shortcuts::is_key(&e).then(|| e.key()).as_deref() {
+                    Some("Enter") => {
+                        e.prevent_default();
+                        if let Some(p) = first() { on_pick.run(p) }
+                    }
+                    Some("ArrowDown") => {
+                        e.prevent_default();
+                        into_grid();
+                    }
+                    _ => {}
                 }/>
-            <div class="app-picker-scroll">
-                {move || custom().into_iter().map(|(g, es)| {
+            <div class="app-picker-scroll" node_ref=scroll on:keydown=on_grid_key>
+                {move || { let mut at = 0usize; custom().into_iter().map(|(g, es)| {
+                    let first_cell = at;
+                    at += es.len();
                     let heading = format!("emojis-{}", g.id);
                     let (labelled, own) = (heading.clone(), heading);
                     view! {
@@ -160,11 +221,13 @@ pub fn EmojiPicker(
                                 <span class="app-ellipsis">{g.name.clone()}</span>
                             </h3>
                             <div class="app-picker-grid" role="group" aria-label=format!("Emojis de {}", g.name)>
-                                {es.into_iter().map(|e| {
+                                {es.into_iter().enumerate().map(|(n, e)| {
                                     let label = shortcode(&e.name);
                                     let (id, name) = (e.id, e.name.clone());
+                                    let cell = first_cell + n;
                                     view! {
                                         <button type="button" class="app-picker-emoji app-picker-emoji--custom" aria-label=label.clone() title=label
+                                            tabindex=move || tab(cell) on:focus=move |_| active.set(cell)
                                             on:click=move |_| on_pick.run(Picked::Custom(e.clone()))>
                                             <EmojiImg id=id name=name/>
                                         </button>
@@ -173,15 +236,22 @@ pub fn EmojiPicker(
                             </div>
                         </section>
                     }
-                }).collect_view()}
+                }).collect_view() }}
                 <Show when=move || !found().is_empty()>
                     <section class="app-picker-sec" aria-labelledby="emojis-unicode">
                         <h3 class="app-picker-title" id="emojis-unicode" data-only=move || custom().is_empty().then_some("")>"Emojis standards"</h3>
                         <div class="app-picker-grid" role="group" aria-label="Emojis">
-                            {move || found().into_iter().map(|(emoji, name)| view! {
-                                <button type="button" class="app-picker-emoji" aria-label=name title=name
-                                    on:click=move |_| on_pick.run(Picked::Unicode(emoji.to_string()))>{emoji}</button>
-                            }).collect_view()}
+                            {move || {
+                                let base: usize = custom().iter().map(|(_, es)| es.len()).sum();
+                                found().into_iter().enumerate().map(|(n, (emoji, name))| {
+                                    let cell = base + n;
+                                    view! {
+                                        <button type="button" class="app-picker-emoji" aria-label=name title=name
+                                            tabindex=move || tab(cell) on:focus=move |_| active.set(cell)
+                                            on:click=move |_| on_pick.run(Picked::Unicode(emoji.to_string()))>{emoji}</button>
+                                    }
+                                }).collect_view()
+                            }}
                         </div>
                     </section>
                 </Show>
