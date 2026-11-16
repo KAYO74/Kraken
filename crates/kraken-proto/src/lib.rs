@@ -353,10 +353,26 @@ pub struct RenameEmoji {
     pub name: String,
 }
 
+/// `POST /guilds` : le nom, et le modèle de serveur (`kraken_core::templates`) ; sans modèle, « vide ».
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateGuild {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
 }
+
+/// `PATCH /guilds/{id}` : renommer le serveur.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RenameGuild {
+    pub name: String,
+}
+
+/// Poids maximal de l'icône d'un serveur envoyée, en octets (4 Mio).
+pub const MAX_GUILD_ICON_BYTES: usize = 4 * 1024 * 1024;
+/// Côté, en pixels, de l'icône d'un serveur telle que le serveur la garde (carrée).
+pub const GUILD_ICON_SIZE: u32 = 256;
+/// Plus petit côté, en pixels, de l'image d'une icône de serveur : en dessous, il ne reste qu'un point.
+pub const MIN_GUILD_ICON_SIDE: u32 = 8;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateChannel {
@@ -1186,6 +1202,8 @@ pub enum Event {
         user_id: Id,
     },
     GuildCreate(Box<GuildState>),
+    /// Nom ou icône du serveur changés : le serveur entier (sans ses salons), à remplacer. À tous ses membres.
+    GuildUpdate(Guild),
     /// Le serveur n'existe plus : son propriétaire l'a supprimé.
     GuildDelete {
         guild_id: Id,
@@ -1379,7 +1397,7 @@ pub struct AuditChange {
 
 /// Une ligne du journal. Rien n'y passe que la liste blanche de chaque action : `details` porte les faits
 /// de la phrase (`role`, `seconds`, `kind`, `channel`, `max_uses`, `max_age_s`, `animated`, `inviter`,
-/// `allow`, `deny`, `subject`, `subject_kind`), `changes` les avant / après.
+/// `allow`, `deny`, `subject`, `subject_kind`, `icon` : `changed` ou `removed`), `changes` les avant / après.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuditEntry {
     pub id: Id,

@@ -2,7 +2,7 @@
 
 use std::cell::RefCell;
 
-use kraken_proto::{Status, User};
+use kraken_proto::{Guild, Status, User};
 use leptos::html;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
@@ -188,6 +188,47 @@ pub fn Avatar(
 /// Adresse d'une photo de profil, d'après la clé gardée dans `User::avatar`.
 pub fn avatar_url(key: &str) -> String {
     format!("/api/v1/avatars/{key}")
+}
+
+/// Adresse de l'icône d'un serveur, d'après la clé gardée dans `Guild::icon`.
+pub fn guild_icon_url(key: &str) -> String {
+    format!("/api/v1/guild-icons/{key}")
+}
+
+/// L'icône d'un serveur : son image s'il en a une, sinon ses initiales ; si l'image ne charge pas, les initiales
+/// reviennent. C'est le seul endroit qui dessine un serveur ainsi (rail, sélecteur rapide, invitation, sélecteur
+/// d'emojis, réglages). L'image est décorative (`alt` vide) : le nom du serveur est déjà dans le libellé de
+/// ce qui la porte.
+///
+/// Sans `size`, seul le contenu est rendu (la tuile du rail, l'aperçu des réglages fournissent leur cadre) ;
+/// avec `size` (`xs` à `xl`), il est posé dans un `k-avatar` de cette taille, teinté d'après l'id du serveur si
+/// `tinted`. `cap` : le côté, en pixels, de la copie fixe d'une animation (96 par défaut).
+#[component]
+pub fn GuildIcon(
+    guild: Guild,
+    #[prop(optional)] size: &'static str,
+    #[prop(optional)] tinted: bool,
+    #[prop(optional)] cap: u32,
+) -> impl IntoView {
+    let broken = RwSignal::new(false);
+    let initials = initials(&guild.name);
+    let cap = if cap == 0 { 96 } else { cap };
+    let content = {
+        let icon = guild.icon.clone();
+        move || match &icon {
+            Some(key) if !broken.get() => view! {
+                <Photo src=guild_icon_url(key) cap=cap on_error=move |()| broken.set(true)/>
+            }
+            .into_any(),
+            _ => initials.clone().into_any(),
+        }
+    };
+    if size.is_empty() {
+        return content.into_any();
+    }
+    let class = format!("k-avatar k-avatar--{size}");
+    let tint = tinted.then(|| tint(guild.id));
+    view! { <span class=class data-tint=tint aria-hidden="true">{content}</span> }.into_any()
 }
 
 /// Adresse d'une bannière, d'après la clé gardée dans `User::banner`.

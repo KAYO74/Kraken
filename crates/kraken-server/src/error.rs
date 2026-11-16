@@ -94,6 +94,7 @@ impl From<DbError> for AppError {
                 Self::invalid(format!("Ce groupe est complet : {MAX_GROUP_MEMBERS} personnes au plus."))
             }
             DbError::Invalid("guild_name") => Self::invalid("Le nom d'un serveur compte de 2 à 100 caractères."),
+            DbError::Invalid("template") => Self::invalid("Ce modèle de serveur n'existe pas."),
             DbError::Invalid("channel_name") => Self::invalid(format!(
                 "Le nom d'un salon compte de 1 à {MAX_CHANNEL_NAME} caractères, sans caractère de contrôle."
             )),

@@ -18,7 +18,7 @@ use wasm_bindgen::JsCast;
 
 use crate::photo::Photo;
 use crate::store::store;
-use crate::ui::{initials, modal};
+use crate::ui::{GuildIcon, modal};
 
 /// Ce que l'on a choisi dans le sélecteur.
 #[derive(Clone, PartialEq)]
@@ -217,7 +217,7 @@ pub fn EmojiPicker(
                     view! {
                         <section class="app-picker-sec" aria-labelledby=labelled>
                             <h3 class="app-picker-title" id=own>
-                                <span class="k-avatar k-avatar--sm" aria-hidden="true">{initials(&g.name)}</span>
+                                <GuildIcon guild=g.clone() size="sm" cap=64/>
                                 <span class="app-ellipsis">{g.name.clone()}</span>
                             </h3>
                             <div class="app-picker-grid" role="group" aria-label=format!("Emojis de {}", g.name)>

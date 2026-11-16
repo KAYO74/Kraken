@@ -12,7 +12,7 @@ async fn user(db: &Db, name: &str) -> User {
 
 /// Un serveur à `owner` avec `others` dedans ; rend son id et celui de #général.
 async fn guild_with(db: &Db, name: &str, owner: &User, others: &[&User]) -> (Id, Id) {
-    let g = db.create_guild(owner.id, name).await.unwrap();
+    let g = db.create_guild(owner.id, name, None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let inv = db.create_invite(g.guild.id, Some(general), owner.id, 0, None).await.unwrap();
     for u in others {

@@ -4,7 +4,9 @@
 //! garde qu'une image) : il part tel quel, et s'affiche recadré au centre.
 
 use kraken_core::image::{ImageKind, sniff};
-use kraken_proto::{BANNER_HEIGHT, BANNER_WIDTH, EMOJI_SIZE, MAX_AVATAR_BYTES, MAX_BANNER_BYTES};
+use kraken_proto::{
+    BANNER_HEIGHT, BANNER_WIDTH, EMOJI_SIZE, GUILD_ICON_SIZE, MAX_AVATAR_BYTES, MAX_BANNER_BYTES, MIN_GUILD_ICON_SIDE,
+};
 use leptos::html;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -19,13 +21,15 @@ use crate::ui::{Avatar, banner_url, modal};
 
 const MAX_ZOOM: f64 = 4.0;
 
-/// Ce que l'on recadre : la photo (carrée), la bannière (3 pour 1) ou un emoji de serveur (carré, petit ;
-/// la fenêtre rend alors l'image recadrée à celui qui l'a ouverte, voir `CropDialog::cropped`).
+/// Ce que l'on recadre : la photo (carrée), la bannière (3 pour 1), un emoji de serveur (carré, petit) ou l'icône
+/// d'un serveur (carrée, 256 px). Pour un emoji ou une icône, la fenêtre rend l'image recadrée à celui qui l'a
+/// ouverte (voir `CropDialog::cropped`).
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Which {
     Avatar,
     Banner,
     Emoji,
+    Icon,
 }
 
 /// Géométrie du recadrage : rapport largeur / hauteur, taille de l'image envoyée, du cadre et
@@ -54,6 +58,9 @@ impl Which {
                 margin: 24.0,
             },
             Self::Emoji => Shape { ratio: 1.0, out: (EMOJI_SIZE, EMOJI_SIZE), frame: (256.0, 256.0), margin: 32.0 },
+            Self::Icon => {
+                Shape { ratio: 1.0, out: (GUILD_ICON_SIZE, GUILD_ICON_SIZE), frame: (256.0, 256.0), margin: 32.0 }
+            }
         }
     }
 
@@ -62,7 +69,7 @@ impl Which {
             Self::Avatar => MAX_AVATAR_BYTES,
             Self::Banner => MAX_BANNER_BYTES,
             // Une image fixe est recadrée et réduite avant l'envoi : seule sa source peut être lourde.
-            Self::Emoji => MAX_AVATAR_BYTES,
+            Self::Emoji | Self::Icon => MAX_AVATAR_BYTES,
         }
     }
 
@@ -71,6 +78,7 @@ impl Which {
             Self::Avatar => "Photo enregistrée.",
             Self::Banner => "Bannière enregistrée.",
             Self::Emoji => "Emoji ajouté.",
+            Self::Icon => "Icône mise à jour.",
         }
     }
 
@@ -79,12 +87,17 @@ impl Which {
             Self::Avatar => "Photo retirée.",
             Self::Banner => "Bannière retirée.",
             Self::Emoji => "Emoji retiré.",
+            Self::Icon => "Icône mise à jour.",
         }
     }
 }
 
 pub(crate) fn not_image() -> String {
     "Ce fichier n'est pas une image lisible : choisis un PNG, un JPEG, un WebP ou un GIF.".into()
+}
+
+pub(crate) fn too_small() -> String {
+    format!("Cette image est trop petite : {MIN_GUILD_ICON_SIDE} pixels de côté au moins.")
 }
 
 pub(crate) fn too_big(which: Which) -> String {
@@ -135,8 +148,8 @@ async fn take_file(
             let sent = match which {
                 Which::Avatar => crate::api::set_avatar(&all, found.kind.mime()).await,
                 Which::Banner => crate::api::set_banner(&all, found.kind.mime()).await,
-                // Les emojis ont leur propre fenêtre d'ajout (`emoji_settings.rs`).
-                Which::Emoji => Err(unsupported()),
+                // Les emojis et les icônes de serveur ont leur propre parcours (`emoji_settings.rs`, `icon_picker.rs`).
+                Which::Emoji | Which::Icon => Err(unsupported()),
             };
             match sent {
                 Ok(u) => {
@@ -377,6 +390,10 @@ pub(crate) fn CropDialog(
                 done.run(Some(Err(not_image())));
                 return;
             }
+            if which == Which::Icon && w.min(h) < f64::from(MIN_GUILD_ICON_SIDE) {
+                done.run(Some(Err(too_small())));
+                return;
+            }
             size.set((w, h));
             center.set((w / 2.0, h / 2.0));
             ready.set(true);
@@ -483,7 +500,7 @@ pub(crate) fn CropDialog(
             let sent = match which {
                 Which::Avatar => crate::api::set_avatar(&bytes, "image/png").await,
                 Which::Banner => crate::api::set_banner(&bytes, "image/png").await,
-                Which::Emoji => Err(unsupported()),
+                Which::Emoji | Which::Icon => Err(unsupported()),
             };
             match sent {
                 Ok(u) => {
@@ -501,6 +518,7 @@ pub(crate) fn CropDialog(
         Which::Avatar => ("Recadrer ta photo", "crop-t"),
         Which::Banner => ("Recadrer ta bannière", "crop-banner-t"),
         Which::Emoji => ("Recadrer ton emoji", "crop-emoji-t"),
+        Which::Icon => ("Recadrer l'icône", "crop-icon-t"),
     };
     let previews = match which {
         Which::Emoji => view! {
@@ -508,6 +526,13 @@ pub(crate) fn CropDialog(
                 <figure><canvas node_ref=big class="app-emoji-preview" width="96" height="96"></canvas><figcaption class="k-hint">"Grand"</figcaption></figure>
                 <figure><canvas node_ref=mid class="app-emoji-preview app-emoji-preview--md" width="64" height="64"></canvas><figcaption class="k-hint">"Moyen"</figcaption></figure>
                 <figure><canvas node_ref=small class="app-emoji-preview app-emoji-preview--sm" width="44" height="44"></canvas><figcaption class="k-hint">"Dans un message"</figcaption></figure>
+            </div>
+        }
+        .into_any(),
+        Which::Icon => view! {
+            <div class="app-crop-previews" aria-hidden="true">
+                <figure><canvas node_ref=big class="app-gicon-canvas" width="192" height="192"></canvas><figcaption class="k-hint">"Réglages"</figcaption></figure>
+                <figure><canvas node_ref=small class="app-gicon-canvas app-gicon-canvas--rail" width="80" height="80"></canvas><figcaption class="k-hint">"Dans la liste"</figcaption></figure>
             </div>
         }
         .into_any(),

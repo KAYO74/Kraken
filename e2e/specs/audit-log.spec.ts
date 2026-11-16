@@ -93,7 +93,7 @@ test('audit-H1 l’onglet n’existe que pour qui peut lire le journal ; l’API
 
   // Le propriétaire : l'onglet vient juste après « Bannis ».
   await open(owner.page, gid);
-  await expect(nav(owner.page)).toHaveText(['Rôles', 'Salons', 'Emojis', 'Invitations', 'Bannis', "Journal d'audit", 'Propriété']);
+  await expect(nav(owner.page)).toHaveText(["Vue d'ensemble", 'Rôles', 'Salons', 'Emojis', 'Invitations', 'Bannis', "Journal d'audit", 'Propriété']);
   await expect(nav(owner.page).filter({ hasText: "Journal d'audit" })).toHaveAttribute('aria-current', 'page');
   await a11y(owner.page);
 

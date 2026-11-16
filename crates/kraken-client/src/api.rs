@@ -164,8 +164,24 @@ pub async fn logout() -> ApiResult<()> {
     call(Method::POST, "/auth/logout", NO_BODY).await
 }
 
-pub async fn create_guild(name: &str) -> ApiResult<GuildState> {
-    call(Method::POST, "/guilds", Some(CreateGuild { name: name.into() })).await
+/// Crée un serveur d'après un modèle (`kraken_core::templates`).
+pub async fn create_guild(name: &str, template: &str) -> ApiResult<GuildState> {
+    call(Method::POST, "/guilds", Some(CreateGuild { name: name.into(), template: Some(template.into()) })).await
+}
+
+/// Renomme le serveur.
+pub async fn rename_guild(guild: Id, name: &str) -> ApiResult<Guild> {
+    call(Method::PATCH, &format!("/guilds/{guild}"), Some(RenameGuild { name: name.into() })).await
+}
+
+/// Envoie l'icône du serveur (déjà recadrée, ou une animation telle quelle) : le corps est l'image.
+pub async fn set_guild_icon(guild: Id, bytes: &[u8], mime: &str) -> ApiResult<Guild> {
+    send_image(Method::PUT, &format!("/api/v1/guilds/{guild}/icon"), bytes, mime, MAX_GUILD_ICON_BYTES).await
+}
+
+/// Retire l'icône du serveur : retour aux initiales.
+pub async fn remove_guild_icon(guild: Id) -> ApiResult<Guild> {
+    call(Method::DELETE, &format!("/guilds/{guild}/icon"), NO_BODY).await
 }
 
 pub async fn messages(channel: Id) -> ApiResult<Vec<Message>> {

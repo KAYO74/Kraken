@@ -9,6 +9,7 @@ mod calls;
 mod channels;
 mod emojis;
 mod files;
+mod guilds;
 mod invites;
 mod jobs;
 mod moderation;
@@ -648,16 +649,16 @@ impl Db {
 
     // ───────── serveurs ─────────
 
-    /// Crée le serveur, son rôle `@everyone` (id = id du serveur), deux catégories, `#général`
-    /// et un salon vocal, et fait du créateur le premier membre.
-    pub async fn create_guild(&self, owner: Id, name: &str) -> Result<GuildState> {
-        let name = name.trim();
-        if !(2..=100).contains(&name.chars().count()) {
-            return Err(DbError::Invalid("guild_name"));
-        }
-        if !kraken_core::text::visible_name(name) {
-            return Err(DbError::Invalid("hidden_chars"));
-        }
+    /// Crée le serveur, son rôle `@everyone` (id = id du serveur), les catégories et salons du modèle
+    /// (`kraken_core::templates` ; sans modèle, « vide » : deux catégories, `#général` et un salon vocal) et
+    /// fait du créateur le premier membre. Le premier salon textuel du modèle est le salon système. Un modèle
+    /// inconnu est refusé (`Invalid("template")`) avant d'écrire quoi que ce soit.
+    pub async fn create_guild(&self, owner: Id, name: &str, template: Option<&str>) -> Result<GuildState> {
+        let name = guilds::clean_guild_name(name)?;
+        let template = match template {
+            None => kraken_core::templates::default_template(),
+            Some(id) => kraken_core::templates::find(id).ok_or(DbError::Invalid("template"))?,
+        };
         let mut tx = self.pool.begin().await?;
         // FOR SHARE : sérialisé avec `request_deletion`, un compte fermé ne crée plus rien.
         sqlx::query("select 1 from users where id = $1 and deletion_requested_at is null for share")
@@ -675,13 +676,23 @@ impl Db {
             .bind(perms::DEFAULT_EVERYONE as i64)
             .execute(&mut *tx)
             .await?;
-        let text = insert_channel(&mut tx, gid, None, ChannelKind::Category, "Salons textuels").await?;
-        let general = insert_channel(&mut tx, gid, Some(text), ChannelKind::Text, "général").await?;
-        let voice = insert_channel(&mut tx, gid, None, ChannelKind::Category, "Salons vocaux").await?;
-        insert_channel(&mut tx, gid, Some(voice), ChannelKind::Voice, "Général").await?;
+        let mut system = None;
+        for group in template.groups {
+            let category = insert_channel(&mut tx, gid, None, ChannelKind::Category, group.name).await?;
+            for slot in group.slots {
+                let kind = match slot.kind {
+                    kraken_core::templates::SlotKind::Text => ChannelKind::Text,
+                    kraken_core::templates::SlotKind::Voice => ChannelKind::Voice,
+                };
+                let id = insert_channel(&mut tx, gid, Some(category), kind, slot.name).await?;
+                if kind == ChannelKind::Text && system.is_none() {
+                    system = Some(id);
+                }
+            }
+        }
         sqlx::query("update guilds set system_channel_id = $2 where id = $1")
             .bind(gid)
-            .bind(general)
+            .bind(system)
             .execute(&mut *tx)
             .await?;
         sqlx::query("insert into members (guild_id, user_id) values ($1, $2)")
@@ -1299,5 +1310,7 @@ mod tests_emojis;
 
 #[cfg(test)]
 mod tests_guild;
+#[cfg(test)]
+mod tests_guild_edit;
 #[cfg(test)]
 mod tests_profile;

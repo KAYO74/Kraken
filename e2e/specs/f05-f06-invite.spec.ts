@@ -33,8 +33,9 @@ test('F05-N1 nom de serveur vide ou trop court refusé', async ({ user, api }) =
   const { page, token } = await user('cyan');
   await page.goto('/guilds/new');
   const name = page.getByLabel('Nom du serveur');
+  await expect(name).toHaveValue(/^Serveur de /); // proposé d'après le pseudo, une fois le compte chargé
   await name.fill('');
-  await page.getByRole('button', { name: 'Créer', exact: true }).click();
+  await page.getByRole('button', { name: 'Créer le serveur', exact: true }).click();
   await expect(page).toHaveURL(/\/guilds\/new$/);
   expect(await name.evaluate((el: HTMLInputElement) => el.validity.valueMissing)).toBe(true);
   // Le serveur refuse aussi, même sans navigateur.

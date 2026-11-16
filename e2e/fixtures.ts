@@ -108,7 +108,7 @@ export const test = base.extend<Fixtures>({
 export async function createGuild(page: Page, name: string): Promise<[string, string]> {
   await page.getByRole('link', { name: 'Créer ou rejoindre un serveur' }).click();
   await page.getByLabel('Nom du serveur').fill(name);
-  await page.getByRole('button', { name: 'Créer', exact: true }).click();
+  await page.getByRole('button', { name: 'Créer le serveur', exact: true }).click();
   await page.waitForURL(/\/channels\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
   await expect(page.getByRole('heading', { name: 'général', level: 1 })).toBeVisible();
   const [, , gid, cid] = new URL(page.url()).pathname.split('/');

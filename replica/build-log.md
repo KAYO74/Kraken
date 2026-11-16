@@ -10,7 +10,7 @@ Une ligne par écran. Statut : **fait**, **partiel** (manque listé), **route** 
 | S04 mon compte (bas du rail) | 2026-10-17 | partiel | menu de statut ; le 2026-10-26 le panneau utilisateur devient une carte « Mon compte » au bas du rail, micro et son passent dans le panneau « En appel » | |
 | S28 connexion / inscription | 2026-10-17 | partiel | MFA, QR, mot de passe oublié, vérif e-mail | |
 | F06 page d'invitation | 2026-10-17 | fait | | |
-| S21 créer / rejoindre | 2026-10-17 | partiel | modèles, icône | |
+| S21 créer / rejoindre | 2026-10-17 | fait | | le 2026-11-16 : cinq modèles (Vide, Communauté, Jeux, Études, Amis) et icône facultative ; Réglages › Vue d'ensemble (icône, nom) |
 | S05 salon textuel | 2026-10-17 | partiel | modifier, supprimer, répondre, réactions, pièces jointes, markdown, mentions, non-lus, épingles, pagination vers le haut | l'envoi optimiste (nonce, grisé, échec + Réessayer) et le rechargement après reconnexion |
 | S19 MP / groupe | 2026-10-17 | partiel | appel, profil latéral ; le 2026-10-26 ajout de membres, renommer, quitter, MP fermé par un blocage | |
 | S01 Amis | 2026-10-17 | partiel | panneau d'activité réel ; le 2026-10-26 ajouter, accepter, refuser, annuler, retirer, bloquer, onglet Bloqués | |

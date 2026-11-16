@@ -1,7 +1,7 @@
-//! Photos de profil et bannières : reçues telles quelles, vérifiées, puis gardées sur disque
-//! sous une clé aléatoire dans `KRAKEN_DATA_DIR/avatars` (les deux ensemble : la clé est celle de
-//! `users.avatar_key` ou de `users.banner_key` ; elle ne se devine pas, et change à chaque envoi,
-//! d'où un cache sans fin).
+//! Photos de profil, bannières et icônes de serveur : reçues telles quelles, vérifiées, puis gardées sur
+//! disque sous une clé aléatoire dans `KRAKEN_DATA_DIR/avatars` (tout ensemble : la clé est celle de
+//! `users.avatar_key`, de `users.banner_key` ou de `guilds.icon_key` ; elle ne se devine pas, et change à
+//! chaque envoi, d'où un cache sans fin).
 //!
 //! * Image fixe (PNG, JPEG, WebP, GIF d'une seule image) : décodée, recadrée au centre (carré
 //!   pour une photo, 3 pour 1 pour une bannière), réduite et ré-encodée en PNG, ce qui efface EXIF
@@ -9,6 +9,9 @@
 //!   Avant de décoder, l'en-tête dit la taille : au-delà de 4096 pixels de côté ou de 16 millions
 //!   de pixels, l'image est refusée (`image_too_big`), et deux décodages au plus tournent à la fois
 //!   sur tout le serveur (un PNG de 215 Ko en 8192 × 8192 pèse plus de 400 Mo décodé).
+//! * L'icône d'un serveur suit la même voie que la photo de profil (carré de 256 pixels, 4 Mio au plus), avec
+//!   un petit côté d'au moins 8 pixels (`image_too_small`, jugé sur l'en-tête avant tout décodage). Son
+//!   propre module (`guild`) en tient la base et les droits ; ici, seule l'image.
 //! * GIF ou WebP **animé** : gardé animé, donc pas ré-encodé. Il est décodé image par image pour
 //!   vérifier qu'il est lisible et borné (côté, nombre d'images, surface totale), puis recopié sans
 //!   ses commentaires, XMP et EXIF. Le navigateur le recadre au centre à l'affichage.
@@ -44,9 +47,10 @@ const MAX_ANIMATED_PIXELS: u64 = 128 * 1024 * 1024;
 const EXTS: [&str; 3] = ["png", "gif", "webp"];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Kind {
+pub(crate) enum Kind {
     Avatar,
     Banner,
+    GuildIcon,
 }
 
 impl Kind {
@@ -55,6 +59,7 @@ impl Kind {
         match self {
             Self::Avatar => (AVATAR_SIZE, AVATAR_SIZE),
             Self::Banner => (BANNER_WIDTH, BANNER_HEIGHT),
+            Self::GuildIcon => (GUILD_ICON_SIZE, GUILD_ICON_SIZE),
         }
     }
 
@@ -62,6 +67,7 @@ impl Kind {
         match self {
             Self::Avatar => MAX_AVATAR_BYTES,
             Self::Banner => MAX_BANNER_BYTES,
+            Self::GuildIcon => MAX_GUILD_ICON_BYTES,
         }
     }
 }
@@ -113,6 +119,15 @@ pub(crate) fn big_image() -> AppError {
         StatusCode::BAD_REQUEST,
         "image_too_big",
         format!("Cette image est trop grande : {}. Réduis-la avant de l'envoyer.", STILL.describe()),
+    )
+}
+
+/// Un côté trop petit pour faire une icône : jugé sur l'en-tête, sans rien décoder.
+pub(crate) fn image_too_small() -> AppError {
+    AppError(
+        StatusCode::BAD_REQUEST,
+        "image_too_small",
+        format!("Cette image est trop petite : {MIN_GUILD_ICON_SIDE} pixels de côté au moins."),
     )
 }
 
@@ -213,6 +228,31 @@ pub async fn set_banner(
 }
 
 async fn put(state: AppState, auth: Auth, headers: HeaderMap, body: Body, kind: Kind) -> ApiResult<Json<User>> {
+    let (key, file) = receive(&state, &headers, body, kind).await?;
+    let saved = match kind {
+        Kind::Banner => state.db.set_banner(auth.user.id, Some(&key)).await,
+        _ => state.db.set_avatar(auth.user.id, Some(&key)).await,
+    };
+    let (user, old) = match saved {
+        Ok(r) => r,
+        Err(e) => {
+            tokio::fs::remove_file(&file).await.ok();
+            return Err(e.into());
+        }
+    };
+    forget(&state, old).await;
+    announce(&state, &user).await?;
+    Ok(Json(user))
+}
+
+/// Reçoit une image : borne le poids, la juge, la normalise, l'écrit sous une clé neuve. Rend la clé (sans
+/// extension) et le chemin du fichier, que l'appelant efface (`tokio::fs::remove_file`) si la base refuse.
+pub(crate) async fn receive(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: Body,
+    kind: Kind,
+) -> ApiResult<(String, PathBuf)> {
     let max = kind.max_bytes();
     let too_big = || {
         AppError(
@@ -230,6 +270,12 @@ async fn put(state: AppState, auth: Auth, headers: HeaderMap, body: Body, kind: 
     if raw.is_empty() {
         return Err(not_image());
     }
+    if kind == Kind::GuildIcon
+        && let Some((w, h)) = media::header_size(Cursor::new(&raw))
+        && w.min(h) < MIN_GUILD_ICON_SIDE
+    {
+        return Err(image_too_small());
+    }
     let stored = gated(move || normalize(raw.into(), kind)).await.ok_or_else(not_image)?.map_err(|e| match e {
         Refused::NotImage => not_image(),
         Refused::BigAnimation => big_animation(),
@@ -237,7 +283,7 @@ async fn put(state: AppState, auth: Auth, headers: HeaderMap, body: Body, kind: 
     })?;
 
     let key = new_key();
-    let dir = dir(&state);
+    let dir = dir(state);
     let file = dir.join(format!("{key}.{}", stored.ext));
     let written = async {
         tokio::fs::create_dir_all(&dir).await?;
@@ -247,20 +293,7 @@ async fn put(state: AppState, auth: Auth, headers: HeaderMap, body: Body, kind: 
         tracing::error!("avatar : écriture de {} : {e}", file.display());
         return Err(AppError(StatusCode::INTERNAL_SERVER_ERROR, "internal", "Erreur du serveur, réessaie.".into()));
     }
-    let saved = match kind {
-        Kind::Avatar => state.db.set_avatar(auth.user.id, Some(&key)).await,
-        Kind::Banner => state.db.set_banner(auth.user.id, Some(&key)).await,
-    };
-    let (user, old) = match saved {
-        Ok(r) => r,
-        Err(e) => {
-            tokio::fs::remove_file(&file).await.ok();
-            return Err(e.into());
-        }
-    };
-    forget(&state, old).await;
-    announce(&state, &user).await?;
-    Ok(Json(user))
+    Ok((key, file))
 }
 
 /// Retirer sa photo de profil : retour aux initiales.
@@ -279,7 +312,7 @@ pub async fn remove_banner(State(state): State<AppState>, auth: Auth) -> ApiResu
     Ok(Json(user))
 }
 
-/// Supprime le fichier d'une ancienne photo ou bannière, quel que soit son format.
+/// Supprime le fichier d'une ancienne photo, bannière ou icône de serveur, quel que soit son format.
 pub async fn forget(state: &AppState, key: Option<String>) {
     if let Some(key) = key.filter(|k| valid_key(k)) {
         for ext in EXTS {
@@ -290,7 +323,7 @@ pub async fn forget(state: &AppState, key: Option<String>) {
 
 /// L'image, pour n'importe quel navigateur (une balise `<img>` n'envoie pas d'en-tête
 /// d'autorisation). Sa clé aléatoire fait office d'adresse secrète ; elle ne change jamais de
-/// contenu, d'où le cache sans fin. Photos et bannières ont la même route de lecture.
+/// contenu, d'où le cache sans fin. Photos, bannières et icônes de serveur ont la même route de lecture.
 pub async fn get(State(state): State<AppState>, Path(key): Path<String>) -> ApiResult<impl IntoResponse> {
     let key = EXTS.iter().find_map(|e| key.strip_suffix(&format!(".{e}"))).unwrap_or(&key);
     if !valid_key(key) {

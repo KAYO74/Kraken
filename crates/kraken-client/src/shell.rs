@@ -12,7 +12,7 @@ use leptos_router::hooks::{use_location, use_navigate};
 use crate::call::{CallAudio, ControlPanel, IncomingCalls, VoicePanel, VoiceUsers};
 use crate::icons::{Icon, lu};
 use crate::store::{Conn, store};
-use crate::ui::{Avatar, Dot, Logo, StatusDot, initials, modal};
+use crate::ui::{Avatar, Dot, GuildIcon, Logo, StatusDot, initials, modal};
 use crate::unread::{MentionBadge, MutedMark, NotifyDialog, Target, TargetMenu, UnreadText};
 use crate::update::{UpdateEntry, UpdateTile, Updater};
 
@@ -139,6 +139,15 @@ pub fn Shell() -> impl IntoView {
                         <span>{move || if s.conn.get() == Conn::Connecting { "Connexion au serveur…" } else { "Connexion perdue, nouvelle tentative…" }}</span>
                     </div>
                 </Show>
+                <Show when=move || s.notice.get().is_some()>
+                    <div class="k-banner app-conn" role="status">
+                        <Icon icon=lu::LuInfo/>
+                        <span>{move || s.notice.get()}</span>
+                        <button type="button" class="k-btn k-btn--icon" aria-label="Fermer l'information" on:click=move |_| s.notice.set(None)>
+                            <Icon icon=lu::LuX small=true/>
+                        </button>
+                    </div>
+                </Show>
                 <Outlet/>
             </main>
             <CallAudio/>
@@ -188,24 +197,26 @@ fn Rail() -> impl IntoView {
                     {
                         let id = g.guild.id;
                         let href = format!("/channels/{id}");
-                        let name = g.guild.name.clone();
+                        // Nom et icône suivent `GUILD_UPDATE` : la ligne du rail garde son id, pas son contenu.
+                        let first = g.guild.clone();
+                        let info = Memo::new(move |_| {
+                            s.guilds.with(|gs| gs.iter().find(|x| x.guild.id == id).map(|x| x.guild.clone())).unwrap_or_else(|| first.clone())
+                        });
+                        let name = move || info.get().name;
                         let badge = Memo::new(move |_| s.guild_badge(id));
-                        let label = {
-                            let name = name.clone();
-                            move || {
-                                let (unread, n) = badge.get();
-                                let mut l = format!("Serveur {name}");
-                                if unread { l.push_str(", non lu"); }
-                                match n { 0 => {}, 1 => l.push_str(", 1 mention"), n => l.push_str(&format!(", {n} mentions")) }
-                                l
-                            }
+                        let label = move || {
+                            let (unread, n) = badge.get();
+                            let mut l = format!("Serveur {}", name());
+                            if unread { l.push_str(", non lu"); }
+                            match n { 0 => {}, 1 => l.push_str(", 1 mention"), n => l.push_str(&format!(", {n} mentions")) }
+                            l
                         };
                         view! {
-                            <a class="k-server" href=href title=name.clone() aria-label=label
+                            <a class="k-server" href=href title=name aria-label=label
                                 data-unread=move || badge.get().0.then_some("")
                                 aria-current=move || (ids.get().0 == Some(id)).then_some("page")
                                 on:contextmenu=u.on_context(Target::Guild(id)) on:keydown=u.on_key(Target::Guild(id))>
-                                {initials(&name)}
+                                {move || view! { <GuildIcon guild=info.get()/> }}
                                 <Show when=move || { badge.get().1 > 0 }>
                                     <span class="k-badge k-badge--count" aria-hidden="true">{move || crate::unread::count_text(badge.get().1)}</span>
                                 </Show>
@@ -706,85 +717,6 @@ fn Me() -> impl IntoView {
                     </button>
                 </div>
             </Show>
-        </div>
-    }
-}
-
-/// S21 : créer un serveur ou en rejoindre un avec une invitation.
-#[component]
-pub fn CreateGuild() -> impl IntoView {
-    let s = store();
-    let navigate = use_navigate();
-    let default_name = s.me.get_untracked().map(|u| format!("Le repaire de {}", u.name())).unwrap_or_default();
-    let name = RwSignal::new(default_name);
-    let code = RwSignal::new(String::new());
-    let busy = RwSignal::new(false);
-    let error = RwSignal::new(None::<String>);
-    let join_error = RwSignal::new(None::<String>);
-
-    let nav = navigate.clone();
-    let create = move |e: leptos::ev::SubmitEvent| {
-        e.prevent_default();
-        let nav = nav.clone();
-        busy.set(true);
-        spawn_local(async move {
-            match crate::api::create_guild(&name.get_untracked()).await {
-                Ok(g) => {
-                    let to = format!(
-                        "/channels/{}/{}",
-                        g.guild.id,
-                        first_text(&g).map(|c| c.to_string()).unwrap_or_default()
-                    );
-                    s.upsert_guild(g);
-                    nav(&to, Default::default());
-                }
-                Err(e) => error.set(Some(e.message)),
-            }
-            busy.set(false);
-        });
-    };
-    let join = move |e: leptos::ev::SubmitEvent| {
-        e.prevent_default();
-        let raw = code.get_untracked();
-        let c = raw.trim().trim_end_matches('/').rsplit('/').next().unwrap_or_default().to_string();
-        if c.is_empty() {
-            join_error.set(Some("Colle un lien ou un code d'invitation.".into()));
-            return;
-        }
-        navigate(&format!("/invite/{c}"), Default::default());
-    };
-    view! {
-        <div class="k-scrim">
-            <div class="k-dialog app-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="cg-t">
-                <header><h2 id="cg-t">"Ton propre serveur"</h2></header>
-                <form on:submit=create>
-                    <div>
-                        <p>"Un espace pour ta bande, avec des salons texte et vocal. Tu pourras tout changer ensuite."</p>
-                        <label class="k-field">
-                            <span class="k-label">"Nom du serveur"</span>
-                            <input class="k-input" required minlength="2" maxlength="100" bind:value=name
-                                aria-invalid=move || error.get().is_some().then_some("true") aria-describedby="cg-e"/>
-                            <Show when=move || error.get().is_some()>
-                                <span class="k-error" id="cg-e" role="alert">{move || error.get()}</span>
-                            </Show>
-                        </label>
-                    </div>
-                    <footer>
-                        <a class="k-btn k-btn--ghost" href="/channels/@me">"Annuler"</a>
-                        <button class="k-btn k-btn--primary" type="submit" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>"Créer"</button>
-                    </footer>
-                </form>
-                <form on:submit=join class="app-dialog-alt">
-                    <label class="k-field">
-                        <span class="k-label">"Tu as déjà une invitation ?"</span>
-                        <input class="k-input" placeholder="https://…/invite/AbC123xy" bind:value=code aria-describedby="cj-e"/>
-                        <Show when=move || join_error.get().is_some()>
-                            <span class="k-error" id="cj-e" role="alert">{move || join_error.get()}</span>
-                        </Show>
-                    </label>
-                    <button class="k-btn" type="submit">"Rejoindre"</button>
-                </form>
-            </div>
         </div>
     }
 }

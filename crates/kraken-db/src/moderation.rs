@@ -729,6 +729,12 @@ impl Db {
             .fetch_all(&mut *tx)
             .await?;
         files.extend(emoji_keys.into_iter().map(|k| format!("emojis/{k}")));
+        // L'icône du serveur : son format n'est pas gardé, on cite les trois possibles (un fichier absent est ignoré).
+        let icon: Option<String> =
+            sqlx::query_scalar("select icon_key from guilds where id = $1").bind(gid).fetch_one(&mut *tx).await?;
+        if let Some(k) = icon {
+            files.extend(["png", "gif", "webp"].map(|ext| format!("avatars/{k}.{ext}")));
+        }
         // Tout le reste part en cascade (salons et leurs messages, rôles, invitations, journal…).
         sqlx::query("delete from guilds where id = $1").bind(gid).execute(&mut *tx).await?;
         tx.commit().await?;

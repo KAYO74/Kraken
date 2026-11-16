@@ -206,7 +206,7 @@ pub fn InvitePage() -> impl IntoView {
                     }.into_any(),
                     Some(Ok(i)) => { let join = join.clone(); view! {
                         <header class="app-invite-head">
-                            <span class="k-avatar k-avatar--lg" aria-hidden="true">{crate::ui::initials(&i.guild.name)}</span>
+                            <crate::ui::GuildIcon guild=i.guild.clone() size="lg" cap=128/>
                             <p class="app-hint">"Une place t'attend dans"</p>
                             <h1>{i.guild.name.clone()}</h1>
                             <p class="app-hint">{format!("{} membre{}", i.member_count, if i.member_count > 1 { "s" } else { "" })}</p>

@@ -33,6 +33,7 @@ test('S22-H1 créer un rôle, lui donner une couleur, le donner à un membre : l
   // Réglages : créer, renommer, colorier, afficher à part, un droit, puis enregistrer d'un coup.
   await owner.page.getByRole('link', { name: 'Paramètres du serveur' }).click();
   await expect(owner.page.getByRole('dialog', { name: 'Paramètres du serveur' })).toBeVisible();
+  await owner.page.getByRole('dialog', { name: 'Paramètres du serveur' }).getByRole('link', { name: 'Rôles' }).click();
   await owner.page.getByRole('button', { name: 'Créer un rôle' }).click();
   const name = owner.page.getByLabel('Nom du rôle');
   await expect(name).toBeFocused();

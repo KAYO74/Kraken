@@ -211,7 +211,7 @@ async fn presence_is_seen_by_friends_and_members_only_and_never_across_a_block(p
     );
     friends(&db, &lou, &ami).await;
     // Un serveur partagé, un MP (ami d'un ami : on s'écrit) et un compte bloqué qui partage pourtant le serveur.
-    let g = db.create_guild(lou.id, "Abysse").await.unwrap();
+    let g = db.create_guild(lou.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let inv = db.create_invite(g.guild.id, Some(general), lou.id, 0, None).await.unwrap();
     for u in [&collegue, &bloque] {

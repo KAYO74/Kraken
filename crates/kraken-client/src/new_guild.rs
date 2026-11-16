@@ -1,0 +1,250 @@
+//! S21 : créer un serveur (un modèle, un nom, une icône facultative) ou en rejoindre un avec une invitation.
+//!
+//! Le modèle est un groupe de boutons radio natifs (les flèches passent d'une carte à l'autre, une seule est dans
+//! l'ordre de tabulation) ; le choix est écrit en toutes lettres (coche + bordure, pas la couleur seule), et la
+//! liste « Sera créé » suit le choix. L'icône est envoyée juste après la création : si cet envoi échoue, le
+//! serveur existe quand même et on y arrive avec une information à fermer (la page du serveur en dit plus), car
+//! la création, elle, est faite. Une création qui échoue ne laisse rien derrière elle.
+
+use kraken_core::templates::{self, SlotKind, Template};
+use kraken_proto::GuildState;
+use leptos::prelude::*;
+use leptos::task::spawn_local;
+use leptos_router::hooks::use_navigate;
+
+use crate::icon_picker::{IconFile, IconPicker};
+use crate::icons::{Icon, lu};
+use crate::shell::first_text;
+use crate::store::store;
+use crate::ui::{Header, initials};
+
+/// Ce que dessine la carte d'un modèle.
+fn template_icon(id: &str) -> icondata_core::Icon {
+    match id {
+        "communaute" => lu::LuUsers,
+        "jeux" => lu::LuGamepad2,
+        "etudes" => lu::LuGraduationCap,
+        "amis" => lu::LuHeart,
+        _ => lu::LuSquareDashed,
+    }
+}
+
+/// L'icône choisie, gardée jusqu'à la création : l'image, son adresse temporaire (aperçu).
+#[derive(Clone, PartialEq)]
+struct Staged {
+    file: IconFile,
+    url: String,
+}
+
+/// L'aperçu d'une icône choisie. Une animation : sa première image, fixe, et l'animation elle-même (jamais en
+/// mouvement réduit, voir `.app-gicon-preview`). La page n'a pas le droit de relire une adresse `blob:` (CSP),
+/// d'où la première image tirée des octets qu'on a déjà.
+#[component]
+fn StagedImage(staged: Staged) -> impl IntoView {
+    let frozen = RwSignal::new(None::<Option<String>>);
+    let animated = staged.file.animated;
+    if animated {
+        let bytes = staged.file.bytes.clone();
+        spawn_local(async move {
+            let f = crate::photo::first_frame(&bytes, 256).await;
+            frozen.try_set(Some(f));
+        });
+    }
+    let url = staged.url;
+    move || match (animated, frozen.get()) {
+        (true, Some(Some(f))) => view! {
+            <img class="k-still" src=f alt=""/>
+            <img class="k-live" src=url.clone() alt=""/>
+        }
+        .into_any(),
+        (true, None) => view! { <img src=url.clone() alt="" data-probing=""/> }.into_any(),
+        _ => view! { <img src=url.clone() alt=""/> }.into_any(),
+    }
+}
+
+/// Une carte de modèle : une coche et une bordure disent qu'elle est choisie.
+#[component]
+fn Card(template: &'static Template, chosen: RwSignal<&'static str>) -> impl IntoView {
+    let id = template.id;
+    let desc = format!("ng-tpl-{id}");
+    view! {
+        <label class="app-tpl" data-checked=move || (chosen.get() == id).then_some("")>
+            <input class="k-sr" type="radio" name="template" value=id aria-describedby=desc.clone()
+                prop:checked=move || chosen.get() == id on:change=move |_| chosen.set(id)/>
+            <span class="app-tpl-icon"><Icon icon=template_icon(id)/></span>
+            <span class="app-tpl-body">
+                <b>{template.name}</b>
+                <span id=desc>{template.description}</span>
+            </span>
+            <span class="app-tpl-check" aria-hidden="true"><Icon icon=lu::LuCheck small=true/></span>
+        </label>
+    }
+}
+
+#[component]
+pub fn CreateGuild() -> impl IntoView {
+    let s = store();
+    let navigate = use_navigate();
+    let chosen = RwSignal::new(templates::DEFAULT_ID);
+    let name = RwSignal::new(String::new());
+    // Le nom proposé arrive avec le compte (un rechargement de la page le précède), tant qu'on n'a rien écrit.
+    let typed = RwSignal::new(false);
+    Effect::new(move || {
+        if !typed.get_untracked()
+            && let Some(u) = s.me.get()
+        {
+            name.set(format!("Serveur de {}", u.name()));
+        }
+    });
+    let code = RwSignal::new(String::new());
+    let busy = RwSignal::new(false);
+    let error = RwSignal::new(None::<String>);
+    let join_error = RwSignal::new(None::<String>);
+    let staged = RwSignal::new(None::<Staged>);
+    let icon_error = RwSignal::new(None::<String>);
+    let forget = move |old: Option<Staged>| {
+        if let Some(old) = old {
+            let _ = web_sys::Url::revoke_object_url(&old.url);
+        }
+    };
+    on_cleanup(move || forget(staged.try_get_untracked().flatten()));
+    let on_pick = Callback::new(move |file: IconFile| {
+        let Some(url) = crate::emoji_settings::blob_url(&file.bytes) else {
+            return icon_error.set(Some(crate::avatar::not_image()));
+        };
+        icon_error.set(None);
+        forget(staged.get_untracked());
+        staged.set(Some(Staged { file, url }));
+    });
+    let on_remove = Callback::new(move |()| {
+        icon_error.set(None);
+        forget(staged.get_untracked());
+        staged.set(None);
+    });
+
+    let template = Memo::new(move |_| templates::find(chosen.get()).unwrap_or(templates::default_template()));
+    let nav = navigate.clone();
+    // Créer le serveur, puis lui envoyer l'icône choisie ; ouvrir son premier salon textuel.
+    let create = move || {
+        if busy.get_untracked() {
+            return;
+        }
+        busy.set(true);
+        error.set(None);
+        let nav = nav.clone();
+        spawn_local(async move {
+            let made: Result<GuildState, _> =
+                crate::api::create_guild(&name.get_untracked(), chosen.get_untracked()).await;
+            match made {
+                Ok(g) => {
+                    let gid = g.guild.id;
+                    let to = format!("/channels/{gid}/{}", first_text(&g).map(|c| c.to_string()).unwrap_or_default());
+                    s.upsert_guild(g);
+                    if let Some(st) = staged.get_untracked() {
+                        match crate::api::set_guild_icon(gid, &st.file.bytes, st.file.mime).await {
+                            Ok(g) => s.update_guild(g),
+                            Err(e) => s.notice.set(Some(format!(
+                                "Le serveur est créé, mais son icône n'a pas pu être envoyée : {} Tu peux la choisir dans les paramètres du serveur, rubrique « Vue d'ensemble ».",
+                                e.message
+                            ))),
+                        }
+                    }
+                    nav(&to, Default::default());
+                }
+                Err(e) => {
+                    error.try_set(Some(e.message));
+                }
+            }
+            busy.try_set(false);
+        });
+    };
+    let create2 = create.clone();
+    let submit = move |e: leptos::ev::SubmitEvent| {
+        e.prevent_default();
+        create();
+    };
+    let join = move |e: leptos::ev::SubmitEvent| {
+        e.prevent_default();
+        let raw = code.get_untracked();
+        let c = raw.trim().trim_end_matches('/').rsplit('/').next().unwrap_or_default().to_string();
+        if c.is_empty() {
+            join_error.set(Some("Colle un lien ou un code d'invitation.".into()));
+            return;
+        }
+        navigate(&format!("/invite/{c}"), Default::default());
+    };
+    view! {
+        <Header><h1 class="app-title">"Crée ton serveur"</h1></Header>
+        <div class="app-friends app-ng">
+            <form class="app-ng-form" on:submit=submit>
+                <p class="app-hint">"Un espace pour ta bande, avec des salons textuels et vocaux. Choisis un point de départ : tu pourras tout changer ensuite."</p>
+                <section aria-labelledby="ng-tpl-h" class="app-ng-sec">
+                    <h2 id="ng-tpl-h" class="app-ov-h">"Modèle"</h2>
+                    <div class="app-tpls" role="radiogroup" aria-labelledby="ng-tpl-h">
+                        {templates::ALL.iter().map(|t| view! { <Card template=t chosen=chosen/> }).collect_view()}
+                    </div>
+                    <div class="app-ng-made" aria-live="polite">
+                        <p class="k-label">"Sera créé :"</p>
+                        <ul>
+                            {move || template.get().slots().map(|slot| {
+                                let voice = slot.kind == SlotKind::Voice;
+                                view! {
+                                    <li>
+                                        <Icon icon=if voice { lu::LuVolume2 } else { lu::LuHash } small=true/>
+                                        <span class="k-sr">{if voice { "Salon vocal " } else { "Salon textuel " }}</span>
+                                        {slot.name}
+                                    </li>
+                                }
+                            }).collect_view()}
+                        </ul>
+                    </div>
+                </section>
+                <section class="app-ng-sec">
+                    <label class="k-field">
+                        <span class="k-label">"Nom du serveur"</span>
+                        <input class="k-input" required minlength="2" maxlength="100" bind:value=name
+                            on:input=move |_| typed.set(true)
+                            aria-invalid=move || error.get().is_some().then_some("true") aria-describedby="ng-err"/>
+                    </label>
+                </section>
+                <section aria-labelledby="ng-icon-h" class="app-ng-sec">
+                    <h2 id="ng-icon-h" class="app-ov-h">"Icône " <span class="app-hint">"(facultative)"</span></h2>
+                    <IconPicker id="ng-icon" has_icon=Signal::derive(move || staged.get().is_some()) busy=busy error=icon_error
+                        on_pick=on_pick on_remove=on_remove>
+                        <span class="app-gicon-preview" role="img"
+                            aria-label=move || if staged.get().is_some() { "Icône choisie" } else { "Pas d'icône : les initiales du serveur" }>
+                            {move || match staged.get() {
+                                Some(st) => view! { <StagedImage staged=st/> }.into_any(),
+                                None => initials(&name.get()).into_any(),
+                            }}
+                        </span>
+                    </IconPicker>
+                </section>
+                <Show when=move || error.get().is_some()>
+                    <div class="k-banner k-banner--warning app-ng-error" id="ng-err" role="alert">
+                        <Icon icon=lu::LuCircleAlert/>
+                        <span>{move || error.get()}</span>
+                        <button class="k-btn" type="button" on:click={ let again = create2.clone(); move |_| again() }>"Réessayer"</button>
+                    </div>
+                </Show>
+                <div class="app-ng-actions">
+                    <a class="k-btn k-btn--ghost" href="/channels/@me">"Annuler"</a>
+                    <button class="k-btn k-btn--primary k-btn--lg" type="submit" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>
+                        "Créer le serveur"
+                    </button>
+                </div>
+                <p class="k-hint app-ng-status" role="status">{move || busy.get().then_some("Création…")}</p>
+            </form>
+            <form on:submit=join class="app-ng-join">
+                <label class="k-field">
+                    <span class="k-label">"Tu as déjà une invitation ?"</span>
+                    <input class="k-input" placeholder="https://…/invite/AbC123xy" bind:value=code aria-describedby="cj-e"/>
+                    <Show when=move || join_error.get().is_some()>
+                        <span class="k-error" id="cj-e" role="alert">{move || join_error.get()}</span>
+                    </Show>
+                </label>
+                <button class="k-btn" type="submit">"Rejoindre"</button>
+            </form>
+        </div>
+    }
+}

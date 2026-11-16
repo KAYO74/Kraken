@@ -17,7 +17,7 @@ async fn user(db: &Db, name: &str) -> User {
 
 /// Un serveur à `owner` avec `others` dedans ; rend son id et celui de #général.
 async fn guild_with(db: &Db, owner: &User, others: &[&User]) -> (Id, Id) {
-    let g = db.create_guild(owner.id, "Abysse").await.unwrap();
+    let g = db.create_guild(owner.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let inv = db.create_invite(g.guild.id, Some(general), owner.id, 0, None).await.unwrap();
     for u in others {
@@ -530,7 +530,7 @@ async fn invisible_and_bidi_characters_are_refused_in_names_and_reasons(pool: Pg
     let (gid, _) = guild_with(&db, &own, &[&bob]).await;
     let hidden = Err(DbError::Invalid("hidden_chars"));
 
-    assert_eq!(db.create_guild(own.id, "Abys\u{202E}se").await.map(|_| ()), hidden);
+    assert_eq!(db.create_guild(own.id, "Abys\u{202E}se", None).await.map(|_| ()), hidden);
     assert_eq!(db.create_role(gid, own.id, &role("evil\u{202E}tset", 0)).await.map(|_| ()), hidden);
     assert_eq!(db.create_role(gid, own.id, &role("\u{200B}", 0)).await.map(|_| ()), hidden);
     let channel = CreateChannel { kind: ChannelKind::Text, name: "an\u{200B}nonces".into(), parent_id: None };

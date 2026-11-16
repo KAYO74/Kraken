@@ -60,7 +60,7 @@ Bouton                          .k-btn
   used on   partout (S01, S05, S06–S15, S21, S22)
 
 Icône de serveur                .k-server dans .k-rail
-  variants  serveur (initiales ou image), accueil (--home : le logo), action (--action : bordure tiretée, accent-text)
+  variants  serveur (initiales, ou l'image de son icône ; une animation y reste fixe), accueil (--home : le logo), action (--action : bordure tiretée, accent-text)
   sizes     40, rayon md, filet 1 px border-strong
   states    défaut (surface-raised), survol (bordure accent-text), sélectionné (aria-current : fond accent-soft,
             anneau accent-text détaché de 2 px), non-lu (data-unread : point accent en haut à droite), mentions (badge count)

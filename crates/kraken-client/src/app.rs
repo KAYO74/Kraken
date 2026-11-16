@@ -7,7 +7,7 @@ use leptos_router::path;
 
 use crate::store::{Store, keep_connected};
 use crate::ui::{NotFound, Stub};
-use crate::{auth, channels, chat, guild, home, legal, settings, shell};
+use crate::{auth, channels, chat, guild, home, legal, new_guild, settings, shell};
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -38,9 +38,10 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("channels/:guild/:channel/threads") view=|| view! { <Stub id="S24" title="Fils et forum"/> }/>
                     <Route path=path!("channels/:guild/:channel/settings") view=channels::ChannelSettings/>
                     <Route path=path!("channels/:guild/:channel/settings/:section") view=channels::ChannelSettings/>
-                    <Route path=path!("guilds/new") view=shell::CreateGuild/>
-                    <Route path=path!("guilds/:guild/settings") view=guild::GuildSettings/>
-                    <Route path=path!("guilds/:guild/settings/:section") view=guild::GuildSettings/>
+                    <Route path=path!("guilds/new") view=new_guild::CreateGuild/>
+                    // Une seule route, rubrique facultative : passer d'une rubrique à l'autre garde la même fenêtre
+                    // (deux routes la remontaient, et Échap ne la fermait plus).
+                    <Route path=path!("guilds/:guild/settings/:section?") view=guild::GuildSettings/>
                     <Route path=path!("guilds/:guild/events") view=|| view! { <Stub id="S27" title="Événements"/> }/>
                     <Route path=path!("inbox") view=|| view! { <Stub id="S25" title="Boîte de réception"/> }/>
                     <Route path=path!("search") view=|| view! { <Stub id="S26" title="Recherche de messages"/> }/>

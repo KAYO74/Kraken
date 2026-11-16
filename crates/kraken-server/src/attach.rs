@@ -52,17 +52,21 @@ fn data(state: &AppState) -> PathBuf {
     PathBuf::from(&state.cfg.data_dir)
 }
 
-/// Supprime des fichiers du dossier de données (chemins relatifs rendus par `kraken-db`).
-/// Seuls `attachments/…`, `embeds/…` et `emojis/…`, sans `..`, sont admis : un chemin qui sortirait de ces
-/// dossiers est ignoré.
+/// Un chemin que [`remove_files`] accepte d'effacer : `attachments/…`, `embeds/…`, `emojis/…` ou `avatars/…`
+/// (l'icône d'un serveur supprimé), un seul niveau, sans `..`.
+fn deletable(p: &str) -> bool {
+    ["attachments/", "embeds/", "emojis/", "avatars/"].iter().any(|d| {
+        p.strip_prefix(d).is_some_and(|name| {
+            !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.') && !name.contains("..")
+        })
+    })
+}
+
+/// Supprime des fichiers du dossier de données (chemins relatifs rendus par `kraken-db`). Un chemin qui sortirait
+/// des dossiers admis (voir [`deletable`]) est ignoré.
 pub async fn remove_files(state: &AppState, paths: Vec<String>) {
     for p in paths {
-        let ok = ["attachments/", "embeds/", "emojis/"].iter().any(|d| {
-            p.strip_prefix(d).is_some_and(|name| {
-                !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.') && !name.contains("..")
-            })
-        });
-        if ok {
+        if deletable(&p) {
             tokio::fs::remove_file(data(state).join(&p)).await.ok();
         }
     }
@@ -406,14 +410,10 @@ mod tests {
     #[test]
     fn only_data_dirs_are_deleted() {
         // La liste blanche de `remove_files`, vérifiée sur des chemins pièges.
-        let ok = |p: &str| {
-            ["attachments/", "embeds/"].iter().any(|d| {
-                p.strip_prefix(d).is_some_and(|n| {
-                    !n.is_empty() && n.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.') && !n.contains("..")
-                })
-            })
-        };
+        let ok = deletable;
         assert!(ok("attachments/0123456789abcdef0123456789abcdef.p") && ok("embeds/ab.jpg"));
-        assert!(!ok("../etc/passwd") && !ok("attachments/../x") && !ok("attachments/a/b") && !ok("avatars/ab"));
+        assert!(ok("emojis/ab.png") && ok("avatars/0123456789abcdef0123456789abcdef.webp"));
+        assert!(!ok("../etc/passwd") && !ok("attachments/../x") && !ok("attachments/a/b") && !ok("avatars/../x"));
+        assert!(!ok("avatars/") && !ok("avatars/a/b") && !ok("config/ab") && !ok("avatars"));
     }
 }

@@ -119,7 +119,16 @@ fn shape(action: &str, changes: &Value) -> (BTreeMap<String, String>, Vec<AuditC
         }
         "role_update" => &["name", "color", "hoist", "permissions"],
         "channel_update" => &["name", "topic", "slowmode_s", "private"],
-        "emoji_update" | "guild_update" => &["name"],
+        "emoji_update" => &["name"],
+        "guild_update" => {
+            // L'icône : changée ou retirée, jamais sa clé.
+            if let Some(i) = changes.get("icon").and_then(Value::as_str)
+                && matches!(i, "changed" | "removed")
+            {
+                details.insert("icon".into(), i.into());
+            }
+            &["name"]
+        }
         _ => &[],
     };
     (details, fields.iter().filter_map(|f| diff(changes, f)).collect())
