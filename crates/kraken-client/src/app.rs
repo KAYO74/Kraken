@@ -44,7 +44,6 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("guilds/:guild/events") view=|| view! { <Stub id="S27" title="Événements"/> }/>
                     <Route path=path!("inbox") view=|| view! { <Stub id="S25" title="Boîte de réception"/> }/>
                     <Route path=path!("search") view=|| view! { <Stub id="S26" title="Recherche de messages"/> }/>
-                    <Route path=path!("switcher") view=|| view! { <Stub id="S29" title="Aller à une conversation"/> }/>
                     <Route path=path!("discover") view=|| view! { <Stub id="S30" title="Explorer les serveurs"/> }/>
                     <Route path=path!("users/:user") view=|| view! { <Stub id="S20" title="Profil"/> }/>
                     <Route path=path!("settings/:section") view=settings::Settings/>

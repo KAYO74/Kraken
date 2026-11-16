@@ -370,5 +370,17 @@ a:hover { text-decoration: underline; }
 .k-empty b { color: var(--text-strong); font-size: var(--text-base-size); }
 .k-skeleton { border-radius: var(--radius-md); background: var(--surface-hover); animation: k-pulse 1.4s ease-in-out infinite; }
 @keyframes k-pulse { 50% { opacity: .5; } }
+/* Liste de choix (combobox) : groupes titrés, options, lettres trouvées. L'option active (aria-selected) a un fond et une barre d'accent ;
+   en contraste élevé ou en couleurs forcées, un contour de 3 px dit la même chose. À 44 px sous 640. */
+.k-listbox { --option-row: var(--size-option-row); display: grid; align-content: start; overflow-y: auto; overscroll-behavior: contain; }
+.k-listbox-group { padding: var(--space-4) var(--space-4) var(--space-2); color: var(--text-muted); font-size: var(--text-xs-size); font-weight: var(--weight-semibold); }
+.k-option { display: flex; align-items: center; gap: var(--space-4); min-height: var(--option-row); padding: var(--space-1) var(--space-4); border-radius: var(--radius-sm);
+  color: var(--text-secondary); cursor: pointer; }
+.k-option:hover, .k-option[aria-selected="true"] { background: var(--surface-hover); color: var(--text-strong); }
+.k-option[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--accent); }
+.k-option mark { background: none; color: inherit; font-weight: var(--weight-bold); text-decoration: underline; text-underline-offset: 2px; }
+:root[data-contrast="high"] .k-option[aria-selected="true"] { outline: var(--size-focus) solid var(--accent-text); outline-offset: calc(-1 * var(--size-focus)); }
+@media (forced-colors: active) { .k-option[aria-selected="true"] { outline: 3px solid Highlight; outline-offset: -3px; } }
+@media (max-width: 639px) { .k-listbox { --option-row: var(--size-option-row-mobile); } }
 /* Mouvement réduit : choisi dans Réglages > Accessibilité, ou suivi du système (le client pose data-motion sur <html>). */
 :root[data-motion="reduce"] .k-skeleton, :root[data-motion="reduce"] .k-btn[aria-busy="true"]::after { animation: none; }

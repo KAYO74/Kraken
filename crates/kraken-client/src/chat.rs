@@ -1266,6 +1266,10 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
     };
     let keydown = move |e: leptos::ev::KeyboardEvent| {
         let key = e.key();
+        // Alt+↑/↓, Ctrl+Alt+↑/↓ : raccourcis de navigation (`shortcuts.rs`), pas des flèches de la saisie.
+        if matches!(key.as_str(), "ArrowUp" | "ArrowDown") && (e.alt_key() || e.ctrl_key() || e.meta_key()) {
+            return;
+        }
         if let Some((_, list)) = found.get_untracked() {
             let n = list.len();
             match key.as_str() {

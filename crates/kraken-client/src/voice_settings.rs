@@ -624,7 +624,7 @@ pub fn VoiceSettings() -> impl IntoView {
                                 "Clique pour changer de touche."
                             }}
                         </p>
-                        <button type="button" class="k-btn" id="vv-ptt-key" aria-labelledby="vv-ptt-key-l vv-ptt-key"
+                        <button type="button" class="k-btn" id="vv-ptt-key" data-no-shortcuts aria-labelledby="vv-ptt-key-l vv-ptt-key"
                             aria-describedby=move || key_error.get().map(|_| "vv-ptt-key-err")
                             aria-invalid=move || key_error.get().map(|_| "true")
                             data-capturing=move || capturing.get().then_some("")

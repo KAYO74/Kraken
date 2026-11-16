@@ -56,7 +56,7 @@ Réglages de notif par serveur et salon,notifications,must,yes,yes,"S09 ; tous, 
 Boîte de réception mentions,notifications,should,yes,no,S25
 Notifications par e-mail,notifications,could,yes,no,S09
 Recherche dans les messages,recherche,should,yes,no,S26
-Quick Switcher Ctrl+K,recherche,should,yes,no,S29
+Quick Switcher Ctrl+K,recherche,should,yes,yes,S29 ; Ctrl/Cmd+K (ou « Aller vers… ») : salons texte et vocaux, MP et groupes, personnes, serveurs ; opérateurs # @ * ; récents ; recherche sans accent ni casse
 Salon vocal,voix,must,yes,yes,"S18 F04 ; SFU kraken-voice sur un port UDP (pas de TURN : le port doit être joignable), 25 personnes par salon, qui est là dans la barre latérale, panneau « Vocal connecté », contour de qui parle, Reconnecter après une coupure"
 Appel en MP,voix,must,yes,yes,"F03 S19 ; même SFU que les salons (la conversation sert de salon) : sonnerie partout avec Rejoindre/Refuser (30 s), « Appeler » depuis Amis, qui est dans l'appel en haut du MP et dans la barre latérale, micro, son, partage d'écran, contrôle à distance ; message d'appel (durée, Appel manqué) ; pas entre comptes bloqués"
 Appel de groupe,voix,must,yes,yes,"F03 S19 ; dans un groupe privé (10 personnes au plus) : sonne chez chacun sauf blocage avec l'appelant, chacun décroche, refuse ou rejoint plus tard ; fin au départ du dernier"
@@ -89,8 +89,8 @@ Mode streamer,apparence,could,yes,no,S11
 Taille du texte densité zoom,accessibilite,must,yes,yes,S11 ; texte 14 à 20 px ; zoom 90 à 150 % ; densité compacte ; sur l'appareil
 Contraste élevé saturation mouvement réduit,accessibilite,should,yes,partial,S12 ; contraste élevé (7 pour 1) et mouvement réduit faits ; sans saturation ; images animées fixes dans les listes
 Synthèse vocale des messages,accessibilite,could,yes,no,S12
-Raccourcis clavier par défaut,systeme,must,yes,no,S13
-Raccourcis clavier perso,systeme,should,yes,no,S13
+Raccourcis clavier par défaut,systeme,must,yes,yes,S13 ; un tableau unique (liaison et aide) : Ctrl+K, Alt+↑↓ salons, Ctrl+Alt+↑↓ serveurs, Alt+Maj+↑↓ non lus, Ctrl+Maj+M/D micro et son, Ctrl+/ ou ? aide ; liste dans Réglages
+Raccourcis clavier perso,systeme,should,yes,no,S13 ; pas encore : l'aide le dit (lecture seule, ni raccourci global hors de la fenêtre)
 Langues multiples et format 12 24 h,systeme,must,yes,partial,S14 ; format de l'heure fait (une seule fonction pour toutes les heures) ; une seule langue pour l'instant
 Événements de serveur,serveurs,could,yes,no,S27
 Applications OAuth autorisées (bots),integrations,should,yes,no,S15 ; API publique KRAKEN pour bots

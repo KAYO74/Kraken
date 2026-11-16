@@ -111,34 +111,9 @@ pub fn Shell() -> impl IntoView {
             go(&to, Default::default());
         }
     });
-    // Alt+Maj+↑ ou ↓ : salon (ou conversation) non lu précédent ou suivant.
-    let jump = window_event_listener(leptos::ev::keydown, move |e| {
-        let down = match e.key().as_str() {
-            "ArrowDown" => true,
-            "ArrowUp" => false,
-            _ => return,
-        };
-        if !(e.alt_key() && e.shift_key()) {
-            return;
-        }
-        let (guild, current) = ids.get_untracked();
-        let list: Vec<kraken_proto::Channel> = match guild {
-            Some(g) => s.guild(g).map(|g| ordered(&g.channels)).unwrap_or_default(),
-            None => s.dms.get_untracked(),
-        };
-        let wanted = |c: &kraken_proto::Channel| untrack(|| s.shows_unread(c) || s.mentions(c) > 0);
-        let at = list.iter().position(|c| Some(c.id) == current);
-        let found = if down {
-            list.iter().skip(at.map_or(0, |i| i + 1)).find(|c| wanted(c))
-        } else {
-            list.iter().take(at.unwrap_or(list.len())).rev().find(|c| wanted(c))
-        };
-        if let Some(c) = found {
-            e.prevent_default();
-            s.goto.set(Some(crate::unread::href(c)));
-        }
-    });
-    on_cleanup(move || jump.remove());
+    // Tous les raccourcis clavier (tableau unique : `shortcuts.rs`) et les endroits visités (« Récents »).
+    let keys = crate::shortcuts::install(ids);
+    crate::switcher::track_visits(ids);
 
     view! {
         <div class="app" data-drawer=move || s.drawer.get().then_some("open")>
@@ -172,6 +147,15 @@ pub fn Shell() -> impl IntoView {
             <TargetMenu/>
             <crate::profile::ProfileCardHost/>
             {move || notify_ui.dialog.get().map(|t| view! { <NotifyDialog target=t/> })}
+            // Les fenêtres des raccourcis sortent de la coquille (elles passent devant les réglages, ouverts ou non).
+            <Show when=move || keys.switcher.get()>
+                <Portal><crate::switcher::Switcher/></Portal>
+            </Show>
+            <Show when=move || keys.help.get()>
+                <Portal><crate::shortcuts::ShortcutHelp close=Callback::new(move |()| keys.help.set(false))/></Portal>
+            </Show>
+            // Annonces des raccourcis (micro, son) : une zone polie sans rôle `status`, pour ne pas doubler les autres.
+            <p class="k-sr" aria-live="polite" aria-atomic="true">{move || keys.say.get()}</p>
         </div>
     }
 }
@@ -255,7 +239,7 @@ fn HomeSidebar() -> impl IntoView {
     });
     view! {
         <nav class="k-sidebar app-sidebar" aria-label="Messages privés">
-            <a class="k-btn k-btn--sm app-find" href="/switcher"><Icon icon=lu::LuSearch small=true/>"Aller vers une personne ou un salon"</a>
+            <crate::switcher::SwitcherButton/>
             <a class="k-channel" href="/channels/@me" aria-current=on_friends><Icon icon=lu::LuUsers/>"Amis"
                 <Show when=move || { incoming.get() > 0 }>
                     <span class="k-badge k-badge--count">{move || incoming.get()}</span>
@@ -365,6 +349,7 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
     });
     view! {
         <nav class="k-sidebar app-sidebar" aria-label="Salons">
+            <crate::switcher::SwitcherButton/>
             {move || match g.get() {
                 None => view! {
                     <div aria-busy="true">
