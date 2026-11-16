@@ -248,15 +248,18 @@ Toast                           .k-toast
   used on   copie de lien, erreurs d'envoi
 
 Tuile de participant vocal      .k-tile, .k-tile-name, .k-tile-video
-  variants  avatar lg centré, ou aperçu de mon écran partagé (vidéo, object-fit contain)
-  states    parle (data-speaking : contour success), en direct (data-live : bordure danger-solid)
+  variants  avatar lg centré, aperçu de mon écran partagé (vidéo, object-fit contain), ou caméra
+            (vidéo data-camera, object-fit cover ; la mienne data-mirror, retournée, légende « Toi »)
+  states    parle (data-speaking : anneau success au-dessus de l'image), en direct (data-live :
+            bordure danger-solid), caméra éteinte : retour à l'avatar, jamais de tuile noire
   tokens    surface-raised, border ; nom sur shadow-scrim + on-media ; media derrière la vidéo
   a11y      <li> d'une liste « Participants » ; micro / son coupés en role="img" étiquetés ;
             « Regarder » nomme la personne (« Regarder l'écran de Lou ») et porte aria-pressed
   used on   S18
 
 Barre de commandes d'appel      .k-callbar, .k-callbtn
-  variants  bascule (micro, son : aria-pressed, danger-solid quand pressé), partage (data-on : accent),
+  variants  bascule (micro, son : aria-pressed, danger-solid quand pressé), caméra (aria-pressed et
+            data-on : accent allumée ; nom fixe « Caméra »), partage (data-on : accent),
             quitter (--danger)
   tokens    control, control-hover, danger-solid, accent ; boutons ronds de space-10
   a11y      role="group" étiqueté ; chaque bouton a son aria-label (le texte disparaît sous 640 px) ;

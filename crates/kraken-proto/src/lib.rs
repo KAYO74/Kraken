@@ -874,6 +874,9 @@ pub struct VoiceState {
     pub self_deaf: bool,
     /// Partage son écran.
     pub streaming: bool,
+    /// Sa caméra est allumée : elle est relayée à tout le salon, sans demande.
+    #[serde(default)]
+    pub camera: bool,
 }
 
 /// Secondes pendant lesquelles un appel sonne chez ceux qui n'ont pas encore répondu.
@@ -894,9 +897,9 @@ pub struct Call {
 }
 
 /// `POST /channels/{id}/voice` : l'offre WebRTC du navigateur. Elle contient, dans cet ordre,
-/// trois transceivers `sendonly` (micro, image de l'écran, son de l'écran) et le canal de
-/// données [`VOICE_DATA_CHANNEL`]. Le client ne renégocie jamais : il démarre et arrête micro et
-/// partage avec `RTCRtpSender.replaceTrack` ; ensuite, seul le serveur fait des offres.
+/// quatre transceivers `sendonly` (micro, image de l'écran, son de l'écran, caméra) et le canal
+/// de données [`VOICE_DATA_CHANNEL`]. Le client ne renégocie jamais : il démarre et arrête micro,
+/// partage et caméra avec `RTCRtpSender.replaceTrack` ; ensuite, seul le serveur fait des offres.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VoiceJoin {
     pub sdp: String,
@@ -908,12 +911,14 @@ pub struct VoiceJoin {
     pub self_deaf: bool,
 }
 
-/// Les `mid` des trois transceivers de l'offre.
+/// Les `mid` des quatre transceivers de l'offre (la caméra est le dernier, pour garder l'ordre
+/// des trois premiers).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VoiceMids {
     pub mic: String,
     pub screen: String,
     pub screen_audio: String,
+    pub camera: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -926,23 +931,18 @@ pub struct VoiceAnswer {
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum VoiceClientMsg {
     /// Réponse à la dernière offre du serveur.
-    Answer {
-        sdp: String,
-    },
+    Answer { sdp: String },
     State {
         self_mute: bool,
         self_deaf: bool,
         streaming: bool,
+        #[serde(default)]
+        camera: bool,
     },
     /// Regarder (ou ne plus regarder) l'écran partagé de quelqu'un du même salon.
-    Watch {
-        user_id: Id,
-        on: bool,
-    },
+    Watch { user_id: Id, on: bool },
     /// Contrôle à distance : demander à `user_id`, dont on regarde l'écran, de prendre la main.
-    ControlRequest {
-        user_id: Id,
-    },
+    ControlRequest { user_id: Id },
     /// Contrôle à distance : réponse de celui qui partage à la demande de `user_id`.
     ControlAnswer {
         user_id: Id,
@@ -951,23 +951,18 @@ pub enum VoiceClientMsg {
         reason: Option<ControlRefusal>,
     },
     /// Contrôle à distance : une action sur l'écran de `user_id`, qui l'a accepté.
-    ControlInput {
-        user_id: Id,
-        input: RemoteInput,
-    },
+    ControlInput { user_id: Id, input: RemoteInput },
     /// Contrôle à distance : fin (ou demande retirée) entre moi et `user_id`, dans un sens ou
     /// dans l'autre.
-    ControlStop {
-        user_id: Id,
-    },
+    ControlStop { user_id: Id },
 }
 
 /// Canal de données, serveur → client. Une seule offre à la fois : la suivante attend la réponse.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
 pub enum VoiceServerMsg {
-    /// Pistes ajoutées ou retirées. Chaque piste reçue a pour flux `<user_id>.mic` ou
-    /// `<user_id>.screen` (image et son de l'écran partagent ce flux).
+    /// Pistes ajoutées ou retirées. Chaque piste reçue a pour flux `<user_id>.mic`,
+    /// `<user_id>.screen` (image et son de l'écran partagent ce flux) ou `<user_id>.camera`.
     Offer { sdp: String },
     /// `user_id`, qui regarde mon écran, demande à le contrôler.
     ControlRequest { user_id: Id },
@@ -1423,7 +1418,19 @@ mod tests {
         assert_eq!(watch, VoiceClientMsg::Watch { user_id: u, on: true });
         let state: VoiceClientMsg =
             serde_json::from_str(r#"{"t":"state","self_mute":true,"self_deaf":false,"streaming":false}"#).unwrap();
-        assert_eq!(state, VoiceClientMsg::State { self_mute: true, self_deaf: false, streaming: false });
+        assert_eq!(state, VoiceClientMsg::State { self_mute: true, self_deaf: false, streaming: false, camera: false });
+        // La caméra est facultative (anciens clients) et circule dans les deux sens.
+        let cam: VoiceClientMsg = serde_json::from_str(
+            r#"{"t":"state","self_mute":false,"self_deaf":false,"streaming":false,"camera":true}"#,
+        )
+        .unwrap();
+        assert_eq!(cam, VoiceClientMsg::State { self_mute: false, self_deaf: false, streaming: false, camera: true });
+        assert_eq!(serde_json::to_value(&cam).unwrap()["camera"], true);
+        let old: VoiceState = serde_json::from_str(
+            r#"{"channel_id":null,"user_id":"07070707-0707-0707-0707-070707070707","self_mute":false,"self_deaf":false,"streaming":false}"#,
+        )
+        .unwrap();
+        assert!(!old.camera);
         let offer = serde_json::to_value(VoiceServerMsg::Offer { sdp: "v=0".into() }).unwrap();
         assert_eq!(offer, serde_json::json!({"t": "offer", "sdp": "v=0"}));
         // Les identifiants s'écrivent avec tirets : c'est le début des flux `<id>.mic`.

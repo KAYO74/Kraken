@@ -337,8 +337,13 @@ a:hover { text-decoration: underline; }
 .k-tile { position: relative; display: grid; place-items: center; min-width: 0; aspect-ratio: 16 / 9; overflow: hidden;
   border-radius: var(--radius-lg); background: var(--surface-raised); border: 1px solid var(--border); }
 .k-tile[data-live] { border-color: var(--danger-solid); }
-.k-tile[data-speaking] { box-shadow: inset 0 0 0 2px var(--success); border-color: var(--success); }
+.k-tile[data-speaking] { border-color: var(--success); }
+/* L'anneau passe au-dessus d'une image (caméra, aperçu) : une ombre interne serait cachée par elle. */
+.k-tile[data-speaking]::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 2px var(--success); pointer-events: none; }
 .k-tile-video { width: 100%; height: 100%; object-fit: contain; background: var(--media); }
+/* Caméra : l'image remplit la tuile ; la mienne est retournée comme un miroir (le nom reste sur le scrim). */
+.k-tile-video[data-camera] { object-fit: cover; }
+.k-tile-video[data-mirror] { transform: scaleX(-1); }
 .k-tile-name { position: absolute; left: var(--space-3); bottom: var(--space-3); display: flex; align-items: center; gap: var(--space-2);
   max-width: calc(100% - 2 * var(--space-3)); padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm);
   background: var(--shadow-scrim); color: var(--on-media); font-size: var(--text-sm-size); font-weight: var(--weight-medium); }

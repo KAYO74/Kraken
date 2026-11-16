@@ -224,7 +224,14 @@ async fn broadcast(db: &Db, hub: &Hub, s: VoiceState, before: Option<Id>) -> Res
         Some(b) => db.channel_audience(b).await?.into_iter().filter(|u| !viewers.contains(u)).collect(),
         None => vec![],
     };
-    let hidden = VoiceState { channel_id: None, self_mute: false, self_deaf: false, streaming: false, ..s.clone() };
+    let hidden = VoiceState {
+        channel_id: None,
+        self_mute: false,
+        self_deaf: false,
+        streaming: false,
+        camera: false,
+        ..s.clone()
+    };
     hub.send(&viewers, Event::VoiceStateUpdate(s));
     hub.send(&left, Event::VoiceStateUpdate(hidden));
     Ok(())

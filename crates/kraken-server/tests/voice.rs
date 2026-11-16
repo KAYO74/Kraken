@@ -63,7 +63,7 @@ async fn register(c: &reqwest::Client, base: &str, name: &str) -> (Id, String) {
     (a.user.id, format!("Session {}", a.token))
 }
 
-/// L'offre d'un navigateur : micro, image et son de l'écran, puis le canal de données.
+/// L'offre d'un navigateur : micro, image et son de l'écran, caméra, puis le canal de données.
 fn offer() -> VoiceJoin {
     let crypto = Arc::new(str0m::crypto::from_feature_flags());
     let mut rtc = Rtc::builder().set_crypto_provider(crypto).build(Instant::now());
@@ -72,11 +72,17 @@ fn offer() -> VoiceJoin {
     let mic = api.add_media(MediaKind::Audio, Direction::SendOnly, None, None, None);
     let screen = api.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
     let screen_audio = api.add_media(MediaKind::Audio, Direction::SendOnly, None, None, None);
+    let camera = api.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
     api.add_channel(VOICE_DATA_CHANNEL.into());
     let (sdp, _) = api.apply().unwrap();
     VoiceJoin {
         sdp: sdp.to_sdp_string(),
-        mids: VoiceMids { mic: mic.to_string(), screen: screen.to_string(), screen_audio: screen_audio.to_string() },
+        mids: VoiceMids {
+            mic: mic.to_string(),
+            screen: screen.to_string(),
+            screen_audio: screen_audio.to_string(),
+            camera: camera.to_string(),
+        },
         self_mute: false,
         self_deaf: false,
     }
@@ -177,6 +183,13 @@ async fn join_rights_and_voice_states(pool: PgPool) {
     bad.mids.mic = bad.mids.screen.clone();
     let r = c.post(format!("http://{base}/api/v1/channels/{voice}/voice")).header("authorization", &a).json(&bad);
     assert_eq!(r.send().await.unwrap().status(), 400);
+    // Quatre lignes attendues : la caméra doit être une ligne vidéo à elle.
+    let base_offer = offer();
+    for camera in [base_offer.mids.mic.clone(), base_offer.mids.screen.clone(), "99".to_string()] {
+        let bad = VoiceJoin { mids: VoiceMids { camera, ..base_offer.mids.clone() }, ..base_offer.clone() };
+        let r = c.post(format!("http://{base}/api/v1/channels/{voice}/voice")).header("authorization", &a).json(&bad);
+        assert_eq!(r.send().await.unwrap().status(), 400);
+    }
 
     // Lou rejoint : réponse ICE-lite qui annonce 127.0.0.1 ; Sam le voit arriver.
     let (mut ws, _) = gateway(&base, &b).await;
@@ -193,6 +206,7 @@ async fn join_rights_and_voice_states(pool: PgPool) {
         self_mute: false,
         self_deaf: false,
         streaming: false,
+        camera: false,
     };
     assert_eq!(s, here);
 

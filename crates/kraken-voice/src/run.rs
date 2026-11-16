@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 use kraken_proto::{ControlRefusal, Id, RemoteInput, VOICE_DATA_CHANNEL, VoiceClientMsg, VoiceServerMsg};
 use str0m::change::{SdpAnswer, SdpPendingOffer};
 use str0m::channel::{ChannelData, ChannelId};
-use str0m::media::{Direction, KeyframeRequestKind, MediaData, Mid};
+use str0m::media::{Direction, KeyframeRequestKind, MediaData, MediaKind, Mid};
 use str0m::net::{Protocol, Receive};
 use str0m::{Event, IceConnectionState, Input, Output, Rtc};
 
@@ -70,13 +70,15 @@ pub(crate) struct Client {
     room: Id,
     rtc: Rtc,
     /// Les mids de ce qu'il envoie, dans l'ordre de [`Kind::ALL`].
-    sources: [Mid; 3],
+    sources: [Mid; 4],
     can_speak: bool,
     can_stream: bool,
     /// Micro coupé (ou son coupé) : ce qu'il enverrait quand même n'est pas relayé.
     muted: bool,
     self_deaf: bool,
     streaming: bool,
+    /// Caméra allumée : relayée à tout le salon, sans demande.
+    camera: bool,
     /// Ceux dont il regarde l'écran.
     watching: HashSet<Id>,
     channel: Option<ChannelId>,
@@ -91,7 +93,8 @@ pub(crate) struct Client {
     dirty: bool,
     /// Pistes à renégocier dès que possible.
     stale: bool,
-    last_keyframe: Option<Instant>,
+    /// Dernière demande d'image clé, par piste envoyée (ordre de [`Kind::ALL`]).
+    last_keyframe: [Option<Instant>; 4],
     /// Messages `state`, `watch` et de contrôle encore permis (seau à jetons).
     tokens: f32,
     tokens_at: Instant,
@@ -112,8 +115,10 @@ enum Item {
         kind: Kind,
         data: Box<MediaData>,
     },
+    /// Une image clé de la piste `source` de `user`.
     Keyframe {
         user: Id,
+        source: Kind,
         kind: KeyframeRequestKind,
     },
     State {
@@ -121,6 +126,7 @@ enum Item {
         self_mute: bool,
         self_deaf: bool,
         streaming: bool,
+        camera: bool,
     },
     Watch {
         session: u64,
@@ -147,7 +153,7 @@ enum Control {
 }
 
 impl Client {
-    pub(crate) fn new(rtc: Rtc, now: Instant, session: u64, j: &Join, sources: [Mid; 3]) -> Self {
+    pub(crate) fn new(rtc: Rtc, now: Instant, session: u64, j: &Join, sources: [Mid; 4]) -> Self {
         Self {
             session,
             user: j.user_id,
@@ -159,6 +165,7 @@ impl Client {
             muted: j.self_mute || j.self_deaf,
             self_deaf: j.self_deaf,
             streaming: false,
+            camera: false,
             watching: HashSet::new(),
             channel: None,
             pending: None,
@@ -169,7 +176,7 @@ impl Client {
             next: now,
             dirty: true,
             stale: true,
-            last_keyframe: None,
+            last_keyframe: [None; 4],
             tokens: BURST,
             tokens_at: now,
             input_tokens: INPUT_BURST,
@@ -182,6 +189,15 @@ impl Client {
 
     fn kind_of(&self, mid: Mid) -> Option<Kind> {
         self.sources.iter().position(|m| *m == mid).map(|i| Kind::ALL[i])
+    }
+
+    /// Ce que ce client a le droit d'envoyer, et qu'il envoie, pour cette piste.
+    fn sends(&self, kind: Kind) -> bool {
+        match kind {
+            Kind::Mic => self.can_speak && !self.muted,
+            Kind::Screen | Kind::ScreenAudio => self.can_stream && self.streaming,
+            Kind::Camera => self.can_stream && self.camera,
+        }
     }
 
     fn input(&mut self, input: Input) {
@@ -236,23 +252,19 @@ impl Client {
             Event::ChannelData(d) if Some(d.id) == self.channel => self.message(d, items),
             Event::MediaData(data) => {
                 let Some(kind) = self.kind_of(data.mid) else { return };
-                let allowed = match kind {
-                    Kind::Mic => self.can_speak && !self.muted,
-                    Kind::Screen | Kind::ScreenAudio => self.can_stream && self.streaming,
-                };
-                if !allowed {
+                if !self.sends(kind) {
                     return;
                 }
-                if kind == Kind::Screen && !data.contiguous {
-                    self.request_keyframe(KeyframeRequestKind::Pli);
+                if kind.media() == MediaKind::Video && !data.contiguous {
+                    self.request_keyframe(kind, KeyframeRequestKind::Pli);
                 }
                 items.push(Item::Media { from: self.user, room: self.room, kind, data: Box::new(data) });
             }
-            // Un spectateur demande une image clé : on la demande à celui qui partage.
+            // Un spectateur demande une image clé : on la demande à celui qui l'envoie.
             Event::KeyframeRequest(req) => {
-                let from = self.outs.iter().find(|o| o.state == OutState::Open(req.mid)).map(|o| o.from);
-                if let Some(user) = from {
-                    items.push(Item::Keyframe { user, kind: req.kind });
+                let from = self.outs.iter().find(|o| o.state == OutState::Open(req.mid)).map(|o| (o.from, o.kind));
+                if let Some((user, source)) = from {
+                    items.push(Item::Keyframe { user, source, kind: req.kind });
                 }
             }
             _ => {}
@@ -276,8 +288,8 @@ impl Client {
         let control = |to, what| Item::Control { session, to, what };
         match msg {
             VoiceClientMsg::Answer { sdp } => self.answer(&sdp, items),
-            VoiceClientMsg::State { self_mute, self_deaf, streaming } => {
-                items.push(Item::State { session: self.session, self_mute, self_deaf, streaming })
+            VoiceClientMsg::State { self_mute, self_deaf, streaming, camera } => {
+                items.push(Item::State { session: self.session, self_mute, self_deaf, streaming, camera })
             }
             VoiceClientMsg::Watch { user_id, on } => {
                 items.push(Item::Watch { session: self.session, user: user_id, on })
@@ -338,8 +350,8 @@ impl Client {
             if let OutState::Negotiating(m) = o.state {
                 o.state = OutState::Open(m);
                 // Un nouveau spectateur : il lui faut une image clé pour commencer.
-                if o.kind == Kind::Screen {
-                    items.push(Item::Keyframe { user: o.from, kind: KeyframeRequestKind::Pli });
+                if o.kind.media() == MediaKind::Video {
+                    items.push(Item::Keyframe { user: o.from, source: o.kind, kind: KeyframeRequestKind::Pli });
                 }
             }
         }
@@ -348,15 +360,16 @@ impl Client {
         self.stale = true;
     }
 
-    fn request_keyframe(&mut self, kind: KeyframeRequestKind) {
-        if self.last_keyframe.is_some_and(|t| t.elapsed() < KEYFRAME_GAP) {
+    fn request_keyframe(&mut self, source: Kind, kind: KeyframeRequestKind) {
+        let last = &mut self.last_keyframe[source.index()];
+        if last.is_some_and(|t| t.elapsed() < KEYFRAME_GAP) {
             return;
         }
-        let mid = self.sources[1];
+        let mid = self.sources[source.index()];
         if let Some(mut w) = self.rtc.writer(mid) {
             // Échoue tant que rien n'a été reçu sur cette piste : sans gravité.
             let _ = w.request_keyframe(None, kind);
-            self.last_keyframe = Some(Instant::now());
+            *last = Some(Instant::now());
             self.dirty = true;
         }
     }
@@ -694,28 +707,32 @@ impl Sfu {
         }
     }
 
-    /// Ce que chacun doit recevoir : le micro des autres (s'ils ont le droit de parler), et
-    /// l'écran de ceux qu'il regarde (s'ils partagent et en ont le droit).
+    /// Ce que chacun doit recevoir : le micro des autres (s'ils ont le droit de parler), leur
+    /// caméra (allumée, avec le droit de la diffuser), et l'écran de ceux qu'il regarde (s'ils
+    /// partagent et en ont le droit).
     fn renegotiate(&mut self) {
         if !self.clients.iter().any(|c| c.stale && c.channel.is_some() && c.pending.is_none()) {
             return;
         }
         // Seuls comptent ceux dont le canal de données est ouvert : une connexion qui n'aboutit
         // jamais n'ajoute pas de piste chez les autres.
-        let members: Vec<(Id, Id, bool, bool)> = self
+        let members: Vec<(Id, Id, bool, bool, bool)> = self
             .clients
             .iter()
             .filter(|c| c.channel.is_some())
-            .map(|c| (c.room, c.user, c.can_speak, c.can_stream && c.streaming))
+            .map(|c| (c.room, c.user, c.can_speak, c.can_stream && c.streaming, c.can_stream && c.camera))
             .collect();
         for c in self.clients.iter_mut().filter(|c| c.stale) {
             let mut wanted = HashSet::new();
-            for &(room, user, speaks, streams) in &members {
+            for &(room, user, speaks, streams, films) in &members {
                 if room != c.room || user == c.user {
                     continue;
                 }
                 if speaks {
                     wanted.insert((user, Kind::Mic));
+                }
+                if films {
+                    wanted.insert((user, Kind::Camera));
                 }
                 if streams && c.watching.contains(&user) {
                     wanted.insert((user, Kind::Screen));
@@ -735,17 +752,19 @@ impl Sfu {
             }
             Item::Ready { room } => self.touch(room),
             Item::Control { session, to, what } => self.control(session, to, what),
-            Item::Keyframe { user, kind } => {
-                if let Some(c) = self.clients.iter_mut().find(|c| c.user == user && c.streaming) {
-                    c.request_keyframe(kind);
+            Item::Keyframe { user, source, kind } => {
+                if let Some(c) = self.clients.iter_mut().find(|c| c.user == user && c.sends(source)) {
+                    c.request_keyframe(source, kind);
                 }
             }
-            Item::State { session, self_mute, self_deaf, streaming } => {
+            Item::State { session, self_mute, self_deaf, streaming, camera } => {
                 let Some(c) = self.clients.iter_mut().find(|c| c.session == session) else { return };
                 let streaming = streaming && c.can_stream;
+                let camera = camera && c.can_stream;
                 let stopped = c.streaming && !streaming;
-                let changed = c.streaming != streaming;
+                let changed = c.streaming != streaming || c.camera != camera;
                 c.streaming = streaming;
+                c.camera = camera;
                 c.muted = self_mute || self_deaf;
                 c.self_deaf = self_deaf;
                 let (user, room) = (c.user, c.room);
@@ -753,6 +772,7 @@ impl Sfu {
                     s.self_mute = self_mute || self_deaf;
                     s.self_deaf = self_deaf;
                     s.streaming = streaming;
+                    s.camera = camera;
                 });
                 // Partage arrêté : plus personne ne le regarde ; reprendre demande un nouveau `watch`.
                 // Le contrôle de cet écran, et les demandes, prennent fin.

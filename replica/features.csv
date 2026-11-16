@@ -66,7 +66,7 @@ Détection de voix et push-to-talk,voix,must,yes,no,S10
 Suppression de bruit et annulation d'écho,voix,should,yes,partial,"S10 ; celles du navigateur (echoCancellation, noiseSuppression, autoGainControl) ; RNNoise au lieu de Krisp plus tard"
 Chiffrement de bout en bout du vocal,voix,should,yes,no,S07 ; MLS
 Qualité audio 384 kbps,voix,could,yes,no,boost : gratuit
-Caméra en appel,video,must,yes,no,S10 S18
+Caméra en appel,video,must,yes,yes,"S10 S18 F04 ; bouton « Caméra » dans la barre de l'appel (salon vocal, MP et groupes), 1280×720 à 30 i/s au mieux, caméra choisie lue dans le réglage kraken.cam ; relayée automatiquement à tout le salon, sans « Regarder » ; l'image remplace l'avatar dans la tuile, mon aperçu est en miroir ; éteinte au clic, à la sortie, au raccrochage, à la perte de connexion ou si la caméra est débranchée ; refus du navigateur ou caméra absente : message sous la barre ; impossible sur page en HTTP"
 Flou et arrière-plans vidéo perso,video,could,yes,no,S10 ; nitro : gratuit ; images originales
 Partage d'écran,video,must,yes,yes,"S18 F04 ; image (30 i/s) et son de l'écran quand le navigateur le permet ; envoyé seulement à qui clique « Regarder » ; plein écran ; impossible sur navigateur mobile ou page en HTTP (bouton désactivé, raison affichée)"
 Contrôle à distance de l'écran partagé,video,could,no,yes,"S18 F04 ; ajout KRAKEN : qui regarde un écran demande le contrôle, celui qui partage accepte à chaque fois dans l'appli puis dans une fenêtre native ; un seul à la fois ; souris, molette, clavier (touches physiques) ; Échap rend la main ; arrêt dans l'appli, au menu KRAKEN ou fin du partage ; seule l'appli de bureau peut être contrôlée (X11, macOS avec Accessibilité, Windows), écran entier seulement"

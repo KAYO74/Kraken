@@ -53,7 +53,7 @@ async fn spawn_with_state(pool: PgPool) -> (String, AppState) {
     (format!("{addr}"), state)
 }
 
-/// L'offre d'un navigateur : micro, image et son de l'écran, puis le canal de données.
+/// L'offre d'un navigateur : micro, image et son de l'écran, caméra, puis le canal de données.
 fn offer() -> VoiceJoin {
     let crypto = Arc::new(str0m::crypto::from_feature_flags());
     let mut rtc = Rtc::builder().set_crypto_provider(crypto).build(Instant::now());
@@ -62,11 +62,17 @@ fn offer() -> VoiceJoin {
     let mic = api.add_media(MediaKind::Audio, Direction::SendOnly, None, None, None);
     let screen = api.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
     let screen_audio = api.add_media(MediaKind::Audio, Direction::SendOnly, None, None, None);
+    let camera = api.add_media(MediaKind::Video, Direction::SendOnly, None, None, None);
     api.add_channel(VOICE_DATA_CHANNEL.into());
     let (sdp, _) = api.apply().unwrap();
     VoiceJoin {
         sdp: sdp.to_sdp_string(),
-        mids: VoiceMids { mic: mic.to_string(), screen: screen.to_string(), screen_audio: screen_audio.to_string() },
+        mids: VoiceMids {
+            mic: mic.to_string(),
+            screen: screen.to_string(),
+            screen_audio: screen_audio.to_string(),
+            camera: camera.to_string(),
+        },
         self_mute: false,
         self_deaf: false,
     }

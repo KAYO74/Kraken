@@ -1,7 +1,7 @@
 //! Salons vocaux : un SFU WebRTC ([str0m]) sur un seul port UDP. Chacun envoie son micro et,
-//! s'il partage son écran, l'image et le son de l'écran ; le serveur renvoie à chacun les micros
-//! des autres, et l'écran de ceux qu'il regarde. Rien n'est décodé : les trames sont relayées
-//! telles quelles.
+//! s'il partage son écran, l'image et le son de l'écran, ou s'il allume sa caméra, son image ; le
+//! serveur renvoie à chacun les micros des autres, la caméra de ceux qui l'ont allumée et l'écran
+//! de ceux qu'il regarde. Rien n'est décodé : les trames sont relayées telles quelles.
 //!
 //! Le serveur HTTP crée la connexion ([`Sfu::join`] : offre du navigateur → réponse) ; une
 //! boucle sans I/O asynchrone, sur son propre fil, fait le reste (ICE-lite, DTLS, SRTP, canal de
@@ -100,14 +100,20 @@ enum Kind {
     Mic,
     Screen,
     ScreenAudio,
+    Camera,
 }
 
 impl Kind {
-    const ALL: [Kind; 3] = [Kind::Mic, Kind::Screen, Kind::ScreenAudio];
+    const ALL: [Kind; 4] = [Kind::Mic, Kind::Screen, Kind::ScreenAudio, Kind::Camera];
+
+    /// Place dans [`Kind::ALL`] (et dans les `mid` de l'offre).
+    fn index(self) -> usize {
+        self as usize
+    }
 
     fn media(self) -> MediaKind {
         match self {
-            Kind::Screen => MediaKind::Video,
+            Kind::Screen | Kind::Camera => MediaKind::Video,
             Kind::Mic | Kind::ScreenAudio => MediaKind::Audio,
         }
     }
@@ -121,6 +127,7 @@ impl Kind {
         match self {
             Kind::Mic => format!("{user}.mic"),
             Kind::Screen | Kind::ScreenAudio => format!("{user}.screen"),
+            Kind::Camera => format!("{user}.camera"),
         }
     }
 
@@ -129,6 +136,7 @@ impl Kind {
             Kind::Mic => format!("{user}.mic"),
             Kind::Screen => format!("{user}.screen-video"),
             Kind::ScreenAudio => format!("{user}.screen-audio"),
+            Kind::Camera => format!("{user}.camera-video"),
         }
     }
 }
@@ -186,6 +194,7 @@ fn left(s: &VoiceState) -> VoiceState {
         self_mute: false,
         self_deaf: false,
         streaming: false,
+        camera: false,
     }
 }
 
@@ -286,6 +295,7 @@ impl Sfu {
             self_mute: j.self_mute || j.self_deaf,
             self_deaf: j.self_deaf,
             streaming: false,
+            camera: false,
         };
         let client = run::Client::new(rtc, now, session, &j, sources);
         let mut users = self.shared.lock();
@@ -357,11 +367,11 @@ impl Drop for Sfu {
     }
 }
 
-/// Les trois pistes de l'offre, vérifiées : elles existent, sont de la bonne nature, et le
+/// Les quatre pistes de l'offre, vérifiées : elles existent, sont de la bonne nature, et le
 /// navigateur les envoie.
-fn sources(rtc: &Rtc, mids: &VoiceMids) -> Result<[Mid; 3], JoinError> {
-    let wanted = [&mids.mic, &mids.screen, &mids.screen_audio];
-    let mut out = [Mid::new(); 3];
+fn sources(rtc: &Rtc, mids: &VoiceMids) -> Result<[Mid; 4], JoinError> {
+    let wanted = [&mids.mic, &mids.screen, &mids.screen_audio, &mids.camera];
+    let mut out = [Mid::new(); 4];
     for (i, (kind, raw)) in Kind::ALL.iter().zip(wanted).enumerate() {
         let bad = |why: &str| JoinError::BadOffer(format!("mid {raw:?} ({kind:?}) : {why}"));
         if raw.is_empty() || raw.len() > 16 || !raw.bytes().all(|b| b.is_ascii_alphanumeric()) {

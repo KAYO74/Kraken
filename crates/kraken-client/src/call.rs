@@ -1,5 +1,6 @@
 //! Salon vocal (S18) : avant d'entrer, qui est là et « Rejoindre » ; ensuite les tuiles des
-//! participants, l'écran regardé en grand et la barre de commandes. Plus ce que la coquille montre
+//! participants (leur caméra à la place de l'avatar quand elle est allumée), l'écran regardé en
+//! grand et la barre de commandes. Plus ce que la coquille montre
 //! de l'appel : les participants sous chaque salon vocal, le panneau « En appel » (avec les
 //! boutons micro et son), le son des micros reçus et le contrôle à distance de mon écran.
 //!
@@ -21,7 +22,7 @@ use wasm_bindgen_futures::JsFuture;
 use crate::icons::{Icon, lu};
 use crate::store::{Store, store};
 use crate::ui::{Avatar, Header, initials};
-use crate::voice::{self, Control, ControlNote, ShareNote, Status};
+use crate::voice::{self, Control, ControlNote, Feed, ShareNote, Status};
 
 /// Qui est dans ce salon vocal (ou cet appel), dans l'ordre d'arrivée.
 fn present(s: Store, guild: Option<Id>, channel: Id) -> Vec<VoiceState> {
@@ -216,7 +217,8 @@ fn Call(guild: Option<Id>, channel: Id) -> impl IntoView {
     }
 }
 
-/// Un participant : avatar (ou l'aperçu de mon écran), nom, micro et son coupés, « En direct ».
+/// Un participant : sa caméra, sinon l'aperçu de mon écran ou son avatar ; nom, micro et son
+/// coupés, « En direct ».
 #[component]
 fn Tile(guild: Option<Id>, channel: Id, user: Id) -> impl IntoView {
     let s = store();
@@ -227,7 +229,15 @@ fn Tile(guild: Option<Id>, channel: Id, user: Id) -> impl IntoView {
     let flag = move |f: fn(&VoiceState) -> bool| state.with(|x| x.as_ref().is_some_and(f));
     let live = move || flag(|x| x.streaming);
     let watched = move || v.watching.get() == Some(user);
-    let preview = move || me && v.preview.with(Option::is_some);
+    let preview = Memo::new(move |_| me && v.preview.with(Option::is_some));
+    // Sa caméra est allumée (le serveur l'a annoncée) et son image est là ; la mienne : l'aperçu.
+    let camera = Memo::new(move |_| {
+        if me {
+            v.camera.get() && v.camera_preview.with(Option::is_some)
+        } else {
+            flag(|x| x.camera) && v.remote.with(|r| r.iter().any(|x| x.user == user && x.feed == Feed::Camera))
+        }
+    });
     let watch_label = {
         let name = name.clone();
         move || if watched() { "Arrêter de regarder".to_string() } else { format!("Regarder l'écran de {name}") }
@@ -236,14 +246,23 @@ fn Tile(guild: Option<Id>, channel: Id, user: Id) -> impl IntoView {
         let name = name.clone();
         move || face(account.clone(), &name, "lg")
     };
+    let label = {
+        let name = name.clone();
+        move || if me && camera.get() { "Toi".to_string() } else { format!("{name}{}", if me { " (toi)" } else { "" }) }
+    };
+    let cam_label = if me { "Aperçu de ta caméra".to_string() } else { format!("Caméra de {name}") };
     view! {
-        <li class="k-tile" data-live=move || live().then_some("")
+        <li class="k-tile" data-live=move || live().then_some("") data-camera=move || camera.get().then_some("")
             data-speaking=move || v.speaking.with(|x| x.contains(&user)).then_some("")>
-            <Show when=preview fallback=avatar>
-                <Preview/>
-            </Show>
+            {move || if camera.get() {
+                view! { <CameraVideo user=user me=me label=cam_label.clone()/> }.into_any()
+            } else if preview.get() {
+                view! { <Preview/> }.into_any()
+            } else {
+                avatar()
+            }}
             <div class="k-tile-name">
-                <span class="app-ellipsis">{name.clone()}{me.then_some(" (toi)")}</span>
+                <span class="app-ellipsis">{label}</span>
                 <Show when=move || flag(|x| x.self_mute && !x.self_deaf)>
                     <span class="k-tile-flag" role="img" aria-label="micro coupé" title="Micro coupé"><Icon icon=lu::LuMicOff small=true/></span>
                 </Show>
@@ -260,6 +279,27 @@ fn Tile(guild: Option<Id>, channel: Id, user: Id) -> impl IntoView {
                 </button>
             </Show>
         </li>
+    }
+}
+
+/// La caméra d'un participant, à la place de son avatar : l'image reçue (sans son : le micro
+/// arrive à part), ou, pour la mienne, l'aperçu retourné comme un miroir.
+#[component]
+fn CameraVideo(user: Id, me: bool, label: String) -> impl IntoView {
+    let v = store().voice;
+    let el = NodeRef::<html::Video>::new();
+    Effect::new(move || {
+        let Some(e) = el.get() else { return };
+        if me {
+            v.camera_preview.with(|p| attach(&e, p.as_ref()));
+        } else {
+            v.remote
+                .with(|r| attach(&e, r.iter().find(|x| x.user == user && x.feed == Feed::Camera).map(|x| &x.stream)));
+        }
+    });
+    view! {
+        <video class="k-tile-video" data-camera data-mirror=me.then_some("") node_ref=el autoplay playsinline muted
+            prop:muted=true aria-label=label></video>
     }
 }
 
@@ -311,7 +351,7 @@ fn Stage(guild: Option<Id>, user: Id) -> impl IntoView {
     let playing = RwSignal::new(false);
     Effect::new(move || {
         let Some(e) = el.get() else { return };
-        v.remote.with(|r| attach(&e, r.iter().find(|x| x.user == user && x.screen).map(|x| &x.stream)));
+        v.remote.with(|r| attach(&e, r.iter().find(|x| x.user == user && x.feed == Feed::Screen).map(|x| &x.stream)));
     });
     let controlling = Memo::new(move |_| v.control.get() == Control::On(user));
     let asking = Memo::new(move |_| v.control.get() == Control::Asking(user));
@@ -585,10 +625,18 @@ fn CallBar(private: bool) -> impl IntoView {
         "Ce navigateur ne permet pas de partager l'écran."
     };
     let share_label = move || if v.streaming.get() { "Arrêter le partage" } else { "Partager ton écran" };
+    let cam_title = move || if v.camera.get() { "Couper la caméra" } else { "Activer la caméra" };
     view! {
         <div class="k-callbar" role="group" aria-label="Commandes de l'appel">
             <MicToggle big=true/>
             <DeafToggle big=true/>
+            <button class="k-callbtn" data-on=move || v.camera.get().then_some("")
+                disabled=move || matches!(v.status.get(), Status::Lost(_) | Status::Off)
+                aria-label="Caméra" title=cam_title aria-pressed=move || v.camera.get().to_string()
+                on:click=move |_| v.toggle_camera()>
+                {move || if v.camera.get() { view! { <Icon icon=lu::LuVideo/> } } else { view! { <Icon icon=lu::LuVideoOff/> } }}
+                <span>"Caméra"</span>
+            </button>
             <button class="k-callbtn" data-on=move || v.streaming.get().then_some("")
                 disabled=move || !share_ok || matches!(v.status.get(), Status::Lost(_) | Status::Off)
                 aria-label=share_label title=share_label aria-describedby=(!share_ok).then_some("call-share-why")
@@ -611,6 +659,7 @@ fn CallBar(private: bool) -> impl IntoView {
             }}
         </div>
         {(!share_ok).then(|| view! { <p class="app-hint app-call-why" id="call-share-why">{why}</p> })}
+        {move || v.camera_error.get().map(|e| view! { <p class="k-error app-call-why" role="alert">{e}</p> })}
     }
 }
 
@@ -622,7 +671,7 @@ pub fn VoiceUsers(guild: Option<Id>, channel: Id, name: String, hidden: Signal<b
     view! {
         <Show when=move || who.with(|w| !w.is_empty())>
             <ul class="app-voice-users" aria-label=format!("Dans {name}") hidden=hidden>
-                <For each=move || who.get() key=|x| (x.user_id, x.self_mute, x.self_deaf, x.streaming) let:x>
+                <For each=move || who.get() key=|x| (x.user_id, x.self_mute, x.self_deaf, x.streaming, x.camera) let:x>
                     {
                         let (u, n) = member(s, guild, x.user_id);
                         let user = x.user_id;
@@ -635,6 +684,9 @@ pub fn VoiceUsers(guild: Option<Id>, channel: Id, name: String, hidden: Signal<b
                                 })}
                                 {x.self_deaf.then(|| view! {
                                     <span role="img" aria-label="son coupé" title="Son coupé"><Icon icon=lu::LuHeadphoneOff small=true/></span>
+                                })}
+                                {x.camera.then(|| view! {
+                                    <span role="img" aria-label="caméra allumée" title="Caméra allumée"><Icon icon=lu::LuVideo small=true/></span>
                                 })}
                                 {x.streaming.then(|| view! { <span class="k-badge k-badge--live">"En direct"</span> })}
                             </li>
@@ -701,8 +753,9 @@ pub fn VoicePanel() -> impl IntoView {
 #[component]
 pub fn CallAudio() -> impl IntoView {
     let v = store().voice;
-    let mics =
-        Memo::new(move |_| v.remote.with(|r| r.iter().filter(|x| !x.screen).map(|x| x.user).collect::<Vec<_>>()));
+    let mics = Memo::new(move |_| {
+        v.remote.with(|r| r.iter().filter(|x| x.feed == Feed::Mic).map(|x| x.user).collect::<Vec<_>>())
+    });
     view! {
         <div hidden>
             <For each=move || mics.get() key=|u| *u let:u>
@@ -718,7 +771,7 @@ fn RemoteAudio(user: Id) -> impl IntoView {
     let el = NodeRef::<html::Audio>::new();
     Effect::new(move || {
         let Some(e) = el.get() else { return };
-        v.remote.with(|r| attach(&e, r.iter().find(|x| x.user == user && !x.screen).map(|x| &x.stream)));
+        v.remote.with(|r| attach(&e, r.iter().find(|x| x.user == user && x.feed == Feed::Mic).map(|x| &x.stream)));
     });
     view! { <audio node_ref=el autoplay prop:muted=move || v.deaf.get()></audio> }
 }
