@@ -420,6 +420,8 @@ test('audit-H7 clavier seul : filtres, bouton « Voir les changements » et « C
   // Aucun piège : Tab continue jusqu'à la fin de la fenêtre.
   await settings(page).getByRole('button', { name: 'Réinitialiser' }).click();
   await expect(rows(page)).toHaveCount(50);
+  // Après « Réinitialiser », le focus revient au filtre au bout de 60 ms : on l'attend avant de le reprendre.
+  await expect(action).toBeFocused();
   await settings(page).getByRole('button', { name: 'Charger plus' }).focus();
   await page.keyboard.press('Space');
   await expect(rows(page)).toHaveCount(54);
