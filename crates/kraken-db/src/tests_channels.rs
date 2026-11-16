@@ -15,7 +15,7 @@ async fn user(db: &Db, name: &str) -> User {
 
 /// Un serveur à `owner` avec `others` dedans ; rend son état.
 async fn guild_with(db: &Db, owner: &User, others: &[&User]) -> GuildState {
-    let g = db.create_guild(owner.id, "Abysse").await.unwrap();
+    let g = db.create_guild(owner.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let inv = db.create_invite(g.guild.id, Some(general), owner.id, 0, None).await.unwrap();
     for u in others {

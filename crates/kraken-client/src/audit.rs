@@ -183,9 +183,11 @@ fn predicate(e: &AuditEntry) -> Vec<Seg> {
                 s.extend([t(" dans le salon "), b(format!("#{c}"))]);
             }
         }
-        "guild_update" => match change(e, "name") {
-            Some(c) => s.extend([t("a renommé le serveur « "), b(&c.before), t(" » en « "), b(&c.after), t(" »")]),
-            None => s.push(t("a modifié le serveur")),
+        "guild_update" => match (change(e, "name"), detail(e, "icon")) {
+            (Some(c), _) => s.extend([t("a renommé le serveur « "), b(&c.before), t(" » en « "), b(&c.after), t(" »")]),
+            (None, Some("removed")) => s.push(t("a retiré l'icône du serveur")),
+            (None, Some(_)) => s.push(t("a changé l'icône du serveur")),
+            (None, None) => s.push(t("a modifié le serveur")),
         },
         other => s.extend([t("a effectué une action que cette version ne connaît pas ("), b(other), t(")")]),
     }

@@ -93,7 +93,7 @@ test('audit-H1 l’onglet n’existe que pour qui peut lire le journal ; l’API
 
   // Le propriétaire : l'onglet vient juste après « Bannis ».
   await open(owner.page, gid);
-  await expect(nav(owner.page)).toHaveText(['Rôles', 'Salons', 'Emojis', 'Invitations', 'Bannis', "Journal d'audit", 'Propriété']);
+  await expect(nav(owner.page)).toHaveText(["Vue d'ensemble", 'Rôles', 'Salons', 'Emojis', 'Invitations', 'Bannis', "Journal d'audit", 'Propriété']);
   await expect(nav(owner.page).filter({ hasText: "Journal d'audit" })).toHaveAttribute('aria-current', 'page');
   await a11y(owner.page);
 
@@ -420,6 +420,8 @@ test('audit-H7 clavier seul : filtres, bouton « Voir les changements » et « C
   // Aucun piège : Tab continue jusqu'à la fin de la fenêtre.
   await settings(page).getByRole('button', { name: 'Réinitialiser' }).click();
   await expect(rows(page)).toHaveCount(50);
+  // Après « Réinitialiser », le focus revient au filtre au bout de 60 ms : on l'attend avant de le reprendre.
+  await expect(action).toBeFocused();
   await settings(page).getByRole('button', { name: 'Charger plus' }).focus();
   await page.keyboard.press('Space');
   await expect(rows(page)).toHaveCount(54);

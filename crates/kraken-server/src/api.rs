@@ -62,7 +62,7 @@ pub async fn create_guild(
     auth: Auth,
     Json(req): Json<CreateGuild>,
 ) -> ApiResult<(StatusCode, Json<GuildState>)> {
-    let g = state.db.create_guild(auth.user.id, &req.name).await?;
+    let g = state.db.create_guild(auth.user.id, &req.name, req.template.as_deref()).await?;
     state.hub.send(&[auth.user.id], Event::GuildCreate(Box::new(g.clone())));
     Ok((StatusCode::CREATED, Json(g)))
 }

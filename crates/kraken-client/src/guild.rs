@@ -105,7 +105,8 @@ pub(crate) const CATEGORIES: &[(&str, &[Perm])] = &[
 /// Droits sensibles : une icône d'alerte, en plus de leur phrase.
 pub(crate) const SENSITIVE: [u64; 4] = [perms::ADMINISTRATOR, perms::BAN, perms::MANAGE_ROLES, perms::MANAGE_CHANNELS];
 
-const SECTIONS: [(&str, &str); 7] = [
+const SECTIONS: [(&str, &str); 8] = [
+    ("overview", "Vue d'ensemble"),
     ("roles", "Rôles"),
     ("channels", "Salons"),
     ("emojis", "Emojis"),
@@ -127,6 +128,8 @@ fn allowed(guild: Id) -> Vec<&'static str> {
         .iter()
         .map(|(slug, _)| *slug)
         .filter(|slug| match *slug {
+            // Le nom et l'icône : « Gérer le serveur » (le propriétaire l'a toujours).
+            "overview" => p & perms::MANAGE_GUILD != 0 || owner,
             "roles" => p & perms::MANAGE_ROLES != 0,
             "channels" => p & perms::MANAGE_CHANNELS != 0,
             "emojis" => p & perms::MANAGE_EMOJIS != 0 || admin,
@@ -214,6 +217,7 @@ pub fn GuildSettings() -> impl IntoView {
                             };
                         }
                         match section.get() {
+                            "overview" => view! { <crate::overview::Overview guild=g/> }.into_any(),
                             "roles" => view! { <Roles guild=g/> }.into_any(),
                             "channels" => view! { <crate::channels::ChannelsAdmin guild=g/> }.into_any(),
                             "emojis" => view! { <crate::emoji_settings::EmojiSettings guild=g/> }.into_any(),

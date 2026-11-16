@@ -15,7 +15,7 @@ async fn user(db: &Db, name: &str) -> User {
 
 /// Un serveur à `owner` avec `others` dedans ; rend son état et l'id de #général.
 async fn guild_with(db: &Db, owner: &User, others: &[&User]) -> (GuildState, Id) {
-    let g = db.create_guild(owner.id, "Abysse").await.unwrap();
+    let g = db.create_guild(owner.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let inv = db.create_invite(g.guild.id, Some(general), owner.id, 0, None).await.unwrap();
     for u in others {
@@ -228,7 +228,7 @@ async fn deleting_a_guild_is_for_its_owner_who_retypes_the_name_and_takes_everyt
     let (g, general) = guild_with(&db, &own, &[&mem]).await;
     let gid = g.guild.id;
     let (other, other_general) = {
-        let og = db.create_guild(own.id, "Récif").await.unwrap();
+        let og = db.create_guild(own.id, "Récif", None).await.unwrap();
         let c = og.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
         db.create_message(c, own.id, "ailleurs", None).await.unwrap();
         (og.guild.id, c)
@@ -686,7 +686,7 @@ async fn a_person_holds_fifty_active_invitations_per_server_at_most(pool: PgPool
     let (own, sam) = (user(&db, "lou").await, user(&db, "sam").await);
     let (g, general) = guild_with(&db, &own, &[&sam]).await;
     let gid = g.guild.id;
-    let other = db.create_guild(sam.id, "Ailleurs").await.unwrap();
+    let other = db.create_guild(sam.id, "Ailleurs", None).await.unwrap();
     let elsewhere = other.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let make = |who: Id| {
         let db = db.clone();

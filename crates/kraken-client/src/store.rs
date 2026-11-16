@@ -142,6 +142,9 @@ pub struct Store {
     pub statuses: RwSignal<HashMap<Id, Status>>,
     /// La carte de profil ouverte, s'il y en a une : qui, et dans quel serveur (ses rôles).
     pub card: RwSignal<Option<ProfileTarget>>,
+    /// Une information sans urgence à montrer en haut de la zone principale (« le serveur est créé, mais son
+    /// icône n'est pas partie »), jusqu'à ce qu'on la ferme.
+    pub notice: RwSignal<Option<String>>,
 }
 
 /// La personne dont on ouvre la carte, et le serveur d'où on la regarde (ses rôles, depuis quand
@@ -182,6 +185,7 @@ impl Store {
             presence: RwSignal::new(Presence::Online),
             statuses: RwSignal::new(HashMap::new()),
             card: RwSignal::new(None),
+            notice: RwSignal::new(None),
         }
     }
 
@@ -213,6 +217,7 @@ impl Store {
         self.presence.set(Presence::Online);
         self.statuses.set(HashMap::new());
         self.card.set(None);
+        self.notice.set(None);
         crate::switcher::forget_recents();
     }
 
@@ -273,6 +278,11 @@ impl Store {
         self.guilds
             .with(|gs| gs.iter().flat_map(|g| &g.channels).find(|c| c.id == id).cloned())
             .or_else(|| self.dms.with(|d| d.iter().find(|c| c.id == id).cloned()))
+    }
+
+    /// Remplace nom et icône d'un serveur (réponse de l'API ou événement `GUILD_UPDATE`).
+    pub fn update_guild(&self, g: Guild) {
+        self.in_guild(g.id, |x| x.guild = g);
     }
 
     pub fn upsert_guild(&self, g: GuildState) {
@@ -634,6 +644,7 @@ impl Store {
             Event::RelationshipAdd(r) | Event::RelationshipUpdate(r) => self.upsert_rel(r),
             Event::RelationshipRemove { user_id } => self.remove_rel(user_id),
             Event::GuildCreate(g) => self.upsert_guild(*g),
+            Event::GuildUpdate(g) => self.update_guild(g),
             Event::UserUpdate(u) => self.update_user(u),
             Event::PresenceUpdate { presences } => self.set_statuses(presences),
             Event::MyPresenceUpdate { presence } => self.presence.set(presence),

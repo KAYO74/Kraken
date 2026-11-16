@@ -26,7 +26,7 @@ async fn accounts_are_unique_and_valid(pool: PgPool) {
 async fn outsiders_see_nothing(pool: PgPool) {
     let db = Db::from_pool(pool);
     let (a, b) = two_users(&db).await;
-    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let g = db.create_guild(a.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     db.create_message(general, a.id, "secret", None).await.unwrap();
 
@@ -41,7 +41,7 @@ async fn outsiders_see_nothing(pool: PgPool) {
 async fn invites_messages_and_private_channels(pool: PgPool) {
     let db = Db::from_pool(pool);
     let (a, b) = two_users(&db).await;
-    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let g = db.create_guild(a.id, "Abysse", None).await.unwrap();
     let gid = g.guild.id;
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
 
@@ -117,8 +117,8 @@ async fn sessions_tokens_and_deletion(pool: PgPool) {
 
     // Un propriétaire peut partir : son serveur vide disparaît, l'autre passe au plus ancien membre.
     let c = db.create_user("noa", "noa@example.org", "h".into()).await.unwrap();
-    let solo = db.create_guild(b.id, "Récif").await.unwrap().guild.id;
-    let shared = db.create_guild(b.id, "Lagon").await.unwrap().guild.id;
+    let solo = db.create_guild(b.id, "Récif", None).await.unwrap().guild.id;
+    let shared = db.create_guild(b.id, "Lagon", None).await.unwrap().guild.id;
     let inv = db.create_invite(shared, None, b.id, 0, None).await.unwrap();
     db.use_invite(&inv.code, a.id).await.unwrap();
     db.use_invite(&inv.code, c.id).await.unwrap();
@@ -129,7 +129,7 @@ async fn sessions_tokens_and_deletion(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(owners, vec![(shared, a.id)]);
-    assert_eq!(db.create_guild(b.id, "Trop tard").await.err(), Some(DbError::NotFound), "compte fermé");
+    assert_eq!(db.create_guild(b.id, "Trop tard", None).await.err(), Some(DbError::NotFound), "compte fermé");
 
     db.create_session(a.id, b"t3", "web", "web").await.unwrap();
     db.request_deletion(a.id).await.unwrap();
@@ -179,7 +179,7 @@ async fn seed_is_idempotent(pool: PgPool) {
 async fn odd_inputs_and_races(pool: PgPool) {
     let db = Db::from_pool(pool);
     let (a, b) = two_users(&db).await;
-    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let g = db.create_guild(a.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     // Un caractère nul est une valeur refusée, pas une erreur du serveur.
     assert_eq!(db.create_message(general, a.id, "a\0b", None).await.err(), Some(DbError::Invalid("value")));
@@ -207,7 +207,7 @@ async fn edit_delete_reply_react_and_mention(pool: PgPool) {
     let db = Db::from_pool(pool);
     let (a, b) = two_users(&db).await;
     let outsider = db.create_user("noa", "noa@example.org", "h".into()).await.unwrap();
-    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let g = db.create_guild(a.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let inv = db.create_invite(g.guild.id, Some(general), a.id, 0, None).await.unwrap();
     db.use_invite(&inv.code, b.id).await.unwrap();
@@ -443,7 +443,7 @@ async fn unread_and_mention_counts(pool: PgPool) {
     let db = Db::from_pool(pool);
     let (a, b) = two_users(&db).await;
     let c = db.create_user("noa", "noa@example.org", "h".into()).await.unwrap();
-    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let g = db.create_guild(a.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let inv = db.create_invite(g.guild.id, Some(general), a.id, 0, None).await.unwrap();
     db.use_invite(&inv.code, b.id).await.unwrap();
@@ -524,7 +524,7 @@ async fn unread_and_mention_counts(pool: PgPool) {
 async fn private_messages_all_count_and_settings_persist(pool: PgPool) {
     let db = Db::from_pool(pool);
     let (a, b) = two_users(&db).await;
-    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let g = db.create_guild(a.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let inv = db.create_invite(g.guild.id, Some(general), a.id, 0, None).await.unwrap();
     db.use_invite(&inv.code, b.id).await.unwrap();
@@ -575,7 +575,7 @@ async fn private_messages_all_count_and_settings_persist(pool: PgPool) {
 async fn attachments_belong_to_their_author_and_channel_and_leave_with_the_message(pool: PgPool) {
     let db = Db::from_pool(pool);
     let (a, b) = two_users(&db).await;
-    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let g = db.create_guild(a.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let other = db
         .create_channel(
@@ -658,7 +658,7 @@ async fn attachments_belong_to_their_author_and_channel_and_leave_with_the_messa
 async fn two_sends_of_the_same_file_leave_one_message(pool: PgPool) {
     let db = Db::from_pool(pool);
     let (a, _) = two_users(&db).await;
-    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let g = db.create_guild(a.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     for round in 0..10 {
         let key: &'static str = Box::leak(format!("race{round}").into_boxed_str());
@@ -698,7 +698,7 @@ async fn two_sends_of_the_same_file_leave_one_message(pool: PgPool) {
 async fn account_purge_returns_uploaded_files(pool: PgPool) {
     let db = Db::from_pool(pool);
     let (a, b) = two_users(&db).await;
-    let g = db.create_guild(a.id, "Abysse").await.unwrap();
+    let g = db.create_guild(a.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     for (who, key) in [(a.id, "ka"), (b.id, "kb")] {
         db.create_attachment(NewAttachment {
@@ -734,7 +734,7 @@ async fn user(db: &Db, name: &str) -> User {
 
 /// Un serveur à `owner`, avec `others` dedans.
 async fn guild_with(db: &Db, owner: &User, others: &[&User]) -> Id {
-    let g = db.create_guild(owner.id, "Abysse").await.unwrap();
+    let g = db.create_guild(owner.id, "Abysse", None).await.unwrap();
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let inv = db.create_invite(g.guild.id, Some(general), owner.id, 0, None).await.unwrap();
     for u in others {
@@ -908,7 +908,7 @@ async fn kick_ban_unban_and_rejoin(pool: PgPool) {
     let db = Db::from_pool(pool);
     let (own, a) = two_users(&db).await;
     let b = user(&db, "bob").await;
-    let g = db.create_guild(own.id, "Abysse").await.unwrap();
+    let g = db.create_guild(own.id, "Abysse", None).await.unwrap();
     let gid = g.guild.id;
     let general = g.channels.iter().find(|c| c.kind == ChannelKind::Text).unwrap().id;
     let inv = db.create_invite(gid, Some(general), own.id, 0, None).await.unwrap();

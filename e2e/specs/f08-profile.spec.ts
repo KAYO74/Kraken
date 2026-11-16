@@ -17,7 +17,7 @@ test('F08-H1 changer son nom affiché : partout, en direct, @pseudo dessous', as
   await expect(field).toHaveAttribute('placeholder', a.name);
   await field.fill('Pablo des grands fonds 🐙');
   await a.page.getByRole('button', { name: 'Enregistrer' }).click();
-  await expect(a.page.getByRole('status')).toHaveText('Profil enregistré.');
+  await expect(a.page.getByRole('status').filter({ hasText: 'Profil enregistré.' })).toHaveText('Profil enregistré.');
   await expect(a.page.getByText(`@${a.name}`).first()).toBeVisible();
   await a.page.reload();
   await expect(a.page.getByLabel('Nom affiché')).toHaveValue('Pablo des grands fonds 🐙');
@@ -42,7 +42,7 @@ test('F08-E1 nom vide : retour au pseudo unique', async ({ user }) => {
   const field = page.getByLabel('Nom affiché');
   await field.fill('Rita');
   await page.getByRole('button', { name: 'Enregistrer' }).click();
-  await expect(page.getByRole('status')).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Profil enregistré.' })).toBeVisible();
   await field.fill('   ');
   await page.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(field).toHaveValue('');

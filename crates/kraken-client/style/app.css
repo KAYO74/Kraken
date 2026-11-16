@@ -320,6 +320,7 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-auth-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4);
   padding: var(--space-5) var(--space-7); background: var(--surface); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
 .app-invite-head { display: grid; justify-items: center; gap: var(--space-2); text-align: center; }
+.k-dialog > .app-invite-head { padding-bottom: var(--space-5); }
 .app-dialog-wide { width: min(var(--size-dialog-wide), var(--vw) - var(--space-8)); }
 .k-dialog > form > div { display: grid; gap: var(--space-5); padding: var(--space-5) var(--space-7); color: var(--text-secondary); }
 .k-dialog > form > footer { display: flex; justify-content: flex-end; gap: var(--space-3); padding: var(--space-5) var(--space-7); background: var(--surface); }
@@ -978,3 +979,84 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 .app-keys dt { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .app-keys dd { margin: 0; flex: none; display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-3); }
 .app-keys-or { color: var(--text-muted); font-size: var(--text-sm-size); }
+
+/* Icône d'un serveur (ui.rs `GuildIcon`) : dans le rail, l'image remplit la tuile ; une animation y reste fixe (copie de sa
+   première image, voir --live / --still plus haut). Réglages › Vue d'ensemble et page « Crée ton serveur » : un aperçu carré
+   de 96 px (animé tant que le mouvement n'est pas réduit), les mêmes boutons que la photo de profil, et une zone de dépôt. */
+.k-server img:not(.k-live) { display: block; }
+.k-server img { width: 100%; height: 100%; border-radius: calc(var(--radius-md) - 1px); object-fit: cover; }
+.k-server img[data-probing] { opacity: 0; }
+.app-gicon-edit { position: relative; }
+/* Une règle courte à côté de l'aperçu, pas une ligne qui pousse les boutons sous lui. */
+.app-gicon-edit .app-avatar-side p { max-width: 40ch; }
+.app-gicon-preview { position: relative; display: grid; place-items: center; flex: none; overflow: hidden;
+  width: calc(var(--space-10) * 2); height: calc(var(--space-10) * 2); border-radius: var(--radius-lg); background: var(--control);
+  color: var(--text-strong); font-size: var(--text-2xl-size); font-weight: var(--weight-semibold); }
+.app-gicon-preview img:not(.k-live) { display: block; }
+.app-gicon-preview img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+.app-gicon-preview img[data-probing] { opacity: 0; }
+:root:not([data-motion="reduce"]) .app-gicon-preview { --live: block; --still: hidden; }
+.app-gicon-canvas { display: block; width: calc(var(--space-10) * 2); height: calc(var(--space-10) * 2); border-radius: var(--radius-lg); background: var(--media); }
+.app-gicon-canvas--rail { width: var(--size-server-icon); height: var(--size-server-icon); border-radius: var(--radius-md); }
+.app-gicon-drop { display: none; position: absolute; inset: 0; z-index: var(--z-sticky); align-items: center; justify-content: center; gap: var(--space-3);
+  border: var(--space-1) dashed var(--accent-text); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--accent-soft) 85%, transparent);
+  color: var(--accent-text); font-weight: var(--weight-semibold); pointer-events: none; }
+.app-gicon-edit[data-over] .app-gicon-drop { display: flex; }
+
+/* Réglages › Vue d'ensemble */
+.app-overview { display: grid; gap: var(--space-8); }
+.app-ov-sec { display: grid; gap: var(--space-4); min-width: 0; }
+.app-ov-h { margin: 0; font-size: var(--text-base-size); font-weight: var(--weight-semibold); color: var(--text-strong); }
+.app-ov-h .app-hint { display: inline; font-weight: var(--weight-regular); }
+.app-ov-name { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4); }
+.app-ov-name .k-field { flex: 1 1 16rem; min-width: 0; }
+.app-ov-note { margin: 0; min-height: var(--text-sm-line); }
+
+/* Page « Crée ton serveur » : les modèles en cartes (boutons radio natifs, flèches entre les cartes), la liste de ce qui sera
+   créé, le nom, l'icône facultative ; en dessous, rejoindre avec une invitation. 3 colonnes, 2 de 640 à 1023 px, 1 en dessous. */
+.app-ng > * { max-width: calc(var(--size-settings-content) + 2 * var(--space-10)); margin-inline: auto; width: 100%; }
+.app-ng { display: grid; align-content: start; gap: var(--space-8); }
+.app-ng-form { display: grid; gap: var(--space-7); min-width: 0; }
+.app-ng-sec { display: grid; gap: var(--space-4); min-width: 0; }
+.app-tpls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+.app-tpl { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--space-4);
+  min-height: var(--space-10); padding: var(--space-5); border-radius: var(--radius-lg); border: var(--size-focus) solid var(--border-strong);
+  background: var(--surface-raised); color: var(--text-secondary); cursor: pointer;
+  transition: background var(--motion-fast), border-color var(--motion-fast); }
+.app-tpl:hover { background: var(--surface-hover); }
+.app-tpl[data-checked] { border-color: var(--accent); background: var(--accent-soft); }
+.app-tpl:has(input:focus-visible) { outline: calc(var(--size-focus) + 1px) solid var(--accent-text); outline-offset: var(--space-1); }
+.app-tpl-icon { display: grid; place-items: center; width: var(--space-8); height: var(--space-8); border-radius: var(--radius-md); background: var(--control); color: var(--text-strong); }
+.app-tpl[data-checked] .app-tpl-icon { background: var(--accent); color: var(--on-accent); }
+.app-tpl-body { display: grid; gap: var(--space-1); min-width: 0; padding-right: var(--space-6); }
+.app-tpl-body b { color: var(--text-strong); font-weight: var(--weight-semibold); }
+.app-tpl-body span { font-size: var(--text-sm-size); color: var(--text-secondary); }
+.app-tpl-check { display: none; position: absolute; top: var(--space-4); right: var(--space-4); place-items: center; width: var(--space-6); height: var(--space-6);
+  border-radius: var(--radius-pill); background: var(--accent); color: var(--on-accent); }
+.app-tpl[data-checked] .app-tpl-check { display: grid; }
+.app-ng-made { display: grid; gap: var(--space-2); }
+.app-ng-made p { margin: 0; }
+.app-ng-made ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); }
+.app-ng-made li { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: var(--text-sm-size); }
+.app-ng-made li .k-icon { color: var(--text-muted); }
+.app-ng-error { margin: 0; }
+.app-ng-error .k-btn { margin-left: auto; }
+.app-ng-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--space-4); }
+.app-ng-status { margin: 0; min-height: var(--text-sm-line); text-align: right; }
+.app-ng-join { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4); padding-top: var(--space-6); border-top: 1px solid var(--border); }
+.app-ng-join .k-field { flex: 1 1 16rem; min-width: 0; }
+/* Cartes en colonnes : l'icône au-dessus du texte, qui garde ainsi toute la largeur de la carte. */
+@media (min-width: 640px) {
+  .app-tpl { grid-template-columns: minmax(0, 1fr); align-content: start; }
+  .app-tpl-body { padding-right: 0; }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  .app-tpls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 639px) {
+  .app-tpls { grid-template-columns: minmax(0, 1fr); }
+  .app-ng-actions > .k-btn, .app-ng-join > .k-btn { flex: 1 1 auto; justify-content: center; }
+  .app-ng .app-avatar-edit { flex-direction: column; align-items: flex-start; }
+  .app-ng .app-avatar-side { align-self: stretch; }
+  .app-ng .app-avatar-actions > .k-btn { flex: 1 1 auto; justify-content: center; }
+}

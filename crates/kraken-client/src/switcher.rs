@@ -19,7 +19,7 @@ use crate::icons::{Icon, lu};
 use crate::shell::{current_ids, ordered};
 use crate::shortcuts::{self, Action};
 use crate::store::{Store, store};
-use crate::ui::{Avatar, initials, modal, tint, trap_tab};
+use crate::ui::{Avatar, GuildIcon, initials, modal, tint, trap_tab};
 use crate::unread::{MentionBadge, UnreadText};
 
 const RECENTS_KEY: &str = "kraken.recents";
@@ -149,6 +149,8 @@ enum Lead {
     Glyph(Glyph),
     Person(User),
     Initials(Id, String),
+    /// Un serveur : son icône, ou ses initiales.
+    Guild(Guild),
 }
 
 #[derive(Clone, PartialEq)]
@@ -251,7 +253,7 @@ fn server_entry(g: &Guild) -> Entry {
         name: g.name.clone(),
         detail: String::new(),
         kind: "Serveur",
-        lead: Lead::Initials(g.id, initials(&g.name)),
+        lead: Lead::Guild(g.clone()),
         texts: vec![g.name.clone()],
     }
 }
@@ -431,6 +433,7 @@ fn option_view(
         Lead::Initials(id, text) => {
             view! { <span class="k-avatar k-avatar--sm" data-tint=tint(id) aria-hidden="true">{text}</span> }.into_any()
         }
+        Lead::Guild(g) => view! { <GuildIcon guild=g size="sm" tinted=true cap=64/> }.into_any(),
     };
     let name = search::segments(&e.name, &ranges)
         .into_iter()

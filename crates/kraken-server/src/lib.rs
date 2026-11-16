@@ -13,6 +13,7 @@ mod emoji;
 mod error;
 mod fetch;
 mod gateway;
+mod guild;
 mod jobs;
 mod limit;
 mod media;
@@ -257,6 +258,12 @@ pub fn app(state: AppState) -> Router {
         limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(emoji::WRITES_PER_MIN)),
         limit::check,
     );
+    // Nom et icône d'un serveur : un envoi coûte un décodage d'image, chaque changement est diffusé à tout le
+    // serveur ; même limite pour les trois, compteur à part, un peu plus large qu'une connexion.
+    let guild_limit = axum::middleware::from_fn_with_state(
+        limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(guild::WRITES_PER_MIN)),
+        limit::check,
+    );
     // Journal d'audit : une page lit jusqu'à 100 lignes et leurs noms ; compteur à part, plus large qu'une connexion.
     let audit_limit = axum::middleware::from_fn_with_state(
         limit::Limiter::per_minute(&state.cfg, state.cfg.auth_per_min.max(kraken_proto::AUDIT_READS_PER_MIN)),
@@ -313,7 +320,9 @@ pub fn app(state: AppState) -> Router {
         .route("/guilds/{id}/audit-log", get(audit::list).route_layer(audit_limit))
         .route("/users/@me/emojis", get(emoji::mine))
         .route("/emojis/{eid}/image", get(emoji::image))
+        .route("/guilds/{id}/icon", put(guild::set_icon).delete(guild::remove_icon).route_layer(guild_limit.clone()))
         .route("/avatars/{key}", get(avatar::get))
+        .route("/guild-icons/{key}", get(avatar::get))
         .route("/banners/{key}", get(avatar::get))
         .route("/voice", delete(voice::leave))
         .route("/health", get(api::health))
@@ -323,7 +332,10 @@ pub fn app(state: AppState) -> Router {
         .route("/users/@me", get(auth::me))
         .route("/users/@me/account", get(auth::account))
         .route("/guilds", post(api::create_guild))
-        .route("/guilds/{id}", get(api::guild).delete(moderation::delete_guild))
+        .route(
+            "/guilds/{id}",
+            get(api::guild).delete(moderation::delete_guild).merge(patch(guild::rename).route_layer(guild_limit)),
+        )
         .route("/guilds/{id}/invites", get(api::guild_invites))
         .route("/guilds/{id}/members/{uid}/timeout", put(moderation::timeout).delete(moderation::lift_timeout))
         .route("/guilds/{id}/channels", get(api::guild_channels).post(channels::create))

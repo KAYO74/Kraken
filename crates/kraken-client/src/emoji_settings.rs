@@ -77,7 +77,7 @@ fn full() -> String {
 
 /// Une adresse temporaire pour ces octets (aperçu), à libérer avec `revoke_object_url`. Le navigateur
 /// reconnaît l'image à ses octets : pas besoin de lui dire son type.
-fn blob_url(bytes: &[u8]) -> Option<String> {
+pub(crate) fn blob_url(bytes: &[u8]) -> Option<String> {
     let parts = js_sys::Array::of1(&js_sys::Uint8Array::from(bytes));
     let blob = web_sys::Blob::new_with_u8_array_sequence(&parts).ok()?;
     web_sys::Url::create_object_url_with_blob(&blob).ok()
