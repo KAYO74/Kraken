@@ -178,7 +178,7 @@ pub fn CreateChannelDialog(
                         </fieldset>
                         <div class="k-field">
                             <label class="k-label" for="cc-name">{label}</label>
-                            <input id="cc-name" class="k-input" node_ref=input maxlength=MAX_CHANNEL_NAME.to_string() autocomplete="off" autofocus
+                            <input dir="auto" id="cc-name" class="k-input" node_ref=input maxlength=MAX_CHANNEL_NAME.to_string() autocomplete="off" autofocus
                                 placeholder=placeholder prop:value=move || name.get() on:input=move |e| name.set(event_target_value(&e))
                                 aria-describedby="cc-h" aria-invalid=move || error.get().is_some().then_some("true")/>
                             <p class="k-hint" id="cc-h">{help}</p>
@@ -563,7 +563,7 @@ fn Overview(guild: Id, channel: Id) -> impl IntoView {
             <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
             <div class="k-field">
                 <label class="k-label" for="chan-name">{if category { t("Nom de la catégorie") } else { t("Nom du salon") }}</label>
-                <input id="chan-name" class="k-input" node_ref=name_input maxlength=MAX_CHANNEL_NAME.to_string() autocomplete="off"
+                <input dir="auto" id="chan-name" class="k-input" node_ref=name_input maxlength=MAX_CHANNEL_NAME.to_string() autocomplete="off"
                     prop:value=move || name.get() on:input=move |e| name.set(event_target_value(&e))
                     aria-describedby="chan-name-h" aria-invalid=move || error.get().is_some().then_some("true")/>
                 <p class="k-hint" id="chan-name-h">{if writable {
@@ -575,7 +575,7 @@ fn Overview(guild: Id, channel: Id) -> impl IntoView {
             {writable.then(|| view! {
                 <div class="k-field">
                     <label class="k-label" for="chan-topic">{t("Sujet du salon")}</label>
-                    <textarea id="chan-topic" class="k-input app-textarea" rows="3" maxlength=MAX_TOPIC.to_string()
+                    <textarea dir="auto" id="chan-topic" class="k-input app-textarea" rows="3" maxlength=MAX_TOPIC.to_string()
                         aria-describedby="chan-topic-h"
                         prop:value=move || topic.get() on:input=move |e| topic.set(event_target_value(&e))></textarea>
                     <p class="k-hint" id="chan-topic-h">{t("Une ligne sur ce qui se dit ici : elle s'affiche dans l'en-tête du salon.")}</p>

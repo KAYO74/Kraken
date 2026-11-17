@@ -576,9 +576,11 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>, drafts: Draft
     let keys = move |e: leptos::ev::KeyboardEvent| {
         let i = ROLE_TABS.iter().position(|x| x.0 == tab.get_untracked()).unwrap_or(0);
         let n = ROLE_TABS.len();
+        // Les onglets se suivent de droite à gauche en RTL : la flèche droite revient en arrière (sens lu à l'événement).
+        let forward = if crate::i18n::is_rtl() { "ArrowLeft" } else { "ArrowRight" };
         let next = match e.key().as_str() {
-            "ArrowRight" => (i + 1) % n,
-            "ArrowLeft" => (i + n - 1) % n,
+            k if k == forward => (i + 1) % n,
+            "ArrowRight" | "ArrowLeft" => (i + n - 1) % n,
             "Home" => 0,
             "End" => n - 1,
             _ => return,
@@ -649,7 +651,7 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>, drafts: Draft
         view! {
             <div class="k-field">
                 <label class="k-label" for="role-name">{t("Nom du rôle")}</label>
-                <input id="role-name" class="k-input" maxlength="100" autocomplete="off" disabled=move || !editable()
+                <input dir="auto" id="role-name" class="k-input" maxlength="100" autocomplete="off" disabled=move || !editable()
                     prop:value=move || draft.get().map(|d| d.name).unwrap_or_default()
                     on:input=move |e| { let v = event_target_value(&e); edit(drafts, guild, role, |d| d.name = v) }/>
             </div>
@@ -757,7 +759,7 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>, drafts: Draft
                     RoleTab::Permissions => view! {
                         <div class="k-search app-search">
                             <Icon icon=lu::LuSearch/>
-                            <input class="k-input" type="search" placeholder=t("Chercher un droit") aria-label=t("Chercher un droit")
+                            <input dir="auto" class="k-input" type="search" placeholder=t("Chercher un droit") aria-label=t("Chercher un droit")
                                 prop:value=move || query.get() on:input=move |e| query.set(event_target_value(&e))/>
                         </div>
                         {permissions()}
@@ -847,7 +849,7 @@ fn RoleMembers(guild: Id, role: Id, editable: Signal<bool>) -> impl IntoView {
                     view! {
                         <li class="k-dm">
                             <Avatar user=m.user.clone() size="md"/>
-                            <div class="app-ellipsis">{name.clone()}<small>{format!("@{}", m.user.username)}</small></div>
+                            <div class="app-ellipsis">{name.clone()}<small><bdi dir="ltr">{format!("@{}", m.user.username)}</bdi></small></div>
                             <button class="k-btn k-btn--sm" aria-label=tf("Retirer {nom} de ce rôle", &[("nom", &name)]) disabled=move || !can()
                                 on:click=move |_| set(uid, false)>{t("Retirer")}</button>
                         </li>
@@ -1116,7 +1118,7 @@ fn Bans(guild: Id) -> impl IntoView {
                             <Avatar user=b.user.clone() size="md"/>
                             <div>
                                 <b>{name.clone()}</b>
-                                <small>{format!("@{} · {}", b.user.username, when(b.created_at))}</small>
+                                <small><bdi dir="ltr">{format!("@{} · {}", b.user.username, when(b.created_at))}</bdi></small>
                                 <small class="app-ban-reason">{b.reason.clone().map(|r| tf("Raison : {raison}", &[("raison", &r)])).unwrap_or_else(|| t("Aucune raison donnée"))}</small>
                             </div>
                             <button class="k-btn" aria-label=tf("Lever le bannissement de {nom}", &[("nom", &name)]) on:click=move |_| unban(uid)>{t("Lever le bannissement")}</button>
@@ -1236,7 +1238,7 @@ fn DeleteGuildDialog(guild: Id, close: Callback<()>) -> impl IntoView {
                         </div>
                         <div class="k-field">
                             <label class="k-label" for="dg-name">{t("Tape le nom du serveur")}</label>
-                            <input id="dg-name" class="k-input" autocomplete="off" spellcheck="false" aria-describedby="dg-hint"
+                            <input dir="auto" id="dg-name" class="k-input" autocomplete="off" spellcheck="false" aria-describedby="dg-hint"
                                 prop:value=move || typed.get() on:input=move |e| typed.set(event_target_value(&e))/>
                             <small id="dg-hint" class="app-hint app-wrap">{tf("Pour confirmer, retape : {nom}", &[("nom", &name)])}</small>
                         </div>
@@ -1325,7 +1327,7 @@ pub fn TimeoutDialog(guild: Id, user: User, close: Callback<()>) -> impl IntoVie
                         </fieldset>
                         <div class="k-field">
                             <label class="k-label" for="to-reason">{t("Raison (facultatif)")}</label>
-                            <input id="to-reason" class="k-input" maxlength=MAX_REASON autocomplete="off"
+                            <input dir="auto" id="to-reason" class="k-input" maxlength=MAX_REASON autocomplete="off"
                                 prop:value=move || reason.get() on:input=move |e| reason.set(event_target_value(&e))/>
                         </div>
                         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>

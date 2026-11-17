@@ -105,7 +105,7 @@ pub fn Overview(guild: Id) -> impl IntoView {
                 <form class="app-ov-name" on:submit=save>
                     <label class="k-field">
                         <span class="k-label">{t("Nom du serveur")}</span>
-                        <input class="k-input" required minlength="2" maxlength="100" bind:value=draft
+                        <input dir="auto" class="k-input" required minlength="2" maxlength="100" bind:value=draft
                             on:input=move |_| { on_action.run(()); name_error.set(None); }
                             aria-invalid=move || name_error.get().is_some().then_some("true") aria-describedby="ov-name-err"/>
                     </label>

@@ -224,7 +224,7 @@ pub fn CreateGuild() -> impl IntoView {
                 <section class="app-ng-sec">
                     <label class="k-field">
                         <span class="k-label">{t("Nom du serveur")}</span>
-                        <input class="k-input" required minlength="2" maxlength="100" bind:value=name
+                        <input dir="auto" class="k-input" required minlength="2" maxlength="100" bind:value=name
                             node_ref=name_input on:input=move |_| typed.set(true)
                             aria-invalid=move || (error.get().is_some() && name_error.get()).then_some("true")
                             aria-describedby=move || (error.get().is_some() && name_error.get()).then_some("ng-err")/>
@@ -261,7 +261,7 @@ pub fn CreateGuild() -> impl IntoView {
             <form on:submit=join class="app-ng-join">
                 <label class="k-field">
                     <span class="k-label">{t("Tu as déjà une invitation ?")}</span>
-                    <input class="k-input" placeholder="https://…/invite/AbC123xy" bind:value=code aria-describedby="cj-e"/>
+                    <input dir="ltr" class="k-input" placeholder="https://…/invite/AbC123xy" bind:value=code aria-describedby="cj-e"/>
                     <Show when=move || join_error.get().is_some()>
                         <span class="k-error" id="cj-e" role="alert">{move || join_error.get()}</span>
                     </Show>

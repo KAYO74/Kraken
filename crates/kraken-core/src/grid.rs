@@ -22,6 +22,16 @@ pub enum Move {
 pub const PAGE_ROWS: usize = 5;
 
 impl Move {
+    /// Le même déplacement dans une grille qui se lit de droite à gauche : la flèche gauche va vers la case visuellement à
+    /// gauche, qui vient *après* dans l'ordre du document. Les autres déplacements (haut, bas, début et fin de ligne…) ne changent pas.
+    pub fn mirrored(self) -> Self {
+        match self {
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+            other => other,
+        }
+    }
+
     /// La touche (`KeyboardEvent.key`) et si Ctrl est enfoncé : le déplacement qu'ils demandent.
     pub fn from_key(key: &str, ctrl: bool) -> Option<Self> {
         Some(match (key, ctrl) {
@@ -92,6 +102,15 @@ pub fn cycle(len: usize, at: Option<usize>, forward: bool) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mirrored_swaps_only_left_and_right() {
+        assert_eq!(Move::Left.mirrored(), Move::Right);
+        assert_eq!(Move::Right.mirrored(), Move::Left);
+        for m in [Move::Up, Move::Down, Move::PageUp, Move::PageDown, Move::Home, Move::End, Move::First, Move::Last] {
+            assert_eq!(m.mirrored(), m);
+        }
+    }
 
     #[test]
     fn cycle_wraps_both_ways() {

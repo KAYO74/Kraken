@@ -159,6 +159,8 @@ pub fn EmojiPicker(
             return;
         }
         let Some(mv) = Move::from_key(&e.key(), e.ctrl_key()) else { return };
+        // La grille se lit de droite à gauche en RTL : la flèche gauche va à la case visuellement à gauche (la suivante dans le document).
+        let mv = if crate::i18n::is_rtl() { mv.mirrored() } else { mv };
         let all = cells();
         let target = e.target().and_then(|t| t.dyn_into::<web_sys::Node>().ok());
         let Some(from) = target.and_then(|t| all.iter().position(|c| c.is_same_node(Some(&t)))) else { return };
@@ -198,7 +200,7 @@ pub fn EmojiPicker(
     };
     view! {
         <div class="k-menu app-picker" role="dialog" aria-label=t(title) node_ref=root>
-            <input class="k-input" type="search" placeholder=t("Chercher un emoji") aria-label=t("Chercher un emoji") autofocus bind:value=q
+            <input dir="auto" class="k-input" type="search" placeholder=t("Chercher un emoji") aria-label=t("Chercher un emoji") autofocus bind:value=q
                 on:keydown=move |e: leptos::ev::KeyboardEvent| match crate::shortcuts::is_key(&e).then(|| e.key()).as_deref() {
                     Some("Enter") => {
                         e.prevent_default();

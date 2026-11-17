@@ -570,7 +570,7 @@ fn InviteDialog(guild: Id, close: impl Fn() + Copy + Send + Sync + 'static) -> i
                         Some(Ok(l)) => view! {
                             <label class="k-field">
                                 <span class="k-label">{t("Lien à partager")}</span>
-                                <input class="k-input" readonly value=l.clone() on:focus=|e| { event_target::<web_sys::HtmlInputElement>(&e).select(); }/>
+                                <input dir="ltr" class="k-input" readonly value=l.clone() on:focus=|e| { event_target::<web_sys::HtmlInputElement>(&e).select(); }/>
                             </label>
                             <p class="app-hint">{t("Ce lien n'expire pas. Toute personne qui l'a peut rejoindre.")}</p>
                         }.into_any(),
@@ -705,7 +705,7 @@ fn Me() -> impl IntoView {
                         {move || s.me.get().map(|u| view! { <Avatar user=u size="md" status=dot/> })}
                         <div>
                             <b class="app-ellipsis">{move || s.me.get().map(|u| u.name().to_string()).unwrap_or_default()}</b>
-                            <small class="app-ellipsis">{move || s.me.get().map(|u| format!("@{}", u.username)).unwrap_or_default()}</small>
+                            <small class="app-ellipsis"><bdi dir="ltr">{move || s.me.get().map(|u| format!("@{}", u.username)).unwrap_or_default()}</bdi></small>
                         </div>
                     </header>
                     <p class="k-mecard-state" data-state=move || (s.conn.get() == Conn::Ready).then_some("on")>{state}</p>

@@ -13,7 +13,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
-use kraken_core::i18n::{Catalog, Lang, LangPref, Plural, fill};
+use kraken_core::i18n::{Catalog, Lang, LangPref, Plural, fill, fill_isolated};
 use leptos::prelude::*;
 
 /// Le choix de langue, dans le `localStorage` de l'appareil (jamais envoyé au serveur).
@@ -144,6 +144,37 @@ pub fn init() {
     }
 }
 
+/// La page s'écrit-elle de droite à gauche en ce moment ? Lit `document.documentElement.dir` **à chaque appel** : rien n'est gardé
+/// en mémoire au démarrage, donc un `dir` changé en cours de route (les tests de mise en page, un futur sélecteur de langue sans
+/// rechargement) est suivi à l'événement suivant. À appeler au moment de l'événement ou du rendu, jamais dans un `static`.
+pub fn is_rtl() -> bool {
+    web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.document_element())
+        .and_then(|r| r.get_attribute("dir"))
+        .is_some_and(|d| d.trim().eq_ignore_ascii_case("rtl"))
+}
+
+/// Un texte qui parle d'une flèche du clavier (`Précédente (←)`) : en RTL, la flèche qui revient en arrière pointe vers la droite.
+pub fn mirror_arrows(text: String) -> String {
+    if is_rtl() {
+        text.chars()
+            .map(|c| match c {
+                '←' => '→',
+                '→' => '←',
+                c => c,
+            })
+            .collect()
+    } else {
+        text
+    }
+}
+
+/// [`fill`] ; en RTL, [`fill_isolated`] (les noms et pseudos insérés gardent leur propre sens d'écriture).
+fn fill_here(template: &str, vars: &[(&str, &str)]) -> String {
+    if is_rtl() { fill_isolated(template, vars) } else { fill(template, vars) }
+}
+
 /// La langue de l'interface.
 pub fn lang() -> Lang {
     STATE.with(|s| s.lang)
@@ -168,7 +199,7 @@ pub fn t(key: &str) -> String {
 /// [`t`], puis remplace chaque `{nom}` du gabarit par sa valeur : `tf("{n} événements", &[("n", &n.to_string())])`.
 /// Le gabarit français est la clé ; la traduction garde les mêmes `{noms}`.
 pub fn tf(key: &str, vars: &[(&str, &str)]) -> String {
-    fill(&t(key), vars)
+    fill_here(&t(key), vars)
 }
 
 /// Le gabarit au singulier ou au pluriel selon la règle de la langue, traduit, avec `{n}` remplacé :
@@ -187,7 +218,7 @@ pub fn tnf(one: &str, other: &str, n: impl TryInto<u64>, vars: &[(&str, &str)]) 
     let count = n.to_string();
     let mut all = vec![("n", count.as_str())];
     all.extend_from_slice(vars);
-    fill(&t(key), &all)
+    fill_here(&t(key), &all)
 }
 
 /// Une durée courte (« 5 min », « 1 h 30 », « 2 jours ») dans la langue de l'interface.
