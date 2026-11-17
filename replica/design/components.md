@@ -24,6 +24,7 @@ python3 replica/design/tokens.py        # régénère tokens.css + rapport de co
 - **Thèmes** : `dark` (défaut, mesuré), `light` et `black` (déduits, non capturés), `auto` suit le système. Le contraste élevé n'est pas un 4e thème mais un jeu de couleurs par thème (`contrast.high` dans `tokens.json`, posé par `data-contrast="high"`).
 - **Police** : Inter (OFL), repli Noto Sans puis système ; mono JetBrains Mono (OFL). Embarquées dans le client, jamais via CDN. L'original utilise une police propriétaire.
 - **Icônes** : Lucide (ISC), via le crate `icondata` côté Leptos. Les SVG de la galerie sont des tracés simples écrits à la main.
+- **Droit-à-gauche** : `components.css` et `app.css` n'emploient que des propriétés logiques (`margin-inline-start`, `inset-inline-end`, `text-align: start`…), gardées par `scripts/css-logical-check.py`. `--flip` (1, ou -1 sous `[dir="rtl"]`) pour ce qui se décale (tiroir, ombre, quart de tour), `.k-flip` pour les icônes qui indiquent un sens, `--line-scale` et les piles `font.arabic` / `font.hebrew` (polices du système) pour l'arabe, le persan et l'hébreu ; `pre`, `code` et `.k-kbd` restent de gauche à droite. Mode d'emploi : `crates/kraken-client/i18n/README.md`.
 
 ## Mesures (1 px CSS)
 
