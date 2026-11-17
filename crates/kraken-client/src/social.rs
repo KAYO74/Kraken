@@ -8,8 +8,10 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 
+use crate::i18n::{t, tf};
 use crate::icons::{Icon, lu};
 use crate::store::store;
+use crate::tk;
 use crate::ui::{Avatar, modal};
 
 /// Ouvre (ou crée) le MP avec cette personne, puis y va.
@@ -72,7 +74,7 @@ pub fn call_user(uid: Id, error: RwSignal<Option<String>>) -> impl Fn() + Clone 
 pub fn private_title(c: &Channel) -> String {
     c.name.clone().unwrap_or_else(|| {
         let names: Vec<String> = c.recipients.iter().map(|u| u.name().to_string()).collect();
-        if names.is_empty() { "Groupe vide".into() } else { names.join(", ") }
+        if names.is_empty() { t("Groupe vide") } else { names.join(", ") }
     })
 }
 
@@ -117,12 +119,14 @@ pub fn PeoplePicker(purpose: PickFor, close: Callback<()>) -> impl IntoView {
     });
     let count = move || picked.with(Vec::len);
     let group = move || adding.is_none() && count() >= 2;
-    let action = move || match (adding, count()) {
-        (Some(_), _) => "Ajouter au groupe",
-        (None, 0 | 1) => "Ouvrir la conversation",
-        (None, _) => "Créer le groupe",
+    let action = move || {
+        t(match (adding, count()) {
+            (Some(_), _) => tk!("Ajouter au groupe"),
+            (None, 0 | 1) => tk!("Ouvrir la conversation"),
+            (None, _) => tk!("Créer le groupe"),
+        })
     };
-    let title = if adding.is_some() { "Ajouter des amis au groupe" } else { "Nouvelle conversation" };
+    let title = t(if adding.is_some() { tk!("Ajouter des amis au groupe") } else { tk!("Nouvelle conversation") });
     let submit = move |e: leptos::ev::SubmitEvent| {
         e.prevent_default();
         let ids = picked.get_untracked();
@@ -169,23 +173,29 @@ pub fn PeoplePicker(purpose: PickFor, close: Callback<()>) -> impl IntoView {
                 <form on:submit=submit>
                     <div>
                         <p id="pick-h">{if adding.is_some() {
-                            format!("Un groupe réunit {MAX_GROUP_MEMBERS} personnes au plus : encore {room} place(s).")
+                            tf(
+                                "Un groupe réunit {max} personnes au plus : encore {room} place(s).",
+                                &[("max", &MAX_GROUP_MEMBERS.to_string()), ("room", &room.to_string())],
+                            )
                         } else {
-                            format!("Un ami pour un message privé, plusieurs pour un groupe ({} au plus).", MAX_GROUP_MEMBERS - 1)
+                            tf(
+                                "Un ami pour un message privé, plusieurs pour un groupe ({max} au plus).",
+                                &[("max", &(MAX_GROUP_MEMBERS - 1).to_string())],
+                            )
                         }}</p>
                         <div class="k-search">
                             <Icon icon=lu::LuSearch/>
-                            <input class="k-input" type="search" placeholder="Chercher un ami" aria-label="Chercher parmi tes amis"
+                            <input class="k-input" type="search" placeholder=t("Chercher un ami") aria-label=t("Chercher parmi tes amis")
                                 bind:value=query autofocus/>
                         </div>
                         <fieldset class="app-pick-list">
-                            <legend class="k-sr">"Tes amis"</legend>
+                            <legend class="k-sr">{t("Tes amis")}</legend>
                             {move || if friends.with(Vec::is_empty) {
-                                let line = if s.friends.with(|f| f.iter().any(|r| r.kind == RelationshipKind::Friend)) {
-                                    "Aucun ami ne correspond, ou ils sont déjà tous dans ce groupe."
+                                let line = t(if s.friends.with(|f| f.iter().any(|r| r.kind == RelationshipKind::Friend)) {
+                                    tk!("Aucun ami ne correspond, ou ils sont déjà tous dans ce groupe.")
                                 } else {
-                                    "Ajoute d'abord des amis, depuis l'onglet « Ajouter un ami »."
-                                };
+                                    tk!("Ajoute d'abord des amis, depuis l'onglet « Ajouter un ami ».")
+                                });
                                 view! { <p class="app-hint">{line}</p> }.into_any()
                             } else {
                                 view! {
@@ -207,17 +217,17 @@ pub fn PeoplePicker(purpose: PickFor, close: Callback<()>) -> impl IntoView {
                                 }.into_any()
                             }}
                         </fieldset>
-                        <p class="app-hint" role="status">{move || format!("{} sur {room} choisi(s)", count())}</p>
+                        <p class="app-hint" role="status">{move || tf("{n} sur {room} choisi(s)", &[("n", &count().to_string()), ("room", &room.to_string())])}</p>
                         <Show when=group>
                             <label class="k-field">
-                                <span class="k-label">"Nom du groupe (facultatif)"</span>
-                                <input class="k-input" maxlength=MAX_GROUP_NAME.to_string() placeholder="Les prénoms des membres, sinon" bind:value=name/>
+                                <span class="k-label">{t("Nom du groupe (facultatif)")}</span>
+                                <input class="k-input" maxlength=MAX_GROUP_NAME.to_string() placeholder=t("Les prénoms des membres, sinon") bind:value=name/>
                             </label>
                         </Show>
                         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
                     </div>
                     <footer>
-                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); }>"Annuler"</button>
+                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); }>{t("Annuler")}</button>
                         <button type="submit" class="k-btn k-btn--primary" disabled=move || count() == 0 || busy.get()
                             aria-busy=move || busy.get().to_string()>{action}</button>
                     </footer>
@@ -253,20 +263,20 @@ pub fn RenameGroup(channel: Channel, close: Callback<()>) -> impl IntoView {
     view! {
         <div class="k-scrim" node_ref=root>
             <div class="k-dialog" role="dialog" aria-modal="true" aria-labelledby="ren-t">
-                <header><h2 id="ren-t">"Renommer le groupe"</h2></header>
+                <header><h2 id="ren-t">{t("Renommer le groupe")}</h2></header>
                 <form on:submit=submit>
                     <div>
                         <label class="k-field">
-                            <span class="k-label">"Nom du groupe"</span>
+                            <span class="k-label">{t("Nom du groupe")}</span>
                             <input class="k-input" maxlength=MAX_GROUP_NAME.to_string() bind:value=name autofocus
                                 aria-describedby="ren-h" aria-invalid=move || error.get().is_some().then_some("true")/>
                         </label>
-                        <p class="app-hint" id="ren-h">"Laisse vide pour afficher les prénoms des membres. Tout le groupe voit le changement."</p>
+                        <p class="app-hint" id="ren-h">{t("Laisse vide pour afficher les prénoms des membres. Tout le groupe voit le changement.")}</p>
                         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
                     </div>
                     <footer>
-                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); }>"Annuler"</button>
-                        <button type="submit" class="k-btn k-btn--primary">"Enregistrer"</button>
+                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); }>{t("Annuler")}</button>
+                        <button type="submit" class="k-btn k-btn--primary">{t("Enregistrer")}</button>
                     </footer>
                 </form>
             </div>
@@ -308,80 +318,103 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
     let busy = RwSignal::new(false);
     let (title, body, action) = match &what {
         Confirm::RemoveFriend(u) => (
-            format!("Retirer {} de tes amis ?", u.name()),
-            "Vos messages privés restent. Pour redevenir amis, l'un de vous devra renvoyer une demande.".to_string(),
-            "Retirer",
+            tf("Retirer {nom} de tes amis ?", &[("nom", u.name())]),
+            t("Vos messages privés restent. Pour redevenir amis, l'un de vous devra renvoyer une demande."),
+            t("Retirer"),
         ),
         Confirm::Block(u) => (
-            format!("Bloquer {} ?", u.name()),
-            "Vous ne serez plus amis. Ce compte ne pourra plus t'écrire en privé ni te demander en ami, et ses messages seront repliés dans les salons que vous partagez. Il n'en est pas prévenu.".to_string(),
-            "Bloquer",
+            tf("Bloquer {nom} ?", &[("nom", u.name())]),
+            t(
+                "Vous ne serez plus amis. Ce compte ne pourra plus t'écrire en privé ni te demander en ami, et ses messages seront repliés dans les salons que vous partagez. Il n'en est pas prévenu.",
+            ),
+            t("Bloquer"),
         ),
         Confirm::LeaveGroup(c) => (
-            format!("Quitter « {} » ?", private_title(c)),
-            "Tu ne verras plus ce groupe ni ses messages. Pour y revenir, il faudra qu'un membre t'y ajoute.".to_string(),
-            "Quitter le groupe",
+            tf("Quitter « {nom} » ?", &[("nom", &private_title(c))]),
+            t("Tu ne verras plus ce groupe ni ses messages. Pour y revenir, il faudra qu'un membre t'y ajoute."),
+            t("Quitter le groupe"),
         ),
         Confirm::RemoveMember(c, u) => (
-            format!("Retirer {} du groupe ?", u.name()),
-            format!(
-                "Cette personne ne verra plus « {} » ni ses messages. Tu pourras l'y ajouter de nouveau plus tard.",
-                private_title(c)
+            tf("Retirer {nom} du groupe ?", &[("nom", u.name())]),
+            tf(
+                "Cette personne ne verra plus « {groupe} » ni ses messages. Tu pourras l'y ajouter de nouveau plus tard.",
+                &[("groupe", &private_title(c))],
             ),
-            "Retirer du groupe",
+            t("Retirer du groupe"),
         ),
         Confirm::LeaveGuild(_, name, true) => (
-            format!("Quitter « {name} » ?"),
-            "Tu es le propriétaire de ce serveur : tu ne peux pas le quitter tant qu'il t'appartient. Transfère-le d'abord à un autre membre, puis tu pourras partir.".to_string(),
-            "Transférer la propriété",
+            tf("Quitter « {nom} » ?", &[("nom", name)]),
+            t(
+                "Tu es le propriétaire de ce serveur : tu ne peux pas le quitter tant qu'il t'appartient. Transfère-le d'abord à un autre membre, puis tu pourras partir.",
+            ),
+            t("Transférer la propriété"),
         ),
         Confirm::LeaveGuild(_, name, false) => (
-            format!("Quitter « {name} » ?"),
-            "Tu ne verras plus ce serveur, ses salons ni ses membres. Pour y revenir, il te faudra une nouvelle invitation, et tes rôles ne te seront pas rendus.".to_string(),
-            "Quitter le serveur",
+            tf("Quitter « {nom} » ?", &[("nom", name)]),
+            t(
+                "Tu ne verras plus ce serveur, ses salons ni ses membres. Pour y revenir, il te faudra une nouvelle invitation, et tes rôles ne te seront pas rendus.",
+            ),
+            t("Quitter le serveur"),
         ),
         Confirm::Kick(_, u) => (
-            format!("Expulser {} ?", u.name()),
-            "Cette personne sort du serveur et perd ses rôles, mais ses messages restent. Elle pourra revenir avec une invitation.".to_string(),
-            "Expulser",
+            tf("Expulser {nom} ?", &[("nom", u.name())]),
+            t(
+                "Cette personne sort du serveur et perd ses rôles, mais ses messages restent. Elle pourra revenir avec une invitation.",
+            ),
+            t("Expulser"),
         ),
         Confirm::Ban(_, u) => (
-            format!("Bannir {} ?", u.name()),
-            "Cette personne sort du serveur et ne pourra plus le rejoindre par invitation, tant que tu ne l'auras pas débannie dans les réglages du serveur.".to_string(),
-            "Bannir",
+            tf("Bannir {nom} ?", &[("nom", u.name())]),
+            t(
+                "Cette personne sort du serveur et ne pourra plus le rejoindre par invitation, tant que tu ne l'auras pas débannie dans les réglages du serveur.",
+            ),
+            t("Bannir"),
         ),
         Confirm::DeleteRole(_, r) => (
-            format!("Supprimer le rôle « {} » ?", r.name),
-            "Tous ceux qui l'ont le perdent, avec les droits qu'il leur donnait. Cette action est définitive.".to_string(),
-            "Supprimer le rôle",
+            tf("Supprimer le rôle « {nom} » ?", &[("nom", &r.name)]),
+            t("Tous ceux qui l'ont le perdent, avec les droits qu'il leur donnait. Cette action est définitive."),
+            t("Supprimer le rôle"),
         ),
         Confirm::DeleteChannel(c) => {
             let name = c.name.clone().unwrap_or_default();
             match c.kind {
                 ChannelKind::Category => (
-                    format!("Supprimer la catégorie « {name} » ?"),
-                    format!(
-                        "Les salons qu'elle contient ne sont pas supprimés : ils sortent de la catégorie.{} Cette action est définitive.",
-                        if c.private { " Ses salons gardent les mêmes règles d'accès." } else { "" }
+                    tf("Supprimer la catégorie « {nom} » ?", &[("nom", &name)]),
+                    tf(
+                        "Les salons qu'elle contient ne sont pas supprimés : ils sortent de la catégorie.{suite} Cette action est définitive.",
+                        &[(
+                            "suite",
+                            &if c.private {
+                                format!(" {}", t("Ses salons gardent les mêmes règles d'accès."))
+                            } else {
+                                String::new()
+                            },
+                        )],
                     ),
-                    "Supprimer la catégorie",
+                    t("Supprimer la catégorie"),
                 ),
                 ChannelKind::Voice | ChannelKind::Stage => (
-                    format!("Supprimer le salon vocal « {name} » ?"),
-                    "Le salon disparaît pour tout le monde, et les personnes qui s'y trouvent sont déconnectées. Cette action est définitive.".to_string(),
-                    "Supprimer le salon",
+                    tf("Supprimer le salon vocal « {nom} » ?", &[("nom", &name)]),
+                    t(
+                        "Le salon disparaît pour tout le monde, et les personnes qui s'y trouvent sont déconnectées. Cette action est définitive.",
+                    ),
+                    t("Supprimer le salon"),
                 ),
                 _ => (
-                    format!("Supprimer #{name} ?"),
-                    "Le salon et tous ses messages, avec leurs fichiers, sont supprimés pour tout le monde. Cette action est définitive.".to_string(),
-                    "Supprimer le salon",
+                    tf("Supprimer #{nom} ?", &[("nom", &name)]),
+                    t(
+                        "Le salon et tous ses messages, avec leurs fichiers, sont supprimés pour tout le monde. Cette action est définitive.",
+                    ),
+                    t("Supprimer le salon"),
                 ),
             }
         }
         Confirm::Transfer(_, name, u) => (
-            format!("Donner « {name} » à {} ?", u.name()),
-            "Cette personne devient propriétaire : elle aura tous les droits, et tu seras un membre comme un autre. Tu ne pourras pas le reprendre sans son accord.".to_string(),
-            "Transférer la propriété",
+            tf("Donner « {serveur} » à {nom} ?", &[("serveur", name), ("nom", u.name())]),
+            t(
+                "Cette personne devient propriétaire : elle aura tous les droits, et tu seras un membre comme un autre. Tu ne pourras pas le reprendre sans son accord.",
+            ),
+            t("Transférer la propriété"),
         ),
     };
     let reason = RwSignal::new(String::new());
@@ -465,26 +498,28 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                         <p id="cf-d">{body}</p>
                         {moderation.then(|| view! {
                             <div class="k-field">
-                                <label class="k-label" for="cf-reason">"Raison (facultatif)"</label>
+                                <label class="k-label" for="cf-reason">{t("Raison (facultatif)")}</label>
                                 <input id="cf-reason" class="k-input" maxlength=MAX_REASON autocomplete="off"
                                     prop:value=move || reason.get() on:input=move |e| reason.set(event_target_value(&e))/>
                             </div>
                         })}
                         {banning.then(|| view! {
                             <div class="k-field">
-                                <label class="k-label" for="cf-hours">"Supprimer ses messages"</label>
+                                <label class="k-label" for="cf-hours">{t("Supprimer ses messages")}</label>
                                 <select id="cf-hours" class="k-select" prop:value=move || hours.get()
                                     on:change=move |e| hours.set(event_target_value(&e))>
-                                    <option value="0">"Rien"</option>
-                                    <option value="24">"24 h"</option>
-                                    <option value="168">"7 jours"</option>
+                                    // « Rien » et « 24 h » ont déjà une autre traduction au catalogue (un niveau de notification,
+                                    // le format de l'heure) : le `{contexte}` vide en fait des entrées à part, invisibles en français.
+                                    <option value="0">{tf("Rien{contexte}", &[("contexte", "")])}</option>
+                                    <option value="24">{tf("24 h{contexte}", &[("contexte", "")])}</option>
+                                    <option value="168">{t("7 jours")}</option>
                                 </select>
                             </div>
                         })}
                         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
                     </div>
                     <footer>
-                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); } autofocus>"Annuler"</button>
+                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); } autofocus>{t("Annuler")}</button>
                         <button type="submit" class=if owner_leave { "k-btn k-btn--primary" } else { "k-btn k-btn--danger" } aria-busy=move || busy.get().to_string()>{action}</button>
                     </footer>
                 </form>

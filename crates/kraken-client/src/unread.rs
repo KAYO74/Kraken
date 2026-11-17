@@ -14,8 +14,10 @@ use leptos::task::spawn_local;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
+use crate::i18n::{t, tf, tn};
 use crate::icons::{Icon, lu};
 use crate::store::{Store, store};
+use crate::tk;
 use crate::ui::{modal, when};
 
 /// Attente avant d'envoyer les lectures au serveur : plusieurs messages lus d'affilée (ou
@@ -363,16 +365,16 @@ fn desktop_notification(s: Store, c: &Channel, m: &Message) {
     if !desktop_enabled() || s.presence.get_untracked() == kraken_proto::Presence::Dnd {
         return;
     }
-    let who = m.author.as_ref().map(|a| a.name().to_string()).unwrap_or_else(|| "Compte supprimé".into());
+    let who = m.author.as_ref().map(|a| a.name().to_string()).unwrap_or_else(|| t("Compte supprimé"));
     let title = match c.guild_id {
         None if c.kind == ChannelKind::Dm => who.clone(),
-        None => format!("{who} dans {}", crate::social::private_title(c)),
+        None => tf("{qui} dans {groupe}", &[("qui", &who), ("groupe", &crate::social::private_title(c))]),
         Some(g) => {
             let server = s.guild(g).map(|g| g.guild.name).unwrap_or_default();
             format!("{who} (#{}, {server})", c.name.clone().unwrap_or_default())
         }
     };
-    let body = if m.call.is_some() { "Appel en cours".to_string() } else { kraken_core::markdown::summary(&m.content) };
+    let body = if m.call.is_some() { t("Appel en cours") } else { kraken_core::markdown::summary(&m.content) };
     let opts = web_sys::NotificationOptions::new();
     opts.set_body(&body);
     opts.set_tag(&c.id.to_string());
@@ -549,11 +551,11 @@ pub fn TargetMenu() -> impl IntoView {
     };
     view! {
         {move || u.menu.get().map(|m| {
-            let t = m.target;
-            let title = target_title(s, t);
-            let muted = target_muted(s, t).is_some();
+            let target = m.target;
+            let title = target_title(s, target);
+            let muted = target_muted(s, target).is_some();
             let read = move |_| {
-                match t {
+                match target {
                     Target::Guild(g) => mark_guild_read(s, g),
                     Target::Channel(c) => mark_channel_read(s, c),
                 }
@@ -561,7 +563,7 @@ pub fn TargetMenu() -> impl IntoView {
             };
             let unmute = move |_| {
                 spawn_local(async move {
-                    if let Ok(n) = save(t, SetNotify { mute: Some(Mute::Off), ..Default::default() }).await {
+                    if let Ok(n) = save(target, SetNotify { mute: Some(Mute::Off), ..Default::default() }).await {
                         s.upsert_notify(n);
                     }
                 });
@@ -569,19 +571,19 @@ pub fn TargetMenu() -> impl IntoView {
             };
             let open = move |_| {
                 close(false);
-                u.dialog.set(Some(t));
+                u.dialog.set(Some(target));
             };
             let style = format!("position: fixed; left: min({}px, 100vw - 220px); top: min({}px, 100vh - 160px)", m.x, m.y);
             view! {
-                <div class="k-menu" role="menu" aria-label=format!("Actions pour {title}") node_ref=root style=style on:keydown=keys>
-                    <button type="button" role="menuitem" tabindex="-1" on:click=read>"Marquer comme lu"<Icon icon=lu::LuCheckCheck small=true/></button>
+                <div class="k-menu" role="menu" aria-label=tf("Actions pour {nom}", &[("nom", &title)]) node_ref=root style=style on:keydown=keys>
+                    <button type="button" role="menuitem" tabindex="-1" on:click=read>{t("Marquer comme lu")}<Icon icon=lu::LuCheckCheck small=true/></button>
                     <hr/>
                     {if muted {
-                        view! { <button type="button" role="menuitem" tabindex="-1" on:click=unmute>"Retirer la sourdine"<Icon icon=lu::LuBell small=true/></button> }.into_any()
+                        view! { <button type="button" role="menuitem" tabindex="-1" on:click=unmute>{t("Retirer la sourdine")}<Icon icon=lu::LuBell small=true/></button> }.into_any()
                     } else {
-                        view! { <button type="button" role="menuitem" tabindex="-1" on:click=open>"Mettre en sourdine…"<Icon icon=lu::LuBellOff small=true/></button> }.into_any()
+                        view! { <button type="button" role="menuitem" tabindex="-1" on:click=open>{t("Mettre en sourdine…")}<Icon icon=lu::LuBellOff small=true/></button> }.into_any()
                     }}
-                    <button type="button" role="menuitem" tabindex="-1" on:click=open>"Notifications…"<Icon icon=lu::LuSettings small=true/></button>
+                    <button type="button" role="menuitem" tabindex="-1" on:click=open>{t("Notifications…")}<Icon icon=lu::LuSettings small=true/></button>
                 </div>
             }
         })}
@@ -589,11 +591,11 @@ pub fn TargetMenu() -> impl IntoView {
 }
 
 const MUTES: &[(&str, &str, Option<u32>)] = &[
-    ("15", "Pendant 15 minutes", Some(15)),
-    ("60", "Pendant 1 heure", Some(60)),
-    ("480", "Pendant 8 heures", Some(480)),
-    ("1440", "Pendant 24 heures", Some(1440)),
-    ("forever", "Jusqu'à ce que je la retire", None),
+    ("15", tk!("Pendant 15 minutes"), Some(15)),
+    ("60", tk!("Pendant 1 heure"), Some(60)),
+    ("480", tk!("Pendant 8 heures"), Some(480)),
+    ("1440", tk!("Pendant 24 heures"), Some(1440)),
+    ("forever", tk!("Jusqu'à ce que je la retire"), None),
 ];
 
 /// Boîte « Notifications » d'un serveur ou d'un salon : sourdine, niveau, `@everyone`.
@@ -641,41 +643,37 @@ pub fn NotifyDialog(target: Target) -> impl IntoView {
         let s2 = s;
         move || {
             let l = c.guild_id.and_then(|g| s2.guild_setting(g)).and_then(|x| level_of(x.level));
-            match notify::effective_level(c.guild_id.is_none(), None, l) {
-                Level::All => "tous les messages",
-                Level::Mentions => "les mentions seulement",
-                Level::Nothing => "rien",
-            }
+            t(match notify::effective_level(c.guild_id.is_none(), None, l) {
+                Level::All => tk!("tous les messages"),
+                Level::Mentions => tk!("les mentions seulement"),
+                Level::Nothing => tk!("rien"),
+            })
         }
     });
     let mut levels: Vec<(NotifyLevel, String)> = Vec::new();
     match (&inherited, private) {
-        (Some(_), true) => levels.push((NotifyLevel::Default, "Par défaut : tous les messages".into())),
-        (Some(_), false) => levels.push((NotifyLevel::Default, "Comme le serveur".into())),
+        (Some(_), true) => levels.push((NotifyLevel::Default, t("Par défaut : tous les messages"))),
+        (Some(_), false) => levels.push((NotifyLevel::Default, t("Comme le serveur"))),
         (None, _) => {}
     }
-    levels.push((NotifyLevel::All, "Tous les messages".into()));
+    levels.push((NotifyLevel::All, t("Tous les messages")));
     if !private {
         levels.push((
             NotifyLevel::Mentions,
-            if channel.is_none() {
-                "Les mentions seulement (par défaut)".into()
-            } else {
-                "Les mentions seulement".into()
-            },
+            if channel.is_none() { t("Les mentions seulement (par défaut)") } else { t("Les mentions seulement") },
         ));
     }
-    levels.push((NotifyLevel::Nothing, "Rien".into()));
+    levels.push((NotifyLevel::Nothing, t("Rien")));
     let server_default = channel.is_none();
     let radios = levels
         .into_iter()
         .map(|(l, label)| {
             let checked = move || level.get() == l || (server_default && l == NotifyLevel::Mentions && level.get() == NotifyLevel::Default);
             let sub = match l {
-                NotifyLevel::Default => inherited.map(|f| view! { <span>{move || format!("Aujourd'hui : {}", f())}</span> }.into_any()),
-                NotifyLevel::All => Some(view! { <span>"Chaque nouveau message peut s'afficher sur le bureau."</span> }.into_any()),
-                NotifyLevel::Mentions => Some(view! { <span>"Seulement quand on te nomme, répond à ton message ou appelle tout le monde."</span> }.into_any()),
-                NotifyLevel::Nothing => Some(view! { <span>"Aucune notification, et plus de compteur de mentions."</span> }.into_any()),
+                NotifyLevel::Default => inherited.map(|f| view! { <span>{move || tf("Aujourd'hui : {niveau}", &[("niveau", &f())])}</span> }.into_any()),
+                NotifyLevel::All => Some(view! { <span>{t("Chaque nouveau message peut s'afficher sur le bureau.")}</span> }.into_any()),
+                NotifyLevel::Mentions => Some(view! { <span>{t("Seulement quand on te nomme, répond à ton message ou appelle tout le monde.")}</span> }.into_any()),
+                NotifyLevel::Nothing => Some(view! { <span>{t("Aucune notification, et plus de compteur de mentions.")}</span> }.into_any()),
             };
             view! {
                 <label class="k-radio">
@@ -690,36 +688,40 @@ pub fn NotifyDialog(target: Target) -> impl IntoView {
     view! {
         <div class="k-scrim" node_ref=root on:click=move |_| close()>
             <div class="k-dialog app-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="notify-t" on:click=|e| e.stop_propagation()>
-                <header><h2 id="notify-t">{format!("Notifications de {title}")}</h2></header>
+                <header><h2 id="notify-t">{tf("Notifications de {nom}", &[("nom", &title)])}</h2></header>
                 <div class="app-notify">
                     <label class="k-field">
-                        <span class="k-label">"Sourdine"</span>
+                        <span class="k-label">{t("Sourdine")}</span>
                         <select class="k-select" aria-describedby="notify-mute-h" on:change=on_mute>
-                            <option value="off" prop:selected=move || muted.get().is_none()>"Pas de sourdine"</option>
+                            <option value="off" prop:selected=move || muted.get().is_none()>{t("Pas de sourdine")}</option>
                             {move || muted.get().map(|u| {
-                                let label = if u == MUTED_FOREVER { "En sourdine, sans fin".to_string() } else { format!("En sourdine jusqu'à {}", when(u)) };
+                                let label = if u == MUTED_FOREVER {
+                                    t("En sourdine, sans fin")
+                                } else {
+                                    tf("En sourdine jusqu'à {date}", &[("date", &when(u))])
+                                };
                                 view! { <option value="current" prop:selected=true>{label}</option> }
                             })}
-                            {MUTES.iter().map(|(v, label, _)| view! { <option value=*v>{*label}</option> }).collect_view()}
+                            {MUTES.iter().map(|(v, label, _)| view! { <option value=*v>{t(label)}</option> }).collect_view()}
                         </select>
-                        <span class="k-hint" id="notify-mute-h">"En sourdine : ni gras, ni notification. Les mentions restent comptées."</span>
+                        <span class="k-hint" id="notify-mute-h">{t("En sourdine : ni gras, ni notification. Les mentions restent comptées.")}</span>
                     </label>
                     <fieldset class="k-radios">
-                        <legend class="k-label app-legend">"Me prévenir pour"</legend>
+                        <legend class="k-label app-legend">{t("Me prévenir pour")}</legend>
                         {radios}
                     </fieldset>
                     {server_default.then(|| view! {
                         <div class="k-setting">
-                            <label for="notify-everyone">"Ignorer @everyone et @here"</label>
+                            <label for="notify-everyone">{t("Ignorer @everyone et @here")}</label>
                             <input id="notify-everyone" type="checkbox" role="switch" class="k-switch" prop:checked=move || suppress.get()
                                 on:change=move |e| apply(SetNotify { suppress_everyone: Some(event_target_checked(&e)), ..Default::default() })/>
-                            <p>"Ces appels à tout le serveur ne comptent plus comme des mentions."</p>
+                            <p>{t("Ces appels à tout le serveur ne comptent plus comme des mentions.")}</p>
                         </div>
                     })}
                     <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
                 </div>
                 <footer>
-                    <button type="button" class="k-btn k-btn--primary" on:click=move |_| close() autofocus>"Fermer"</button>
+                    <button type="button" class="k-btn k-btn--primary" on:click=move |_| close() autofocus>{t("Fermer")}</button>
                 </footer>
             </div>
         </div>
@@ -737,7 +739,7 @@ pub fn MentionBadge(#[prop(into)] count: Signal<u32>) -> impl IntoView {
     view! {
         <Show when=move || { count.get() > 0 }>
             <span class="k-badge k-badge--count" aria-hidden="true">{move || count_text(count.get())}</span>
-            <span class="k-sr">{move || match count.get() { 1 => ", 1 mention".to_string(), n => format!(", {n} mentions") }}</span>
+            <span class="k-sr">{move || format!(", {}", tn("{n} mention", "{n} mentions", count.get()))}</span>
         </Show>
     }
 }
@@ -745,7 +747,7 @@ pub fn MentionBadge(#[prop(into)] count: Signal<u32>) -> impl IntoView {
 /// « non lu » pour les lecteurs d'écran.
 #[component]
 pub fn UnreadText(#[prop(into)] on: Signal<bool>) -> impl IntoView {
-    view! { <Show when=move || on.get()><span class="k-sr">", non lu"</span></Show> }
+    view! { <Show when=move || on.get()><span class="k-sr">", "{t("non lu")}</span></Show> }
 }
 
 /// Salon en sourdine : cloche barrée, et « en sourdine » pour les lecteurs d'écran.
@@ -754,7 +756,7 @@ pub fn MutedMark(#[prop(into)] on: Signal<bool>) -> impl IntoView {
     view! {
         <Show when=move || on.get()>
             <span class="k-muted-icon" aria-hidden="true"><Icon icon=lu::LuBellOff small=true/></span>
-            <span class="k-sr">", en sourdine"</span>
+            <span class="k-sr">", "{t("en sourdine")}</span>
         </Show>
     }
 }

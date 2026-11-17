@@ -5,11 +5,13 @@ use std::cell::RefCell;
 use kraken_proto::{Guild, Status, User};
 use leptos::html;
 use leptos::prelude::*;
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{JsCast, JsValue};
 
+use crate::i18n::{t, tf};
 use crate::icons::{Icon, lu};
 use crate::photo::Photo;
 use crate::store::store;
+use crate::tk;
 
 thread_local! {
     /// Boîtes de dialogue ouvertes, la plus haute en dernier : ce qui avait le focus avant chacune.
@@ -91,15 +93,44 @@ pub fn trap_tab(e: &leptos::ev::KeyboardEvent, root: NodeRef<html::Div>) {
     let _ = target.focus();
 }
 
-/// Deux lettres pour un nom : initiales des deux premiers mots, sinon deux premières lettres.
+thread_local! {
+    /// `Intl.Segmenter` (graphèmes) de la langue de l'interface, construit une fois ; `None` si le navigateur n'en a pas.
+    static SEGMENTER: Option<(JsValue, js_sys::Function)> = build_segmenter();
+}
+
+fn build_segmenter() -> Option<(JsValue, js_sys::Function)> {
+    let intl = js_sys::Reflect::get(&js_sys::global(), &"Intl".into()).ok()?;
+    let ctor: js_sys::Function = js_sys::Reflect::get(&intl, &"Segmenter".into()).ok()?.dyn_into().ok()?;
+    let options = js_sys::Object::new();
+    js_sys::Reflect::set(&options, &"granularity".into(), &"grapheme".into()).ok()?;
+    let args = js_sys::Array::of2(&crate::i18n::locale().into(), &options);
+    let segmenter = js_sys::Reflect::construct(&ctor, &args).ok()?;
+    let segment: js_sys::Function = js_sys::Reflect::get(&segmenter, &"segment".into()).ok()?.dyn_into().ok()?;
+    Some((segmenter, segment))
+}
+
+/// Les `max` premiers « caractères » (graphèmes) d'un mot : `Intl.Segmenter`, ou, sans lui, l'approximation de
+/// `kraken_core::text::clusters` (jamais un octet ni un `char` coupé en deux : un emoji lié, une lettre et son accent).
+fn graphemes(word: &str, max: usize) -> Vec<String> {
+    let segmented = SEGMENTER.with(|seg| {
+        let (segmenter, segment) = seg.as_ref()?;
+        let segments = segment.call1(segmenter, &word.into()).ok()?;
+        let mut out = Vec::new();
+        for item in js_sys::try_iter(&segments).ok()?? {
+            out.push(js_sys::Reflect::get(&item.ok()?, &"segment".into()).ok()?.as_string()?);
+            if out.len() >= max {
+                break;
+            }
+        }
+        Some(out)
+    });
+    segmented.unwrap_or_else(|| kraken_core::text::clusters(word).into_iter().take(max).map(str::to_string).collect())
+}
+
+/// Deux lettres pour un nom : initiales des deux premiers mots, sinon deux premières lettres (graphèmes entiers,
+/// en capitales pour les écritures qui en ont).
 pub fn initials(name: &str) -> String {
-    let words: Vec<&str> = name.split_whitespace().collect();
-    let s: String = match words.as_slice() {
-        [a, b, ..] => a.chars().take(1).chain(b.chars().take(1)).collect(),
-        [a] => a.chars().take(2).collect(),
-        [] => "?".into(),
-    };
-    s.to_uppercase()
+    kraken_core::text::initials(name, graphemes)
 }
 
 /// Ce qu'une pastille de statut montre : les statuts que les autres voient, et « invisible », que
@@ -126,14 +157,14 @@ impl From<Status> for Dot {
 
 impl Dot {
     /// Le mot qui le dit, pour les lecteurs d'écran et sous les noms.
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Online => "en ligne",
-            Self::Idle => "inactif",
-            Self::Dnd => "ne pas déranger",
-            Self::Offline => "hors ligne",
-            Self::Invisible => "invisible",
-        }
+    pub fn label(self) -> String {
+        t(match self {
+            Self::Online => tk!("en ligne"),
+            Self::Idle => tk!("inactif"),
+            Self::Dnd => tk!("ne pas déranger"),
+            Self::Offline => tk!("hors ligne"),
+            Self::Invisible => tk!("invisible"),
+        })
     }
 
     fn class(self) -> &'static str {
@@ -286,7 +317,7 @@ pub fn MoreMenu(label: String, children: Children) -> impl IntoView {
     };
     view! {
         <div class="app-more" node_ref=wrap on:keydown=on_key on:focusout=on_focusout>
-            <button class="k-btn k-btn--icon" node_ref=button aria-label=label title="Plus"
+            <button class="k-btn k-btn--icon" node_ref=button aria-label=label title=t("Plus")
                 aria-expanded=move || open.get().to_string() on:click=move |_| open.update(|o| *o = !*o)>
                 <Icon icon=lu::LuEllipsis/>
             </button>
@@ -317,7 +348,7 @@ pub fn Header(children: Children) -> impl IntoView {
     let s = store();
     view! {
         <header class="app-header">
-            <button class="k-btn k-btn--icon app-menu" aria-label="Ouvrir la navigation" on:click=move |_| s.drawer.set(true)>
+            <button class="k-btn k-btn--icon app-menu" aria-label=t("Ouvrir la navigation") on:click=move |_| s.drawer.set(true)>
                 <Icon icon=lu::LuMenu/>
             </button>
             {children()}
@@ -329,11 +360,11 @@ pub fn Header(children: Children) -> impl IntoView {
 #[component]
 pub fn Stub(id: &'static str, title: &'static str) -> impl IntoView {
     view! {
-        <Header><h1 class="app-title">{title}</h1></Header>
+        <Header><h1 class="app-title">{t(title)}</h1></Header>
         <div class="k-empty app-fill">
-            <b>{title}</b>
-            <span>{format!("Écran {id} prévu, pas encore construit.")}</span>
-            <a class="k-btn" href="/channels/@me">"Retour à l'accueil"</a>
+            <b>{t(title)}</b>
+            <span>{tf("Écran {id} prévu, pas encore construit.", &[("id", id)])}</span>
+            <a class="k-btn" href="/channels/@me">{t("Retour à l'accueil")}</a>
         </div>
     }
 }
@@ -343,16 +374,16 @@ pub fn NotFound() -> impl IntoView {
     view! {
         <main class="app-center">
             <div class="k-empty">
-                <b>"Cette page n'existe pas"</b>
-                <span>"Le lien est peut-être ancien ou mal copié."</span>
-                <a class="k-btn k-btn--primary" href="/channels/@me">"Retour à l'accueil"</a>
+                <b>{t("Cette page n'existe pas")}</b>
+                <span>{t("Le lien est peut-être ancien ou mal copié.")}</span>
+                <a class="k-btn k-btn--primary" href="/channels/@me">{t("Retour à l'accueil")}</a>
             </div>
         </main>
     }
 }
 
 /// L'heure locale de `ms`, au format choisi dans Réglages › Langue et heure : « 14:30 » en 24 h,
-/// « 2:30 PM » en 12 h, et d'après la langue du navigateur en « Automatique ». C'est le seul endroit
+/// « 2:30 PM » en 12 h, et d'après la langue de l'interface en « Automatique ». C'est le seul endroit
 /// qui écrit une heure : messages, « Exclu jusqu'à », sourdines, dates des invitations et des bans.
 pub fn clock(ms: i64) -> String {
     let d = js_sys::Date::new(&(ms as f64).into());
@@ -364,12 +395,9 @@ pub fn clock(ms: i64) -> String {
     }
 }
 
-/// L'heure selon la langue du navigateur (« 14:30 » en France, « 2:30 PM » aux États-Unis).
+/// L'heure selon la langue de l'interface (« 14:30 » en français, « 2:30 PM » en anglais américain).
 fn automatic_clock(d: &js_sys::Date) -> Option<String> {
-    let locale = web_sys::window()?.navigator().language()?;
-    if locale.len() < 2 || !locale.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-        return None;
-    }
+    let locale = crate::i18n::locale();
     // Une langue qui compte sur 24 h écrit « 04:09 », pas « 4:09 » ; une langue sur 12 h garde « 4:09 PM ».
     let cycle = {
         let probe = js_sys::Object::new();
@@ -385,16 +413,21 @@ fn automatic_clock(d: &js_sys::Date) -> Option<String> {
     Some(d.to_locale_string(&locale, &options).into())
 }
 
+/// La date courte dans la langue de l'interface : « 16/11/2026 » en français, « 11/16/2026 » en anglais américain.
+fn short_date(d: &js_sys::Date) -> String {
+    let options = js_sys::Object::new();
+    for (key, value) in [("day", "2-digit"), ("month", "2-digit"), ("year", "numeric")] {
+        let _ = js_sys::Reflect::set(&options, &key.into(), &value.into());
+    }
+    d.to_locale_date_string(&crate::i18n::locale(), &options).into()
+}
+
 /// L'heure ([`clock`]), précédée de la date si ce n'est pas aujourd'hui.
 pub fn when(ms: i64) -> String {
     let d = js_sys::Date::new(&(ms as f64).into());
     let now = js_sys::Date::new_0();
     let hm = clock(ms);
-    if d.to_date_string() == now.to_date_string() {
-        hm
-    } else {
-        format!("{:02}/{:02}/{} {hm}", d.get_date(), d.get_month() + 1, d.get_full_year())
-    }
+    if d.to_date_string() == now.to_date_string() { hm } else { format!("{} {hm}", short_date(&d)) }
 }
 
 /// Maintenant, en millisecondes Unix.
@@ -408,13 +441,13 @@ pub fn left(until: i64, now: i64) -> String {
     let secs = ((until - now).max(0) as u64).div_ceil(1000);
     let (mins, hours, days) = (secs.div_ceil(60), secs.div_ceil(3600), secs.div_ceil(86_400));
     if secs < 60 {
-        "moins d'une minute".into()
+        t("moins d'une minute")
     } else if mins < 60 {
-        format!("{mins} min")
+        tf("{n} min", &[("n", &mins.to_string())])
     } else if hours < 24 {
-        format!("{hours} h")
+        tf("{n} h", &[("n", &hours.to_string())])
     } else {
-        format!("{days} j")
+        tf("{n} j", &[("n", &days.to_string())])
     }
 }
 

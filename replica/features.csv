@@ -91,7 +91,7 @@ Contraste élevé saturation mouvement réduit,accessibilite,should,yes,partial,
 Synthèse vocale des messages,accessibilite,could,yes,no,S12
 Raccourcis clavier par défaut,systeme,must,yes,yes,S13 ; un tableau unique (liaison et aide) : Ctrl+K, Alt+↑↓ salons, Ctrl+Alt+↑↓ serveurs, Alt+Maj+↑↓ non lus, Ctrl+Maj+M/D micro et son, Ctrl+/ ou ? aide ; liste dans Réglages
 Raccourcis clavier perso,systeme,should,yes,no,S13 ; pas encore : l'aide le dit (lecture seule, ni raccourci global hors de la fenêtre)
-Langues multiples et format 12 24 h,systeme,must,yes,partial,S14 ; format de l'heure fait (une seule fonction pour toutes les heures) ; une seule langue pour l'instant
+Langues multiples et format 12 24 h,systeme,must,yes,yes,S14 ; format de l'heure fait (une seule fonction pour toutes les heures) ; fr/en sur toute l'interface (v0.21.0) ; reste le droit-à-gauche et d'autres langues
 Événements de serveur,serveurs,could,yes,no,S27
 Applications OAuth autorisées (bots),integrations,should,yes,no,S15 ; API publique KRAKEN pour bots
 Client desktop web et mobile,plateformes,must,yes,partial,web responsive (390 à 1728 px) ; coque Tauri pas encore

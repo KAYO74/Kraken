@@ -1,0 +1,152 @@
+# Catalogue anglais, groupe « server » : les messages d'erreur du serveur (français), traduits à l'affichage par
+# api.rs (`from_server`). Le français doit être le texte exact du serveur. Un message où une valeur est glissée
+# (format!, constante du noyau) y est en gabarit à {variables} (même convention que `tf`) : le client le retrouve,
+# en tire les valeurs et remplit le gabarit anglais ; la valeur reste telle quelle (`{f}` : un nom de champ
+# technique), sauf `{champ}` : un libellé français que le catalogue traduit quand il le connaît. Les gabarits du
+# serveur n'ont pas de variables voisines. Voir ../README.md et `i18n-check.py --server`.
+
+# Connexion, session, accès (error.rs, auth.rs)
+Identifiant ou mot de passe incorrect.	Incorrect username or password.
+Session absente ou expirée.	Your session is missing or has expired.
+Tu n'as pas la permission de faire ça.	You don't have permission to do that.
+Introuvable.	Not found.
+Cette invitation n'existe pas ou a été révoquée.	This invitation doesn't exist or has been revoked.
+Mot de passe incorrect.	Incorrect password.
+Ce pseudo est déjà pris.	This username is already taken.
+Un compte existe déjà avec cette adresse.	An account already exists with this address.
+
+# Requêtes, saisie, limites
+nonce trop long	Nonce too long.
+Pas d'invitation pour un MP.	Direct messages don't have invitations.
+Trop d'essais. Attends une minute.	Too many attempts. Wait a minute.
+`limit` : un nombre attendu.	`limit` must be a number.
+`category` : membres, roles, salons, invitations, emojis ou serveur.	`category` must be one of: membres, roles, salons, invitations, emojis or serveur.
+Erreur du serveur, réessaie.	Server error. Try again.
+
+# Comptes, profil, mot de passe
+Adresse e-mail invalide.	Invalid email address.
+Mot de passe : 8 caractères au minimum.	Password: at least 8 characters.
+Pseudo : 2 à 32 caractères parmi a-z, 0-9, _ et .	Username: 2 to 32 characters from a-z, 0-9, _ and .
+Ce pseudo est réservé : choisis-en un autre.	This username is reserved: choose another one.
+Mot de passe refusé.	Password rejected.
+C'est déjà ton pseudo.	That's already your username.
+C'est déjà ton adresse e-mail.	That's already your email address.
+Choisis un mot de passe différent de l'actuel.	Choose a password different from your current one.
+Lien invalide ou expiré.	Invalid or expired link.
+Cette instance n'envoie pas d'e-mails. Demande à son administrateur.	This instance doesn't send emails. Ask its administrator.
+Lien invalide ou expiré. Refais une demande.	Invalid or expired link. Request a new one.
+C'est ton propre pseudo.	That's your own username.
+
+# Fichiers, images, emojis
+Trop de fichiers en attente : envoie un message ou retire-en avant d'en ajouter.	Too many pending files: send a message or remove some before adding more.
+Envoi interrompu.	Upload interrupted.
+Ce fichier est vide.	This file is empty.
+Ce fichier n'est pas une image lisible : choisis un PNG, un JPEG, un WebP ou un GIF.	This file isn't a readable image: choose a PNG, JPEG, WebP or GIF.
+20 emojis différents au plus sur un message.	At most 20 different emojis per message.
+Seuls les emojis de la sélection ou ceux de tes serveurs servent de réaction.	Only the standard emojis or those from your servers can be used as reactions.
+Le nom d'un emoji compte de 2 à 32 caractères : lettres sans accent, chiffres et _.	Emoji names are 2 to 32 characters: unaccented letters, digits and _.
+
+# Épingles
+Seuls les messages écrits (texte ou réponse) peuvent être épinglés.	Only written messages (text or replies) can be pinned.
+Le message d'origine n'est plus dans ce salon.	The original message is no longer in this channel.
+Tu ne peux pas épingler ni désépingler ici : tu as bloqué cette personne.	You can't pin or unpin here: you've blocked this person.
+Tu ne peux pas épingler ni désépingler ici : la conversation est bloquée.	You can't pin or unpin here: the conversation is blocked.
+
+# Serveurs, salons, rôles, droits
+C'est le dernier salon d'écriture du serveur : crée-en un autre avant de le supprimer.	This is the server's last text channel: create another one before deleting it.
+Ce nom est déjà pris dans ce serveur.	This name is already taken in this server.
+Le nom d'un serveur compte de 2 à 100 caractères.	A server name is 2 to 100 characters long.
+Le nom du serveur contient un caractère interdit (tabulation, saut de ligne ou autre caractère de contrôle).	The server name contains a forbidden character (tab, line break or other control character).
+Ce modèle de serveur n'existe pas.	This server template doesn't exist.
+Mode lent : aucun, 5 s, 10 s, 30 s, 1 min, 5 min, 15 min ou 1 h, et seulement dans un salon d'écriture.	Slow mode: off, 5 s, 10 s, 30 s, 1 min, 5 min, 15 min or 1 h, and only in a text channel.
+Cette catégorie n'existe pas ou n'est pas visible.	This category doesn't exist or isn't visible.
+Un droit ne peut pas être à la fois autorisé et refusé.	A permission can't be both allowed and denied.
+Ce réglage existe déjà pour un autre genre de cible (rôle ou membre).	This setting already exists for another kind of target (role or member).
+Un serveur ou un salon, l'un des deux.	Provide exactly one: a server or a channel.
+Les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés dans un nom ou un motif.	Invisible characters (zero-width space, text direction change, filler) aren't allowed in a name or pattern.
+Le nom d'un rôle compte de 1 à 100 caractères.	A role name is 1 to 100 characters long.
+Cette couleur n'existe pas dans la palette.	This color isn't in the palette.
+Droit inconnu.	Unknown permission.
+@everyone ne peut être ni renommé, ni supprimé, ni donné.	@everyone can't be renamed, deleted or assigned.
+Ce changement te retirerait l'accès à ce salon, ou le droit de le gérer.	This change would remove your access to this channel, or your permission to manage it.
+Le nom retapé ne correspond pas à celui du serveur.	The name you typed doesn't match the server's name.
+
+# Invitations
+Cette invitation a expiré. Demande-en une nouvelle.	This invitation has expired. Ask for a new one.
+Cette invitation a déjà servi autant de fois que permis. Demande-en une nouvelle.	This invitation has already been used the maximum number of times. Ask for a new one.
+Une invitation dure 7 jours au plus, ou n'expire jamais.	An invitation lasts 7 days at most, or never expires.
+
+# Modération, rangs, propriétaire
+Une exclusion temporaire dure de 1 minute à 28 jours.	A timeout lasts from 1 minute to 28 days.
+Une sourdine dure de 1 minute à 30 jours, ou sans fin.	A mute lasts from 1 minute to 30 days, or indefinitely.
+Tu ne peux pas faire ça sur toi-même.	You can't do that to yourself.
+Son rang est égal ou supérieur au tien (le propriétaire est intouchable).	Their rank is equal to or higher than yours (the owner is untouchable).
+Tu possèdes ce serveur : transfère-le à un autre membre avant de le quitter.	You own this server: transfer it to another member before leaving.
+Seul le propriétaire peut faire ça.	Only the owner can do that.
+Un administrateur ne peut pas être exclu temporairement.	An administrator can't be timed out.
+Tu as été banni de ce serveur.	You've been banned from this server.
+Tu es exclu temporairement : tu peux lire, mais pas écrire, réagir, envoyer de fichier ni parler.	You're timed out: you can read, but not write, react, send files or speak.
+
+# Amis, blocages, messages privés, groupes
+Vous êtes déjà amis.	You're already friends.
+Ta demande est déjà partie : elle attend sa réponse dans « En attente ».	Your request was already sent and is waiting for a reply under "Pending".
+Tu as bloqué ce compte. Débloque-le d'abord, dans l'onglet « Bloqués ».	You've blocked this account. Unblock it first, in the "Blocked" tab.
+Cette personne n'accepte pas de demande d'ami de ta part.	This person doesn't accept friend requests from you.
+Tu as bloqué cette personne : débloque-la pour lui écrire.	You've blocked this person: unblock them to message them.
+Ton message n'a pas pu être remis : cette personne ne reçoit pas de message de ta part.	Your message couldn't be delivered: this person doesn't receive messages from you.
+Pour écrire à quelqu'un, soyez amis ou membres d'un même serveur.	To message someone, you must be friends or members of the same server.
+Seuls tes amis peuvent entrer dans un groupe que tu crées ou complètes.	Only your friends can join a group you create or add people to.
+Seul le propriétaire du groupe peut en retirer quelqu'un.	Only the group owner can remove someone from it.
+Tu as bloqué cette personne : débloque-la pour l'appeler.	You've blocked this person: unblock them to call them.
+Impossible d'appeler cette personne : elle ne reçoit pas d'appel de ta part.	Can't call this person: they don't receive calls from you.
+Écris le pseudo de la personne à ajouter.	Enter the username of the person to add.
+Aucun compte ne porte ce pseudo : il ne contient que des minuscules, chiffres, points et tirets bas.	No account has this username: usernames only contain lowercase letters, digits, dots and underscores.
+Seuls « friend » et « blocked » se choisissent.	Only "friend" and "blocked" can be chosen.
+Choisis au moins une personne.	Choose at least one person.
+
+# Vocal
+Le vocal n'est pas disponible sur cette instance.	Voice isn't available on this instance.
+Ce salon n'est pas un salon vocal.	This channel isn't a voice channel.
+Ton application est trop ancienne pour les appels : mets-la à jour.	Your app is too old for calls: update it.
+Offre WebRTC trop longue.	WebRTC offer too long.
+Connexion vocale refusée : offre WebRTC inattendue.	Voice connection refused: unexpected WebRTC offer.
+
+# Messages à valeur glissée : limites, valeurs refusées, attentes
+Déjà utilisé : {f}.	Already in use: {f}.
+Valeur refusée : {f}.	Value rejected: {f}.
+Ce serveur a déjà ses {n} emojis : retires-en un pour en ajouter.	This server already has its {n} emojis: remove one to add another.
+Ce salon a déjà {n} messages épinglés : désépingles-en un d'abord.	This channel already has {n} pinned messages: unpin one first.
+Un groupe réunit de 3 à {n} personnes, toi compris.	A group has 3 to {n} people, including you.
+Ce groupe est complet : {n} personnes au plus.	This group is full: {n} people at most.
+Le nom d'un salon compte de 1 à {n} caractères, sans caractère de contrôle.	A channel name is 1 to {n} characters long, with no control characters.
+Un serveur compte {n} salons et catégories au plus.	A server can have at most {n} channels and categories.
+Le sujet tient en {n} caractères au plus, et seuls les salons d'écriture en ont un.	A topic is {n} characters at most, and only text channels have one.
+Tu as déjà {n} invitations actives. Révoque-en une.	You already have {n} active invitations. Revoke one.
+Une invitation sert {n} fois au plus (0 : sans limite).	An invitation can be used {n} times at most (0: no limit).
+{n} réglages de droits au plus par salon.	At most {n} permission settings per channel.
+Le nom tient en {n} caractères au plus.	The name is {n} characters at most.
+La raison tient en {n} caractères au plus.	The reason is {n} characters at most.
+On peut effacer les messages de {n} heures au plus.	You can delete messages from the last {n} hours at most.
+{n} rôles au plus, et l'ordre doit les citer tous.	At most {n} roles, and the order must list them all.
+Mode lent : encore {n} s avant ton prochain message.	Slow mode: {n} s until your next message.
+Tu as déjà changé ton pseudo {n} fois en une heure. Réessaie dans {d} s.	You've already changed your username {n} times in an hour. Try again in {d} s.
+Tu as déjà changé ton pseudo {n} fois en une heure. Réessaie dans {d} min.	You've already changed your username {n} times in an hour. Try again in {d} min.
+Ce salon vocal est complet ({n} personnes au plus).	This voice channel is full ({n} people at most).
+Aucun compte ne porte le pseudo « {nom} ». Vérifie son orthographe.	No account has the username "{nom}". Check the spelling.
+`{f}` : un identifiant attendu.	`{f}` must be an ID.
+
+# Profil : le libellé du champ ({champ}) est traduit à part
+{champ} : {n} caractères au plus.	{champ}: {n} characters at most.
+{champ} : {n} caractères au plus, sans retour à la ligne.	{champ}: {n} characters at most, no line breaks.
+{champ} : les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés.	{champ}: invisible characters (zero-width space, text direction change, filler) aren't allowed.
+{champ} : écris au moins un caractère visible, ou laisse le champ vide.	{champ}: write at least one visible character, or leave the field empty.
+
+# Images, animations et fichiers : limites de poids et de forme
+Ce fichier pèse trop lourd : {n} Mo au plus.	This file is too large: {n} MB at most.
+Cette image pèse trop lourd : {n} Mo au plus.	This image is too large: {n} MB at most.
+Cette image pèse trop lourd : {n} Ko au plus.	This image is too large: {n} KB at most.
+Cette image est trop petite : {n} pixels de côté au moins.	This image is too small: it must be at least {n} pixels on each side.
+Cette image est trop grande : {n} pixels de côté et {m} millions de pixels au plus. Réduis-la avant de l'envoyer.	This image is too big: {n} pixels per side and {m} million pixels at most. Reduce it before uploading.
+Cette image est trop allongée : son grand côté ne doit pas dépasser {n} fois son petit côté.	This image is too elongated: its long side must not exceed {n} times its short side.
+Cette animation est trop lourde à afficher : {n} pixels de côté et {m} images au plus.	This animation is too heavy to display: {n} pixels per side and {m} frames at most.
+Cette animation est trop allongée : elle doit rester presque carrée ({n} pour 1 au plus).	This animation is too elongated: it must stay almost square ({n} to 1 at most).

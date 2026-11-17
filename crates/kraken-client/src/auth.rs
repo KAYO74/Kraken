@@ -6,6 +6,7 @@ use leptos::task::spawn_local;
 use leptos_router::NavigateOptions;
 use leptos_router::hooks::{use_navigate, use_params_map, use_query_map};
 
+use crate::i18n::{LangSelect, stash, t, tn, unstash};
 use crate::shell::first_text;
 use crate::store::store;
 use crate::ui::Logo;
@@ -34,8 +35,15 @@ fn next_path() -> Memo<String> {
     })
 }
 
+/// La carte des pages de connexion. `keep` : sur /login et /register, le sélecteur de langue en pied de carte ;
+/// il l'appelle avant de recharger la page, pour garder ce qui est déjà saisi (jamais un mot de passe).
 #[component]
-fn AuthCard(title: &'static str, sub: &'static str, children: Children) -> impl IntoView {
+fn AuthCard(
+    #[prop(into)] title: String,
+    #[prop(into)] sub: String,
+    #[prop(optional, into)] keep: Option<Callback<()>>,
+    children: Children,
+) -> impl IntoView {
     view! {
         <main class="app-center app-auth">
             <div class="app-auth-stack">
@@ -43,9 +51,10 @@ fn AuthCard(title: &'static str, sub: &'static str, children: Children) -> impl 
                 <div class="k-dialog app-auth-card">
                     <header><h1>{title}</h1><p class="app-hint">{sub}</p></header>
                     {children()}
+                    {keep.map(|keep| view! { <div class="app-auth-lang"><LangSelect id="lang" auth=true keep=keep/></div> })}
                 </div>
             </div>
-            <p class="app-hint"><a href="/privacy">"Confidentialité"</a>" · "<a href="/terms">"Conditions"</a></p>
+            <p class="app-hint"><a href="/privacy">{t("Confidentialité")}</a>" · "<a href="/terms">{t("Conditions")}</a></p>
         </main>
     }
 }
@@ -55,7 +64,8 @@ pub fn Login() -> impl IntoView {
     let s = store();
     let navigate = use_navigate();
     let next = next_path();
-    let login = RwSignal::new(String::new());
+    // Après un changement de langue, l'identifiant déjà saisi revient (jamais le mot de passe).
+    let login = RwSignal::new(unstash("login").unwrap_or_default());
     let password = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
@@ -78,20 +88,21 @@ pub fn Login() -> impl IntoView {
         });
     };
     view! {
-        <AuthCard title="Bon retour sous la surface" sub="Connecte-toi pour retrouver tes serveurs.">
+        <AuthCard title=t("Bon retour sous la surface") sub=t("Connecte-toi pour retrouver tes serveurs.")
+            keep=Callback::new(move |()| stash("login", &login.get_untracked()))>
             <form on:submit=submit>
                 <div class="app-form">
-                    <label class="k-field"><span class="k-label">"Pseudo ou e-mail"</span>
+                    <label class="k-field"><span class="k-label">{t("Pseudo ou e-mail")}</span>
                         <input class="k-input" name="login" autocomplete="username" required bind:value=login autofocus/></label>
-                    <label class="k-field"><span class="k-label">"Mot de passe"</span>
+                    <label class="k-field"><span class="k-label">{t("Mot de passe")}</span>
                         <input class="k-input" name="password" type="password" autocomplete="current-password" required bind:value=password
                             aria-invalid=move || error.get().is_some().then_some("true") aria-describedby="login-e"/></label>
                     <Show when=move || error.get().is_some()><p class="k-error" id="login-e" role="alert">{move || error.get()}</p></Show>
-                    <a class="app-hint" href="/forgot-password">"Mot de passe oublié ?"</a>
+                    <a class="app-hint" href="/forgot-password">{t("Mot de passe oublié ?")}</a>
                 </div>
                 <footer class="app-auth-foot">
-                    <a href=move || format!("/register?next={}", next.get())>"Pas encore de compte ? S'inscrire"</a>
-                    <button class="k-btn k-btn--primary" type="submit" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>"Se connecter"</button>
+                    <a href=move || format!("/register?next={}", next.get())>{t("Pas encore de compte ? S'inscrire")}</a>
+                    <button class="k-btn k-btn--primary" type="submit" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>{t("Se connecter")}</button>
                 </footer>
             </form>
         </AuthCard>
@@ -103,8 +114,8 @@ pub fn Register() -> impl IntoView {
     let s = store();
     let navigate = use_navigate();
     let next = next_path();
-    let email = RwSignal::new(String::new());
-    let username = RwSignal::new(String::new());
+    let email = RwSignal::new(unstash("email").unwrap_or_default());
+    let username = RwSignal::new(unstash("username").unwrap_or_default());
     let password = RwSignal::new(String::new());
     let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
@@ -128,21 +139,25 @@ pub fn Register() -> impl IntoView {
         });
     };
     view! {
-        <AuthCard title="Créer un compte" sub="Gratuit, sans abonnement, tout compris.">
+        <AuthCard title=t("Créer un compte") sub=t("Gratuit, sans abonnement, tout compris.")
+            keep=Callback::new(move |()| {
+                stash("email", &email.get_untracked());
+                stash("username", &username.get_untracked());
+            })>
             <form on:submit=submit>
                 <div class="app-form">
-                    <label class="k-field"><span class="k-label">"E-mail"</span>
+                    <label class="k-field"><span class="k-label">{t("E-mail")}</span>
                         <input class="k-input" type="email" autocomplete="email" required bind:value=email autofocus/></label>
-                    <label class="k-field"><span class="k-label">"Pseudo"</span>
+                    <label class="k-field"><span class="k-label">{t("Pseudo")}</span>
                         <input class="k-input" autocomplete="username" required minlength="2" maxlength="32" pattern="[a-zA-Z0-9_.]+" bind:value=username aria-describedby="reg-h"/>
-                        <span class="app-hint" id="reg-h">"Lettres, chiffres, _ et . ; 2 à 32 caractères."</span></label>
-                    <label class="k-field"><span class="k-label">"Mot de passe"</span>
+                        <span class="app-hint" id="reg-h">{t("Lettres, chiffres, _ et . ; 2 à 32 caractères.")}</span></label>
+                    <label class="k-field"><span class="k-label">{t("Mot de passe")}</span>
                         <input class="k-input" type="password" autocomplete="new-password" required minlength="8" bind:value=password/></label>
                     <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
                 </div>
                 <footer class="app-auth-foot">
-                    <a href=move || format!("/login?next={}", next.get())>"Déjà inscrit ? Se connecter"</a>
-                    <button class="k-btn k-btn--primary" type="submit" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>"Créer mon compte"</button>
+                    <a href=move || format!("/login?next={}", next.get())>{t("Déjà inscrit ? Se connecter")}</a>
+                    <button class="k-btn k-btn--primary" type="submit" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>{t("Créer mon compte")}</button>
                 </footer>
             </form>
         </AuthCard>
@@ -154,7 +169,7 @@ pub fn Register() -> impl IntoView {
 fn dead_invite(e: ApiError) -> String {
     match e.code.as_str() {
         "invite_expired" | "invite_exhausted" | "invite_unknown" => e.message,
-        _ => "Ce lien n'existe pas ou n'est plus valable. Demande-en un nouveau.".into(),
+        _ => t("Ce lien n'existe pas ou n'est plus valable. Demande-en un nouveau."),
     }
 }
 
@@ -200,25 +215,25 @@ pub fn InvitePage() -> impl IntoView {
                 {move || match invite.get() {
                     None => view! { <div class="app-form" aria-busy="true"><div class="k-skeleton app-skel-block"></div></div> }.into_any(),
                     Some(Err(why)) => view! {
-                        <header><h1>"Invitation invalide"</h1></header>
+                        <header><h1>{t("Invitation invalide")}</h1></header>
                         <div><p>{why}</p></div>
-                        <footer><a class="k-btn k-btn--primary" href="/channels/@me">"Retour à l'accueil"</a></footer>
+                        <footer><a class="k-btn k-btn--primary" href="/channels/@me">{t("Retour à l'accueil")}</a></footer>
                     }.into_any(),
                     Some(Ok(i)) => { let join = join.clone(); view! {
                         <header class="app-invite-head">
                             <crate::ui::GuildIcon guild=i.guild.clone() size="lg" cap=128/>
-                            <p class="app-hint">"Une place t'attend dans"</p>
+                            <p class="app-hint">{t("Une place t'attend dans")}</p>
                             <h1>{i.guild.name.clone()}</h1>
-                            <p class="app-hint">{format!("{} membre{}", i.member_count, if i.member_count > 1 { "s" } else { "" })}</p>
+                            <p class="app-hint">{tn("{n} membre", "{n} membres", i.member_count)}</p>
                         </header>
                         <Show when=move || error.get().is_some()><div><p class="k-error" role="alert">{move || error.get()}</p></div></Show>
                         <footer>
                             {move || if s.signed_in.get() {
-                                view! { <button class="k-btn k-btn--primary k-btn--lg app-grow" on:click=join.clone() disabled=move || busy.get() aria-busy=move || busy.get().to_string()>"Rejoindre le serveur"</button> }.into_any()
+                                view! { <button class="k-btn k-btn--primary k-btn--lg app-grow" on:click=join.clone() disabled=move || busy.get() aria-busy=move || busy.get().to_string()>{t("Rejoindre le serveur")}</button> }.into_any()
                             } else {
                                 view! {
-                                    <a class="k-btn" href=move || format!("/login?next={}", here())>"Se connecter"</a>
-                                    <a class="k-btn k-btn--primary" href=move || format!("/register?next={}", here())>"Créer un compte"</a>
+                                    <a class="k-btn" href=move || format!("/login?next={}", here())>{t("Se connecter")}</a>
+                                    <a class="k-btn k-btn--primary" href=move || format!("/register?next={}", here())>{t("Créer un compte")}</a>
                                 }.into_any()
                             }}
                         </footer>
@@ -244,22 +259,22 @@ pub fn ForgotPassword() -> impl IntoView {
         });
     };
     view! {
-        <AuthCard title="Mot de passe oublié" sub="Indique l'adresse de ton compte : on t'envoie un lien pour en choisir un nouveau.">
+        <AuthCard title=t("Mot de passe oublié") sub=t("Indique l'adresse de ton compte : on t'envoie un lien pour en choisir un nouveau.")>
             {move || match state.get() {
                 Some(Ok(())) => view! {
-                    <div class="app-form" role="status"><p>"Si un compte utilise cette adresse, un e-mail arrive. Le lien reste valable 30 minutes."</p></div>
-                    <footer class="app-auth-foot"><a href="/login">"Retour à la connexion"</a></footer>
+                    <div class="app-form" role="status"><p>{t("Si un compte utilise cette adresse, un e-mail arrive. Le lien reste valable 30 minutes.")}</p></div>
+                    <footer class="app-auth-foot"><a href="/login">{t("Retour à la connexion")}</a></footer>
                 }.into_any(),
                 other => view! {
                     <form on:submit=submit>
                         <div class="app-form">
-                            <label class="k-field"><span class="k-label">"E-mail"</span>
+                            <label class="k-field"><span class="k-label">{t("E-mail")}</span>
                                 <input class="k-input" type="email" autocomplete="email" required bind:value=email autofocus/></label>
                             {other.and_then(|r| r.err()).map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
                         </div>
                         <footer class="app-auth-foot">
-                            <a href="/login">"Retour à la connexion"</a>
-                            <button class="k-btn k-btn--primary" type="submit" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>"Envoyer le lien"</button>
+                            <a href="/login">{t("Retour à la connexion")}</a>
+                            <button class="k-btn k-btn--primary" type="submit" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>{t("Envoyer le lien")}</button>
                         </footer>
                     </form>
                 }.into_any(),
@@ -289,22 +304,22 @@ pub fn ResetPassword() -> impl IntoView {
         });
     };
     view! {
-        <AuthCard title="Nouveau mot de passe" sub="Toutes tes sessions seront fermées, sur chaque appareil.">
+        <AuthCard title=t("Nouveau mot de passe") sub=t("Toutes tes sessions seront fermées, sur chaque appareil.")>
             {move || match state.get() {
                 Some(Ok(())) => view! {
-                    <div class="app-form" role="status"><p>"C'est fait. Connecte-toi avec ton nouveau mot de passe."</p></div>
-                    <footer class="app-auth-foot"><a class="k-btn k-btn--primary" href="/login">"Se connecter"</a></footer>
+                    <div class="app-form" role="status"><p>{t("C'est fait. Connecte-toi avec ton nouveau mot de passe.")}</p></div>
+                    <footer class="app-auth-foot"><a class="k-btn k-btn--primary" href="/login">{t("Se connecter")}</a></footer>
                 }.into_any(),
                 other => view! {
                     <form on:submit=submit>
                         <div class="app-form">
-                            <label class="k-field"><span class="k-label">"Nouveau mot de passe"</span>
+                            <label class="k-field"><span class="k-label">{t("Nouveau mot de passe")}</span>
                                 <input class="k-input" type="password" autocomplete="new-password" required minlength="8" bind:value=password autofocus/></label>
                             {other.and_then(|r| r.err()).map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
                         </div>
                         <footer class="app-auth-foot">
-                            <a href="/forgot-password">"Demander un autre lien"</a>
-                            <button class="k-btn k-btn--primary" type="submit" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>"Enregistrer"</button>
+                            <a href="/forgot-password">{t("Demander un autre lien")}</a>
+                            <button class="k-btn k-btn--primary" type="submit" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>{t("Enregistrer")}</button>
                         </footer>
                     </form>
                 }.into_any(),
@@ -322,15 +337,15 @@ pub fn VerifyEmail() -> impl IntoView {
         spawn_local(async move { state.set(Some(crate::api::verify_email(&t).await.map_err(|e| e.message))) });
     });
     view! {
-        <AuthCard title="Adresse e-mail" sub="">
+        <AuthCard title=t("Adresse e-mail") sub="">
             <div class="app-form" role="status" aria-busy=move || state.get().is_none().to_string()>
                 {move || match state.get() {
                     None => view! { <div class="k-skeleton app-skel-line"></div> }.into_any(),
-                    Some(Ok(())) => view! { <p>"Adresse confirmée. Merci !"</p> }.into_any(),
+                    Some(Ok(())) => view! { <p>{t("Adresse confirmée. Merci !")}</p> }.into_any(),
                     Some(Err(e)) => view! { <p class="k-error">{e}</p> }.into_any(),
                 }}
             </div>
-            <footer class="app-auth-foot"><a class="k-btn" href="/channels/@me">"Ouvrir KRAKEN"</a></footer>
+            <footer class="app-auth-foot"><a class="k-btn" href="/channels/@me">{t("Ouvrir KRAKEN")}</a></footer>
         </AuthCard>
     }
 }

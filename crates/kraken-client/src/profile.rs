@@ -7,10 +7,12 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use wasm_bindgen::{JsCast, JsValue};
 
+use crate::i18n::{t, tf};
 use crate::icons::{Icon, lu};
 use crate::photo::Photo;
 use crate::social::{Confirm, ConfirmDialog, open_dm};
 use crate::store::{ProfileTarget, Store, store};
+use crate::tk;
 use crate::ui::{Avatar, StatusDot, banner_url, modal, tint};
 
 /// Ouvre la carte de profil de cette personne. `guild` : le serveur d'où on la regarde, dont on
@@ -26,7 +28,7 @@ fn long_date(ms: i64) -> String {
     for (key, value) in [("day", "numeric"), ("month", "long"), ("year", "numeric")] {
         let _ = js_sys::Reflect::set(&options, &JsValue::from_str(key), &JsValue::from_str(value));
     }
-    date.to_locale_date_string("fr-FR", &options).into()
+    date.to_locale_date_string(&crate::i18n::locale(), &options).into()
 }
 
 fn capital(s: &str) -> String {
@@ -78,7 +80,7 @@ fn PlayAnimation() -> impl IntoView {
     };
     view! {
         <button type="button" class="k-btn k-btn--sm app-play" aria-pressed=move || playing.get().to_string() on:click=toggle>
-            <Icon icon=lu::LuPlay small=true/>"Lire l'animation"
+            <Icon icon=lu::LuPlay small=true/>{t("Lire l'animation")}
         </button>
     }
 }
@@ -133,26 +135,26 @@ fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: 
             </p>
             <p class="app-card-status">
                 <span class="app-dot-inline"><StatusDot status=dot/></span>
-                {move || capital(dot.get().label())}
+                {move || capital(&dot.get().label())}
             </p>
             <PlayAnimation/>
             {move || user.get().bio.filter(|b| !b.is_empty()).map(|b| view! {
-                <section class="app-card-section" aria-label="À propos">
-                    <h3 class="app-card-label">"À propos"</h3>
+                <section class="app-card-section" aria-label=t("À propos")>
+                    <h3 class="app-card-label">{t("À propos")}</h3>
                     <p class="app-card-bio">{b}</p>
                 </section>
             })}
             <dl class="app-card-dates">
-                {move || user.get().created_at.map(|t| view! {
-                    <div><dt>"Membre depuis"</dt><dd>{long_date(t)}</dd></div>
+                {move || user.get().created_at.map(|since| view! {
+                    <div><dt>{t("Membre depuis")}</dt><dd>{long_date(since)}</dd></div>
                 })}
                 {move || member.get().map(|(_, at)| view! {
-                    <div><dt>"Sur ce serveur depuis"</dt><dd>{long_date(at)}</dd></div>
+                    <div><dt>{t("Sur ce serveur depuis")}</dt><dd>{long_date(at)}</dd></div>
                 })}
             </dl>
             {move || member.get().filter(|(roles, _)| !roles.is_empty()).map(|(roles, _)| view! {
                 <section class="app-card-section" aria-labelledby=format!("{name_id}-roles")>
-                    <h3 class="app-card-label" id=format!("{name_id}-roles")>"Rôles"</h3>
+                    <h3 class="app-card-label" id=format!("{name_id}-roles")>{t("Rôles")}</h3>
                     <ul class="app-chips">
                         {roles.into_iter().map(|r| view! {
                             <li class="app-chip" data-role-color=r.color.map(|c| c.to_string())>
@@ -190,14 +192,14 @@ fn CardDialog() -> impl IntoView {
         move || live_user(s, &target)
     });
     let label = move || {
-        format!(
-            "Profil de {}",
-            guild.and_then(|g| s.name_of(Some(g), id)).unwrap_or_else(|| user.get().name().to_string())
+        tf(
+            "Profil de {nom}",
+            &[("nom", &guild.and_then(|g| s.name_of(Some(g), id)).unwrap_or_else(|| user.get().name().to_string()))],
         )
     };
     let mine = s.my_id() == Some(id);
     let error = RwSignal::new(None::<String>);
-    let note = RwSignal::new(None::<&'static str>);
+    let note = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
     let blocking = RwSignal::new(false);
     let rel = Memo::new(move |_| s.rel_kind(id));
@@ -214,11 +216,11 @@ fn CardDialog() -> impl IntoView {
         spawn_local(async move {
             match crate::api::send_friend_request(&username).await {
                 Ok(r) => {
-                    note.try_set(Some(if r.kind == RelationshipKind::Friend {
-                        "Vous êtes maintenant amis."
+                    note.try_set(Some(t(if r.kind == RelationshipKind::Friend {
+                        tk!("Vous êtes maintenant amis.")
                     } else {
-                        "Demande d'ami envoyée."
-                    }));
+                        tk!("Demande d'ami envoyée.")
+                    })));
                     s.upsert_rel(r);
                 }
                 Err(e) => {
@@ -236,7 +238,7 @@ fn CardDialog() -> impl IntoView {
             match crate::api::set_relationship(id, RelationshipKind::Friend).await {
                 Ok(r) => {
                     s.upsert_rel(r);
-                    note.try_set(Some("Vous êtes maintenant amis."));
+                    note.try_set(Some(t("Vous êtes maintenant amis.")));
                 }
                 Err(e) => {
                     error.try_set(Some(e.message));
@@ -253,7 +255,7 @@ fn CardDialog() -> impl IntoView {
             match crate::api::remove_relationship(id).await {
                 Ok(()) => {
                     s.remove_rel(id);
-                    note.try_set(Some("Compte débloqué."));
+                    note.try_set(Some(t("Compte débloqué.")));
                 }
                 Err(e) => {
                     error.try_set(Some(e.message));
@@ -265,7 +267,7 @@ fn CardDialog() -> impl IntoView {
     let actions = move || {
         if mine {
             return view! {
-                <a class="k-btn k-btn--primary" href="/settings/profiles" on:click=move |_| close()>"Modifier mon profil"</a>
+                <a class="k-btn k-btn--primary" href="/settings/profiles" on:click=move |_| close()>{t("Modifier mon profil")}</a>
             }
             .into_any();
         }
@@ -274,32 +276,32 @@ fn CardDialog() -> impl IntoView {
         let relation = match rel.get() {
             None => Some(view! {
                 <button type="button" class="k-btn" disabled=move || busy.get() on:click=ask>
-                    <Icon icon=lu::LuUserPlus/>"Ajouter en ami"
+                    <Icon icon=lu::LuUserPlus/>{t("Ajouter en ami")}
                 </button>
             }.into_any()),
             Some(RelationshipKind::PendingOutgoing) => Some(view! {
-                <button type="button" class="k-btn" disabled>"Demande envoyée"</button>
+                <button type="button" class="k-btn" disabled>{t("Demande envoyée")}</button>
             }.into_any()),
             Some(RelationshipKind::PendingIncoming) => Some(view! {
                 <button type="button" class="k-btn" disabled=move || busy.get() on:click=accept>
-                    <Icon icon=lu::LuCheck/>"Accepter la demande"
+                    <Icon icon=lu::LuCheck/>{t("Accepter la demande")}
                 </button>
             }.into_any()),
-            Some(RelationshipKind::Friend) => Some(view! { <span class="k-badge k-badge--neutral">"Ami"</span> }.into_any()),
+            Some(RelationshipKind::Friend) => Some(view! { <span class="k-badge k-badge--neutral">{t("Ami")}</span> }.into_any()),
             Some(RelationshipKind::Blocked) => Some(view! {
-                <button type="button" class="k-btn" disabled=move || busy.get() on:click=unblock>"Débloquer"</button>
+                <button type="button" class="k-btn" disabled=move || busy.get() on:click=unblock>{t("Débloquer")}</button>
             }.into_any()),
         };
         view! {
             {(!blocked).then(|| view! {
                 <button type="button" class="k-btn k-btn--primary" on:click=write>
-                    <Icon icon=lu::LuMessageCircle/>"Envoyer un message"
+                    <Icon icon=lu::LuMessageCircle/>{t("Envoyer un message")}
                 </button>
             })}
             {relation}
             {(!blocked).then(|| view! {
                 <button type="button" class="k-btn k-btn--ghost app-link-danger" on:click=move |_| blocking.set(true)>
-                    <Icon icon=lu::LuBan/>"Bloquer"
+                    <Icon icon=lu::LuBan/>{t("Bloquer")}
                 </button>
             })}
         }
@@ -308,7 +310,7 @@ fn CardDialog() -> impl IntoView {
     view! {
         <div class="k-scrim" node_ref=root>
             <div class="k-dialog app-card" role="dialog" aria-modal="true" aria-label=label>
-                <button type="button" class="k-btn k-btn--icon app-card-close" aria-label="Fermer le profil (Échap)" autofocus
+                <button type="button" class="k-btn k-btn--icon app-card-close" aria-label=t("Fermer le profil (Échap)") autofocus
                     on:click=move |_| close()>
                     <Icon icon=lu::LuX/>
                 </button>
@@ -396,32 +398,32 @@ pub fn ProfileSettings() -> impl IntoView {
     view! {
         <div class="app-profile">
             <form class="app-profile-form" on:submit=save aria-labelledby="profile-form-t">
-                <h3 id="profile-form-t" class="app-profile-title">"Ce que les autres voient"</h3>
-                <label class="k-label" for="display-name">"Nom affiché"</label>
+                <h3 id="profile-form-t" class="app-profile-title">{t("Ce que les autres voient")}</h3>
+                <label class="k-label" for="display-name">{t("Nom affiché")}</label>
                 <input id="display-name" class="k-input" maxlength=MAX_DISPLAY_NAME.to_string() placeholder=username bind:value=display
                     aria-describedby="display-name-h" autocomplete="nickname"/>
-                <p id="display-name-h" class="k-hint">{move || format!("Ton pseudo unique @{} ne change pas ici : il reste écrit en dessous.", username())}</p>
-                <label class="k-label" for="pronouns">"Pronoms"</label>
-                <input id="pronouns" class="k-input" maxlength=MAX_PRONOUNS.to_string() placeholder="elle/elles, il/lui, iel/iels…" bind:value=pronouns
+                <p id="display-name-h" class="k-hint">{move || tf("Ton pseudo unique @{pseudo} ne change pas ici : il reste écrit en dessous.", &[("pseudo", &username())])}</p>
+                <label class="k-label" for="pronouns">{t("Pronoms")}</label>
+                <input id="pronouns" class="k-input" maxlength=MAX_PRONOUNS.to_string() placeholder=t("elle/elles, il/lui, iel/iels…") bind:value=pronouns
                     aria-describedby="pronouns-h"/>
-                <p id="pronouns-h" class="k-hint">{move || format!("Facultatif. {} / {MAX_PRONOUNS}", units(&pronouns.get()))}</p>
-                <label class="k-label" for="bio">"À propos de toi"</label>
+                <p id="pronouns-h" class="k-hint">{move || tf("Facultatif. {n} / {max}", &[("n", &units(&pronouns.get()).to_string()), ("max", &MAX_PRONOUNS.to_string())])}</p>
+                <label class="k-label" for="bio">{t("À propos de toi")}</label>
                 <textarea id="bio" class="k-input app-bio" rows="4" maxlength=MAX_BIO.to_string() bind:value=bio aria-describedby="bio-h"
-                    placeholder="Quelques mots sur toi, tes jeux, ta façon de discuter…"></textarea>
+                    placeholder=t("Quelques mots sur toi, tes jeux, ta façon de discuter…")></textarea>
                 <p id="bio-h" class="k-hint app-count">{move || format!("{} / {MAX_BIO}", units(&bio.get()))}</p>
                 <div class="app-profile-save">
-                    <button class="k-btn k-btn--primary" type="submit" disabled=move || busy.get() aria-busy=move || busy.get().to_string()>"Enregistrer"</button>
-                    <Show when=move || saved.get()><p class="app-hint" role="status">"Profil enregistré."</p></Show>
+                    <button class="k-btn k-btn--primary" type="submit" disabled=move || busy.get() aria-busy=move || busy.get().to_string()>{t("Enregistrer")}</button>
+                    <Show when=move || saved.get()><p class="app-hint" role="status">{t("Profil enregistré.")}</p></Show>
                 </div>
                 <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
             </form>
             <section class="app-profile-images" aria-labelledby="profile-images-t">
-                <h3 id="profile-images-t" class="app-profile-title">"Photo et bannière"</h3>
+                <h3 id="profile-images-t" class="app-profile-title">{t("Photo et bannière")}</h3>
                 <div class="k-card app-account"><crate::avatar::AvatarBlock/></div>
                 <crate::avatar::BannerBlock/>
             </section>
             <section class="app-profile-preview" aria-labelledby="profile-preview-t">
-                <h3 id="profile-preview-t" class="app-profile-title">"Aperçu de ta carte"</h3>
+                <h3 id="profile-preview-t" class="app-profile-title">{t("Aperçu de ta carte")}</h3>
                 <div class="app-card app-card--preview">
                     <CardBody user=preview guild=None name_id="preview-name" size="lg"/>
                 </div>

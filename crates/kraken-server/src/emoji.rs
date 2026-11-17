@@ -287,6 +287,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_refusal_has_an_english_text_in_the_catalogue() {
+        use crate::error::coverage::assert_translated;
+        for e in [too_large(), bad_ratio(), too_small(), too_elongated()] {
+            assert_translated(&e.2);
+        }
+    }
+
+    #[test]
     fn only_files_written_here_are_served() {
         let key = "0123456789abcdef0123456789abcdef";
         assert_eq!(file_kind(&format!("{key}.png")).map(|f| f.1), Some("image/png"));

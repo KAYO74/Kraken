@@ -563,7 +563,7 @@ test('S12-H2 images animées : fixes dans les listes, animées au survol, au foc
   const { code } = await (await (await api(a.token)).post(`${API}/channels/${cid}/invites`, { data: {} })).json();
   expect((await (await api(b.token)).post(`${API}/invites/${code}`)).status()).toBe(200);
   await page.goto(`/channels/${gid}/${cid}`);
-  await expect(members(page).getByText(b.name)).toBeVisible();
+  await expect(members(page).getByText(b.name, { exact: true })).toBeVisible();
 
   const row = members(page).getByRole('listitem').filter({ hasText: a.name });
   const profile = row.getByRole('button', { name: new RegExp(`^${a.name}`) });
@@ -751,14 +751,15 @@ test('S12-H6 souligner les liens : un interrupteur, appliqué tout de suite et g
 
 // ───────── S14 : Langue et heure ─────────
 
-test('S14-H1 langue et heure : Français seul, format 12 h ou 24 h avec un exemple en direct', async ({ user }) => {
+test('S14-H1 langue et heure : le choix de la langue, format 12 h ou 24 h avec un exemple en direct', async ({ user }) => {
   const { page } = await user('heura');
   await page.goto('/settings/language');
   await expect(page.getByRole('heading', { name: 'Langue et heure', level: 2 })).toBeVisible();
   await a11y(page);
   const language = page.getByRole('combobox', { name: 'Langue' });
-  expect(await language.locator('option').allTextContents()).toEqual(['Français']);
-  await expect(language).toHaveAccessibleDescription("D'autres langues arrivent.");
+  expect(await language.locator('option').allTextContents()).toEqual(["Langue de l'appareil", 'Français', 'English']);
+  await expect(language).toHaveValue('auto');
+  await expect(language).toHaveAccessibleDescription('Le changement recharge la page.');
   expect(await group(page, "Format de l'heure").getByRole('radio').evaluateAll((r) => r.map((x) => document.getElementById(x.getAttribute('aria-labelledby')!)!.textContent)))
     .toEqual(['Automatique', '12 h', '24 h']);
   await expect(radio(page, "Format de l'heure", 'Automatique')).toBeChecked();
@@ -835,6 +836,18 @@ test.describe('largeur mobile', () => {
     await page.goto('/settings/language');
     await a11y(page);
     await noScroll(page);
+    // La barre d'onglets défile de côté : l'onglet ouvert (« Langue et heure », le dernier) est amené dans la vue.
+    const tab = page.locator('.k-settings nav a[aria-current="page"]');
+    await expect(tab).toHaveText('Langue et heure');
+    await expect(tab).toBeInViewport({ ratio: 1 });
+    expect((await tab.boundingBox())!.x).toBeGreaterThanOrEqual(0);
+    // Un autre onglet ouvert vient à son tour au centre ; le premier revient en vue.
+    await page.getByRole('link', { name: 'Mon compte', exact: true }).click();
+    await expect(tab).toHaveText('Mon compte');
+    await expect(tab).toBeInViewport({ ratio: 1 });
+    await page.getByRole('link', { name: 'Langue et heure', exact: true }).click();
+    await expect(tab).toHaveText('Langue et heure');
+    await expect(tab).toBeInViewport({ ratio: 1 });
     const boxes = await group(page, "Format de l'heure").getByRole('radio').evaluateAll((r) => r.map((x) => x.closest('label')!.getBoundingClientRect()));
     expect(new Set(boxes.map((b) => Math.round(b.x))).size).toBe(1);
     boxes.slice(1).forEach((b, i) => expect(b.y).toBeGreaterThan(boxes[i].y));

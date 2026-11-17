@@ -1,0 +1,460 @@
+# Catalogue anglais, groupe « guilds » : une ligne « français<TAB>anglais » par texte (voir ../README.md).
+
+# Journal d'audit (audit.rs) : une phrase entière par action, jamais des morceaux recollés
+Rôles	Roles
+Invitations	Invites
+Serveur	Server
+Membre supprimé	Deleted member
+(supprimé)	(deleted)
+{auteur} a créé le salon vocal {nom}	{auteur} created the voice channel {nom}
+{auteur} a créé la catégorie {nom}	{auteur} created the category {nom}
+{auteur} a créé le salon d'annonces {nom}	{auteur} created the announcement channel {nom}
+{auteur} a créé le forum {nom}	{auteur} created the forum {nom}
+{auteur} a créé la scène {nom}	{auteur} created the stage channel {nom}
+{auteur} a créé le salon {nom}	{auteur} created the channel {nom}
+{auteur} a supprimé le salon vocal {nom}	{auteur} deleted the voice channel {nom}
+{auteur} a supprimé la catégorie {nom}	{auteur} deleted the category {nom}
+{auteur} a supprimé le salon d'annonces {nom}	{auteur} deleted the announcement channel {nom}
+{auteur} a supprimé le forum {nom}	{auteur} deleted the forum {nom}
+{auteur} a supprimé la scène {nom}	{auteur} deleted the stage channel {nom}
+{auteur} a supprimé le salon {nom}	{auteur} deleted the channel {nom}
+(rôle)	(role)
+{auteur} a ajouté le rôle {role} à {cible}	{auteur} added the role {role} to {cible}
+{auteur} a retiré le rôle {role} à {cible}	{auteur} removed the role {role} from {cible}
+{auteur} a expulsé {cible}	{auteur} kicked {cible}
+{auteur} a banni {cible}	{auteur} banned {cible}
+{auteur} a levé le bannissement de {cible}	{auteur} unbanned {cible}
+{auteur} a exclu {cible} pendant {duree}	{auteur} timed out {cible} for {duree}
+{auteur} a exclu {cible} temporairement	{auteur} timed out {cible} temporarily
+{auteur} a levé l'exclusion de {cible}	{auteur} removed the timeout from {cible}
+{auteur} a transféré la propriété du serveur à {cible}	{auteur} transferred server ownership to {cible}
+{auteur} a créé le rôle {cible}	{auteur} created the role {cible}
+{auteur} a modifié le rôle {cible}	{auteur} edited the role {cible}
+{auteur} a supprimé le rôle {cible}	{auteur} deleted the role {cible}
+{auteur} a changé l'ordre des rôles	{auteur} changed the order of the roles
+{auteur} a modifié le salon {salon}	{auteur} edited the channel {salon}
+{auteur} a déplacé le salon {salon}	{auteur} moved the channel {salon}
+{auteur} a retiré les droits propres du rôle {sujet} dans le salon {salon}	{auteur} removed the permission overrides for the role {sujet} in the channel {salon}
+{auteur} a retiré les droits propres de {sujet} dans le salon {salon}	{auteur} removed the permission overrides for {sujet} in the channel {salon}
+{auteur} a modifié les droits du rôle {sujet} dans le salon {salon}	{auteur} changed the permissions of the role {sujet} in the channel {salon}
+{auteur} a modifié les droits de {sujet} dans le salon {salon}	{auteur} changed the permissions of {sujet} in the channel {salon}
+{auteur} a créé une invitation pour le salon {salon}	{auteur} created an invite for the channel {salon}
+{auteur} a créé une invitation	{auteur} created an invite
+{auteur} a révoqué une invitation de {nom}	{auteur} revoked an invite created by {nom}
+{auteur} a révoqué une invitation	{auteur} revoked an invite
+{auteur} a ajouté l'emoji {emoji}	{auteur} added the emoji {emoji}
+{auteur} a renommé l'emoji {avant} en {apres}	{auteur} renamed the emoji {avant} to {apres}
+{auteur} a modifié l'emoji {emoji}	{auteur} edited the emoji {emoji}
+{auteur} a supprimé l'emoji {emoji}	{auteur} deleted the emoji {emoji}
+{auteur} a supprimé un message de {cible} dans le salon {salon}	{auteur} deleted a message by {cible} in the channel {salon}
+{auteur} a supprimé un message de {cible}	{auteur} deleted a message by {cible}
+{auteur} a épinglé un message dans {salon}	{auteur} pinned a message in {salon}
+{auteur} a épinglé un message	{auteur} pinned a message
+{auteur} a désépinglé un message dans {salon}	{auteur} unpinned a message in {salon}
+{auteur} a désépinglé un message	{auteur} unpinned a message
+{auteur} a renommé le serveur « {avant} » en « {apres} »	{auteur} renamed the server "{avant}" to "{apres}"
+{auteur} a retiré l'icône du serveur	{auteur} removed the server icon
+{auteur} a changé l'icône du serveur	{auteur} changed the server icon
+{auteur} a modifié le serveur	{auteur} edited the server
+{auteur} a effectué une action que cette version ne connaît pas ({action})	{auteur} did something this version doesn't recognize ({action})
+
+# Journal d'audit : précisions, champs et valeurs avant / après, filtres, états
+Valable {duree}, {n} utilisation au plus	Valid for {duree}, at most {n} use
+Valable {duree}, {n} utilisations au plus	Valid for {duree}, at most {n} uses
+Valable {duree}, utilisations illimitées	Valid for {duree}, unlimited uses
+Sans date limite, {n} utilisation au plus	No expiry, at most {n} use
+Sans date limite, {n} utilisations au plus	No expiry, at most {n} uses
+Sans date limite, utilisations illimitées	No expiry, unlimited uses
+Autorisé : {droits}	Allowed: {droits}
+Refusé : {droits}	Denied: {droits}
+Autorisé : {autorises}. Refusé : {refuses}	Allowed: {autorises}. Denied: {refuses}
+Nom	Name
+Sujet	Topic
+Mode lent	Slow mode
+Visibilité	Visibility
+Couleur	Color
+Affiché à part	Shown separately
+Droits	Permissions
+Réglage	Setting
+(vide)	(empty)
+(aucun)	(none)
+Privé	Private
+Public	Public
+Oui	Yes
+Non	No
+Aucune	None
+Ajoutés	Added
+Retirés	Removed
+Avant	Before
+Après	After
+Aucun événement	No events
+{n} événement	{n} event
+{n} événements	{n} events
+{n} événement affiché	{n} event shown
+{n} événements affichés	{n} events shown
+{n} événement de plus	{n} more event
+{n} événements de plus	{n} more events
+Chargement du journal…	Loading the log…
+Les actions de gestion et de modération de ce serveur, de la plus récente à la plus ancienne. Le journal est en lecture seule : rien ne s'y efface.	Management and moderation actions on this server, newest first. The log is read-only: nothing in it can be erased.
+Filtrer le journal d'audit	Filter the audit log
+Action	Action
+Toutes	All
+Membre	Member
+Tous	All
+Réinitialiser	Reset
+Actualiser	Refresh
+Aucun événement ne correspond	No matching events
+Essaie un autre type d'action ou un autre membre.	Try another type of action or another member.
+Les actions de gestion et de modération du serveur apparaîtront ici.	The server's management and moderation actions will show up here.
+Événements du journal	Audit log events
+Charger plus	Load more
+Raison :	Reason:
+Masquer les changements	Hide changes
+Voir les changements	View changes
+
+# Salons : mode lent, création, rangement, paramètres d'un salon, droits par salon (channels.rs)
+Désactivé	Off
+{n} seconde	{n} second
+{n} secondes	{n} seconds
+{n} heure	{n} hour
+{n} heures	{n} hours
+Salon textuel	Text channel
+Pour écrire des messages, partager des images et des fichiers.	For writing messages and sharing images and files.
+Salon vocal	Voice channel
+Pour parler et se voir en direct.	For talking and seeing each other live.
+Catégorie	Category
+Pour ranger plusieurs salons sous un même titre.	For grouping several channels under one heading.
+Donne un nom à la catégorie.	Give the category a name.
+Donne un nom au salon.	Give the channel a name.
+Nom de la catégorie	Category name
+Nom du salon	Channel name
+Elle range des salons sous un même titre, que l'on peut replier.	It groups channels under one heading that you can collapse.
+Le nom peut contenir des espaces et des majuscules.	The name can contain spaces and capital letters.
+Les majuscules et les espaces sont remplacés : « Salon de test » donne #salon-de-test.	Capital letters and spaces are replaced: "Test channel" becomes #test-channel.
+Nouvelle catégorie	New category
+nouveau-salon	new-channel
+Type	Type
+Aucune catégorie	No category
+Créer la catégorie	Create category
+Créer le salon	Create channel
+« {nom} » déplacé.	"{nom}" moved.
+Les salons s'affichent dans cet ordre. Monter le premier salon d'une catégorie le range dans la catégorie du dessus, descendre le dernier le range dans celle du dessous.	Channels are shown in this order. Moving the first channel of a category up puts it in the category above; moving the last one down puts it in the category below.
+Salons et catégories, dans l'ordre d'affichage	Channels and categories, in display order
+privé	private
+Monter la catégorie {nom}	Move category {nom} up
+Monter le salon {nom}	Move channel {nom} up
+Monter	Move up
+Descendre la catégorie {nom}	Move category {nom} down
+Descendre le salon {nom}	Move channel {nom} down
+Descendre	Move down
+Paramètres de la catégorie {nom}	Settings for category {nom}
+Paramètres du salon {nom}	Settings for channel {nom}
+Aperçu{contexte}	Overview{contexte}
+Permissions	Permissions
+Sections des paramètres du salon	Channel settings sections
+Fermer les paramètres (Échap)	Close settings (Esc)
+Salon introuvable	Channel not found
+Ce lien est peut-être ancien.	This link may be out of date.
+Il a été supprimé, ou tu n'y as plus accès.	It was deleted, or you no longer have access to it.
+Rien à régler ici	Nothing to adjust here
+Il faut le droit « Gérer les salons » pour changer ce salon.	You need the "Manage Channels" permission to change this channel.
+Modifications enregistrées.	Changes saved.
+Tout le monde voit le changement tout de suite.	Everyone sees the change right away.
+Sujet du salon	Channel topic
+Une ligne sur ce qui se dit ici : elle s'affiche dans l'en-tête du salon.	One line about what's discussed here: it appears in the channel header.
+Chacun doit attendre ce délai entre deux messages. Les personnes qui gèrent les messages ou les salons n'attendent pas.	Everyone has to wait this long between messages. People who manage messages or channels don't have to wait.
+Catégorie privée	Private category
+Salon privé	Private channel
+Sa catégorie est privée : ce salon l'est aussi. Change-le dans les paramètres de la catégorie.	Its category is private, so this channel is too. Change it in the category settings.
+Seuls les rôles et les membres que tu ajoutes dans « Permissions » voient cette catégorie et ses salons.	Only the roles and members you add under "Permissions" can see this category and its channels.
+Seuls les rôles et les membres que tu ajoutes dans « Permissions » voient ce salon.	Only the roles and members you add under "Permissions" can see this channel.
+Modifications du salon	Channel changes
+Modifications non enregistrées	Unsaved changes
+Non enregistré	Unsaved
+Supprimer la catégorie	Delete category
+Supprimer le salon	Delete channel
+Autoriser	Allow
+Hériter	Inherit
+Refuser	Deny
+@tout le monde	@everyone
+Rôle supprimé	Deleted role
+Ancien membre	Former member
+Permissions enregistrées.	Permissions saved.
+Droit sensible	Sensitive permission
+Droit sensible :	Sensitive permission:
+Pour chaque droit : « Autoriser » ou « Refuser » s'ajoute aux droits du serveur dans ce salon, « Hériter » laisse les droits habituels. Un refus l'emporte sur un droit donné par un rôle, mais pas sur le propriétaire ni les administrateurs. On ne règle que des droits que l'on a soi-même.	For each permission: "Allow" or "Deny" is added to the server's permissions in this channel, and "Inherit" keeps the usual permissions. A deny overrides a permission granted by a role, but not the owner or administrators. You can only set permissions you have yourself.
+Rôles et membres de ce salon	Roles and members of this channel
+modifications non enregistrées	unsaved changes
+réglé	configured
+Ajouter un rôle ou un membre	Add a role or a member
+Choisis dans la liste	Pick from the list
+Ajouter	Add
+Son rang est égal ou supérieur au tien : tu ne peux pas changer ses réglages.	Their rank is equal to or higher than yours: you can't change their settings.
+Tout remettre sur « Hériter »	Reset everything to "Inherit"
+Modifications des permissions	Permission changes
+
+# Emojis du serveur (emoji_settings.rs)
+Le nom compte de 2 à 32 caractères : lettres sans accent, chiffres et _.	The name must be 2 to 32 characters: letters without accents, digits and _.
+Ce serveur a déjà ses {max} emojis : retires-en un pour en ajouter.	This server already has its {max} emojis: remove one to add another.
+Cette animation pèse trop lourd : {taille} Ko au plus.	This animation is too large. The limit is {taille} KB.
+Un emoji à la fois : seul le premier fichier a été pris.	One emoji at a time: only the first file was used.
+Emoji {code} ajouté.	Emoji {code} added.
+Ajoute des images à ce serveur : ses membres les écrivent dans leurs messages avec {code} ou les choisissent dans le sélecteur d'emojis, et s'en servent aussi pour réagir dans leurs autres serveurs.	Add images to this server: members type them in their messages with {code}, or pick them from the emoji picker, and can also use them to react in their other servers.
+Ajouter un emoji	Add an emoji
+emplacements	slots
+PNG, JPEG, WebP ou GIF. Une image fixe est recadrée en carré et réduite à 128 px ; une animation reste telle quelle et pèse {taille} Ko au plus.	PNG, JPEG, WebP or GIF. A still image is cropped to a square and shrunk to 128 px; an animation is kept as is and must be {taille} KB or less.
+Il faut le droit « Gérer les émojis » pour ajouter, renommer ou retirer un emoji.	You need the "Manage Emojis" permission to add, rename or remove an emoji.
+Tous les emplacements sont pris : retire un emoji pour en ajouter un autre.	All slots are taken: remove an emoji to add another one.
+Aucun emoji pour l'instant	No emojis yet
+Les emojis du serveur apparaîtront ici, et dans le sélecteur de ses membres.	The server's emojis will show up here, and in its members' emoji picker.
+Emojis du serveur	Server emojis
+Dépose l'image pour l'ajouter	Drop the image to add it
+ajouté par {nom}	added by {nom}
+ajouté par un ancien membre	added by a former member
+Actions pour {code}	Actions for {code}
+Nouveau nom de {code}	New name for {code}
+Entrée valide, Échap annule.	Enter to save, Esc to cancel.
+Aperçu de l'emoji	Emoji preview
+Dans un message :	In a message:
+Ajouter l'emoji	Add emoji
+Supprimer {code} ?	Delete {code}?
+Emoji {code} supprimé.	Emoji {code} deleted.
+L'emoji disparaît du serveur et du sélecteur. Les messages et les réactions qui l'utilisent restent, mais n'affichent plus que son nom. Cette action est définitive.	The emoji disappears from the server and the picker. Messages and reactions that use it stay, but only show its name. This can't be undone.
+Supprimer l'emoji	Delete emoji
+
+# Noms des couleurs de rôle et des droits, par catégorie (guild.rs)
+Rouge	Red
+Or	Gold
+Citron vert	Lime
+Vert	Green
+Turquoise	Turquoise
+Bleu	Blue
+Violet	Purple
+Rose	Pink
+Général	General
+Voir les salons	View Channels
+Voir les salons et lire ce qui s'y dit.	See the channels and read what's said in them.
+Gérer les salons	Manage Channels
+Créer, renommer, déplacer et supprimer des salons.	Create, rename, move and delete channels.
+Gérer le serveur	Manage Server
+Changer le nom, l'icône et les réglages du serveur.	Change the server's name, icon and settings.
+Gérer les émojis	Manage Emojis
+Ajouter et retirer les émojis et les autocollants du serveur.	Add and remove the server's emojis and stickers.
+Gérer les événements	Manage Events
+Créer, modifier et annuler les événements.	Create, edit and cancel events.
+Voir le journal d'audit	View Audit Log
+Consulter l'historique des actions de modération.	See the history of moderation actions.
+Créer des invitations	Create Invites
+Inviter de nouvelles personnes avec un lien.	Invite new people with a link.
+Changer son surnom	Change Nickname
+Choisir son propre surnom sur ce serveur.	Choose your own nickname on this server.
+Gérer les surnoms	Manage Nicknames
+Changer le surnom des autres membres.	Change other members' nicknames.
+Expulser des membres	Kick Members
+Faire sortir un membre, qui peut revenir avec une invitation.	Remove a member, who can come back with an invite.
+Bannir des membres	Ban Members
+Faire sortir un membre pour de bon : il ne peut plus revenir avec une invitation.	Remove a member for good: they can't come back with an invite.
+Exclure temporairement	Timeout Members
+Empêcher un membre de parler pendant un moment.	Stop a member from talking for a while.
+Gérer les rôles	Manage Roles
+Créer, modifier et donner des rôles plus bas que le sien : de quoi distribuer des droits.	Create, edit and assign roles below your own: enough to hand out permissions.
+Salons texte	Text Channels
+Écrire des messages	Send Messages
+Envoyer des messages dans les salons textuels.	Send messages in text channels.
+Écrire dans les fils	Send Messages in Threads
+Répondre dans les fils de discussion.	Reply in threads.
+Créer des fils	Create Threads
+Ouvrir un nouveau fil à partir d'un message.	Start a new thread from a message.
+Aperçu des liens	Embed Links
+Faire afficher un aperçu des liens postés.	Show a preview of the links you post.
+Joindre des fichiers	Attach Files
+Envoyer des images et des fichiers.	Send images and files.
+Ajouter des réactions	Add Reactions
+Réagir à un message avec un émoji.	React to a message with an emoji.
+Mentionner tout le monde	Mention Everyone
+Prévenir tous les membres d'un coup avec @everyone.	Notify all members at once with @everyone.
+Gérer les messages	Manage Messages
+Supprimer les messages des autres.	Delete other people's messages.
+Lire l'historique	Read Message History
+Relire les messages envoyés avant son arrivée.	Read messages sent before you joined.
+Vocal	Voice
+Se connecter{contexte}	Connect{contexte}
+Rejoindre les salons vocaux.	Join voice channels.
+Parler	Speak
+Prendre la parole dans un salon vocal.	Talk in a voice channel.
+Caméra	Camera
+Allumer sa caméra.	Turn on your camera.
+Partager son écran	Share Screen
+Diffuser son écran dans un salon vocal.	Share your screen in a voice channel.
+Table de sons	Use Soundboard
+Jouer des sons de la table du serveur.	Play sounds from the server's soundboard.
+Voix prioritaire	Priority Speaker
+Baisser le volume des autres quand on parle.	Lower everyone else's volume while you talk.
+Couper le micro des autres	Mute Members
+Rendre muet un membre dans un salon vocal.	Mute a member in a voice channel.
+Déplacer des membres	Move Members
+Faire passer un membre d'un salon vocal à un autre.	Move a member from one voice channel to another.
+Avancé	Advanced
+Administrateur	Administrator
+Tous les droits, sans exception ni limite de rang : à réserver à des personnes de confiance.	Every permission, with no exceptions and no rank limits: only for people you trust.
+
+# Paramètres du serveur : sections, rôles, invitations, bannis, propriété, exclusion, fiche d'un membre (guild.rs)
+Vue d'ensemble	Overview
+Bannis	Bans
+Journal d'audit	Audit log
+Propriété	Ownership
+Sections des paramètres du serveur	Server settings sections
+Serveur introuvable	Server not found
+Tu n'en fais plus partie, ou il n'existe pas.	You're no longer a member, or it doesn't exist.
+Tes rôles ne te donnent accès à aucun réglage de ce serveur.	Your roles don't give you access to any settings on this server.
+Ordre des rôles modifié.	Role order changed.
+Nouveau rôle	New role
+Plus un rôle est haut dans la liste, plus il est puissant. On ne peut modifier, donner ni déplacer que les rôles plus bas que le sien.	The higher a role is in the list, the more powerful it is. You can only edit, assign or move roles below your own.
+Créer un rôle	Create a role
+Rôles, du plus haut au plus bas	Roles, highest to lowest
+Membres qui ont ce rôle	Members with this role
+membre	member
+membres	members
+Monter le rôle {nom}	Move role {nom} up
+Descendre le rôle {nom}	Move role {nom} down
+Affichage	Display
+Tout le monde a ce rôle, automatiquement : il n'a ni nom à changer, ni couleur. Ses droits (onglet Permissions) s'ajoutent à ceux de tous les autres rôles.	Everyone has this role automatically, so it has no name to change and no color. Its permissions (Permissions tab) are added to those of all other roles.
+Nom du rôle	Role name
+Couleur du nom	Name color
+Par défaut	Default
+Huit teintes qui restent lisibles sur tous les thèmes. Le nom des membres prend la couleur de leur rôle coloré le plus haut.	Eight shades that stay readable on every theme. A member's name takes the color of their highest colored role.
+Afficher à part dans la liste des membres	Show separately in the member list
+Les membres qui ont ce rôle forment leur propre rubrique, au-dessus des autres.	Members with this role get their own section, above the others.
+Supprimer ce rôle	Delete this role
+Aucun droit ne correspond à cette recherche.	No permission matches this search.
+Réglages du rôle	Role settings
+Chercher un droit	Search permissions
+Modifications du rôle	Role changes
+Tout le monde est dans ce rôle, automatiquement.	Everyone is in this role automatically.
+Ajouter un membre à ce rôle	Add a member to this role
+Choisis un membre	Pick a member
+Personne n'a ce rôle pour l'instant.	Nobody has this role yet.
+Retirer {nom} de ce rôle	Remove {nom} from this role
+30 minutes	30 minutes
+1 heure	1 hour
+6 heures	6 hours
+12 heures	12 hours
+1 jour	1 day
+7 jours	7 days
+Jamais	Never
+Illimité	Unlimited
+1 utilisation	1 use
+5 utilisations	5 uses
+10 utilisations	10 uses
+25 utilisations	25 uses
+50 utilisations	50 uses
+100 utilisations	100 uses
+Invitation {code} créée.	Invite {code} created.
+Invitation {code} révoquée.	Invite {code} revoked.
+Les invitations expirées ou épuisées restent listées une semaine. Une invitation révoquée cesse de marcher aussitôt.	Expired or used-up invites stay listed for a week. A revoked invite stops working right away.
+Tu ne vois que les invitations que tu as créées. Une invitation révoquée cesse de marcher aussitôt.	You only see the invites you created. A revoked invite stops working right away.
+Nouvelle invitation	New invite
+Expire après	Expires after
+Nombre d'utilisations	Number of uses
+Créer une invitation	Create invite
+Aucune invitation	No invites
+Celles que tu crées apparaissent ici.	The ones you create show up here.
+Expirée	Expired
+Épuisée	Used up
+un compte supprimé	a deleted account
+{n} utilisation, sans limite	{n} use, no limit
+{n} utilisations, sans limite	{n} uses, no limit
+{n} utilisation sur {max}	{n} use out of {max}
+{n} utilisations sur {max}	{n} uses out of {max}
+a expiré ({date})	expired ({date})
+a expiré	expired
+plus aucune utilisation	no uses left
+expire dans {duree}	expires in {duree}
+n'expire jamais	never expires
+Créée par {nom}	Created by {nom}
+Copie impossible	Couldn't copy
+Copier le lien de l'invitation {code}	Copy the link to invite {code}
+Copier	Copy
+Plus d'actions pour l'invitation {code}	More actions for invite {code}
+Révoquer	Revoke
+Une personne bannie ne peut plus rejoindre le serveur avec une invitation. Lever le bannissement lui rend cette possibilité.	A banned person can't rejoin the server with an invite. Lifting the ban gives that ability back.
+Personne n'est banni	Nobody is banned
+Les bannissements apparaîtront ici.	Bans will show up here.
+Personnes bannies	Banned people
+Raison : {raison}	Reason: {raison}
+Aucune raison donnée	No reason given
+Lever le bannissement de {nom}	Unban {nom}
+Lever le bannissement	Unban
+Le propriétaire a tous les droits et ne peut pas être sanctionné. Pour quitter le serveur, il faut d'abord le confier à un autre membre.	The owner has every permission and can't be sanctioned. To leave the server, you first have to hand it over to another member.
+Nouveau propriétaire	New owner
+Transférer…	Transfer…
+Zone dangereuse	Danger zone
+Supprimer le serveur efface ses salons, ses messages, ses rôles et ses invitations, pour tout le monde. Il n'y a aucun moyen de revenir en arrière.	Deleting the server erases its channels, messages, roles and invites, for everyone. There's no way back.
+Supprimer le serveur…	Delete server…
+Supprimer « {nom} » ?	Delete "{nom}"?
+Tout ça disparaît pour tout le monde, tout de suite :	All of this disappears for everyone, immediately:
+les salons, leurs messages et leurs fichiers,	the channels, their messages and their files,
+les rôles et les droits,	the roles and permissions,
+les invitations.	the invites.
+C'est irréversible.	This can't be undone.
+Les personnes en vocal sont déconnectées.	People in voice are disconnected.
+Tape le nom du serveur	Type the server name
+Pour confirmer, retape : {nom}	To confirm, type: {nom}
+Supprimer le serveur	Delete server
+60 secondes	60 seconds
+5 minutes	5 minutes
+10 minutes	10 minutes
+1 semaine	1 week
+Exclure {nom} temporairement	Time out {nom}
+Pendant ce temps, cette personne peut lire le serveur, mais ni écrire, ni réagir, ni envoyer de fichier, ni parler en vocal. L'exclusion se termine toute seule, et tu peux la lever avant.	During this time, this person can read the server but can't write, react, send files or talk in voice. The timeout ends on its own, and you can lift it earlier.
+Durée	Duration
+Raison (facultatif)	Reason (optional)
+Exclure	Time out
+@{pseudo} · membre depuis {date}	@{pseudo} · member since {date}
+Aucun rôle.	No roles.
+Son rang est égal ou supérieur au tien : tu ne peux pas changer ses rôles.	Their rank is equal to or higher than yours: you can't change their roles.
+
+# Icône du serveur (icon_picker.rs)
+Cette animation pèse trop lourd : {taille} Mo au plus.	This animation is too large. The limit is {taille} MB.
+Une seule image à la fois : seul le premier fichier a été pris.	One image at a time: only the first file was used.
+Choisir une image	Choose an image
+Retirer l'icône	Remove icon
+PNG, JPEG, WebP ou GIF. Une image fixe est recadrée en carré ; une animation reste telle quelle et pèse {taille} Mo au plus.	PNG, JPEG, WebP or GIF. A still image is cropped to a square; an animation is kept as is and must be {taille} MB or less.
+Dépose l'image pour l'utiliser	Drop the image to use it
+
+# Créer un serveur (new_guild.rs)
+Serveur de {nom}	{nom}'s server
+Le serveur est créé, mais son icône n'a pas pu être envoyée : {erreur} Tu peux la choisir dans les paramètres du serveur, rubrique « Vue d'ensemble ».	The server was created, but its icon couldn't be uploaded: {erreur} You can choose one in the server settings, under "Overview".
+Colle un lien ou un code d'invitation.	Paste an invite link or code.
+Crée ton serveur	Create your server
+Un espace pour ta bande, avec des salons textuels et vocaux. Choisis un point de départ : tu pourras tout changer ensuite.	A space for your crew, with text and voice channels. Pick a starting point: you can change everything afterwards.
+Modèle	Template
+Sera créé :	Will be created:
+Nom du serveur	Server name
+Icône	Icon
+(facultative)	(optional)
+Icône choisie	Chosen icon
+Pas d'icône : les initiales du serveur	No icon: the server's initials
+Créer le serveur	Create server
+Création…	Creating…
+Tu as déjà une invitation ?	Already have an invite?
+Rejoindre	Join
+
+# Vue d'ensemble (overview.rs)
+Icône mise à jour.	Icon updated.
+Nom du serveur enregistré.	Server name saved.
+Icône du serveur	Server icon
+Elle remplace les initiales du serveur dans la liste de gauche, chez tous ses membres.	It replaces the server's initials in the list on the left, for all its members.
+Icône actuelle du serveur	Current server icon
+
+# Modèles de serveur (kraken-core/src/templates.rs) : noms et descriptions des cartes, traduits à l'affichage ;
+# les noms des catégories et des salons viennent du noyau (`Label`), dans la langue choisie
+Vide	Empty
+Communauté	Community
+Jeux	Gaming
+Études	Study
+Un salon textuel et un vocal, à compléter.	One text channel and one voice channel, ready for you to build on.
+Annonces, règles et entraide, pour un club ou un projet.	Announcements, rules and support, for a club or a project.
+Trouver des partenaires, parler pendant la partie.	Find teammates and talk during the game.
+Cours, devoirs et salles de travail vocales.	Classes, homework and voice study rooms.
+Discuter, partager ses photos, se retrouver en vocal.	Chat, share photos and hang out in voice.

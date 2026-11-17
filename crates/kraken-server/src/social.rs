@@ -33,6 +33,16 @@ pub async fn relationships(State(state): State<AppState>, auth: Auth) -> ApiResu
     Ok(Json(state.hub.with_presence(state.db.relationships(auth.user.id).await?)))
 }
 
+/// Aucun compte à ce pseudo : on le redit s'il est bien formé, sinon on rappelle ce qu'un pseudo peut contenir.
+fn unknown_user(name: &str) -> AppError {
+    let message = if kraken_db::valid_username(&name.to_lowercase()) {
+        format!("Aucun compte ne porte le pseudo « {} ». Vérifie son orthographe.", name.to_lowercase())
+    } else {
+        "Aucun compte ne porte ce pseudo : il ne contient que des minuscules, chiffres, points et tirets bas.".into()
+    };
+    AppError(StatusCode::NOT_FOUND, "unknown_user", message)
+}
+
 /// Demande d'ami par pseudo (ou acceptation, s'il m'en a envoyé une).
 pub async fn send_request(
     State(state): State<AppState>,
@@ -45,21 +55,7 @@ pub async fn send_request(
     }
     let target = match state.db.user_by_username(name).await? {
         Some(u) => u,
-        None if kraken_db::valid_username(&name.to_lowercase()) => {
-            return Err(AppError(
-                StatusCode::NOT_FOUND,
-                "unknown_user",
-                format!("Aucun compte ne porte le pseudo « {} ». Vérifie son orthographe.", name.to_lowercase()),
-            ));
-        }
-        None => {
-            return Err(AppError(
-                StatusCode::NOT_FOUND,
-                "unknown_user",
-                "Aucun compte ne porte ce pseudo : il ne contient que des minuscules, chiffres, points et tirets bas."
-                    .into(),
-            ));
-        }
+        None => return Err(unknown_user(name)),
     };
     let (r, notices) = state.db.befriend(auth.user.id, target.id).await?;
     notify(&state, notices);
@@ -184,4 +180,26 @@ pub async fn remove_recipient(
     state.hub.send(&[target], Event::ChannelDelete { id: cid });
     announce(&state, cid, &left, Event::ChannelUpdate).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unknown_username_has_an_english_text_in_the_catalogue() {
+        // « Zoë » n'est pas un pseudo valide : on rappelle les règles.
+        let malformed = unknown_user("Zoë");
+        assert!(malformed.2.starts_with("Aucun compte ne porte ce pseudo :"));
+        let ok = unknown_user("LOU.sam");
+        assert_eq!(ok.2, "Aucun compte ne porte le pseudo « lou.sam ». Vérifie son orthographe.");
+        for e in [ok, malformed] {
+            crate::error::coverage::assert_translated(&e.2);
+        }
+        assert_eq!(
+            crate::error::coverage::english_of("Aucun compte ne porte le pseudo « lou.sam ». Vérifie son orthographe.")
+                .as_deref(),
+            Some("No account has the username \"lou.sam\". Check the spelling.")
+        );
+    }
 }

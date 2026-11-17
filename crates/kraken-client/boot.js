@@ -1,7 +1,7 @@
 // Fichier séparé : la CSP du serveur interdit les scripts en ligne.
 //
 // Script classique, chargé dans <head> : il bloque le premier rendu le temps de poser les réglages
-// d'affichage de cet appareil (Apparence, Accessibilité) sur <html>, pour que la page ne clignote pas
+// d'affichage de cet appareil (Apparence, Accessibilité) et la langue sur <html>, pour que la page ne clignote pas
 // avant que le client WASM ne démarre. Mêmes clés et mêmes attributs que src/prefs.rs ; sans stockage
 // local (navigation privée, accès refusé) les valeurs par défaut restent en place.
 (function () {
@@ -21,6 +21,20 @@
   function set(name, value) {
     if (value === null) root.removeAttribute(name); else root.setAttribute(name, value);
   }
+
+  // Langue de l'interface (même choix et même règle que src/i18n.rs) : `<html lang dir>` avant le client WASM.
+  var chosen = read("kraken.lang", ["auto", "fr", "en"], "auto");
+  try { if (chosen === "auto") chosen = window.sessionStorage.getItem("kraken.lang") || "auto"; } catch (e) { /* stockage refusé */ }
+  var lang = chosen === "fr" || chosen === "en" ? chosen : "fr";
+  if (chosen === "auto") {
+    var wanted = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
+    for (var i = 0; i < wanted.length; i++) {
+      var code = String(wanted[i] || "").split(/[-_]/)[0].toLowerCase();
+      if (code === "fr" || code === "en") { lang = code; break; }
+    }
+  }
+  root.setAttribute("lang", lang);
+  root.setAttribute("dir", "ltr");
 
   set("data-theme", read("kraken.theme", ["auto", "dark", "light", "black"], "dark"));
   var text = read("kraken.text", ["14", "16", "18", "20"], "16");

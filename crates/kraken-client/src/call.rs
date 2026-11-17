@@ -19,11 +19,19 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use wasm_bindgen_futures::JsFuture;
 
+use crate::i18n::{t, tf, tn};
 use crate::icons::{Icon, lu};
 use crate::store::{Store, store};
+use crate::tk;
 use crate::ui::{Avatar, Header, initials};
 use crate::voice::{self, Control, ControlNote, Feed, ShareNote, Status};
 use crate::voice_settings;
+
+/// « Refuser » un appel ou une demande de contrôle. Le catalogue traduit déjà « Refuser » autrement (un droit refusé) :
+/// le `{contexte}` vide en fait une entrée à part, invisible en français.
+fn decline_label() -> String {
+    tf("Refuser{contexte}", &[("contexte", "")])
+}
 
 /// Qui est dans ce salon vocal (ou cet appel), dans l'ordre d'arrivée.
 fn present(s: Store, guild: Option<Id>, channel: Id) -> Vec<VoiceState> {
@@ -43,7 +51,7 @@ fn member(s: Store, guild: Option<Id>, user: Id) -> (Option<User>, String) {
                 let n = u.name().to_string();
                 (Some(u), n)
             }
-            None => (None, "Quelqu'un".into()),
+            None => (None, t("Quelqu'un")),
         };
     };
     s.guilds
@@ -51,7 +59,7 @@ fn member(s: Store, guild: Option<Id>, user: Id) -> (Option<User>, String) {
             let m = gs.iter().find(|g| g.guild.id == guild)?.members.iter().find(|m| m.user.id == user)?;
             Some((Some(m.user.clone()), m.nick.clone().unwrap_or_else(|| m.user.name().to_string())))
         })
-        .unwrap_or_else(|| (None, "Membre".into()))
+        .unwrap_or_else(|| (None, t("Membre")))
 }
 
 fn face(user: Option<User>, name: &str, size: &'static str) -> AnyView {
@@ -90,14 +98,14 @@ pub fn VoiceRoom(channel: Channel) -> impl IntoView {
     let here = Memo::new(move |_| v.room.get().is_some_and(|r| r.channel == cid));
     // Quitter l'écran du salon arrête de regarder (les micros, eux, continuent).
     on_cleanup(move || v.watch(None));
-    let (title, label, lobby_name) = (name.clone(), format!("Salon vocal {name}"), name.clone());
+    let (title, label, lobby_name) = (name.clone(), tf("Salon vocal {nom}", &[("nom", &name)]), name.clone());
     view! {
         <Header>
             <Icon icon=lu::LuVolume2/>
             <h1 class="app-title app-ellipsis">{title}</h1>
             <div class="app-header-tools">
-                <a class="k-btn k-btn--icon" href="/search" aria-label="Rechercher" title="Rechercher"><Icon icon=lu::LuSearch/></a>
-                <a class="k-btn k-btn--icon" href="/inbox" aria-label="Boîte de réception" title="Boîte de réception"><Icon icon=lu::LuInbox/></a>
+                <a class="k-btn k-btn--icon" href="/search" aria-label=t("Rechercher") title=t("Rechercher")><Icon icon=lu::LuSearch/></a>
+                <a class="k-btn k-btn--icon" href="/inbox" aria-label=t("Boîte de réception") title=t("Boîte de réception")><Icon icon=lu::LuInbox/></a>
             </div>
         </Header>
         <section class="app-call" aria-label=label>
@@ -128,9 +136,8 @@ fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
             <span class="app-call-icon" aria-hidden="true"><Icon icon=lu::LuVolume2/></span>
             <h2>{name}</h2>
             <p class="app-hint" aria-live="polite">{move || match who.with(Vec::len) {
-                0 => "Personne pour l'instant.".to_string(),
-                1 => "1 personne dans le salon".to_string(),
-                n => format!("{n} personnes dans le salon"),
+                0 => t("Personne pour l'instant."),
+                n => tn("{n} personne dans le salon", "{n} personnes dans le salon", n),
             }}</p>
             <Show when=move || who.with(|w| !w.is_empty())>
                 <ul class="app-call-who">
@@ -143,12 +150,12 @@ fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
                 </ul>
             </Show>
             <button class="k-btn k-btn--primary k-btn--lg" disabled=!supported on:click=move |_| v.join(guild, channel)>
-                <Icon icon=lu::LuPhone/>"Rejoindre"
+                <Icon icon=lu::LuPhone/>{t("Rejoindre")}
             </button>
-            {move || elsewhere.get().map(|c| view! { <p class="app-hint">{format!("Tu quitteras {c}.")}</p> })}
+            {move || elsewhere.get().map(|c| view! { <p class="app-hint">{tf("Tu quitteras {salon}.", &[("salon", &c)])}</p> })}
             {move || error().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
-            {(!supported).then(|| view! { <p class="k-error">"Ton navigateur ne permet pas les appels vocaux. Essaie avec un navigateur récent."</p> })}
-            {insecure.then(|| view! { <p class="app-hint">{voice::INSECURE}</p> })}
+            {(!supported).then(|| view! { <p class="k-error">{t(voice::NO_WEBRTC)}</p> })}
+            {insecure.then(|| view! { <p class="app-hint">{t(voice::INSECURE)}</p> })}
         </div>
     }
 }
@@ -164,15 +171,15 @@ fn Call(guild: Option<Id>, channel: Id) -> impl IntoView {
             {move || match v.status.get() {
                 Status::Connecting => Some(view! {
                     <div class="k-banner" role="status"><Icon icon=lu::LuLoaderCircle/>
-                        <span>{if guild.is_some() { "Connexion au salon vocal…" } else { "Connexion à l'appel…" }}</span></div>
+                        <span>{if guild.is_some() { t("Connexion au salon vocal…") } else { t("Connexion à l'appel…") }}</span></div>
                 }.into_any()),
                 Status::Unstable => Some(view! {
-                    <div class="k-banner k-banner--warning" role="status"><Icon icon=lu::LuWifiOff/><span>"Connexion instable : on attend le retour du réseau…"</span></div>
+                    <div class="k-banner k-banner--warning" role="status"><Icon icon=lu::LuWifiOff/><span>{t("Connexion instable : on attend le retour du réseau…")}</span></div>
                 }.into_any()),
                 Status::Lost(why) => Some(view! {
                     <div class="k-banner k-banner--warning" role="alert">
                         <Icon icon=lu::LuWifiOff/><span>{why}</span>
-                        <button class="k-btn k-btn--sm app-push" on:click=move |_| v.join(guild, channel)>"Reconnecter"</button>
+                        <button class="k-btn k-btn--sm app-push" on:click=move |_| v.join(guild, channel)>{t("Reconnecter")}</button>
                     </div>
                 }.into_any()),
                 Status::Off | Status::Connected => None,
@@ -180,7 +187,7 @@ fn Call(guild: Option<Id>, channel: Id) -> impl IntoView {
             {move || v.notice.get().map(|n| view! {
                 <div class="k-banner" role="status">
                     <Icon icon=lu::LuCircleAlert/><span>{n}</span>
-                    <button class="k-btn k-btn--icon" aria-label="Masquer ce message" title="Masquer" on:click=move |_| v.notice.set(None)>
+                    <button class="k-btn k-btn--icon" aria-label=t("Masquer ce message") title=t("Masquer") on:click=move |_| v.notice.set(None)>
                         <Icon icon=lu::LuX/>
                     </button>
                 </div>
@@ -188,27 +195,30 @@ fn Call(guild: Option<Id>, channel: Id) -> impl IntoView {
             {move || v.control_note.get().map(|(u, note)| {
                 let who = member(s, guild, u).1;
                 let text = match note {
-                    ControlNote::Ended => format!("Le contrôle de l'écran de {who} a pris fin."),
-                    ControlNote::Refused(ControlRefusal::Declined) => format!("{who} a refusé ta demande de contrôle."),
-                    ControlNote::Refused(ControlRefusal::Busy) => format!("Quelqu'un d'autre contrôle déjà l'écran de {who}."),
-                    ControlNote::Refused(ControlRefusal::Desktop) => format!(
-                        "{who} partage depuis un navigateur : pour être contrôlé, il faut partager depuis l'appli de bureau KRAKEN."),
-                    ControlNote::Refused(ControlRefusal::Surface) => format!(
-                        "{who} partage une fenêtre ou un onglet : le contrôle demande le partage d'un écran entier."),
-                    ControlNote::Refused(ControlRefusal::Unavailable) => format!(
-                        "Le contrôle à distance n'est pas possible sur l'ordinateur de {who} pour l'instant."),
+                    ControlNote::Ended => tf("Le contrôle de l'écran de {nom} a pris fin.", &[("nom", &who)]),
+                    ControlNote::Refused(ControlRefusal::Declined) => tf("{nom} a refusé ta demande de contrôle.", &[("nom", &who)]),
+                    ControlNote::Refused(ControlRefusal::Busy) => tf("Quelqu'un d'autre contrôle déjà l'écran de {nom}.", &[("nom", &who)]),
+                    ControlNote::Refused(ControlRefusal::Desktop) => tf(
+                        "{nom} partage depuis un navigateur : pour être contrôlé, il faut partager depuis l'appli de bureau KRAKEN.",
+                        &[("nom", &who)]),
+                    ControlNote::Refused(ControlRefusal::Surface) => tf(
+                        "{nom} partage une fenêtre ou un onglet : le contrôle demande le partage d'un écran entier.",
+                        &[("nom", &who)]),
+                    ControlNote::Refused(ControlRefusal::Unavailable) => tf(
+                        "Le contrôle à distance n'est pas possible sur l'ordinateur de {nom} pour l'instant.",
+                        &[("nom", &who)]),
                 };
                 view! {
                     <div class="k-banner" role="status">
                         <Icon icon=lu::LuMousePointer2/><span>{text}</span>
-                        <button class="k-btn k-btn--icon" aria-label="Masquer ce message" title="Masquer" on:click=move |_| v.control_note.set(None)>
+                        <button class="k-btn k-btn--icon" aria-label=t("Masquer ce message") title=t("Masquer") on:click=move |_| v.control_note.set(None)>
                             <Icon icon=lu::LuX/>
                         </button>
                     </div>
                 }
             })}
             {move || v.watching.get().map(|u| view! { <Stage guild=guild user=u/> })}
-            <ul class="app-tiles" aria-label="Participants">
+            <ul class="app-tiles" aria-label=t("Participants")>
                 <For each=move || who.get() key=|u| *u let:u>
                     <Tile guild=guild channel=channel user=u/>
                 </For>
@@ -241,15 +251,15 @@ fn Tile(guild: Option<Id>, channel: Id, user: Id) -> impl IntoView {
     });
     let watch_label = {
         let name = name.clone();
-        move || if watched() { "Arrêter de regarder".to_string() } else { format!("Regarder l'écran de {name}") }
+        move || if watched() { t("Arrêter de regarder") } else { tf("Regarder l'écran de {nom}", &[("nom", &name)]) }
     };
     let avatar = {
         let name = name.clone();
         move || face(account.clone(), &name, "lg")
     };
     // Ma légende est « <mon nom> (toi) », caméra allumée ou non.
-    let label = format!("{name}{}", if me { " (toi)" } else { "" });
-    let cam_label = if me { "Aperçu de ta caméra".to_string() } else { format!("Caméra de {name}") };
+    let label = if me { tf("{nom} (toi)", &[("nom", &name)]) } else { name.clone() };
+    let cam_label = if me { t("Aperçu de ta caméra") } else { tf("Caméra de {nom}", &[("nom", &name)]) };
     view! {
         <li class="k-tile" data-live=move || live().then_some("") data-camera=move || camera.get().then_some("")
             data-speaking=move || v.speaking.with(|x| x.contains(&user)).then_some("")>
@@ -263,18 +273,18 @@ fn Tile(guild: Option<Id>, channel: Id, user: Id) -> impl IntoView {
             <div class="k-tile-name">
                 <span class="app-ellipsis">{label}</span>
                 <Show when=move || flag(|x| x.self_mute && !x.self_deaf)>
-                    <span class="k-tile-flag" role="img" aria-label="micro coupé" title="Micro coupé"><Icon icon=lu::LuMicOff small=true/></span>
+                    <span class="k-tile-flag" role="img" aria-label=t("micro coupé") title=t("Micro coupé")><Icon icon=lu::LuMicOff small=true/></span>
                 </Show>
                 <Show when=move || flag(|x| x.self_deaf)>
-                    <span class="k-tile-flag" role="img" aria-label="son coupé" title="Son coupé"><Icon icon=lu::LuHeadphoneOff small=true/></span>
+                    <span class="k-tile-flag" role="img" aria-label=t("son coupé") title=t("Son coupé")><Icon icon=lu::LuHeadphoneOff small=true/></span>
                 </Show>
-                <Show when=live><span class="k-badge k-badge--live">"En direct"</span></Show>
+                <Show when=live><span class="k-badge k-badge--live">{t("En direct")}</span></Show>
             </div>
             <Show when=move || live() && !me>
                 <button class="k-btn k-btn--sm" aria-label=watch_label.clone() aria-pressed=move || watched().to_string()
                     on:click=move |_| v.watch(if watched() { None } else { Some(user) })>
                     <Icon icon=lu::LuMonitorPlay small=true/>
-                    <span>{move || if watched() { "Arrêter de regarder" } else { "Regarder" }}</span>
+                    <span>{move || if watched() { t("Arrêter de regarder") } else { t("Regarder") }}</span>
                 </button>
             </Show>
         </li>
@@ -312,7 +322,7 @@ fn Preview() -> impl IntoView {
             v.preview.with(|p| attach(&e, p.as_ref()));
         }
     });
-    view! { <video class="k-tile-video" node_ref=el autoplay playsinline muted aria-label="Aperçu de ton écran partagé"></video> }
+    view! { <video class="k-tile-video" node_ref=el autoplay playsinline muted aria-label=t("Aperçu de ton écran partagé")></video> }
 }
 
 /// Ce que je tiens enfoncé sur l'écran que je contrôle, et de quoi espacer les mouvements.
@@ -527,8 +537,8 @@ fn Stage(guild: Option<Id>, user: Id) -> impl IntoView {
     };
     let on_keyup = move |e: web_sys::KeyboardEvent| on_key(e, false);
     let on_blur = move |_| release(true);
-    let hint = format!("Tu contrôles l'écran de {name}. Échap pour relâcher (Maj+Échap envoie Échap).");
-    let request_label = format!("Demander le contrôle de l'écran de {name}");
+    let hint = tf("Tu contrôles l'écran de {nom}. Échap pour relâcher (Maj+Échap envoie Échap).", &[("nom", &name)]);
+    let request_label = tf("Demander le contrôle de l'écran de {nom}", &[("nom", &name)]);
     let full = move |_| {
         let d = document();
         if d.fullscreen_element().is_some() {
@@ -540,46 +550,46 @@ fn Stage(guild: Option<Id>, user: Id) -> impl IntoView {
     view! {
         <figure class="app-stage" node_ref=frame data-control=move || controlling.get().then_some("")>
             <video node_ref=el autoplay playsinline prop:muted=move || v.deaf.get()
-                aria-label=format!("Écran partagé par {name}") on:playing=move |_| playing.set(true)
+                aria-label=tf("Écran partagé par {nom}", &[("nom", &name)]) on:playing=move |_| playing.set(true)
                 tabindex=move || controlling.get().then_some("0")
                 on:pointermove=on_move on:pointerdown=on_down on:pointerup=on_up on:wheel=on_wheel
                 on:keydown=on_keydown on:keyup=on_keyup on:blur=on_blur
                 on:contextmenu=move |e| if controlling.get_untracked() { e.prevent_default() }></video>
             <Show when=move || !playing.get()>
-                <p class="app-stage-wait" role="status">"Chargement de l'écran…"</p>
+                <p class="app-stage-wait" role="status">{t("Chargement de l'écran…")}</p>
             </Show>
             <Show when=move || controlling.get()>
                 <p class="app-stage-hint" role="status">{hint.clone()}</p>
             </Show>
             <figcaption>
-                <span class="k-badge k-badge--live">"En direct"</span>
+                <span class="k-badge k-badge--live">{t("En direct")}</span>
                 <b class="app-ellipsis">{name.clone()}</b>
                 {
                     let request_label = request_label.clone();
                     move || if controlling.get() {
                         view! {
                             <button class="k-btn k-btn--sm k-btn--danger app-push" on:click=move |_| v.stop_control()>
-                                <Icon icon=lu::LuMousePointerBan small=true/><span>"Arrêter le contrôle"</span>
+                                <Icon icon=lu::LuMousePointerBan small=true/><span>{t("Arrêter le contrôle")}</span>
                             </button>
                         }.into_any()
                     } else if asking.get() {
                         view! {
-                            <span class="app-push app-stage-asking" role="status">"Demande envoyée…"</span>
-                            <button class="k-btn k-btn--sm" on:click=move |_| v.stop_control()>"Annuler la demande"</button>
+                            <span class="app-push app-stage-asking" role="status">{t("Demande envoyée…")}</span>
+                            <button class="k-btn k-btn--sm" on:click=move |_| v.stop_control()>{t("Annuler la demande")}</button>
                         }.into_any()
                     } else {
                         view! {
                             <button class="k-btn k-btn--sm app-push" aria-label=request_label.clone() title=request_label.clone()
                                 on:click=move |_| v.request_control(user)>
-                                <Icon icon=lu::LuMousePointer2 small=true/><span>"Demander le contrôle"</span>
+                                <Icon icon=lu::LuMousePointer2 small=true/><span>{t("Demander le contrôle")}</span>
                             </button>
                         }.into_any()
                     }
                 }
-                <button class="k-btn k-btn--icon" aria-label="Plein écran" title="Plein écran" on:click=full>
+                <button class="k-btn k-btn--icon" aria-label=t("Plein écran") title=t("Plein écran") on:click=full>
                     <Icon icon=lu::LuMaximize/>
                 </button>
-                <button class="k-btn k-btn--icon" aria-label="Arrêter de regarder" title="Arrêter de regarder" on:click=move |_| v.watch(None)>
+                <button class="k-btn k-btn--icon" aria-label=t("Arrêter de regarder") title=t("Arrêter de regarder") on:click=move |_| v.watch(None)>
                     <Icon icon=lu::LuX/>
                 </button>
             </figcaption>
@@ -593,8 +603,8 @@ pub fn MicToggle(#[prop(optional)] big: bool) -> impl IntoView {
     let v = store().voice;
     let off = move || v.mute.get() || v.deaf.get();
     view! {
-        <button class=if big { "k-callbtn" } else { "k-btn k-btn--icon" } aria-label="Couper le micro"
-            title=move || if off() { "Réactiver le micro" } else { "Couper le micro" }
+        <button class=if big { "k-callbtn" } else { "k-btn k-btn--icon" } aria-label=t("Couper le micro")
+            title=move || if off() { t("Réactiver le micro") } else { t("Couper le micro") }
             aria-pressed=move || off().to_string() on:click=move |_| v.toggle_mute()>
             {move || if off() { view! { <Icon icon=lu::LuMicOff/> } } else { view! { <Icon icon=lu::LuMic/> } }}
         </button>
@@ -607,8 +617,8 @@ pub fn DeafToggle(#[prop(optional)] big: bool) -> impl IntoView {
     let v = store().voice;
     let deaf = move || v.deaf.get();
     view! {
-        <button class=if big { "k-callbtn" } else { "k-btn k-btn--icon" } aria-label="Couper le son"
-            title=move || if deaf() { "Réactiver le son" } else { "Couper le son" }
+        <button class=if big { "k-callbtn" } else { "k-btn k-btn--icon" } aria-label=t("Couper le son")
+            title=move || if deaf() { t("Réactiver le son") } else { t("Couper le son") }
             aria-pressed=move || deaf().to_string() on:click=move |_| v.toggle_deaf()>
             {move || if deaf() { view! { <Icon icon=lu::LuHeadphoneOff/> } } else { view! { <Icon icon=lu::LuHeadphones/> } }}
         </button>
@@ -621,21 +631,21 @@ fn CallBar(private: bool) -> impl IntoView {
     let v = store().voice;
     let share_ok = voice::can_share();
     let why = if voice::devices().is_none() {
-        "Le partage d'écran demande l'instance en HTTPS (ou ouverte via localhost)."
+        t("Le partage d'écran demande l'instance en HTTPS (ou ouverte via localhost).")
     } else {
-        "Ce navigateur ne permet pas de partager l'écran."
+        t("Ce navigateur ne permet pas de partager l'écran.")
     };
-    let share_label = move || if v.streaming.get() { "Arrêter le partage" } else { "Partager ton écran" };
+    let share_label = move || if v.streaming.get() { t("Arrêter le partage") } else { t("Partager ton écran") };
     // Sans le droit « Caméra » : bouton désactivé, la raison en infobulle et lue par `aria-describedby`.
     // Une caméra déjà allumée reste éteignable si le droit disparaît en cours d'appel.
     let cam_blocked = move || !v.camera.get() && v.camera_denied();
     let cam_title = move || {
         if cam_blocked() {
-            voice::CAM_NO_RIGHT
+            t(voice::CAM_NO_RIGHT)
         } else if v.camera.get() {
-            "Couper la caméra"
+            t("Couper la caméra")
         } else {
-            "Activer la caméra"
+            t("Activer la caméra")
         }
     };
     view! {
@@ -644,16 +654,16 @@ fn CallBar(private: bool) -> impl IntoView {
         <div class="app-call-note">
             {move || v.camera_error.get().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
         </div>
-        <div class="k-callbar" role="group" aria-label="Commandes de l'appel">
+        <div class="k-callbar" role="group" aria-label=t("Commandes de l'appel")>
             <MicToggle big=true/>
             <DeafToggle big=true/>
             <button class="k-callbtn" data-on=move || v.camera.get().then_some("")
                 disabled=move || cam_blocked() || matches!(v.status.get(), Status::Lost(_) | Status::Off)
-                aria-label="Caméra" title=cam_title aria-pressed=move || v.camera.get().to_string()
+                aria-label=t("Caméra") title=cam_title aria-pressed=move || v.camera.get().to_string()
                 aria-describedby=move || cam_blocked().then_some("call-cam-why")
                 on:click=move |_| v.toggle_camera()>
                 {move || if v.camera.get() { view! { <Icon icon=lu::LuVideo/> } } else { view! { <Icon icon=lu::LuVideoOff/> } }}
-                <span>"Caméra"</span>
+                <span>{t("Caméra")}</span>
             </button>
             <button class="k-callbtn" data-on=move || v.streaming.get().then_some("")
                 disabled=move || !share_ok || matches!(v.status.get(), Status::Lost(_) | Status::Off)
@@ -664,14 +674,14 @@ fn CallBar(private: bool) -> impl IntoView {
             </button>
             {if private {
                 view! {
-                    <button class="k-callbtn k-callbtn--danger" aria-label="Raccrocher" title="Raccrocher" on:click=move |_| v.leave()>
-                        <Icon icon=lu::LuPhoneOff/><span>"Raccrocher"</span>
+                    <button class="k-callbtn k-callbtn--danger" aria-label=t("Raccrocher") title=t("Raccrocher") on:click=move |_| v.leave()>
+                        <Icon icon=lu::LuPhoneOff/><span>{t("Raccrocher")}</span>
                     </button>
                 }.into_any()
             } else {
                 view! {
-                    <button class="k-callbtn k-callbtn--danger" aria-label="Quitter" title="Quitter le salon vocal" on:click=move |_| v.leave()>
-                        <Icon icon=lu::LuPhoneOff/><span>"Quitter"</span>
+                    <button class="k-callbtn k-callbtn--danger" aria-label=t("Quitter") title=t("Quitter le salon vocal") on:click=move |_| v.leave()>
+                        <Icon icon=lu::LuPhoneOff/><span>{t("Quitter")}</span>
                     </button>
                 }.into_any()
             }}
@@ -682,16 +692,16 @@ fn CallBar(private: bool) -> impl IntoView {
                     <Icon icon=lu::LuMic small=true/>
                     <span class="app-call-ptt-text">
                         <span class="app-call-ptt-idle">
-                            "Appuyer pour parler : "
+                            {t("Appuyer pour parler :")}" "
                             <span class="k-kbd"><kbd>{move || v.ptt_key.with(|k| k.as_ref().map(|k| k.label.clone()).unwrap_or_default())}</kbd></span>
                         </span>
-                        <span class="app-call-ptt-held">"Micro ouvert"</span>
+                        <span class="app-call-ptt-held">{t("Micro ouvert")}</span>
                     </span>
                 </span>
             })}
         </div>
         {(!share_ok).then(|| view! { <p class="app-hint app-call-why" id="call-share-why">{why}</p> })}
-        {move || cam_blocked().then(|| view! { <p class="app-hint app-call-why" id="call-cam-why">{voice::CAM_NO_RIGHT}</p> })}
+        {move || cam_blocked().then(|| view! { <p class="app-hint app-call-why" id="call-cam-why">{t(voice::CAM_NO_RIGHT)}</p> })}
     }
 }
 
@@ -702,7 +712,7 @@ pub fn VoiceUsers(guild: Option<Id>, channel: Id, name: String, hidden: Signal<b
     let who = Memo::new(move |_| present(s, guild, channel));
     view! {
         <Show when=move || who.with(|w| !w.is_empty())>
-            <ul class="app-voice-users" aria-label=format!("Dans {name}") hidden=hidden>
+            <ul class="app-voice-users" aria-label=tf("Dans {nom}", &[("nom", &name)]) hidden=hidden>
                 <For each=move || who.get() key=|x| (x.user_id, x.self_mute, x.self_deaf, x.streaming, x.camera) let:x>
                     {
                         let (u, n) = member(s, guild, x.user_id);
@@ -712,15 +722,15 @@ pub fn VoiceUsers(guild: Option<Id>, channel: Id, name: String, hidden: Signal<b
                                 {face(u, &n, "sm")}
                                 <span class="app-ellipsis">{n.clone()}</span>
                                 {(x.self_mute && !x.self_deaf).then(|| view! {
-                                    <span role="img" aria-label="micro coupé" title="Micro coupé"><Icon icon=lu::LuMicOff small=true/></span>
+                                    <span role="img" aria-label=t("micro coupé") title=t("Micro coupé")><Icon icon=lu::LuMicOff small=true/></span>
                                 })}
                                 {x.self_deaf.then(|| view! {
-                                    <span role="img" aria-label="son coupé" title="Son coupé"><Icon icon=lu::LuHeadphoneOff small=true/></span>
+                                    <span role="img" aria-label=t("son coupé") title=t("Son coupé")><Icon icon=lu::LuHeadphoneOff small=true/></span>
                                 })}
                                 {x.camera.then(|| view! {
-                                    <span role="img" aria-label="caméra allumée" title="Caméra allumée"><Icon icon=lu::LuVideo small=true/></span>
+                                    <span role="img" aria-label=t("caméra allumée") title=t("Caméra allumée")><Icon icon=lu::LuVideo small=true/></span>
                                 })}
-                                {x.streaming.then(|| view! { <span class="k-badge k-badge--live">"En direct"</span> })}
+                                {x.streaming.then(|| view! { <span class="k-badge k-badge--live">{t("En direct")}</span> })}
                             </li>
                         }
                     }
@@ -745,34 +755,34 @@ pub fn VoicePanel() -> impl IntoView {
             }
             None => {
                 let title = s.channel(r.channel).map(|c| crate::social::private_title(&c)).unwrap_or_default();
-                (format!("/channels/@me/{}", r.channel), format!("Appel avec {title}"))
+                (format!("/channels/@me/{}", r.channel), tf("Appel avec {nom}", &[("nom", &title)]))
             }
         };
         Some((r, href, where_))
     });
     let state = move || match v.status.get() {
-        Status::Connected => ("on", "En appel"),
-        Status::Connecting => ("wait", "Connexion…"),
-        Status::Unstable => ("wait", "Connexion instable"),
-        Status::Lost(_) | Status::Off => ("lost", "Connexion perdue"),
+        Status::Connected => ("on", tk!("En appel")),
+        Status::Connecting => ("wait", tk!("Connexion…")),
+        Status::Unstable => ("wait", tk!("Connexion instable")),
+        Status::Lost(_) | Status::Off => ("lost", tk!("Connexion perdue")),
     };
     view! {
         {move || place.get().map(|(r, href, where_)| {
-            let leave = if r.guild.is_some() { "Quitter le salon vocal" } else { "Raccrocher" };
+            let leave = if r.guild.is_some() { t("Quitter le salon vocal") } else { t("Raccrocher") };
             view! {
-                <section class="k-voicebar" aria-label="Connexion vocale">
+                <section class="k-voicebar" aria-label=t("Connexion vocale")>
                     <div>
-                        <b data-state=move || state().0 role="status">{move || state().1}</b>
+                        <b data-state=move || state().0 role="status">{move || t(state().1)}</b>
                         <a class="app-ellipsis" href=href title=where_.clone()>{where_.clone()}</a>
                     </div>
                     <MicToggle/>
                     <DeafToggle/>
                     <Show when=move || matches!(v.status.get(), Status::Lost(_))>
-                        <button class="k-btn k-btn--icon" aria-label="Reconnecter" title="Reconnecter" on:click=move |_| v.join(r.guild, r.channel)>
+                        <button class="k-btn k-btn--icon" aria-label=t("Reconnecter") title=t("Reconnecter") on:click=move |_| v.join(r.guild, r.channel)>
                             <Icon icon=lu::LuRefreshCw/>
                         </button>
                     </Show>
-                    <button class="k-btn k-btn--icon" aria-label=leave title=leave on:click=move |_| v.leave()>
+                    <button class="k-btn k-btn--icon" aria-label=leave.clone() title=leave on:click=move |_| v.leave()>
                         <Icon icon=lu::LuPhoneOff/>
                     </button>
                 </section>
@@ -798,7 +808,7 @@ pub fn CallAudio() -> impl IntoView {
                 <RemoteAudio user=u/>
             </For>
         </div>
-        {move || announce().then(|| view! { <p class="k-sr" role="status" aria-live="polite">{move || v.ptt_say.get()}</p> })}
+        {move || announce().then(|| view! { <p class="k-sr" role="status" aria-live="polite">{move || t(v.ptt_say.get())}</p> })}
     }
 }
 
@@ -820,19 +830,19 @@ fn RemoteAudio(user: Id) -> impl IntoView {
 pub fn ControlPanel() -> impl IntoView {
     let s = store();
     let v = s.voice;
-    let name = move |u: Id| v.room.get_untracked().map_or_else(|| "Quelqu'un".to_string(), |r| member(s, r.guild, u).1);
+    let name = move |u: Id| v.room.get_untracked().map_or_else(|| t("Quelqu'un"), |r| member(s, r.guild, u).1);
     let shown = move || {
         v.controller.get().is_some() || v.requests.with(|r| !r.is_empty()) || v.share_note.with(Option::is_some)
     };
     view! {
         <Show when=shown>
-            <section class="app-remote" aria-label="Contrôle à distance de ton écran">
+            <section class="app-remote" aria-label=t("Contrôle à distance de ton écran")>
                 {move || v.controller.get().map(|u| view! {
                     <div class="app-remote-row" data-on="">
                         <Icon icon=lu::LuMousePointer2/>
-                        <p role="status">{format!("{} contrôle ton écran.", name(u))}</p>
+                        <p role="status">{tf("{nom} contrôle ton écran.", &[("nom", &name(u))])}</p>
                         <button class="k-btn k-btn--sm k-btn--danger" on:click=move |_| v.release_control(true)>
-                            <Icon icon=lu::LuMousePointerBan small=true/><span>"Arrêter le contrôle"</span>
+                            <Icon icon=lu::LuMousePointerBan small=true/><span>{t("Arrêter le contrôle")}</span>
                         </button>
                     </div>
                 })}
@@ -845,14 +855,14 @@ pub fn ControlPanel() -> impl IntoView {
                             <div class="app-remote-row" role="alert">
                                 <Icon icon=lu::LuMousePointer2/>
                                 <p>
-                                    {format!("{who} demande à contrôler ton écran (souris et clavier).")}
+                                    {tf("{nom} demande à contrôler ton écran (souris et clavier).", &[("nom", &who)])}
                                     <Show when=waiting>
-                                        <span class="app-remote-wait">" Réponds dans la fenêtre de KRAKEN qui vient de s'ouvrir."</span>
+                                        <span class="app-remote-wait">" "{t("Réponds dans la fenêtre de KRAKEN qui vient de s'ouvrir.")}</span>
                                     </Show>
                                 </p>
                                 <button class="k-btn k-btn--sm k-btn--primary" disabled=move || v.confirming.get().is_some()
-                                    on:click=move |_| v.accept_control(u, who_accept.clone())>"Accepter"</button>
-                                <button class="k-btn k-btn--sm" disabled=waiting on:click=move |_| v.decline_control(u)>"Refuser"</button>
+                                    on:click=move |_| v.accept_control(u, who_accept.clone())>{t("Accepter")}</button>
+                                <button class="k-btn k-btn--sm" disabled=waiting on:click=move |_| v.decline_control(u)>{decline_label()}</button>
                             </div>
                         }
                     }
@@ -860,17 +870,19 @@ pub fn ControlPanel() -> impl IntoView {
                 {move || v.share_note.get().map(|(u, note)| {
                     let who = name(u);
                     let text = match note {
-                        ShareNote::Desktop => format!(
-                            "{who} a demandé à contrôler ton écran. Le contrôle à distance n'est possible que depuis l'appli de bureau KRAKEN : partage ton écran depuis l'appli pour l'accepter."),
-                        ShareNote::Surface => format!(
-                            "{who} a demandé à contrôler ton écran, mais tu partages une fenêtre ou un onglet. Partage ton écran entier pour pouvoir l'accepter."),
+                        ShareNote::Desktop => tf(
+                            "{nom} a demandé à contrôler ton écran. Le contrôle à distance n'est possible que depuis l'appli de bureau KRAKEN : partage ton écran depuis l'appli pour l'accepter.",
+                            &[("nom", &who)]),
+                        ShareNote::Surface => tf(
+                            "{nom} a demandé à contrôler ton écran, mais tu partages une fenêtre ou un onglet. Partage ton écran entier pour pouvoir l'accepter.",
+                            &[("nom", &who)]),
                         ShareNote::Message(m) => m,
                     };
                     view! {
                         <div class="app-remote-row">
                             <Icon icon=lu::LuCircleAlert/>
                             <p role="status">{text}</p>
-                            <button class="k-btn k-btn--icon" aria-label="Masquer ce message" title="Masquer" on:click=move |_| v.share_note.set(None)>
+                            <button class="k-btn k-btn--icon" aria-label=t("Masquer ce message") title=t("Masquer") on:click=move |_| v.share_note.set(None)>
                                 <Icon icon=lu::LuX/>
                             </button>
                         </div>
@@ -888,7 +900,7 @@ fn names(list: &[String]) -> String {
     match list {
         [] => String::new(),
         [a] => a.clone(),
-        [rest @ .., last] => format!("{} et {last}", rest.join(", ")),
+        [rest @ .., last] => tf("{liste} et {dernier}", &[("liste", &rest.join(", ")), ("dernier", last.as_str())]),
     }
 }
 
@@ -908,15 +920,15 @@ pub fn DmCall(channel: Id) -> impl IntoView {
     let shown = move || here.get() || who.with(|w| !w.is_empty()) || error().is_some();
     view! {
         <Show when=shown>
-            <section class="app-dmcall" aria-label="Appel">
+            <section class="app-dmcall" aria-label=t("Appel")>
                 {move || if here.get() {
                     view! { <Call guild=None channel=channel/> }.into_any()
                 } else if who.with(|w| !w.is_empty()) {
                     view! {
                         <div class="app-dmcall-lobby">
                             <span class="app-call-icon" aria-hidden="true"><Icon icon=lu::LuPhoneCall/></span>
-                            <p class="app-hint" role="status">"Appel en cours"</p>
-                            <ul class="app-call-who" aria-label="Dans l'appel">
+                            <p class="app-hint" role="status">{t("Appel en cours")}</p>
+                            <ul class="app-call-who" aria-label=t("Dans l'appel")>
                                 <For each=move || who.get() key=|x| x.user_id let:x>
                                     {
                                         let (u, n) = member(s, None, x.user_id);
@@ -925,7 +937,7 @@ pub fn DmCall(channel: Id) -> impl IntoView {
                                 </For>
                             </ul>
                             <button class="k-btn k-btn--primary" disabled=!voice::supported() on:click=move |_| v.join(None, channel)>
-                                <Icon icon=lu::LuPhone/>"Rejoindre l'appel"
+                                <Icon icon=lu::LuPhone/>{t("Rejoindre l'appel")}
                             </button>
                         </div>
                     }.into_any()
@@ -934,7 +946,7 @@ pub fn DmCall(channel: Id) -> impl IntoView {
                 }}
                 <Show when=move || here.get() && ringing.with(|r| !r.is_empty())>
                     <p class="app-hint app-dmcall-ringing" role="status">
-                        <Icon icon=lu::LuBellRing small=true/>{move || format!("Ça sonne chez {}…", names(&ringing.get()))}
+                        <Icon icon=lu::LuBellRing small=true/>{move || tf("Ça sonne chez {noms}…", &[("noms", &names(&ringing.get()))])}
                     </p>
                 </Show>
                 {move || error().map(|e| view! { <p class="k-error app-dmcall-error" role="alert">{e}</p> })}
@@ -953,7 +965,7 @@ pub fn StartCall(channel: Id, #[prop(into)] blocked: Signal<bool>) -> impl IntoV
     let supported = voice::supported();
     view! {
         <Show when=move || idle.get()>
-            <button class="k-btn k-btn--icon" aria-label="Démarrer un appel" title="Démarrer un appel"
+            <button class="k-btn k-btn--icon" aria-label=t("Démarrer un appel") title=t("Démarrer un appel")
                 disabled=move || blocked.get() || !supported on:click=move |_| v.join(None, channel)>
                 <Icon icon=lu::LuPhoneCall/>
             </button>
@@ -1019,7 +1031,7 @@ pub fn IncomingCalls() -> impl IntoView {
     on_cleanup(|| ring(false));
     view! {
         <Show when=move || incoming.with(|c| !c.is_empty())>
-            <section class="app-ring" aria-label="Appels entrants">
+            <section class="app-ring" aria-label=t("Appels entrants")>
                 <For each=move || incoming.get() key=|c| (c.channel_id, c.message_id) let:c>
                     <RingCard call=c/>
                 </For>
@@ -1040,8 +1052,8 @@ fn RingCard(call: kraken_proto::Call) -> impl IntoView {
         .filter(|ch| ch.kind == kraken_proto::ChannelKind::GroupDm)
         .map(|ch| crate::social::private_title(&ch));
     let line = match &group {
-        Some(g) => format!("t'appelle dans {g}"),
-        None => "t'appelle".to_string(),
+        Some(g) => tf("t'appelle dans {salon}", &[("salon", g.as_str())]),
+        None => t("t'appelle"),
     };
     let answer = move |_| {
         v.join(None, cid);
@@ -1057,14 +1069,14 @@ fn RingCard(call: kraken_proto::Call) -> impl IntoView {
         });
     };
     view! {
-        <div class="app-ring-card" role="alertdialog" aria-label=format!("Appel de {who}") aria-describedby=format!("ring-{cid}")>
+        <div class="app-ring-card" role="alertdialog" aria-label=tf("Appel de {nom}", &[("nom", &who)]) aria-describedby=format!("ring-{cid}")>
             {face(account, &who, "md")}
             <p id=format!("ring-{cid}")><b class="app-ellipsis">{who.clone()}</b><span>{line}</span></p>
             <button class="k-btn k-btn--sm k-btn--primary" disabled=!voice::supported() on:click=answer>
-                <Icon icon=lu::LuPhone small=true/><span>"Rejoindre"</span>
+                <Icon icon=lu::LuPhone small=true/><span>{t("Rejoindre")}</span>
             </button>
             <button class="k-btn k-btn--sm k-btn--danger" on:click=decline>
-                <Icon icon=lu::LuPhoneOff small=true/><span>"Refuser"</span>
+                <Icon icon=lu::LuPhoneOff small=true/><span>{decline_label()}</span>
             </button>
         </div>
     }

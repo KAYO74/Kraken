@@ -13,6 +13,7 @@ use leptos::task::spawn_local;
 use wasm_bindgen_futures::JsFuture;
 
 use crate::avatar::{CropDialog, Which, looks_like_image, not_image, too_big};
+use crate::i18n::{t, tf};
 use crate::icons::{Icon, lu};
 
 /// Une image prête à devenir l'icône : ses octets tels qu'ils partiront, et leur type.
@@ -24,7 +25,10 @@ pub struct IconFile {
 }
 
 fn heavy_animation() -> String {
-    format!("Cette animation pèse trop lourd : {} Mo au plus.", MAX_GUILD_ICON_BYTES / (1024 * 1024))
+    tf(
+        "Cette animation pèse trop lourd : {taille} Mo au plus.",
+        &[("taille", &(MAX_GUILD_ICON_BYTES / (1024 * 1024)).to_string())],
+    )
 }
 
 /// Un fichier choisi ou déposé : une animation passe tout de suite ; une image fixe s'ouvre dans la fenêtre de
@@ -169,7 +173,7 @@ pub fn IconPicker(
         let many = files.len() > 1;
         if let Some(file) = files.into_iter().next() {
             if many {
-                error.set(Some("Une seule image à la fois : seul le premier fichier a été pris.".into()));
+                error.set(Some(t("Une seule image à la fois : seul le premier fichier a été pris.")));
             }
             pick(file);
         }
@@ -195,20 +199,20 @@ pub fn IconPicker(
                         <input id=file_id.clone() class="k-sr app-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif"
                             node_ref=input on:change=on_change aria-describedby=described
                             aria-invalid=move || error.get().is_some().then_some("true")/>
-                        <label class="k-btn" for=file_id><Icon icon=lu::LuImagePlus/>"Choisir une image"</label>
+                        <label class="k-btn" for=file_id><Icon icon=lu::LuImagePlus/>{t("Choisir une image")}</label>
                         <Show when=move || has_icon.get()>
                             <button type="button" class="k-btn k-btn--ghost app-link-danger" disabled=move || busy.get() on:click=remove>
-                                "Retirer l'icône"
+                                {t("Retirer l'icône")}
                             </button>
                         </Show>
                     </div>
-                    <p id=hint_id class="k-hint">{format!("PNG, JPEG, WebP ou GIF. Une image fixe est recadrée en carré ; une animation reste telle quelle et pèse {} Mo au plus.", MAX_GUILD_ICON_BYTES / (1024 * 1024))}</p>
+                    <p id=hint_id class="k-hint">{tf("PNG, JPEG, WebP ou GIF. Une image fixe est recadrée en carré ; une animation reste telle quelle et pèse {taille} Mo au plus.", &[("taille", &(MAX_GUILD_ICON_BYTES / (1024 * 1024)).to_string())])}</p>
                     <Show when=move || error.get().is_some()>
                         <p id=err_id.clone() class="k-error" role="alert">{move || error.get()}</p>
                     </Show>
                 </div>
             </div>
-            <div class="app-gicon-drop" aria-hidden="true"><Icon icon=lu::LuUpload/>"Dépose l'image pour l'utiliser"</div>
+            <div class="app-gicon-drop" aria-hidden="true"><Icon icon=lu::LuUpload/>{t("Dépose l'image pour l'utiliser")}</div>
         </div>
         // Montée hors de la page (et des réglages) : sinon `.k-settings main > *` rétrécit son fond sombre à la
         // largeur du contenu et laisse la navigation cliquable derrière.

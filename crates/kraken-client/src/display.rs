@@ -5,40 +5,51 @@
 use kraken_proto::{Id, User};
 use leptos::prelude::*;
 
+use crate::i18n::{LangSelect, t};
 use crate::prefs::{self, Pref};
+use crate::tk;
 use crate::ui::{Avatar, clock};
 
-/// Un choix : sa valeur, son nom et ce qu'il fait.
+/// Un choix : sa valeur, son nom et ce qu'il fait. Le nom et l'aide sont des textes français que `Choices`
+/// traduit à l'affichage (`tk!` les marque pour `scripts/i18n-check.py`).
 type Opt = (&'static str, &'static str, &'static str);
 
 const THEMES: &[Opt] = &[
-    ("auto", "Automatique (système)", "Suit le réglage clair ou sombre de ton système."),
-    ("dark", "Sombre", "Le thème par défaut, doux pour les yeux le soir."),
-    ("light", "Clair", "Fond blanc, pour les pièces lumineuses."),
-    ("black", "Noir", "Noir profond, idéal sur les écrans OLED."),
+    ("auto", tk!("Automatique (système)"), tk!("Suit le réglage clair ou sombre de ton système.")),
+    ("dark", tk!("Sombre"), tk!("Le thème par défaut, doux pour les yeux le soir.")),
+    ("light", tk!("Clair"), tk!("Fond blanc, pour les pièces lumineuses.")),
+    ("black", tk!("Noir"), tk!("Noir profond, idéal sur les écrans OLED.")),
 ];
-const TEXT_SIZES: &[Opt] =
-    &[("14", "Petit", "14 px"), ("16", "Normal", "16 px"), ("18", "Grand", "18 px"), ("20", "Très grand", "20 px")];
+const TEXT_SIZES: &[Opt] = &[
+    ("14", tk!("Petit"), "14 px"),
+    ("16", tk!("Normal"), "16 px"),
+    ("18", tk!("Grand"), "18 px"),
+    ("20", tk!("Très grand"), "20 px"),
+];
 const ZOOMS: &[&str] = &["90", "100", "110", "125", "150"];
 const DENSITIES: &[Opt] = &[
-    ("comfortable", "Confortable", "Des messages aérés, avec des avatars de 40 px."),
-    ("compact", "Compacte", "Des messages resserrés, avec des avatars de 24 px."),
+    ("comfortable", tk!("Confortable"), tk!("Des messages aérés, avec des avatars de 40 px.")),
+    ("compact", tk!("Compacte"), tk!("Des messages resserrés, avec des avatars de 24 px.")),
 ];
 const MOTIONS: &[Opt] = &[
-    ("auto", "Automatique", "Suit le réglage de ton système."),
-    ("reduce", "Réduit", "Coupe les animations de l'interface et fige les images animées partout."),
-    ("normal", "Normal", "Garde les animations, même si ton système en demande moins."),
+    ("auto", tk!("Automatique"), tk!("Suit le réglage de ton système.")),
+    ("reduce", tk!("Réduit"), tk!("Coupe les animations de l'interface et fige les images animées partout.")),
+    ("normal", tk!("Normal"), tk!("Garde les animations, même si ton système en demande moins.")),
 ];
 const CONTRASTS: &[Opt] = &[
-    ("normal", "Normal", "Les couleurs d'origine du thème."),
-    ("high", "Élevé", "Texte plus net (7 pour 1), bordures bien visibles, anneau de focus plus épais."),
-    ("auto", "Automatique", "Suit ton système, quand il demande un contraste plus élevé."),
+    ("normal", tk!("Normal"), tk!("Les couleurs d'origine du thème.")),
+    ("high", tk!("Élevé"), tk!("Texte plus net (7 pour 1), bordures bien visibles, anneau de focus plus épais.")),
+    ("auto", tk!("Automatique"), tk!("Suit ton système, quand il demande un contraste plus élevé.")),
 ];
-const CLOCKS: &[Opt] =
-    &[("auto", "Automatique", "Suit la langue de ton navigateur."), ("12", "12 h", "2:30 PM"), ("24", "24 h", "14:30")];
+const CLOCKS: &[Opt] = &[
+    ("auto", tk!("Automatique"), tk!("Suit la langue de l'interface.")),
+    ("12", tk!("12 h"), "2:30 PM"),
+    ("24", tk!("24 h"), "14:30"),
+];
 
 /// Un groupe de boutons radio qui règle `pref`. Les flèches du clavier passent d'un choix à l'autre ;
-/// le choix s'applique tout de suite. `on_pick` est appelé après chaque changement.
+/// le choix s'applique tout de suite. `on_pick` est appelé après chaque changement. `legend` et `hint` sont des
+/// textes français (`tk!`), traduits ici.
 #[component]
 fn Choices(
     pref: &'static Pref,
@@ -55,8 +66,8 @@ fn Choices(
     let columns = if options.len() == 3 { "k-radios app-choices app-choices--3" } else { "k-radios app-choices" };
     view! {
         <fieldset class="app-choice-group" aria-describedby=described_by>
-            <legend class="k-label">{legend}</legend>
-            {hint_id.map(|id| view! { <p id=id class="app-hint">{hint}</p> })}
+            <legend class="k-label">{t(legend)}</legend>
+            {hint_id.map(|id| view! { <p id=id class="app-hint">{t(hint)}</p> })}
             <div class=columns>
                 {options.iter().map(|&(value, label, sub)| {
                     let (label_id, sub_id) = (format!("{name}-{value}-l"), format!("{name}-{value}-d"));
@@ -71,7 +82,7 @@ fn Choices(
                                         f.run(value);
                                     }
                                 }/>
-                            <div><b id=label_id>{label}</b><span id=sub_id>{sub}</span></div>
+                            <div><b id=label_id>{t(label)}</b><span id=sub_id>{t(sub)}</span></div>
                         </label>
                     }
                 }).collect_view()}
@@ -103,20 +114,20 @@ fn Preview() -> impl IntoView {
     };
     view! {
         <section class="app-preview" aria-labelledby="preview-t">
-            <h3 id="preview-t" class="app-preview-title">"Aperçu"</h3>
+            <h3 id="preview-t" class="app-preview-title">{t("Aperçu")}</h3>
             <div class="app-preview-body" aria-hidden="true" inert>
                 <div class="k-msg">
                     <Avatar user=nacre/>
                     <div>
                         <header><b>"Nacre"</b><time>{clock(at(30))}</time></header>
-                        <p>"Salut ! On se retrouve ce soir dans le vocal ?"</p>
+                        <p>{t("Salut ! On se retrouve ce soir dans le vocal ?")}</p>
                     </div>
                 </div>
                 <div class="k-msg">
                     <Avatar user=recif/>
                     <div>
-                        <header><b>"Récif"</b><time>{clock(at(32))}</time></header>
-                        <p>"Avec plaisir, vers 21 h. Voici "<a>"le programme de la soirée"</a>"."</p>
+                        <header><b>"Récif"</b><time>{clock(at(32))}</time></header> // i18n-ok : nom d'exemple
+                        <p>{t("Avec plaisir, vers 21 h. Voici")}" "<a>{t("le programme de la soirée")}</a>"."</p>
                     </div>
                 </div>
             </div>
@@ -135,13 +146,13 @@ pub fn Appearance() -> impl IntoView {
     view! {
         <div class="app-prefs">
             <Preview/>
-            <p class="app-hint">"Ces réglages s'appliquent tout de suite et restent sur cet appareil."</p>
-            <Choices pref=&prefs::THEME name="theme" legend="Thème" options=THEMES/>
-            <Choices pref=&prefs::TEXT name="text" legend="Taille du texte" options=TEXT_SIZES
-                hint="Agrandit ou réduit tout le texte de l'appli."/>
+            <p class="app-hint">{t("Ces réglages s'appliquent tout de suite et restent sur cet appareil.")}</p>
+            <Choices pref=&prefs::THEME name="theme" legend=tk!("Thème") options=THEMES/>
+            <Choices pref=&prefs::TEXT name="text" legend=tk!("Taille du texte") options=TEXT_SIZES
+                hint=tk!("Agrandit ou réduit tout le texte de l'appli.")/>
             <div class="app-choice-group">
                 <label class="k-field app-pref-select">
-                    <span class="k-label">"Zoom de l'interface"</span>
+                    <span class="k-label">{t("Zoom de l'interface")}</span>
                     <select class="k-select" aria-describedby="zoom-h" prop:disabled=prefs::zoom_locked on:change=on_zoom>
                         {ZOOMS.iter().map(|&z| view! {
                             <option value=z prop:selected=move || zoom.get() == z>{format!("{z} %")}</option>
@@ -149,11 +160,11 @@ pub fn Appearance() -> impl IntoView {
                     </select>
                 </label>
                 <p id="zoom-h" class="app-hint">
-                    "Agrandit ou réduit toute l'interface, texte compris. Le zoom est limité par la largeur de la fenêtre."
+                    {t("Agrandit ou réduit toute l'interface, texte compris. Le zoom est limité par la largeur de la fenêtre.")}
                 </p>
             </div>
-            <Choices pref=&prefs::DENSITY name="density" legend="Densité" options=DENSITIES
-                hint="L'espace entre les messages et la taille des avatars."/>
+            <Choices pref=&prefs::DENSITY name="density" legend=tk!("Densité") options=DENSITIES
+                hint=tk!("L'espace entre les messages et la taille des avatars.")/>
         </div>
     }
 }
@@ -170,15 +181,15 @@ pub fn Accessibility() -> impl IntoView {
     view! {
         <div class="app-prefs">
             <Preview/>
-            <p class="app-hint">"Ces réglages s'appliquent tout de suite et restent sur cet appareil."</p>
-            <Choices pref=&prefs::MOTION name="motion" legend="Mouvement" options=MOTIONS
-                hint="Les GIF et WebP animés restent fixes dans les listes ; ils bougent au survol, au focus et sur la carte de profil. En mouvement réduit, ils restent fixes partout : « Lire l'animation » les lance sur la carte de profil."/>
-            <Choices pref=&prefs::CONTRAST name="contrast" legend="Contraste" options=CONTRASTS/>
+            <p class="app-hint">{t("Ces réglages s'appliquent tout de suite et restent sur cet appareil.")}</p>
+            <Choices pref=&prefs::MOTION name="motion" legend=tk!("Mouvement") options=MOTIONS
+                hint=tk!("Les GIF et WebP animés restent fixes dans les listes ; ils bougent au survol, au focus et sur la carte de profil. En mouvement réduit, ils restent fixes partout : « Lire l'animation » les lance sur la carte de profil.")/>
+            <Choices pref=&prefs::CONTRAST name="contrast" legend=tk!("Contraste") options=CONTRASTS/>
             <div class="k-setting">
-                <label for="underline">"Souligner les liens"</label>
+                <label for="underline">{t("Souligner les liens")}</label>
                 <input id="underline" type="checkbox" role="switch" class="k-switch" aria-describedby="underline-h"
                     prop:checked=move || underline.get() on:change=toggle/>
-                <p id="underline-h">"Les liens du texte sont toujours soulignés, pas seulement colorés."</p>
+                <p id="underline-h">{t("Les liens du texte sont toujours soulignés, pas seulement colorés.")}</p>
             </div>
         </div>
     }
@@ -196,20 +207,12 @@ pub fn Language() -> impl IntoView {
     };
     view! {
         <div class="app-prefs">
+            <LangSelect id="language"/>
             <div class="app-choice-group">
-                <label class="k-field app-pref-select">
-                    <span class="k-label">"Langue"</span>
-                    <select class="k-select" aria-describedby="language-h">
-                        <option value="fr" selected>"Français"</option>
-                    </select>
-                </label>
-                <p id="language-h" class="app-hint">"D'autres langues arrivent."</p>
-            </div>
-            <div class="app-choice-group">
-                <Choices pref=&prefs::CLOCK name="clock" legend="Format de l'heure" options=CLOCKS
+                <Choices pref=&prefs::CLOCK name="clock" legend=tk!("Format de l'heure") options=CLOCKS
                     on_pick=move |_| tick.update(|t| *t += 1)/>
                 <p class="app-example" role="status">
-                    "Exemple : "<time>{move || { tick.track(); clock(sample) }}</time>
+                    {t("Exemple :")}" "<time>{move || { tick.track(); clock(sample) }}</time>
                 </p>
             </div>
         </div>

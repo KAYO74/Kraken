@@ -1,0 +1,226 @@
+# Catalogue anglais, groupe « voice » : une ligne « français<TAB>anglais » par texte (voir ../README.md).
+
+# Salon vocal, appels des MP et des groupes (call.rs)
+Quelqu'un	Someone
+Salon vocal {nom}	Voice channel {nom}
+Personne pour l'instant.	Nobody here yet.
+{n} personne dans le salon	{n} person in the channel
+{n} personnes dans le salon	{n} people in the channel
+Tu quitteras {salon}.	You'll leave {salon}.
+Connexion au salon vocal…	Connecting to the voice channel…
+Connexion à l'appel…	Connecting to the call…
+Connexion instable : on attend le retour du réseau…	Unstable connection: waiting for the network to come back…
+Reconnecter	Reconnect
+Masquer ce message	Hide this message
+Le contrôle de l'écran de {nom} a pris fin.	Control of {nom}'s screen has ended.
+{nom} a refusé ta demande de contrôle.	{nom} declined your control request.
+Quelqu'un d'autre contrôle déjà l'écran de {nom}.	Someone else is already controlling {nom}'s screen.
+{nom} partage depuis un navigateur : pour être contrôlé, il faut partager depuis l'appli de bureau KRAKEN.	{nom} is sharing from a browser: to be controlled, they need to share from the KRAKEN desktop app.
+{nom} partage une fenêtre ou un onglet : le contrôle demande le partage d'un écran entier.	{nom} is sharing a window or a tab: control requires sharing an entire screen.
+Le contrôle à distance n'est pas possible sur l'ordinateur de {nom} pour l'instant.	Remote control isn't possible on {nom}'s computer right now.
+Participants	Participants
+Arrêter de regarder	Stop watching
+Regarder	Watch
+Regarder l'écran de {nom}	Watch {nom}'s screen
+{nom} (toi)	{nom} (you)
+Aperçu de ta caméra	Preview of your camera
+Caméra de {nom}	{nom}'s camera
+Aperçu de ton écran partagé	Preview of your shared screen
+micro coupé	muted
+Micro coupé	Muted
+son coupé	deafened
+Son coupé	Deafened
+caméra allumée	camera on
+Caméra allumée	Camera on
+En direct	Live
+Tu contrôles l'écran de {nom}. Échap pour relâcher (Maj+Échap envoie Échap).	You're controlling {nom}'s screen. Press Esc to release (Shift+Esc sends Esc).
+Demander le contrôle de l'écran de {nom}	Request control of {nom}'s screen
+Écran partagé par {nom}	Screen shared by {nom}
+Chargement de l'écran…	Loading the screen…
+Arrêter le contrôle	Stop control
+Demande envoyée…	Request sent…
+Annuler la demande	Cancel request
+Demander le contrôle	Request control
+Plein écran	Full screen
+Couper le micro	Mute
+Réactiver le micro	Unmute
+Couper le son	Deafen
+Réactiver le son	Undeafen
+Le partage d'écran demande l'instance en HTTPS (ou ouverte via localhost).	Screen sharing requires the instance to be served over HTTPS (or opened through localhost).
+Ce navigateur ne permet pas de partager l'écran.	This browser can't share the screen.
+Arrêter le partage	Stop sharing
+Partager ton écran	Share your screen
+Couper la caméra	Turn off camera
+Activer la caméra	Turn on camera
+Commandes de l'appel	Call controls
+Raccrocher	Hang up
+Quitter	Leave
+Quitter le salon vocal	Leave voice channel
+Appuyer pour parler :	Push to talk:
+Micro ouvert	Mic open
+Dans {nom}	In {nom}
+Appel avec {nom}	Call with {nom}
+En appel	In call
+Connexion instable	Unstable connection
+Connexion perdue	Connection lost
+Connexion vocale	Voice connection
+Contrôle à distance de ton écran	Remote control of your screen
+{nom} contrôle ton écran.	{nom} is controlling your screen.
+{nom} demande à contrôler ton écran (souris et clavier).	{nom} is asking to control your screen (mouse and keyboard).
+Réponds dans la fenêtre de KRAKEN qui vient de s'ouvrir.	Answer in the KRAKEN window that just opened.
+Accepter	Accept
+Refuser{contexte}	Decline{contexte}
+{nom} a demandé à contrôler ton écran. Le contrôle à distance n'est possible que depuis l'appli de bureau KRAKEN : partage ton écran depuis l'appli pour l'accepter.	{nom} asked to control your screen. Remote control only works from the KRAKEN desktop app: share your screen from the app to accept.
+{nom} a demandé à contrôler ton écran, mais tu partages une fenêtre ou un onglet. Partage ton écran entier pour pouvoir l'accepter.	{nom} asked to control your screen, but you're sharing a window or a tab. Share your entire screen to be able to accept.
+{liste} et {dernier}	{liste} and {dernier}
+Appel	Call
+Dans l'appel	In the call
+Rejoindre l'appel	Join call
+Ça sonne chez {noms}…	Ringing {noms}…
+Démarrer un appel	Start a call
+Appels entrants	Incoming calls
+t'appelle dans {salon}	is calling you in {salon}
+t'appelle	is calling you
+Appel de {nom}	Call from {nom}
+
+# Session vocale : avertissements et erreurs (voice.rs)
+Connexion non sécurisée : tu peux écouter et regarder, mais parler et partager ton écran demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).	Insecure connection: you can listen and watch, but speaking and sharing your screen require the instance to be served over HTTPS (or opened on this computer, via localhost).
+Micro refusé ou introuvable : tu es en sourdine. Autorise le micro dans ton navigateur, puis réactive-le.	Microphone denied or not found: you're muted. Allow the microphone in your browser, then unmute.
+Ton navigateur ne permet pas les appels vocaux. Essaie avec un navigateur récent.	Your browser doesn't support voice calls. Try a recent browser.
+Connexion vocale perdue.	Voice connection lost.
+Le navigateur a refusé l'accès à la caméra	The browser denied access to the camera
+Aucune caméra n'a été trouvée sur cet appareil.	No camera was found on this device.
+La caméra n'a pas pu démarrer : une autre application l'utilise peut-être.	The camera couldn't start: another app may be using it.
+La caméra s'est arrêtée : elle a été débranchée ou reprise par une autre application.	The camera stopped: it was unplugged or taken over by another app.
+La caméra demande l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).	The camera requires the instance to be served over HTTPS (or opened on this computer, via localhost).
+Tu n'as pas le droit d'allumer ta caméra sur ce serveur.	You don't have permission to turn on your camera on this server.
+Le micro choisi n'a pas pu démarrer : l'appel garde celui qui était utilisé.	The chosen microphone couldn't start: the call keeps using the previous one.
+L'appli de bureau ne répond pas.	The desktop app isn't responding.
+Le navigateur n'a pas pu préparer l'appel.	The browser couldn't set up the call.
+La réponse du serveur n'a pas convenu au navigateur.	The browser couldn't accept the server's response.
+Connexion impossible : le port UDP du vocal est sans doute bloqué entre toi et le serveur.	Can't connect: the voice UDP port is probably blocked between you and the server.
+Le navigateur a refusé une mise à jour de l'appel.	The browser rejected a call update.
+Connexion vocale coupée par le serveur, ou reprise depuis un autre appareil.	Voice connection cut by the server, or taken over from another device.
+Le partage d'écran n'a pas pu démarrer.	Screen sharing couldn't start.
+
+# Réglages › Voix et vidéo (voice_settings.rs)
+Par défaut du système	System default
+Le micro et la caméra demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).	The microphone and camera require the instance to be served over HTTPS (or opened on this computer, via localhost).
+La touche Tab sert à naviguer dans la page : choisis-en une autre.	The Tab key is used to navigate the page: choose another one.
+La touche Entrée seule ne peut pas servir : choisis-en une autre.	The Enter key on its own can't be used: choose another one.
+Micro {n}	Microphone {n}
+Sortie {n}	Speaker {n}
+Caméra {n}	Camera {n}
+Le navigateur a refusé l'accès : les appareils gardent un nom générique.	The browser denied access: devices keep a generic name.
+Aucun micro ni aucune caméra n'a été trouvé sur cet appareil.	No microphone or camera was found on this device.
+Aucun micro n'a été trouvé sur cet appareil.	No microphone was found on this device.
+Le micro n'a pas pu démarrer : une autre application l'utilise peut-être.	The microphone couldn't start: another app may be using it.
+Le navigateur a refusé l'accès au micro	The browser denied access to the microphone
+Image de ta caméra	Your camera image
+Ces réglages restent sur cet appareil. Un changement s'applique tout de suite, même pendant un appel.	These settings stay on this device. A change applies right away, even during a call.
+Appareils	Devices
+Le navigateur n'affiche le nom de tes appareils qu'une fois l'accès au micro et à la caméra autorisé.	The browser only shows your devices' names once access to the microphone and camera is allowed.
+Autoriser l'accès	Allow access
+Entrée audio	Audio input
+Sortie audio	Audio output
+Ton navigateur ne permet pas de choisir la sortie audio : le son sort sur l'appareil par défaut du système (Chrome et Edge savent le faire).	Your browser can't choose the audio output: sound plays on the system's default device (Chrome and Edge can).
+Test du micro	Microphone test
+Parle : la barre monte avec ta voix. Rien n'est enregistré ni rejoué dans tes haut-parleurs.	Speak: the bar rises with your voice. Nothing is recorded or played back through your speakers.
+Arrêter le test	Stop test
+Tester le micro	Test microphone
+Niveau du micro	Microphone level
+Aperçu de la caméra	Camera preview
+La caméra ne s'allume que pendant l'aperçu, et s'éteint quand tu quittes cette page.	The camera only turns on during the preview, and turns off when you leave this page.
+Arrêter l'aperçu	Stop preview
+Traitement du son	Audio processing
+Annulation d'écho	Echo cancellation
+Retire de ton micro le son qui sort de tes haut-parleurs.	Keeps the sound coming out of your speakers from being picked up by your microphone.
+Suppression du bruit	Noise suppression
+Atténue les bruits de fond : clavier, ventilateur, rue.	Reduces background noise: keyboard, fan, street.
+Réglage automatique du volume	Automatic volume control
+Garde ta voix à un niveau régulier, que tu parles fort ou doucement.	Keeps your voice at an even level, whether you speak loudly or softly.
+Appuyer pour parler	Push to talk
+Ton micro ne s'ouvre que tant que tu tiens la touche choisie, et se referme un instant après (0,2 s). Ça ne marche que lorsque la fenêtre est au premier plan : un raccourci global viendra avec l'appli de bureau.	Your microphone only opens while you hold the chosen key, and closes a moment after you let go (0.2 s). This only works while the window is in the foreground: a global shortcut will come with the desktop app.
+Touche pour parler	Push-to-talk key
+Appuie sur une touche… Échap annule	Press a key… Esc cancels
+Aucune touche choisie : le micro reste ouvert comme d'habitude.	No key chosen: your microphone stays open as usual.
+Clique pour changer de touche.	Click to change the key.
+En attente…	Waiting…
+Choisir une touche	Choose a key
+Micro fermé	Mic closed
+
+# Noms des touches (voice_settings.rs, shortcuts.rs)
+Pavé {digit}	Numpad {digit}
+Espace	Space
+Ctrl	Ctrl
+Ctrl gauche	Left Ctrl
+Ctrl droite	Right Ctrl
+Maj	Shift
+Maj gauche	Left Shift
+Maj droite	Right Shift
+Majuscule	Shift
+Alt	Alt
+Alt Gr	Right Alt
+Option	Option
+Commande	Command
+Verr. maj.	Caps Lock
+Retour arrière	Backspace
+Flèche haut	Up arrow
+Flèche bas	Down arrow
+Flèche gauche	Left arrow
+Flèche droite	Right arrow
+flèche haut	up arrow
+flèche bas	down arrow
+Échap	Esc
+Entrée	Enter
+ou	or
+
+# Raccourcis clavier (shortcuts.rs)
+Navigation	Navigation
+Aller vers un salon, une personne ou un serveur	Go to a channel, person or server
+Salon précédent	Previous channel
+Salon suivant	Next channel
+Serveur précédent	Previous server
+Serveur suivant	Next server
+Salon non lu précédent	Previous unread channel
+Salon non lu suivant	Next unread channel
+Envoyer le message	Send message
+Aller à la ligne	New line
+Modifier mon dernier message (saisie vide)	Edit my last message (empty message box)
+Annuler la réponse ou la modification	Cancel the reply or edit
+Couper ou réactiver le micro	Mute or unmute
+Couper ou réactiver le son	Deafen or undeafen
+Afficher les raccourcis clavier	Show keyboard shortcuts
+Fermer la fenêtre ouverte	Close the open window
+Lecture seule : ces raccourcis ne se changent pas encore, et aucun ne marche hors de la fenêtre de KRAKEN (pas de raccourci global pour l'instant).	Read only: these shortcuts can't be changed yet, and none of them work outside the KRAKEN window (no global shortcut for now).
+Son coupé, micro coupé	Deafened, muted
+Son réactivé	Undeafened
+Micro réactivé	Unmuted
+
+# Quick Switcher (switcher.rs)
+Récents	Recent
+Personnes	People
+Salon vocal privé	Private voice channel
+Annonces	Announcements
+Groupe	Group
+Message privé	Direct message
+Personne{contexte}	Person{contexte}
+Aller vers…	Go to…
+Aucun lieu récent	No recent places
+{n} lieu récent	{n} recent place
+{n} lieux récents	{n} recent places
+Aucun résultat	No results
+{n} résultat	{n} result
+{n} résultats	{n} results
+Rien de récent	Nothing recent
+Tape le nom d'un salon, d'une personne ou d'un serveur.	Type the name of a channel, a person or a server.
+Aucun résultat pour « {saisie} »	No results for "{saisie}"
+Aller vers	Go to
+Salon, personne ou serveur	Channel, person or server
+Aller vers un salon, une personne, un serveur	Go to a channel, a person, a server
+Fermer (Échap)	Close (Esc)
+\# salons · @ personnes et messages privés · * serveurs	# channels · @ people and direct messages · * servers
+Résultats	Results
+choisir	select
+ouvrir	open
+fermer	close

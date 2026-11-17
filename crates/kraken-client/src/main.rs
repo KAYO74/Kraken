@@ -15,6 +15,7 @@ mod emoji_settings;
 mod files;
 mod guild;
 mod home;
+mod i18n;
 mod icon_picker;
 mod icons;
 mod legal;
@@ -39,5 +40,7 @@ mod voice_settings;
 
 fn main() {
     console_error_panic_hook::set_once();
+    // La langue d'abord : `<html lang>` et les textes du premier rendu.
+    i18n::init();
     leptos::mount::mount_to_body(app::App);
 }

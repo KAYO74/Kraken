@@ -9,29 +9,35 @@
 //! du texte, jamais comme du HTML.
 
 use gloo_timers::future::TimeoutFuture;
-use kraken_core::span;
 use kraken_proto::{AuditActor, AuditChange, AuditEntry, AuditTarget, Id, User};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::guild::{CATEGORIES, COLOR_NAMES};
+use crate::guild::{CATEGORIES, COLOR_NAMES, label};
+use crate::i18n::{t, tf, tn, tnf};
 use crate::icons::{Icon, lu};
+use crate::tk;
 use crate::ui::{Avatar, clock, iso, now_ms};
 
 /// Les types d'action du filtre, dans l'ordre de la liste : le mot de l'adresse, et son libellé.
 const KINDS: [(&str, &str); 6] = [
-    ("salons", "Salons"),
-    ("roles", "Rôles"),
-    ("membres", "Membres"),
-    ("invitations", "Invitations"),
-    ("serveur", "Serveur"),
-    ("emojis", "Emojis"),
+    ("salons", tk!("Salons")),
+    ("roles", tk!("Rôles")),
+    ("membres", tk!("Membres")),
+    ("invitations", tk!("Invitations")),
+    ("serveur", tk!("Serveur")),
+    ("emojis", tk!("Emojis")),
 ];
 
 /// Ce que dit la personne dont le compte n'existe plus.
-const GONE_ACTOR: &str = "Membre supprimé";
-const GONE_TARGET: &str = "(supprimé)";
+fn gone_actor() -> String {
+    t("Membre supprimé")
+}
+
+fn gone_target() -> String {
+    t("(supprimé)")
+}
 
 #[derive(Clone, PartialEq)]
 enum Phase {
@@ -47,7 +53,7 @@ enum Seg {
     B(String),
 }
 
-fn t(s: impl Into<String>) -> Seg {
+fn seg(s: impl Into<String>) -> Seg {
     Seg::T(s.into())
 }
 
@@ -91,115 +97,174 @@ fn change<'a>(e: &'a AuditEntry, field: &str) -> Option<&'a AuditChange> {
 }
 
 fn target_name(target: &Option<AuditTarget>) -> String {
-    target.as_ref().and_then(|t| t.name.clone()).unwrap_or_else(|| GONE_TARGET.into())
+    target.as_ref().and_then(|x| x.name.clone()).unwrap_or_else(gone_target)
 }
 
-/// « le salon #général », « le salon vocal Cartes », « la catégorie Archives » : d'après le type gardé à
-/// l'écriture, sinon un salon.
-fn channel_phrase(kind: Option<&str>, name: &str) -> Vec<Seg> {
-    match kind {
-        Some("voice") => vec![t("le salon vocal "), b(name)],
-        Some("category") => vec![t("la catégorie "), b(name)],
-        Some("announcement") => vec![t("le salon d'annonces "), b(format!("#{name}"))],
-        Some("forum") => vec![t("le forum "), b(format!("#{name}"))],
-        Some("stage") => vec![t("la scène "), b(name)],
-        _ => vec![t("le salon "), b(format!("#{name}"))],
+/// Une phrase du journal d'après son gabarit : le français est la clé, traduit en entier (jamais des morceaux
+/// recollés, l'ordre des mots change d'une langue à l'autre). Chaque `{nom}` du gabarit prend sa valeur : un nom
+/// propre en gras (`b`), le reste en texte (`seg`). Le gabarit est marqué `tk!` pour le contrôle des traductions.
+fn phrase(key: &str, vars: &[(&str, Seg)]) -> Vec<Seg> {
+    let template = t(key);
+    let mut out = Vec::new();
+    let mut rest = template.as_str();
+    while let Some(open) = rest.find('{') {
+        let after = &rest[open + 1..];
+        let found = after.find('}').and_then(|end| {
+            let name = &after[..end];
+            vars.iter().find(|(k, _)| *k == name).map(|(_, v)| (end, v.clone()))
+        });
+        match found {
+            Some((end, value)) => {
+                if open > 0 {
+                    out.push(seg(&rest[..open]));
+                }
+                out.push(value);
+                rest = &after[end + 1..];
+            }
+            None => {
+                out.push(seg(&rest[..=open]));
+                rest = after;
+            }
+        }
     }
+    if !rest.is_empty() {
+        out.push(seg(rest));
+    }
+    out
+}
+
+/// « a créé le salon vocal Cartes », « a supprimé la catégorie Archives » : d'après le type gardé à l'écriture,
+/// sinon un salon.
+fn channel_sentence(created: bool, kind: Option<&str>, who: Seg, name: &str) -> Vec<Seg> {
+    let hashed = || b(format!("#{name}"));
+    let (key, value) = match (created, kind) {
+        (true, Some("voice")) => (tk!("{auteur} a créé le salon vocal {nom}"), b(name)),
+        (true, Some("category")) => (tk!("{auteur} a créé la catégorie {nom}"), b(name)),
+        (true, Some("announcement")) => (tk!("{auteur} a créé le salon d'annonces {nom}"), hashed()),
+        (true, Some("forum")) => (tk!("{auteur} a créé le forum {nom}"), hashed()),
+        (true, Some("stage")) => (tk!("{auteur} a créé la scène {nom}"), b(name)),
+        (true, _) => (tk!("{auteur} a créé le salon {nom}"), hashed()),
+        (false, Some("voice")) => (tk!("{auteur} a supprimé le salon vocal {nom}"), b(name)),
+        (false, Some("category")) => (tk!("{auteur} a supprimé la catégorie {nom}"), b(name)),
+        (false, Some("announcement")) => (tk!("{auteur} a supprimé le salon d'annonces {nom}"), hashed()),
+        (false, Some("forum")) => (tk!("{auteur} a supprimé le forum {nom}"), hashed()),
+        (false, Some("stage")) => (tk!("{auteur} a supprimé la scène {nom}"), b(name)),
+        (false, _) => (tk!("{auteur} a supprimé le salon {nom}"), hashed()),
+    };
+    phrase(key, &[("auteur", who), ("nom", value)])
 }
 
 fn emoji_code(name: &str) -> String {
     format!(":{name}:")
 }
 
-/// La phrase complète de l'événement, sans l'auteur : « a banni lou ».
-fn predicate(e: &AuditEntry) -> Vec<Seg> {
+/// La phrase complète de l'événement, auteur compris : « lou a banni sam ».
+fn predicate(e: &AuditEntry, who: Seg) -> Vec<Seg> {
     let target = || target_name(&e.target);
     let channel = || {
         let n = target();
-        if e.target.as_ref().is_some_and(|t| t.name.is_some()) { format!("#{n}") } else { n }
+        if e.target.as_ref().is_some_and(|x| x.name.is_some()) { format!("#{n}") } else { n }
     };
-    let mut s = Vec::new();
+    let role = || detail(e, "role").map_or_else(|| t("(rôle)"), str::to_string);
+    let at = |name: &str| format!("#{name}");
+    let auteur = ("auteur", who.clone());
     match e.action.as_str() {
-        "member_role_add" => {
-            s.extend([t("a ajouté le rôle "), b(detail(e, "role").unwrap_or("(rôle)")), t(" à "), b(target())]);
+        "member_role_add" => phrase(
+            tk!("{auteur} a ajouté le rôle {role} à {cible}"),
+            &[auteur, ("role", b(role())), ("cible", b(target()))],
+        ),
+        "member_role_remove" => phrase(
+            tk!("{auteur} a retiré le rôle {role} à {cible}"),
+            &[auteur, ("role", b(role())), ("cible", b(target()))],
+        ),
+        "member_kick" => phrase(tk!("{auteur} a expulsé {cible}"), &[auteur, ("cible", b(target()))]),
+        "member_ban" => phrase(tk!("{auteur} a banni {cible}"), &[auteur, ("cible", b(target()))]),
+        "member_unban" => phrase(tk!("{auteur} a levé le bannissement de {cible}"), &[auteur, ("cible", b(target()))]),
+        "member_timeout" => match detail(e, "seconds").and_then(|v| v.parse::<u64>().ok()) {
+            Some(secs) => phrase(
+                tk!("{auteur} a exclu {cible} pendant {duree}"),
+                &[auteur, ("cible", b(target())), ("duree", seg(crate::i18n::duration(secs)))],
+            ),
+            None => phrase(tk!("{auteur} a exclu {cible} temporairement"), &[auteur, ("cible", b(target()))]),
+        },
+        "member_timeout_remove" => {
+            phrase(tk!("{auteur} a levé l'exclusion de {cible}"), &[auteur, ("cible", b(target()))])
         }
-        "member_role_remove" => {
-            s.extend([t("a retiré le rôle "), b(detail(e, "role").unwrap_or("(rôle)")), t(" à "), b(target())]);
+        "owner_transfer" => {
+            phrase(tk!("{auteur} a transféré la propriété du serveur à {cible}"), &[auteur, ("cible", b(target()))])
         }
-        "member_kick" => s.extend([t("a expulsé "), b(target())]),
-        "member_ban" => s.extend([t("a banni "), b(target())]),
-        "member_unban" => s.extend([t("a levé le bannissement de "), b(target())]),
-        "member_timeout" => {
-            s.extend([t("a exclu "), b(target())]);
-            match detail(e, "seconds").and_then(|v| v.parse::<u64>().ok()) {
-                Some(secs) => s.push(t(format!(" pendant {}", span::duration(secs)))),
-                None => s.push(t(" temporairement")),
-            }
-        }
-        "member_timeout_remove" => s.extend([t("a levé l'exclusion de "), b(target())]),
-        "owner_transfer" => s.extend([t("a transféré la propriété du serveur à "), b(target())]),
-        "role_create" => s.extend([t("a créé le rôle "), b(target())]),
-        "role_update" => s.extend([t("a modifié le rôle "), b(target())]),
-        "role_delete" => s.extend([t("a supprimé le rôle "), b(target())]),
-        "role_reorder" => s.push(t("a changé l'ordre des rôles")),
-        "channel_create" => {
-            s.push(t("a créé "));
-            s.extend(channel_phrase(detail(e, "kind"), &target()));
-        }
-        "channel_update" => s.extend([t("a modifié le salon "), b(channel())]),
-        "channel_delete" => {
-            s.push(t("a supprimé "));
-            s.extend(channel_phrase(detail(e, "kind"), &target()));
-        }
-        "channel_move" => s.extend([t("a déplacé le salon "), b(channel())]),
+        "role_create" => phrase(tk!("{auteur} a créé le rôle {cible}"), &[auteur, ("cible", b(target()))]),
+        "role_update" => phrase(tk!("{auteur} a modifié le rôle {cible}"), &[auteur, ("cible", b(target()))]),
+        "role_delete" => phrase(tk!("{auteur} a supprimé le rôle {cible}"), &[auteur, ("cible", b(target()))]),
+        "role_reorder" => phrase(tk!("{auteur} a changé l'ordre des rôles"), &[auteur]),
+        "channel_create" => channel_sentence(true, detail(e, "kind"), who, &target()),
+        "channel_update" => phrase(tk!("{auteur} a modifié le salon {salon}"), &[auteur, ("salon", b(channel()))]),
+        "channel_delete" => channel_sentence(false, detail(e, "kind"), who, &target()),
+        "channel_move" => phrase(tk!("{auteur} a déplacé le salon {salon}"), &[auteur, ("salon", b(channel()))]),
         "overwrite_update" => {
-            let who = detail(e, "subject").unwrap_or(GONE_TARGET);
+            let subject = detail(e, "subject").map_or_else(gone_target, str::to_string);
             let (allow, deny) = (bits(detail(e, "allow")), bits(detail(e, "deny")));
-            s.push(t(if allow | deny == 0 { "a retiré les droits propres " } else { "a modifié les droits " }));
-            s.push(t(if detail(e, "subject_kind") == Some("role") { "du rôle " } else { "de " }));
-            s.extend([b(who), t(" dans le salon "), b(channel())]);
+            let vars = [auteur, ("sujet", b(subject)), ("salon", b(channel()))];
+            let key = match (allow | deny == 0, detail(e, "subject_kind") == Some("role")) {
+                (true, true) => tk!("{auteur} a retiré les droits propres du rôle {sujet} dans le salon {salon}"),
+                (true, false) => tk!("{auteur} a retiré les droits propres de {sujet} dans le salon {salon}"),
+                (false, true) => tk!("{auteur} a modifié les droits du rôle {sujet} dans le salon {salon}"),
+                (false, false) => tk!("{auteur} a modifié les droits de {sujet} dans le salon {salon}"),
+            };
+            phrase(key, &vars)
         }
-        "invite_create" => {
-            s.push(t("a créé une invitation"));
-            if let Some(c) = detail(e, "channel") {
-                s.extend([t(" pour le salon "), b(format!("#{c}"))]);
-            }
-        }
-        "invite_revoke" => {
-            s.push(t("a révoqué une invitation"));
-            if let Some(who) = detail(e, "inviter") {
-                s.extend([t(" de "), b(who)]);
-            }
-        }
-        "emoji_create" => s.extend([t("a ajouté l'emoji "), b(emoji_code(&target()))]),
-        "emoji_update" => match change(e, "name") {
+        "invite_create" => match detail(e, "channel") {
             Some(c) => {
-                s.extend([t("a renommé l'emoji "), b(emoji_code(&c.before)), t(" en "), b(emoji_code(&c.after))])
+                phrase(tk!("{auteur} a créé une invitation pour le salon {salon}"), &[auteur, ("salon", b(at(c)))])
             }
-            None => s.extend([t("a modifié l'emoji "), b(emoji_code(&target()))]),
+            None => phrase(tk!("{auteur} a créé une invitation"), &[auteur]),
         },
-        "emoji_delete" => s.extend([t("a supprimé l'emoji "), b(emoji_code(&target()))]),
-        "message_delete" => {
-            s.extend([t("a supprimé un message de "), b(target())]);
-            if let Some(c) = detail(e, "channel") {
-                s.extend([t(" dans le salon "), b(format!("#{c}"))]);
-            }
+        "invite_revoke" => match detail(e, "inviter") {
+            Some(who) => phrase(tk!("{auteur} a révoqué une invitation de {nom}"), &[auteur, ("nom", b(who))]),
+            None => phrase(tk!("{auteur} a révoqué une invitation"), &[auteur]),
+        },
+        "emoji_create" => {
+            phrase(tk!("{auteur} a ajouté l'emoji {emoji}"), &[auteur, ("emoji", b(emoji_code(&target())))])
         }
-        "message_pin" | "message_unpin" => {
-            s.push(t(if e.action == "message_pin" { "a épinglé un message" } else { "a désépinglé un message" }));
-            if let Some(c) = detail(e, "channel") {
-                s.extend([t(" dans "), b(format!("#{c}"))]);
-            }
+        "emoji_update" => match change(e, "name") {
+            Some(c) => phrase(
+                tk!("{auteur} a renommé l'emoji {avant} en {apres}"),
+                &[auteur, ("avant", b(emoji_code(&c.before))), ("apres", b(emoji_code(&c.after)))],
+            ),
+            None => phrase(tk!("{auteur} a modifié l'emoji {emoji}"), &[auteur, ("emoji", b(emoji_code(&target())))]),
+        },
+        "emoji_delete" => {
+            phrase(tk!("{auteur} a supprimé l'emoji {emoji}"), &[auteur, ("emoji", b(emoji_code(&target())))])
         }
+        "message_delete" => match detail(e, "channel") {
+            Some(c) => phrase(
+                tk!("{auteur} a supprimé un message de {cible} dans le salon {salon}"),
+                &[auteur, ("cible", b(target())), ("salon", b(at(c)))],
+            ),
+            None => phrase(tk!("{auteur} a supprimé un message de {cible}"), &[auteur, ("cible", b(target()))]),
+        },
+        "message_pin" => match detail(e, "channel") {
+            Some(c) => phrase(tk!("{auteur} a épinglé un message dans {salon}"), &[auteur, ("salon", b(at(c)))]),
+            None => phrase(tk!("{auteur} a épinglé un message"), &[auteur]),
+        },
+        "message_unpin" => match detail(e, "channel") {
+            Some(c) => phrase(tk!("{auteur} a désépinglé un message dans {salon}"), &[auteur, ("salon", b(at(c)))]),
+            None => phrase(tk!("{auteur} a désépinglé un message"), &[auteur]),
+        },
         "guild_update" => match (change(e, "name"), detail(e, "icon")) {
-            (Some(c), _) => s.extend([t("a renommé le serveur « "), b(&c.before), t(" » en « "), b(&c.after), t(" »")]),
-            (None, Some("removed")) => s.push(t("a retiré l'icône du serveur")),
-            (None, Some(_)) => s.push(t("a changé l'icône du serveur")),
-            (None, None) => s.push(t("a modifié le serveur")),
+            (Some(c), _) => phrase(
+                tk!("{auteur} a renommé le serveur « {avant} » en « {apres} »"),
+                &[auteur, ("avant", b(&c.before)), ("apres", b(&c.after))],
+            ),
+            (None, Some("removed")) => phrase(tk!("{auteur} a retiré l'icône du serveur"), &[auteur]),
+            (None, Some(_)) => phrase(tk!("{auteur} a changé l'icône du serveur"), &[auteur]),
+            (None, None) => phrase(tk!("{auteur} a modifié le serveur"), &[auteur]),
         },
-        other => s.extend([t("a effectué une action que cette version ne connaît pas ("), b(other), t(")")]),
+        other => phrase(
+            tk!("{auteur} a effectué une action que cette version ne connaît pas ({action})"),
+            &[auteur, ("action", b(other))],
+        ),
     }
-    s
 }
 
 fn bits(v: Option<&str>) -> u64 {
@@ -212,7 +277,7 @@ fn perm_names(bits: u64) -> String {
         .iter()
         .flat_map(|(_, perms)| perms.iter())
         .filter(|(bit, ..)| bits & bit != 0)
-        .map(|(_, name, _)| *name)
+        .map(|(_, name, _)| label(name))
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -221,55 +286,73 @@ fn perm_names(bits: u64) -> String {
 fn extra(e: &AuditEntry) -> Option<String> {
     match e.action.as_str() {
         "invite_create" => {
-            let age = detail(e, "max_age_s").and_then(|v| v.parse::<u64>().ok());
+            let age = detail(e, "max_age_s").and_then(|v| v.parse::<u64>().ok()).map(crate::i18n::duration);
             let uses = detail(e, "max_uses").and_then(|v| v.parse::<u32>().ok()).filter(|n| *n > 0);
-            let first = match age {
-                Some(a) => format!("Valable {}", span::duration(a)),
-                None => "Sans date limite".into(),
-            };
-            Some(match uses {
-                Some(1) => format!("{first}, 1 utilisation au plus"),
-                Some(n) => format!("{first}, {n} utilisations au plus"),
-                None => format!("{first}, utilisations illimitées"),
+            Some(match (age, uses) {
+                (Some(a), Some(n)) => tnf(
+                    "Valable {duree}, {n} utilisation au plus",
+                    "Valable {duree}, {n} utilisations au plus",
+                    n,
+                    &[("duree", &a)],
+                ),
+                (Some(a), None) => tf("Valable {duree}, utilisations illimitées", &[("duree", &a)]),
+                (None, Some(n)) => {
+                    tn("Sans date limite, {n} utilisation au plus", "Sans date limite, {n} utilisations au plus", n)
+                }
+                (None, None) => t("Sans date limite, utilisations illimitées"),
             })
         }
         "overwrite_update" => {
             let (allow, deny) = (perm_names(bits(detail(e, "allow"))), perm_names(bits(detail(e, "deny"))));
             match (allow.is_empty(), deny.is_empty()) {
                 (true, true) => None,
-                (false, true) => Some(format!("Autorisé : {allow}")),
-                (true, false) => Some(format!("Refusé : {deny}")),
-                (false, false) => Some(format!("Autorisé : {allow}. Refusé : {deny}")),
+                (false, true) => Some(tf("Autorisé : {droits}", &[("droits", &allow)])),
+                (true, false) => Some(tf("Refusé : {droits}", &[("droits", &deny)])),
+                (false, false) => {
+                    Some(tf("Autorisé : {autorises}. Refusé : {refuses}", &[("autorises", &allow), ("refuses", &deny)]))
+                }
             }
         }
         _ => None,
     }
 }
 
-fn field_label(field: &str) -> &'static str {
-    match field {
-        "name" => "Nom",
-        "topic" => "Sujet",
-        "slowmode_s" => "Mode lent",
-        "private" => "Visibilité",
-        "color" => "Couleur",
-        "hoist" => "Affiché à part",
-        "permissions" => "Droits",
-        _ => "Réglage",
-    }
+fn field_label(field: &str) -> String {
+    t(match field {
+        "name" => tk!("Nom"),
+        "topic" => tk!("Sujet"),
+        "slowmode_s" => tk!("Mode lent"),
+        "private" => tk!("Visibilité"),
+        "color" => tk!("Couleur"),
+        "hoist" => tk!("Affiché à part"),
+        "permissions" => tk!("Droits"),
+        _ => tk!("Réglage"),
+    })
 }
 
-/// Une valeur de l'avant / après, en français.
+/// Une valeur de l'avant / après, dans la langue de l'interface.
 fn value_text(field: &str, v: &str) -> String {
     match field {
-        "name" if v.is_empty() => "(vide)".into(),
-        "topic" if v.is_empty() => "(aucun)".into(),
+        "name" if v.is_empty() => t("(vide)"),
+        "topic" if v.is_empty() => t("(aucun)"),
         "slowmode_s" => crate::channels::slow_label(v.parse().unwrap_or(0)),
-        "private" => (if v == "true" { "Privé" } else { "Public" }).into(),
-        "hoist" => (if v == "true" { "Oui" } else { "Non" }).into(),
+        "private" => {
+            if v == "true" {
+                t("Privé")
+            } else {
+                t("Public")
+            }
+        }
+        "hoist" => {
+            if v == "true" {
+                t("Oui")
+            } else {
+                t("Non")
+            }
+        }
         "color" => match v.parse::<usize>() {
-            Ok(n) if (1..=COLOR_NAMES.len()).contains(&n) => COLOR_NAMES[n - 1].into(),
-            _ => "Aucune".into(),
+            Ok(n) if (1..=COLOR_NAMES.len()).contains(&n) => t(COLOR_NAMES[n - 1]),
+            _ => t("Aucune"),
         },
         _ => v.to_string(),
     }
@@ -277,7 +360,7 @@ fn value_text(field: &str, v: &str) -> String {
 
 /// Ce qui change, prêt à être posé dans la ligne : des paires (libellé, valeurs). Pour les droits, le
 /// détail de ce qui est ajouté et retiré, pas deux listes entières.
-fn diff_rows(changes: &[AuditChange]) -> Vec<(&'static str, Vec<(&'static str, String)>)> {
+fn diff_rows(changes: &[AuditChange]) -> Vec<(String, Vec<(String, String)>)> {
     changes
         .iter()
         .map(|c| {
@@ -287,14 +370,17 @@ fn diff_rows(changes: &[AuditChange]) -> Vec<(&'static str, Vec<(&'static str, S
                 let mut rows = Vec::new();
                 let (added, removed) = (perm_names(new & !old), perm_names(old & !new));
                 if !added.is_empty() {
-                    rows.push(("Ajoutés", added));
+                    rows.push((t("Ajoutés"), added));
                 }
                 if !removed.is_empty() {
-                    rows.push(("Retirés", removed));
+                    rows.push((t("Retirés"), removed));
                 }
                 (label, rows)
             } else {
-                (label, vec![("Avant", value_text(&c.field, &c.before)), ("Après", value_text(&c.field, &c.after))])
+                (
+                    label,
+                    vec![(t("Avant"), value_text(&c.field, &c.before)), (t("Après"), value_text(&c.field, &c.after))],
+                )
             }
         })
         .filter(|(_, rows)| !rows.is_empty())
@@ -317,12 +403,12 @@ fn long_date(ms: i64, weekday: bool) -> String {
     for (key, value) in parts {
         let _ = js_sys::Reflect::set(&options, &JsValue::from_str(key), &JsValue::from_str(value));
     }
-    js_date(ms).to_locale_date_string("fr-FR", &options).into()
+    js_date(ms).to_locale_date_string(&crate::i18n::locale(), &options).into()
 }
 
 /// « mercredi 12 novembre 2026 à 14:30 » : l'heure suit le choix 12 / 24 h.
 fn full_date(ms: i64) -> String {
-    format!("{} à {}", long_date(ms, true), clock(ms))
+    tf("{date} à {heure}", &[("date", &long_date(ms, true)), ("heure", &clock(ms))])
 }
 
 /// Le jour, pour regrouper : la date locale sans l'heure.
@@ -336,9 +422,9 @@ fn day_label(ms: i64, now: i64) -> String {
     yesterday.set_date(today.get_date() - 1);
     let key = day_key(ms);
     if today.to_date_string() == key {
-        "Aujourd'hui".into()
+        t("Aujourd'hui")
     } else if yesterday.to_date_string() == key {
-        "Hier".into()
+        t("Hier")
     } else {
         long_date(ms, true)
     }
@@ -366,7 +452,7 @@ fn by_day(entries: &[AuditEntry], now: i64) -> Vec<Day> {
 /// L'heure d'un événement : « il y a 5 min » s'il est tout récent, sinon l'heure du jour (12 ou 24 h selon
 /// le choix). La date et l'heure complètes sont en infobulle et lues telles quelles par un lecteur d'écran.
 fn when_view(ms: i64) -> impl IntoView {
-    let shown = span::ago(now_ms() - ms).unwrap_or_else(|| clock(ms));
+    let shown = crate::i18n::ago(now_ms() - ms).unwrap_or_else(|| clock(ms));
     let full = full_date(ms);
     let title = full.clone();
     view! {
@@ -424,10 +510,9 @@ fn focus_by_id(id: &'static str) {
 
 fn count_text(n: usize, more: bool) -> String {
     match (n, more) {
-        (0, _) => "Aucun événement".into(),
-        (1, false) => "1 événement".into(),
-        (n, false) => format!("{n} événements"),
-        (n, true) => format!("{n} événements affichés"),
+        (0, _) => t("Aucun événement"),
+        (n, false) => tn("{n} événement", "{n} événements", n),
+        (n, true) => tn("{n} événement affiché", "{n} événements affichés", n),
     }
 }
 
@@ -477,10 +562,7 @@ pub fn AuditLog(guild: Id) -> impl IntoView {
                     let n = page.entries.len();
                     entries.try_update(|v| v.extend(page.entries));
                     next.try_set(page.next);
-                    note.try_set(Some(match n {
-                        1 => "1 événement de plus".to_string(),
-                        n => format!("{n} événements de plus"),
-                    }));
+                    note.try_set(Some(tn("{n} événement de plus", "{n} événements de plus", n)));
                     busy.try_set(false);
                     if let Some(id) = first {
                         focus_row(id);
@@ -516,7 +598,7 @@ pub fn AuditLog(guild: Id) -> impl IntoView {
         entries.with(|v| by_day(v, now))
     });
     let status = move || match phase.get() {
-        Phase::Loading => "Chargement du journal…".to_string(),
+        Phase::Loading => t("Chargement du journal…"),
         Phase::Failed(_) => String::new(),
         Phase::Ready => {
             let base = count_text(entries.with(Vec::len), next.with(Option::is_some));
@@ -529,27 +611,27 @@ pub fn AuditLog(guild: Id) -> impl IntoView {
 
     view! {
         <div class="app-audit">
-            <p class="app-hint">"Les actions de gestion et de modération de ce serveur, de la plus récente à la plus ancienne. Le journal est en lecture seule : rien ne s'y efface."</p>
-            <form class="app-audit-filters" role="search" aria-label="Filtrer le journal d'audit" on:submit=|e| e.prevent_default()>
+            <p class="app-hint">{t("Les actions de gestion et de modération de ce serveur, de la plus récente à la plus ancienne. Le journal est en lecture seule : rien ne s'y efface.")}</p>
+            <form class="app-audit-filters" role="search" aria-label=t("Filtrer le journal d'audit") on:submit=|e| e.prevent_default()>
                 <div class="k-field">
-                    <label class="k-label" for="audit-category">"Action"</label>
+                    <label class="k-label" for="audit-category">{t("Action")}</label>
                     <select id="audit-category" class="k-select" on:change=move |e| {
                         category.set(event_target_value(&e));
                         fetch(false);
                     }>
-                        <option value="" prop:selected=move || category.get().is_empty()>"Toutes"</option>
-                        {KINDS.iter().map(|(slug, label)| view! {
-                            <option value=*slug prop:selected=move || category.get() == *slug>{*label}</option>
+                        <option value="" prop:selected=move || category.get().is_empty()>{t("Toutes")}</option>
+                        {KINDS.iter().map(|(slug, lbl)| view! {
+                            <option value=*slug prop:selected=move || category.get() == *slug>{t(lbl)}</option>
                         }).collect_view()}
                     </select>
                 </div>
                 <div class="k-field">
-                    <label class="k-label" for="audit-actor">"Membre"</label>
+                    <label class="k-label" for="audit-actor">{t("Membre")}</label>
                     <select id="audit-actor" class="k-select" on:change=move |e| {
                         actor.set(event_target_value(&e));
                         fetch(false);
                     }>
-                        <option value="" prop:selected=move || actor.get().is_empty()>"Tous"</option>
+                        <option value="" prop:selected=move || actor.get().is_empty()>{t("Tous")}</option>
                         {move || actors.get().into_iter().map(|a| {
                             let id = a.id.to_string();
                             let mine = id.clone();
@@ -559,10 +641,10 @@ pub fn AuditLog(guild: Id) -> impl IntoView {
                 </div>
                 <div class="app-audit-buttons">
                     <Show when=move || filtered.get()>
-                        <button type="button" class="k-btn k-btn--ghost" on:click=reset>"Réinitialiser"</button>
+                        <button type="button" class="k-btn k-btn--ghost" on:click=reset>{t("Réinitialiser")}</button>
                     </Show>
                     <button type="button" class="k-btn k-btn--ghost" on:click=move |_| fetch(false)>
-                        <Icon icon=lu::LuRefreshCw/>"Actualiser"
+                        <Icon icon=lu::LuRefreshCw/>{t("Actualiser")}
                     </button>
                 </div>
             </form>
@@ -577,19 +659,19 @@ pub fn AuditLog(guild: Id) -> impl IntoView {
                 Phase::Failed(message) => view! {
                     <div class="k-empty">
                         <p class="k-error" role="alert">{message}</p>
-                        <button type="button" class="k-btn" on:click=move |_| fetch(false)>"Réessayer"</button>
+                        <button type="button" class="k-btn" on:click=move |_| fetch(false)>{t("Réessayer")}</button>
                     </div>
                 }.into_any(),
                 Phase::Ready if entries.with_untracked(Vec::is_empty) => view! {
                     <div class="k-empty">
-                        <b>{if filtered.get_untracked() { "Aucun événement ne correspond" } else { "Aucun événement" }}</b>
+                        <b>{if filtered.get_untracked() { t("Aucun événement ne correspond") } else { t("Aucun événement") }}</b>
                         <span>{if filtered.get_untracked() {
-                            "Essaie un autre type d'action ou un autre membre."
+                            t("Essaie un autre type d'action ou un autre membre.")
                         } else {
-                            "Les actions de gestion et de modération du serveur apparaîtront ici."
+                            t("Les actions de gestion et de modération du serveur apparaîtront ici.")
                         }}</span>
                         {filtered.get_untracked().then(|| view! {
-                            <button type="button" class="k-btn" on:click=reset>"Réinitialiser"</button>
+                            <button type="button" class="k-btn" on:click=reset>{t("Réinitialiser")}</button>
                         })}
                     </div>
                 }.into_any(),
@@ -597,7 +679,7 @@ pub fn AuditLog(guild: Id) -> impl IntoView {
                     <For each=move || groups.get() key=|d| (d.label.clone(), d.items.len()) let:day>
                         <div class="app-audit-day">
                             <h3>{day.label.clone()}</h3>
-                            <ul class="app-list app-list--col app-audit-list" aria-label="Événements du journal">
+                            <ul class="app-list app-list--col app-audit-list" aria-label=t("Événements du journal")>
                                 {day.items.into_iter().map(|e| view! { <Row entry=e/> }).collect_view()}
                             </ul>
                         </div>
@@ -608,7 +690,7 @@ pub fn AuditLog(guild: Id) -> impl IntoView {
                     <Show when=move || next.get().is_some()>
                         <div class="app-audit-more">
                             <button type="button" class="k-btn" aria-busy=move || busy.get().then_some("true")
-                                on:click=move |_| fetch(true)>"Charger plus"</button>
+                                on:click=move |_| fetch(true)>{t("Charger plus")}</button>
                         </div>
                     </Show>
                 }.into_any(),
@@ -624,19 +706,14 @@ fn Row(entry: AuditEntry) -> impl IntoView {
     let expanded = RwSignal::new(false);
     let id = entry.id;
     let (icon, danger) = visual(&entry.action);
-    let who = entry.actor.as_ref().map_or_else(|| GONE_ACTOR.to_string(), |a| a.name.clone());
+    let who = entry.actor.as_ref().map_or_else(gone_actor, |a| a.name.clone());
     let avatar = match &entry.actor {
         Some(a) => view! { <span aria-hidden="true"><Avatar user=user_of(a) size="md"/></span> }.into_any(),
         None => {
             view! { <span class="k-avatar k-avatar--md" aria-hidden="true"><Icon icon=lu::LuUser/></span> }.into_any()
         }
     };
-    let sentence = {
-        let mut s = vec![b(who)];
-        s.push(t(" "));
-        s.extend(predicate(&entry));
-        s
-    };
+    let sentence = predicate(&entry, b(who));
     let reason = entry.reason.clone().filter(|r| !r.is_empty());
     let extra = extra(&entry);
     let rows = diff_rows(&entry.changes);
@@ -649,7 +726,7 @@ fn Row(entry: AuditEntry) -> impl IntoView {
                 <p class="app-audit-sentence">{segs_view(sentence)}</p>
                 <small class="app-audit-when">{when_view(entry.created_at)}</small>
                 {extra.map(|x| view! { <small class="app-ban-reason"><bdi>{x}</bdi></small> })}
-                {reason.map(|r| view! { <small class="app-ban-reason">"Raison : "<bdi>{r}</bdi></small> })}
+                {reason.map(|r| view! { <small class="app-ban-reason">{t("Raison :")}" "<bdi>{r}</bdi></small> })}
                 {has_diff.then(|| {
                     let controls = diff_id.clone();
                     view! {
@@ -657,9 +734,9 @@ fn Row(entry: AuditEntry) -> impl IntoView {
                             aria-expanded=move || expanded.get().to_string() aria-controls=controls
                             on:click=move |_| expanded.update(|e| *e = !*e)>
                             {move || if expanded.get() {
-                                view! { <Icon icon=lu::LuChevronUp small=true/>"Masquer les changements" }.into_any()
+                                view! { <Icon icon=lu::LuChevronUp small=true/>{t("Masquer les changements")} }.into_any()
                             } else {
-                                view! { <Icon icon=lu::LuChevronDown small=true/>"Voir les changements" }.into_any()
+                                view! { <Icon icon=lu::LuChevronDown small=true/>{t("Voir les changements")} }.into_any()
                             }}
                         </button>
                     }

@@ -15,10 +15,12 @@ use leptos::html;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
+use crate::i18n::{t, tf, tn};
 use crate::icons::{Icon, lu};
 use crate::shell::{current_ids, ordered};
 use crate::shortcuts::{self, Action};
 use crate::store::{Store, store};
+use crate::tk;
 use crate::ui::{Avatar, GuildIcon, initials, modal, tint, trap_tab};
 use crate::unread::{MentionBadge, UnreadText};
 
@@ -113,13 +115,14 @@ enum Section {
 impl Section {
     const ALL: [Section; 5] = [Self::Recent, Self::Channels, Self::Dms, Self::People, Self::Servers];
 
+    /// Le titre du groupe : une clé de traduction (`t(…)` à l'affichage).
     fn title(self) -> &'static str {
         match self {
-            Self::Recent => "Récents",
-            Self::Channels => "Salons",
-            Self::Dms => "Messages privés",
-            Self::People => "Personnes",
-            Self::Servers => "Serveurs",
+            Self::Recent => tk!("Récents"),
+            Self::Channels => tk!("Salons"),
+            Self::Dms => tk!("Messages privés"),
+            Self::People => tk!("Personnes"),
+            Self::Servers => tk!("Serveurs"),
         }
     }
 
@@ -165,8 +168,8 @@ struct Entry {
     href: Option<String>,
     name: String,
     detail: String,
-    /// Ce que dit un lecteur d'écran avant le nom.
-    kind: &'static str,
+    /// Ce que dit un lecteur d'écran avant le nom (déjà traduit).
+    kind: String,
     lead: Lead,
     /// Les textes comparés à la requête : le nom d'abord.
     texts: Vec<String>,
@@ -176,12 +179,12 @@ fn channel_entry(c: &Channel, guild: &Guild) -> Option<Entry> {
     let (glyph, kind) = match c.kind {
         ChannelKind::Category | ChannelKind::Thread | ChannelKind::Dm | ChannelKind::GroupDm => return None,
         ChannelKind::Voice | ChannelKind::Stage => {
-            (Glyph::Voice, if c.private { "Salon vocal privé" } else { "Salon vocal" })
+            (Glyph::Voice, if c.private { t("Salon vocal privé") } else { t("Salon vocal") })
         }
-        ChannelKind::Announcement => (Glyph::Announcement, "Annonces"),
-        ChannelKind::Forum => (Glyph::Forum, "Forum"),
-        _ if c.private => (Glyph::Lock, "Salon privé"),
-        _ => (Glyph::Hash, "Salon textuel"),
+        ChannelKind::Announcement => (Glyph::Announcement, t("Annonces")),
+        ChannelKind::Forum => (Glyph::Forum, t("Forum")),
+        _ if c.private => (Glyph::Lock, t("Salon privé")),
+        _ => (Glyph::Hash, t("Salon textuel")),
     };
     let name = c.name.clone().unwrap_or_default();
     Some(Entry {
@@ -212,7 +215,7 @@ fn dm_entry(c: &Channel) -> Entry {
     };
     let detail = match (group, c.recipients.first()) {
         (false, Some(u)) => format!("@{}", u.username),
-        _ => format!("{} membres", c.recipients.len() + 1),
+        _ => tn("{n} membre", "{n} membres", c.recipients.len() + 1),
     };
     Entry {
         section: Section::Dms,
@@ -222,7 +225,7 @@ fn dm_entry(c: &Channel) -> Entry {
         href: Some(format!("/channels/@me/{}", c.id)),
         name,
         detail,
-        kind: if group { "Groupe" } else { "Message privé" },
+        kind: if group { t("Groupe") } else { t("Message privé") },
         lead,
         texts,
     }
@@ -237,7 +240,8 @@ fn person_entry(u: &User) -> Entry {
         href: None,
         name: u.name().to_string(),
         detail: format!("@{}", u.username),
-        kind: "Personne",
+        // « Personne » (nul) a une autre traduction : le `{contexte}` vide en fait une entrée à part.
+        kind: tf("Personne{contexte}", &[("contexte", "")]),
         lead: Lead::Person(u.clone()),
         texts: vec![u.name().to_string(), u.username.clone()],
     }
@@ -252,7 +256,7 @@ fn server_entry(g: &Guild) -> Entry {
         href: None,
         name: g.name.clone(),
         detail: String::new(),
-        kind: "Serveur",
+        kind: t("Serveur"),
         lead: Lead::Guild(g.clone()),
         texts: vec![g.name.clone()],
     }
@@ -393,7 +397,7 @@ pub fn SwitcherButton() -> impl IntoView {
         <button type="button" class="k-btn k-btn--sm app-find" aria-haspopup="dialog" aria-keyshortcuts=shortcut
             on:click=move |_| ui.switcher.set(true)>
             <Icon icon=lu::LuSearch small=true/>
-            <span class="app-find-text">"Aller vers…"</span>
+            <span class="app-find-text">{t("Aller vers…")}</span>
             <span class="app-find-kbd" aria-hidden="true">{shortcuts::keys_view(Action::Switcher)}</span>
         </button>
     }
@@ -526,12 +530,10 @@ pub fn Switcher() -> impl IntoView {
     let status = move || {
         let n = count.get();
         match (recent_mode.get(), n) {
-            (true, 0) => "Aucun lieu récent".to_string(),
-            (true, 1) => "1 lieu récent".to_string(),
-            (true, n) => format!("{n} lieux récents"),
-            (false, 0) => "Aucun résultat".to_string(),
-            (false, 1) => "1 résultat".to_string(),
-            (false, n) => format!("{n} résultats"),
+            (true, 0) => t("Aucun lieu récent"),
+            (true, n) => tn("{n} lieu récent", "{n} lieux récents", n),
+            (false, 0) => t("Aucun résultat"),
+            (false, n) => tn("{n} résultat", "{n} résultats", n),
         }
     };
     let groups = move || {
@@ -551,7 +553,7 @@ pub fn Switcher() -> impl IntoView {
                 let (labelled, own) = (format!("sw-g-{}", section.slug()), format!("sw-g-{}", section.slug()));
                 Some(view! {
                     <div role="group" aria-labelledby=labelled>
-                        <div class="k-listbox-group" id=own>{section.title()}</div>
+                        <div class="k-listbox-group" id=own>{t(section.title())}</div>
                         {items.into_iter().map(|(i, r)| option_view(s, r, i, at, active, pick)).collect_view()}
                     </div>
                 })
@@ -561,30 +563,30 @@ pub fn Switcher() -> impl IntoView {
     let empty = move || {
         let typed = q.get().trim().to_string();
         if recent_mode.get() {
-            view! { <div class="k-empty"><b>"Rien de récent"</b><span>"Tape le nom d'un salon, d'une personne ou d'un serveur."</span></div> }.into_any()
+            view! { <div class="k-empty"><b>{t("Rien de récent")}</b><span>{t("Tape le nom d'un salon, d'une personne ou d'un serveur.")}</span></div> }.into_any()
         } else {
-            view! { <div class="k-empty"><b class="app-sw-typed">{format!("Aucun résultat pour « {typed} »")}</b></div> }.into_any()
+            view! { <div class="k-empty"><b class="app-sw-typed">{tf("Aucun résultat pour « {saisie} »", &[("saisie", &typed)])}</b></div> }.into_any()
         }
     };
     view! {
         <div class="k-scrim app-sw-scrim" node_ref=root on:click=move |_| ui.switcher.set(false) on:keydown=move |e| trap_tab(&e, root)>
-            <div class="k-dialog app-sw" role="dialog" aria-modal="true" aria-label="Aller vers" on:click=|e| e.stop_propagation()>
+            <div class="k-dialog app-sw" role="dialog" aria-modal="true" aria-label=t("Aller vers") on:click=|e| e.stop_propagation()>
                 <div class="app-sw-top">
                     <div class="app-sw-field">
                         <input class="k-input" type="text" role="combobox" aria-autocomplete="list" autocomplete="off" spellcheck="false"
                             autocapitalize="off" enterkeyhint="go" maxlength="100" autofocus
-                            aria-label="Salon, personne ou serveur" placeholder="Aller vers un salon, une personne, un serveur"
+                            aria-label=t("Salon, personne ou serveur") placeholder=t("Aller vers un salon, une personne, un serveur")
                             aria-describedby="sw-hint"
                             aria-expanded=move || (count.get() > 0).to_string()
                             aria-controls=move || (count.get() > 0).then_some("sw-list")
                             aria-activedescendant=active_id
                             bind:value=q on:keydown=on_key/>
-                        <button type="button" class="k-btn k-btn--icon app-sw-close" aria-label="Fermer" title="Fermer (Échap)"
+                        <button type="button" class="k-btn k-btn--icon app-sw-close" aria-label=t("Fermer") title=t("Fermer (Échap)")
                             on:click=move |_| ui.switcher.set(false)>
                             <Icon icon=lu::LuX/>
                         </button>
                     </div>
-                    <p class="k-hint" id="sw-hint">"# salons · @ personnes et messages privés · * serveurs"</p>
+                    <p class="k-hint" id="sw-hint">{t("# salons · @ personnes et messages privés · * serveurs")}</p>
                 </div>
                 <p class="k-hint app-sw-count" role="status"><span class:k-sr=move || count.get() == 0>{status}</span></p>
                 <Show when=move || error.get().is_some()>
@@ -592,13 +594,13 @@ pub fn Switcher() -> impl IntoView {
                 </Show>
                 <div class="app-sw-body">
                     <Show when=move || { count.get() > 0 } fallback=empty>
-                        <div class="k-listbox app-sw-list" id="sw-list" role="listbox" aria-label="Résultats" node_ref=list>{groups}</div>
+                        <div class="k-listbox app-sw-list" id="sw-list" role="listbox" aria-label=t("Résultats") node_ref=list>{groups}</div>
                     </Show>
                 </div>
                 <footer class="app-sw-foot" aria-hidden="true">
-                    <span><span class="k-kbd"><kbd>"↑"</kbd><kbd>"↓"</kbd></span>" choisir"</span>
-                    <span><span class="k-kbd"><kbd>"↵"</kbd></span>" ouvrir"</span>
-                    <span><span class="k-kbd"><kbd>"Échap"</kbd></span>" fermer"</span>
+                    <span><span class="k-kbd"><kbd>"↑"</kbd><kbd>"↓"</kbd></span>" "{t("choisir")}</span>
+                    <span><span class="k-kbd"><kbd>"↵"</kbd></span>" "{t("ouvrir")}</span>
+                    <span><span class="k-kbd"><kbd>{t("Échap")}</kbd></span>" "{t("fermer")}</span>
                 </footer>
             </div>
         </div>

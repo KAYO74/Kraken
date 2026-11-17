@@ -73,11 +73,6 @@ impl Bounds {
     pub fn fits(self, w: u32, h: u32) -> bool {
         w <= self.side && h <= self.side && u64::from(w) * u64::from(h) <= self.pixels
     }
-
-    /// « 4096 pixels de côté et 16 millions de pixels au plus ».
-    pub fn describe(self) -> String {
-        format!("{} pixels de côté et {} millions de pixels au plus", self.side, self.pixels / 1_000_000)
-    }
 }
 
 /// Pièces jointes et images d'aperçus : jusqu'à 8192 pixels de côté et 40 millions de pixels.
@@ -238,7 +233,6 @@ mod tests {
     fn bounds_limit_the_side_and_the_surface() {
         assert!(MEDIA.fits(8192, 4882) && MEDIA.fits(8192, 16) && MEDIA.fits(6324, 6324));
         assert!(!MEDIA.fits(8193, 1) && !MEDIA.fits(1, 8193) && !MEDIA.fits(8192, 8192) && !MEDIA.fits(7000, 6000));
-        assert_eq!(MEDIA.describe(), "8192 pixels de côté et 40 millions de pixels au plus");
     }
 
     #[test]

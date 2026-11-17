@@ -118,7 +118,20 @@ pub(crate) fn big_image() -> AppError {
     AppError(
         StatusCode::BAD_REQUEST,
         "image_too_big",
-        format!("Cette image est trop grande : {}. Réduis-la avant de l'envoyer.", STILL.describe()),
+        format!(
+            "Cette image est trop grande : {} pixels de côté et {} millions de pixels au plus. Réduis-la avant de l'envoyer.",
+            STILL.side,
+            STILL.pixels / 1_000_000
+        ),
+    )
+}
+
+/// Une image plus lourde que ce que `max` octets permet.
+fn too_large(max: usize) -> AppError {
+    AppError(
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "too_large",
+        format!("Cette image pèse trop lourd : {} Mo au plus.", max / (1024 * 1024)),
     )
 }
 
@@ -254,13 +267,7 @@ pub(crate) async fn receive(
     kind: Kind,
 ) -> ApiResult<(String, PathBuf)> {
     let max = kind.max_bytes();
-    let too_big = || {
-        AppError(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "too_large",
-            format!("Cette image pèse trop lourd : {} Mo au plus.", max / (1024 * 1024)),
-        )
-    };
+    let too_big = || too_large(max);
     let declared =
         headers.get(header::CONTENT_LENGTH).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<usize>().ok());
     if declared.is_some_and(|n| n > max) {
@@ -399,8 +406,23 @@ mod tests {
     }
 
     #[test]
+    fn every_refusal_has_an_english_text_in_the_catalogue() {
+        use crate::error::coverage::assert_translated;
+        for e in [not_image(), big_animation(), big_image(), image_too_small()] {
+            assert_translated(&e.2);
+        }
+        for kind in [Kind::Avatar, Kind::Banner, Kind::GuildIcon] {
+            assert_translated(&too_large(kind.max_bytes()).2);
+        }
+    }
+
+    #[test]
     fn side_and_surface_limits() {
         assert!(STILL.fits(4096, 3906) && STILL.fits(4000, 4000) && STILL.fits(1, 1));
         assert!(!STILL.fits(4097, 1) && !STILL.fits(1, 4097) && !STILL.fits(4096, 4096) && !STILL.fits(4000, 4001));
+        assert_eq!(
+            big_image().2,
+            "Cette image est trop grande : 4096 pixels de côté et 16 millions de pixels au plus. Réduis-la avant de l'envoyer."
+        );
     }
 }

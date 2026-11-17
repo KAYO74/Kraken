@@ -10,6 +10,7 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use wasm_bindgen::JsCast;
 
+use crate::i18n::{t, tf};
 use crate::icons::{Icon, lu};
 use crate::store::{Conn, PinList, Store, store};
 use crate::ui::{iso, trap_tab, when};
@@ -18,11 +19,11 @@ use crate::ui::{iso, trap_tab, when};
 const SAID_MS: u32 = 6_000;
 
 /// Dit une chose dans la zone `status` de la coquille, puis la retire si personne ne l'a remplacée.
-fn say(s: Store, text: &'static str) {
-    s.notice.set(Some(text.into()));
+fn say(s: Store, text: String) {
+    s.notice.set(Some(text.clone()));
     spawn_local(async move {
         TimeoutFuture::new(SAID_MS).await;
-        if s.notice.try_get_untracked().flatten().as_deref() == Some(text) {
+        if s.notice.try_get_untracked().flatten().as_deref() == Some(text.as_str()) {
             s.notice.try_set(None);
         }
     });
@@ -36,7 +37,7 @@ pub async fn set_pinned(s: Store, channel: Id, id: Id, on: bool) -> Result<(), S
         Ok(m) => {
             s.log_if_open(channel, |l| l.update(m.clone()));
             s.pin_changed(&m);
-            say(s, if on { "Message épinglé." } else { "Message désépinglé." });
+            say(s, if on { t("Message épinglé.") } else { t("Message désépinglé.") });
             Ok(())
         }
         Err(e) => Err(e.message),
@@ -46,7 +47,7 @@ pub async fn set_pinned(s: Store, channel: Id, id: Id, on: bool) -> Result<(), S
 /// Le texte d'un message épinglé, en une ligne de texte simple.
 fn excerpt(m: &Message) -> String {
     let text = kraken_core::markdown::summary(&m.content);
-    if text.trim().is_empty() { "Fichier joint".into() } else { text }
+    if text.trim().is_empty() { t("Fichier joint") } else { text }
 }
 
 fn focus(el: Option<web_sys::Element>) {
@@ -171,19 +172,19 @@ pub fn PinsPanel(
     let body = move || {
         view! {
             <header class="app-pins-head">
-                <h2 id="pins-title" tabindex="-1" node_ref=title>"Messages épinglés"</h2>
+                <h2 id="pins-title" tabindex="-1" node_ref=title>{t("Messages épinglés")}</h2>
                 <Show when=move || !loading.get() && failure.with(Option::is_none)>
                     <span class="k-badge k-badge--neutral">{move || format!("{} / {MAX_PINS}", count.get())}</span>
                 </Show>
-                <button type="button" class="k-btn k-btn--icon app-pins-close" aria-label="Fermer les messages épinglés" title="Fermer"
+                <button type="button" class="k-btn k-btn--icon app-pins-close" aria-label=t("Fermer les messages épinglés") title=t("Fermer")
                     on:click=move |_| close.run(())><Icon icon=lu::LuX/></button>
             </header>
             <div class="app-pins-body" aria-busy=move || loading.get().to_string()>
                 // Toujours là, de hauteur réservée : le texte vient sans rien décaler.
                 <p class="k-hint app-pins-status" role="status">{move || {
-                    if loading.get() { "Chargement des messages épinglés…" }
-                    else if failure.with(Option::is_none) && !empty.get() { "Du plus récemment épinglé au plus ancien." }
-                    else { "" }
+                    if loading.get() { t("Chargement des messages épinglés…") }
+                    else if failure.with(Option::is_none) && !empty.get() { t("Du plus récemment épinglé au plus ancien.") }
+                    else { String::new() }
                 }}</p>
                 <Show when=move || error.get().is_some()>
                     <p class="k-error" role="alert">{move || error.get()}</p>
@@ -199,9 +200,9 @@ pub fn PinsPanel(
                     if let Some(e) = failure.get() {
                         return view! {
                             <div class="k-empty" role="alert">
-                                <b>"Impossible de charger les messages épinglés"</b>
+                                <b>{t("Impossible de charger les messages épinglés")}</b>
                                 <span>{e}</span>
-                                <button type="button" class="k-btn" on:click=retry>"Réessayer"</button>
+                                <button type="button" class="k-btn" on:click=retry>{t("Réessayer")}</button>
                             </div>
                         }.into_any();
                     }
@@ -209,11 +210,11 @@ pub fn PinsPanel(
                         return view! {
                             <div class="k-empty">
                                 <Icon icon=lu::LuPin/>
-                                <b>"Aucun message épinglé"</b>
+                                <b>{t("Aucun message épinglé")}</b>
                                 <span>{move || if can_manage.get() {
-                                    "Épingle un message depuis ses actions pour le retrouver ici."
+                                    t("Épingle un message depuis ses actions pour le retrouver ici.")
                                 } else {
-                                    "Les modérateurs peuvent en épingler."
+                                    t("Les modérateurs peuvent en épingler.")
                                 }}</span>
                             </div>
                         }.into_any();
@@ -224,9 +225,11 @@ pub fn PinsPanel(
                                 key=|m| (m.id, m.content.clone(), m.edited_at, m.author.as_ref().map(|a| a.name().to_string()))
                                 children=move |m| {
                                     let id = m.id;
-                                    let who = m.author.as_ref().map(|a| a.name().to_string()).unwrap_or_else(|| "Compte supprimé".into());
-                                    let (go_label, unpin_label) =
-                                        (format!("Aller au message de {who}"), format!("Désépingler le message de {who}"));
+                                    let who = m.author.as_ref().map(|a| a.name().to_string()).unwrap_or_else(|| t("Compte supprimé"));
+                                    let (go_label, unpin_label) = (
+                                        tf("Aller au message de {nom}", &[("nom", &who)]),
+                                        tf("Désépingler le message de {nom}", &[("nom", &who)]),
+                                    );
                                     let text = excerpt(&m);
                                     // Un auteur bloqué est replié comme dans le fil : même ligne, même bouton, dépliable au clic.
                                     let author_id = m.author.as_ref().map(|a| a.id);
@@ -241,26 +244,26 @@ pub fn PinsPanel(
                                             <Show when=move || blocked.get()>
                                                 <div class="app-blocked">
                                                     <Icon icon=lu::LuEyeOff small=true/>
-                                                    <span>"Message d'un compte que tu as bloqué."</span>
+                                                    <span>{t("Message d'un compte que tu as bloqué.")}</span>
                                                     <button type="button" class="k-btn k-btn--link" aria-expanded=move || shown.get().to_string()
                                                         aria-controls=format!("pin-body-{id}")
                                                         on:click=move |_| shown.update(|v| *v = !*v)>
-                                                        {move || if shown.get() { "Masquer" } else { "Afficher" }}
+                                                        {move || if shown.get() { t("Masquer") } else { t("Afficher") }}
                                                     </button>
                                                 </div>
                                             </Show>
                                             <div id=format!("pin-body-{id}") class="app-pin-body" hidden=move || blocked.get() && !shown.get()>
                                                 <div class="app-pin-head">
-                                                    <b class="app-ellipsis">{who}</b>
+                                                    <b class="app-ellipsis"><bdi>{who}</bdi></b>
                                                     <time datetime=iso(m.created_at)>{when(m.created_at)}</time>
                                                 </div>
-                                                <p class="app-pin-text">{text}</p>
+                                                <p class="app-pin-text" dir="auto">{text}</p>
                                                 <div class="app-pin-actions">
                                                     <button type="button" class="k-btn k-btn--sm" aria-label=go_label
-                                                        on:click=move |_| goto.run(id)>"Aller au message"</button>
+                                                        on:click=move |_| goto.run(id)>{t("Aller au message")}</button>
                                                     <Show when=move || can_manage.get()>
                                                         <button type="button" class="k-btn k-btn--sm" aria-label=unpin_label.clone()
-                                                            on:click=move |_| unpin(id)>"Désépingler"</button>
+                                                            on:click=move |_| unpin(id)>{t("Désépingler")}</button>
                                                     </Show>
                                                 </div>
                                             </div>

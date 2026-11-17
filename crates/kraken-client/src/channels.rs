@@ -17,22 +17,21 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::{use_navigate, use_params_map};
 use wasm_bindgen::JsCast;
 
+use crate::i18n::{t, tf, tn};
 use crate::icons::{Icon, lu};
 use crate::shell::ordered;
 use crate::social::{Confirm, ConfirmDialog};
 use crate::store::{Conn, store};
+use crate::tk;
 use crate::ui::modal;
 
 /// Le délai du mode lent, en toutes lettres.
 pub fn slow_label(seconds: u32) -> String {
     match seconds {
-        0 => "Désactivé".into(),
-        1 => "1 seconde".into(),
-        s if s < 60 => format!("{s} secondes"),
-        60 => "1 minute".into(),
-        s if s < 3600 => format!("{} minutes", s / 60),
-        3600 => "1 heure".into(),
-        s => format!("{} heures", s / 3600),
+        0 => t("Désactivé"),
+        s if s < 60 => tn("{n} seconde", "{n} secondes", s),
+        s if s < 3600 => tn("{n} minute", "{n} minutes", s / 60),
+        s => tn("{n} heure", "{n} heures", s / 3600),
     }
 }
 
@@ -49,15 +48,15 @@ fn focus_by_selector(selector: &str) {
 }
 
 fn empty(title: &'static str, text: &'static str) -> impl IntoView {
-    view! { <div class="k-empty"><b>{title}</b><span>{text}</span></div> }
+    view! { <div class="k-empty"><b>{t(title)}</b><span>{t(text)}</span></div> }
 }
 
 // ───────────────────────── créer ─────────────────────────
 
 const KINDS: [(ChannelKind, &str, &str); 3] = [
-    (ChannelKind::Text, "Salon textuel", "Pour écrire des messages, partager des images et des fichiers."),
-    (ChannelKind::Voice, "Salon vocal", "Pour parler et se voir en direct."),
-    (ChannelKind::Category, "Catégorie", "Pour ranger plusieurs salons sous un même titre."),
+    (ChannelKind::Text, tk!("Salon textuel"), tk!("Pour écrire des messages, partager des images et des fichiers.")),
+    (ChannelKind::Voice, tk!("Salon vocal"), tk!("Pour parler et se voir en direct.")),
+    (ChannelKind::Category, tk!("Catégorie"), tk!("Pour ranger plusieurs salons sous un même titre.")),
 ];
 
 /// Fenêtre « Créer un salon » (ou une catégorie). `go` : aller dans le salon créé.
@@ -107,8 +106,12 @@ pub fn CreateChannelDialog(
         let n = name.get_untracked();
         let k = kind.get_untracked();
         if n.trim().is_empty() {
-            let what = if k == ChannelKind::Category { "à la catégorie" } else { "au salon" };
-            error.set(Some(format!("Donne un nom {what}.")));
+            let asked = if k == ChannelKind::Category {
+                t("Donne un nom à la catégorie.")
+            } else {
+                t("Donne un nom au salon.")
+            };
+            error.set(Some(asked));
             refocus_name();
             return;
         }
@@ -146,17 +149,17 @@ pub fn CreateChannelDialog(
             }
         });
     };
-    let title = move || if category() { "Créer une catégorie" } else { "Créer un salon" };
-    let label = move || if category() { "Nom de la catégorie" } else { "Nom du salon" };
+    let title = move || if category() { t("Créer une catégorie") } else { t("Créer un salon") };
+    let label = move || if category() { t("Nom de la catégorie") } else { t("Nom du salon") };
     let help = move || match kind.get() {
-        ChannelKind::Category => "Elle range des salons sous un même titre, que l'on peut replier.",
-        ChannelKind::Voice => "Le nom peut contenir des espaces et des majuscules.",
-        _ => "Les majuscules et les espaces sont remplacés : « Salon de test » donne #salon-de-test.",
+        ChannelKind::Category => t("Elle range des salons sous un même titre, que l'on peut replier."),
+        ChannelKind::Voice => t("Le nom peut contenir des espaces et des majuscules."),
+        _ => t("Les majuscules et les espaces sont remplacés : « Salon de test » donne #salon-de-test."),
     };
     let placeholder = move || match kind.get() {
-        ChannelKind::Category => "Nouvelle catégorie",
-        ChannelKind::Voice => "Salon vocal",
-        _ => "nouveau-salon",
+        ChannelKind::Category => t("Nouvelle catégorie"),
+        ChannelKind::Voice => t("Salon vocal"),
+        _ => t("nouveau-salon"),
     };
     view! {
         <div class="k-scrim" node_ref=root>
@@ -165,11 +168,11 @@ pub fn CreateChannelDialog(
                 <form on:submit=submit novalidate>
                     <div>
                         <fieldset class="k-radios">
-                            <legend class="k-label app-legend">"Type"</legend>
+                            <legend class="k-label app-legend">{t("Type")}</legend>
                             {KINDS.iter().map(|(k, label, sub)| view! {
                                 <label class="k-radio">
                                     <input type="radio" name="cc-kind" prop:checked=move || kind.get() == *k on:change=move |_| kind.set(*k)/>
-                                    <div><b>{*label}</b><span>{*sub}</span></div>
+                                    <div><b>{t(label)}</b><span>{t(sub)}</span></div>
                                 </label>
                             }).collect_view()}
                         </fieldset>
@@ -182,9 +185,9 @@ pub fn CreateChannelDialog(
                         </div>
                         <Show when=move || !category()>
                             <div class="k-field">
-                                <label class="k-label" for="cc-parent">"Catégorie"</label>
+                                <label class="k-label" for="cc-parent">{t("Catégorie")}</label>
                                 <select id="cc-parent" class="k-select" on:change=move |e| parent.set(event_target_value(&e))>
-                                    <option value="" prop:selected=move || parent.get().is_empty()>"Aucune catégorie"</option>
+                                    <option value="" prop:selected=move || parent.get().is_empty()>{t("Aucune catégorie")}</option>
                                     <For each=move || categories.get() key=|c| (c.id, c.name.clone()) let:c>
                                         {
                                             let id = c.id.to_string();
@@ -200,9 +203,9 @@ pub fn CreateChannelDialog(
                         </Show>
                     </div>
                     <footer>
-                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); }>"Annuler"</button>
+                        <button type="button" class="k-btn k-btn--ghost" on:click=move |_| { close.try_run(()); }>{t("Annuler")}</button>
                         <button type="submit" class="k-btn k-btn--primary" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>
-                            {move || if category() { "Créer la catégorie" } else { "Créer le salon" }}
+                            {move || if category() { t("Créer la catégorie") } else { t("Créer le salon") }}
                         </button>
                     </footer>
                 </form>
@@ -281,7 +284,7 @@ pub fn ChannelsAdmin(guild: Id) -> impl IntoView {
                             s.upsert_channel(g, c);
                         }
                     }
-                    status.try_set(format!("« {name} » déplacé."));
+                    status.try_set(tf("« {nom} » déplacé.", &[("nom", &name)]));
                 }
                 Err(e) => {
                     error.try_set(Some(e.message));
@@ -292,18 +295,18 @@ pub fn ChannelsAdmin(guild: Id) -> impl IntoView {
         });
     };
     view! {
-        <p class="app-hint">"Les salons s'affichent dans cet ordre. Monter le premier salon d'une catégorie le range dans la catégorie du dessus, descendre le dernier le range dans celle du dessous."</p>
+        <p class="app-hint">{t("Les salons s'affichent dans cet ordre. Monter le premier salon d'une catégorie le range dans la catégorie du dessus, descendre le dernier le range dans celle du dessous.")}</p>
         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
         <p class="k-sr" role="status">{move || status.get()}</p>
         <div class="app-chan-tools">
             <button type="button" class="k-btn k-btn--primary" on:click=move |_| creating.set(Some(ChannelKind::Text))>
-                <Icon icon=lu::LuPlus small=true/>"Créer un salon"
+                <Icon icon=lu::LuPlus small=true/>{t("Créer un salon")}
             </button>
             <button type="button" class="k-btn" on:click=move |_| creating.set(Some(ChannelKind::Category))>
-                <Icon icon=lu::LuFolderPlus small=true/>"Créer une catégorie"
+                <Icon icon=lu::LuFolderPlus small=true/>{t("Créer une catégorie")}
             </button>
         </div>
-        <ul class="app-chan-admin" aria-label="Salons et catégories, dans l'ordre d'affichage">
+        <ul class="app-chan-admin" aria-label=t("Salons et catégories, dans l'ordre d'affichage")>
             <For each=move || rows.get() key=|c| c.id let:c>
                 {
                     let id = c.id;
@@ -318,8 +321,7 @@ pub fn ChannelsAdmin(guild: Id) -> impl IntoView {
                         })
                     };
                     let can = move |delta: i32| rows.with(|r| step(r, id, delta).is_some());
-                    let (what, the) = if category { ("la catégorie", "de la catégorie") } else { ("le salon", "du salon") };
-                    let icon = match c.kind {
+                                        let icon = match c.kind {
                         ChannelKind::Category => lu::LuFolder,
                         ChannelKind::Voice | ChannelKind::Stage => lu::LuVolume2,
                         ChannelKind::Announcement => lu::LuMegaphone,
@@ -332,19 +334,19 @@ pub fn ChannelsAdmin(guild: Id) -> impl IntoView {
                             <span class="app-ellipsis app-chan-name">
                                 {name}
                                 <Show when=private>
-                                    <Icon icon=lu::LuLock small=true/><span class="k-sr">" (privé)"</span>
+                                    <Icon icon=lu::LuLock small=true/><span class="k-sr">" ("{t("privé")}")"</span>
                                 </Show>
                             </span>
                             <button type="button" class="k-btn k-btn--icon" id=format!("chan-up-{id}") disabled=move || !can(-1)
-                                aria-label=move || format!("Monter {what} {}", name()) title="Monter" on:click=move |_| go(id, -1)>
+                                aria-label=move || tf(if category { tk!("Monter la catégorie {nom}") } else { tk!("Monter le salon {nom}") }, &[("nom", &name())]) title=t("Monter") on:click=move |_| go(id, -1)>
                                 <Icon icon=lu::LuChevronUp small=true/>
                             </button>
                             <button type="button" class="k-btn k-btn--icon" id=format!("chan-down-{id}") disabled=move || !can(1)
-                                aria-label=move || format!("Descendre {what} {}", name()) title="Descendre" on:click=move |_| go(id, 1)>
+                                aria-label=move || tf(if category { tk!("Descendre la catégorie {nom}") } else { tk!("Descendre le salon {nom}") }, &[("nom", &name())]) title=t("Descendre") on:click=move |_| go(id, 1)>
                                 <Icon icon=lu::LuChevronDown small=true/>
                             </button>
                             <a class="k-btn k-btn--icon" href=format!("/channels/{gid}/{id}/settings")
-                                aria-label=move || format!("Paramètres {the} {}", name()) title="Paramètres">
+                                aria-label=move || tf(if category { tk!("Paramètres de la catégorie {nom}") } else { tk!("Paramètres du salon {nom}") }, &[("nom", &name())]) title=t("Paramètres")>
                                 <Icon icon=lu::LuSettings small=true/>
                             </a>
                         </li>
@@ -360,7 +362,8 @@ pub fn ChannelsAdmin(guild: Id) -> impl IntoView {
 
 // ───────────────────────── paramètres d'un salon ─────────────────────────
 
-const SECTIONS: [(&str, &str); 2] = [("overview", "Aperçu"), ("permissions", "Permissions")];
+// « Aperçu » : voir `guild::label` (le catalogue traduit déjà celui du thème autrement).
+const SECTIONS: [(&str, &str); 2] = [("overview", tk!("Aperçu{contexte}")), ("permissions", tk!("Permissions"))];
 
 /// `/channels/{serveur}/{salon}/settings` : les réglages d'un salon ou d'une catégorie, et ses
 /// droits. Même cadre que les paramètres du serveur.
@@ -403,43 +406,47 @@ pub fn ChannelSettings() -> impl IntoView {
         SECTIONS.iter().map(|x| x.0).find(|x| *x == asked).unwrap_or("overview")
     });
     let title = Memo::new(move |_| {
-        cid.get().and_then(|c| s.channel(c)).and_then(|c| c.name).unwrap_or_else(|| "Paramètres du salon".into())
+        cid.get().and_then(|c| s.channel(c)).and_then(|c| c.name).unwrap_or_else(|| t("Paramètres du salon"))
     });
     let dialog_label = move || {
-        if kind.get() == Some(ChannelKind::Category) { "Paramètres de la catégorie" } else { "Paramètres du salon" }
+        if kind.get() == Some(ChannelKind::Category) {
+            t("Paramètres de la catégorie")
+        } else {
+            t("Paramètres du salon")
+        }
     };
     view! {
         <div class="k-scrim app-settings" node_ref=root>
             <div class="k-settings" role="dialog" aria-modal="true" aria-label=dialog_label>
-                <nav aria-label="Sections des paramètres du salon">
+                <nav aria-label=t("Sections des paramètres du salon")>
                     <h3>{move || title.get()}</h3>
                     {move || gid.get().zip(cid.get()).map(|(g, c)| {
-                        SECTIONS.iter().map(|(slug, label)| view! {
+                        SECTIONS.iter().map(|(slug, lbl)| view! {
                             <a class="k-navitem" href=format!("/channels/{g}/{c}/settings/{slug}")
-                                aria-current=move || (section.get() == *slug).then_some("page")>{*label}</a>
+                                aria-current=move || (section.get() == *slug).then_some("page")>{crate::guild::label(lbl)}</a>
                         }).collect_view()
                     })}
                 </nav>
                 <main>
                     <div class="app-settings-top">
-                        <h2>{move || SECTIONS.iter().find(|x| x.0 == section.get()).map_or("Paramètres du salon", |x| x.1)}</h2>
-                        <button class="k-btn k-btn--icon" aria-label="Fermer les paramètres (Échap)" on:click=move |_| close2() autofocus>
+                        <h2>{move || crate::guild::label(SECTIONS.iter().find(|x| x.0 == section.get()).map_or(tk!("Paramètres du salon"), |x| x.1))}</h2>
+                        <button class="k-btn k-btn--icon" aria-label=t("Fermer les paramètres (Échap)") on:click=move |_| close2() autofocus>
                             <Icon icon=lu::LuX/>
                         </button>
                     </div>
                     {move || {
                         let (Some(g), Some(c)) = (gid.get(), cid.get()) else {
-                            return empty("Salon introuvable", "Ce lien est peut-être ancien.").into_any();
+                            return empty(tk!("Salon introuvable"), tk!("Ce lien est peut-être ancien.")).into_any();
                         };
                         if !exists.get() {
                             return if s.conn.get() == Conn::Ready {
-                                empty("Salon introuvable", "Il a été supprimé, ou tu n'y as plus accès.").into_any()
+                                empty(tk!("Salon introuvable"), tk!("Il a été supprimé, ou tu n'y as plus accès.")).into_any()
                             } else {
                                 view! { <div aria-busy="true"><div class="k-skeleton app-skel-block"></div></div> }.into_any()
                             };
                         }
                         if !allowed.get() {
-                            return empty("Rien à régler ici", "Il faut le droit « Gérer les salons » pour changer ce salon.").into_any();
+                            return empty(tk!("Rien à régler ici"), tk!("Il faut le droit « Gérer les salons » pour changer ce salon.")).into_any();
                         }
                         match section.get() {
                             "permissions" => view! { <ChannelPermissions guild=g channel=c/> }.into_any(),
@@ -506,7 +513,7 @@ fn Overview(guild: Id, channel: Id) -> impl IntoView {
         }
         let n = name.get_untracked().trim().to_string();
         if n.is_empty() {
-            error.set(Some(if category { "Donne un nom à la catégorie." } else { "Donne un nom au salon." }.into()));
+            error.set(Some(if category { t("Donne un nom à la catégorie.") } else { t("Donne un nom au salon.") }));
             if let Some(i) = name_input.get_untracked() {
                 let _ = i.focus();
             }
@@ -532,7 +539,7 @@ fn Overview(guild: Id, channel: Id) -> impl IntoView {
                 Ok(c) => {
                     s.upsert_channel(guild, c.clone());
                     fill(&c);
-                    status.try_set("Modifications enregistrées.".into());
+                    status.try_set(t("Modifications enregistrées."));
                 }
                 Err(e) => {
                     error.try_set(Some(e.message));
@@ -555,26 +562,26 @@ fn Overview(guild: Id, channel: Id) -> impl IntoView {
         <form class="app-chan-form" on:submit=save novalidate>
             <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
             <div class="k-field">
-                <label class="k-label" for="chan-name">{if category { "Nom de la catégorie" } else { "Nom du salon" }}</label>
+                <label class="k-label" for="chan-name">{if category { t("Nom de la catégorie") } else { t("Nom du salon") }}</label>
                 <input id="chan-name" class="k-input" node_ref=name_input maxlength=MAX_CHANNEL_NAME.to_string() autocomplete="off"
                     prop:value=move || name.get() on:input=move |e| name.set(event_target_value(&e))
                     aria-describedby="chan-name-h" aria-invalid=move || error.get().is_some().then_some("true")/>
                 <p class="k-hint" id="chan-name-h">{if writable {
-                    "Les majuscules et les espaces sont remplacés : « Salon de test » donne #salon-de-test."
+                    t("Les majuscules et les espaces sont remplacés : « Salon de test » donne #salon-de-test.")
                 } else {
-                    "Tout le monde voit le changement tout de suite."
+                    t("Tout le monde voit le changement tout de suite.")
                 }}</p>
             </div>
             {writable.then(|| view! {
                 <div class="k-field">
-                    <label class="k-label" for="chan-topic">"Sujet du salon"</label>
+                    <label class="k-label" for="chan-topic">{t("Sujet du salon")}</label>
                     <textarea id="chan-topic" class="k-input app-textarea" rows="3" maxlength=MAX_TOPIC.to_string()
                         aria-describedby="chan-topic-h"
                         prop:value=move || topic.get() on:input=move |e| topic.set(event_target_value(&e))></textarea>
-                    <p class="k-hint" id="chan-topic-h">"Une ligne sur ce qui se dit ici : elle s'affiche dans l'en-tête du salon."</p>
+                    <p class="k-hint" id="chan-topic-h">{t("Une ligne sur ce qui se dit ici : elle s'affiche dans l'en-tête du salon.")}</p>
                 </div>
                 <div class="k-setting">
-                    <label for="chan-slow">"Mode lent"</label>
+                    <label for="chan-slow">{t("Mode lent")}</label>
                     <select id="chan-slow" class="k-select" aria-describedby="chan-slow-h"
                         on:change=move |e| slow.set(event_target_value(&e))>
                         {SLOWMODE_STEPS.iter().map(|n| {
@@ -583,29 +590,29 @@ fn Overview(guild: Id, channel: Id) -> impl IntoView {
                             view! { <option value=v prop:selected=move || slow.get() == mine>{slow_label(*n)}</option> }
                         }).collect_view()}
                     </select>
-                    <p id="chan-slow-h">"Chacun doit attendre ce délai entre deux messages. Les personnes qui gèrent les messages ou les salons n'attendent pas."</p>
+                    <p id="chan-slow-h">{t("Chacun doit attendre ce délai entre deux messages. Les personnes qui gèrent les messages ou les salons n'attendent pas.")}</p>
                 </div>
             })}
             <div class="k-setting">
-                <label for="chan-private">{if category { "Catégorie privée" } else { "Salon privé" }}</label>
+                <label for="chan-private">{if category { t("Catégorie privée") } else { t("Salon privé") }}</label>
                 <input id="chan-private" type="checkbox" role="switch" class="k-switch" aria-describedby="chan-private-h"
                     disabled=move || inherited.get()
                     prop:checked=move || private.get() || inherited.get()
                     on:change=move |e| private.set(event_target_checked(&e))/>
                 <p id="chan-private-h">{move || if inherited.get() {
-                    "Sa catégorie est privée : ce salon l'est aussi. Change-le dans les paramètres de la catégorie."
+                    t("Sa catégorie est privée : ce salon l'est aussi. Change-le dans les paramètres de la catégorie.")
                 } else if category {
-                    "Seuls les rôles et les membres que tu ajoutes dans « Permissions » voient cette catégorie et ses salons."
+                    t("Seuls les rôles et les membres que tu ajoutes dans « Permissions » voient cette catégorie et ses salons.")
                 } else {
-                    "Seuls les rôles et les membres que tu ajoutes dans « Permissions » voient ce salon."
+                    t("Seuls les rôles et les membres que tu ajoutes dans « Permissions » voient ce salon.")
                 }}</p>
             </div>
             <p class="k-sr" role="status">{move || status.get()}</p>
             <Show when=move || dirty.get()>
-                <div class="app-savebar" role="region" aria-label="Modifications du salon">
-                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/><span class="app-bar-long">"Modifications non enregistrées"</span><span class="app-bar-short">"Non enregistré"</span></span>
-                    <button type="button" class="k-btn k-btn--ghost" on:click=cancel>"Annuler"</button>
-                    <button type="submit" class="k-btn k-btn--primary" aria-busy=move || busy.get().to_string()>"Enregistrer"</button>
+                <div class="app-savebar" role="region" aria-label=t("Modifications du salon")>
+                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/><span class="app-bar-long">{t("Modifications non enregistrées")}</span><span class="app-bar-short">{t("Non enregistré")}</span></span>
+                    <button type="button" class="k-btn k-btn--ghost" on:click=cancel>{t("Annuler")}</button>
+                    <button type="submit" class="k-btn k-btn--primary" aria-busy=move || busy.get().to_string()>{t("Enregistrer")}</button>
                 </div>
             </Show>
         </form>
@@ -616,10 +623,10 @@ fn Overview(guild: Id, channel: Id) -> impl IntoView {
             <button type="button" class="k-btn k-btn--danger" disabled=move || last_text.get()
                 aria-describedby=move || last_text.get().then_some("chan-del-h")
                 on:click=move |_| deleting.set(current.get_untracked())>
-                <Icon icon=lu::LuTrash2 small=true/>{if category { "Supprimer la catégorie" } else { "Supprimer le salon" }}
+                <Icon icon=lu::LuTrash2 small=true/>{if category { t("Supprimer la catégorie") } else { t("Supprimer le salon") }}
             </button>
             <Show when=move || last_text.get()>
-                <p class="k-hint" id="chan-del-h">"C'est le dernier salon d'écriture du serveur : crée-en un autre avant de le supprimer."</p>
+                <p class="k-hint" id="chan-del-h">{t("C'est le dernier salon d'écriture du serveur : crée-en un autre avant de le supprimer.")}</p>
             </Show>
         </div>
         {move || deleting.get().map(|c| view! {
@@ -638,7 +645,8 @@ enum Tri {
     Deny,
 }
 
-const TRIS: [(Tri, &str); 3] = [(Tri::Allow, "Autoriser"), (Tri::Inherit, "Hériter"), (Tri::Deny, "Refuser")];
+const TRIS: [(Tri, &str); 3] =
+    [(Tri::Allow, tk!("Autoriser")), (Tri::Inherit, tk!("Hériter")), (Tri::Deny, tk!("Refuser"))];
 
 fn tri_of((allow, deny): (u64, u64), bit: u64) -> Tri {
     if allow & bit != 0 {
@@ -650,9 +658,9 @@ fn tri_of((allow, deny): (u64, u64), bit: u64) -> Tri {
     }
 }
 
-fn with_tri((allow, deny): (u64, u64), bit: u64, t: Tri) -> (u64, u64) {
+fn with_tri((allow, deny): (u64, u64), bit: u64, tg: Tri) -> (u64, u64) {
     let (allow, deny) = (allow & !bit, deny & !bit);
-    match t {
+    match tg {
         Tri::Allow => (allow | bit, deny),
         Tri::Deny => (allow, deny | bit),
         Tri::Inherit => (allow, deny),
@@ -696,14 +704,14 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
         })
     };
     let effective = move |id: Id| drafts.with(|d| d.get(&id).copied()).unwrap_or_else(|| saved_of(id));
-    let name_of = move |t: Target| -> String {
-        match t.kind {
-            OverwriteKind::Role if t.id == guild => "@tout le monde".into(),
+    let name_of = move |tg: Target| -> String {
+        match tg.kind {
+            OverwriteKind::Role if tg.id == guild => t("@tout le monde"),
             OverwriteKind::Role => s
                 .guild(guild)
-                .and_then(|g| g.roles.into_iter().find(|r| r.id == t.id))
-                .map_or_else(|| "Rôle supprimé".into(), |r| r.name),
-            OverwriteKind::Member => s.name_of(Some(guild), t.id).unwrap_or_else(|| "Ancien membre".into()),
+                .and_then(|g| g.roles.into_iter().find(|r| r.id == tg.id))
+                .map_or_else(|| t("Rôle supprimé"), |r| r.name),
+            OverwriteKind::Member => s.name_of(Some(guild), tg.id).unwrap_or_else(|| t("Ancien membre")),
         }
     };
     // `@tout le monde`, puis les rôles du plus haut au plus bas, puis les membres.
@@ -711,28 +719,28 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
         let mut v = vec![Target { id: guild, kind: OverwriteKind::Role }];
         let saved: Vec<Target> =
             list.with(|l| l.iter().flatten().map(|o| Target { id: o.target_id, kind: o.kind }).collect());
-        for t in saved.into_iter().chain(extra.get()) {
-            if !v.iter().any(|x| x.id == t.id) {
-                v.push(t);
+        for tg in saved.into_iter().chain(extra.get()) {
+            if !v.iter().any(|x| x.id == tg.id) {
+                v.push(tg);
             }
         }
-        let position = |t: &Target| {
-            s.guild(guild).and_then(|g| g.roles.iter().find(|r| r.id == t.id).map(|r| r.position)).unwrap_or(0)
+        let position = |tg: &Target| {
+            s.guild(guild).and_then(|g| g.roles.iter().find(|r| r.id == tg.id).map(|r| r.position)).unwrap_or(0)
         };
-        v[1..].sort_by_key(|t| (t.kind == OverwriteKind::Member, std::cmp::Reverse(position(t)), name_of(*t)));
+        v[1..].sort_by_key(|tg| (tg.kind == OverwriteKind::Member, std::cmp::Reverse(position(tg)), name_of(*tg)));
         v
     });
     // La cible choisie disparaît (réglages retirés) : retour à `@tout le monde`.
     Effect::new(move || {
         let cur = selected.get();
-        if !targets.with(|t| t.iter().any(|x| x.id == cur)) {
+        if !targets.with(|tg| tg.iter().any(|x| x.id == cur)) {
             selected.set(guild);
         }
     });
     let candidates = Memo::new(move |_| {
         let Some(g) = s.guild(guild) else { return (vec![], vec![]) };
         let taken = targets.get();
-        let free = |id: Id| !taken.iter().any(|t| t.id == id);
+        let free = |id: Id| !taken.iter().any(|tg| tg.id == id);
         let mut roles: Vec<_> = g.roles.iter().filter(|r| r.id != guild && free(r.id)).cloned().collect();
         roles.sort_by_key(|r| std::cmp::Reverse(r.position));
         let members: Vec<_> = g.members.iter().filter(|m| free(m.user.id)).cloned().collect();
@@ -749,33 +757,33 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
         pick.set(String::new());
     };
     // Ai-je le droit de régler cette cible ? (Le serveur juge : ceci désactive ce qui sera refusé.)
-    let editable = move |t: Target| match t.kind {
+    let editable = move |tg: Target| match tg.kind {
         OverwriteKind::Role => {
-            t.id == guild
+            tg.id == guild
                 || s.guild(guild)
-                    .and_then(|g| g.roles.into_iter().find(|r| r.id == t.id))
+                    .and_then(|g| g.roles.into_iter().find(|r| r.id == tg.id))
                     .is_some_and(|r| s.can_manage_role(guild, &r))
         }
-        OverwriteKind::Member => s.my_id() == Some(t.id) || s.outranks(guild, t.id),
+        OverwriteKind::Member => s.my_id() == Some(tg.id) || s.outranks(guild, tg.id),
     };
-    let set_state = move |t: Target, bit: u64, state: Tri| {
-        let next = with_tri(effective(t.id), bit, state);
-        let saved = saved_of(t.id);
+    let set_state = move |tg: Target, bit: u64, state: Tri| {
+        let next = with_tri(effective(tg.id), bit, state);
+        let saved = saved_of(tg.id);
         drafts.update(|d| {
             if next == saved {
-                d.remove(&t.id);
+                d.remove(&tg.id);
             } else {
-                d.insert(t.id, next);
+                d.insert(tg.id, next);
             }
         });
     };
-    let reset = move |t: Target| {
-        let saved = saved_of(t.id);
+    let reset = move |tg: Target| {
+        let saved = saved_of(tg.id);
         drafts.update(|d| {
             if saved == (0, 0) {
-                d.remove(&t.id);
+                d.remove(&tg.id);
             } else {
-                d.insert(t.id, (0, 0));
+                d.insert(tg.id, (0, 0));
             }
         });
     };
@@ -786,21 +794,21 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
         let todo: Vec<(Target, u64, u64)> = targets
             .get_untracked()
             .into_iter()
-            .filter_map(|t| drafts.with_untracked(|d| d.get(&t.id).copied()).map(|(a, d)| (t, a, d)))
+            .filter_map(|tg| drafts.with_untracked(|d| d.get(&tg.id).copied()).map(|(a, d)| (tg, a, d)))
             .collect();
         busy.set(true);
         error.set(None);
         status.set(String::new());
         spawn_local(async move {
             let mut failed = false;
-            for (t, allow, deny) in todo {
-                match crate::api::set_overwrite(channel, t.id, &SetOverwrite { kind: t.kind, allow, deny }).await {
+            for (tg, allow, deny) in todo {
+                match crate::api::set_overwrite(channel, tg.id, &SetOverwrite { kind: tg.kind, allow, deny }).await {
                     Ok(l) => {
                         list.try_set(Some(l));
                         drafts.try_update(|d| {
-                            d.remove(&t.id);
+                            d.remove(&tg.id);
                         });
-                        extra.try_update(|x| x.retain(|e| e.id != t.id));
+                        extra.try_update(|x| x.retain(|e| e.id != tg.id));
                     }
                     Err(e) => {
                         error.try_set(Some(e.message));
@@ -810,7 +818,7 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
                 }
             }
             if !failed {
-                status.try_set("Permissions enregistrées.".into());
+                status.try_set(t("Permissions enregistrées."));
             }
             busy.try_set(false);
         });
@@ -821,7 +829,7 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
     };
     let dirty = move || drafts.with(|d| !d.is_empty());
     let my_base = move || s.guild_perms(guild);
-    let rows = move |t: Target| {
+    let rows = move |tg: Target| {
         let voice = matches!(kind, ChannelKind::Voice | ChannelKind::Stage);
         crate::guild::CATEGORIES
             .iter()
@@ -837,23 +845,23 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
             .map(|(title, rows)| {
                 view! {
                     <fieldset class="app-perms">
-                        <legend class="k-category">{title}</legend>
-                        {rows.into_iter().map(|(bit, label, help)| {
+                        <legend class="k-category">{t(title)}</legend>
+                        {rows.into_iter().map(|(bit, lbl, help)| {
                             let bit = *bit;
                             let sensitive = crate::guild::SENSITIVE.contains(&bit);
                             let (lid, hid) = (format!("ow-{bit}-l"), format!("ow-{bit}-h"));
                             // On ne règle que des droits que l'on a soi-même.
-                            let ok = move || editable(t) && my_base() & bit != 0;
+                            let ok = move || editable(tg) && my_base() & bit != 0;
                             view! {
                                 <div class="app-ow-row">
                                     <div class="app-ow-text">
                                         <span class="app-ow-label" id=lid.clone()>
                                             {sensitive.then(|| view! {
-                                                <span class="app-sensitive" title="Droit sensible"><Icon icon=lu::LuShieldAlert/><span class="k-sr">"Droit sensible : "</span></span>
+                                                <span class="app-sensitive" title=t("Droit sensible")><Icon icon=lu::LuShieldAlert/><span class="k-sr">{t("Droit sensible :")}" "</span></span>
                                             })}
-                                            {*label}
+                                            {crate::guild::label(lbl)}
                                         </span>
-                                        <p class="app-hint" id=hid.clone()>{*help}</p>
+                                        <p class="app-hint" id=hid.clone()>{crate::guild::label(help)}</p>
                                     </div>
                                     <div class="app-tri" role="radiogroup" aria-labelledby=lid aria-describedby=hid>
                                         {TRIS.iter().map(|(state, text)| {
@@ -864,12 +872,12 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
                                                 Tri::Deny => lu::LuX,
                                             };
                                             view! {
-                                                <label data-state=match state { Tri::Allow => "allow", Tri::Inherit => "inherit", Tri::Deny => "deny" } title=*text>
+                                                <label data-state=match state { Tri::Allow => "allow", Tri::Inherit => "inherit", Tri::Deny => "deny" } title=t(text)>
                                                     <input type="radio" name=format!("ow-{bit}")
-                                                        prop:checked=move || tri_of(effective(t.id), bit) == state
+                                                        prop:checked=move || tri_of(effective(tg.id), bit) == state
                                                         disabled=move || !ok()
-                                                        on:change=move |_| set_state(t, bit, state)/>
-                                                    <Icon icon=icon small=true/><span class="k-sr">{*text}</span>
+                                                        on:change=move |_| set_state(tg, bit, state)/>
+                                                    <Icon icon=icon small=true/><span class="k-sr">{t(text)}</span>
                                                 </label>
                                             }
                                         }).collect_view()}
@@ -883,63 +891,63 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
             .collect_view()
     };
     view! {
-        <p class="app-hint">"Pour chaque droit : « Autoriser » ou « Refuser » s'ajoute aux droits du serveur dans ce salon, « Hériter » laisse les droits habituels. Un refus l'emporte sur un droit donné par un rôle, mais pas sur le propriétaire ni les administrateurs. On ne règle que des droits que l'on a soi-même."</p>
+        <p class="app-hint">{t("Pour chaque droit : « Autoriser » ou « Refuser » s'ajoute aux droits du serveur dans ce salon, « Hériter » laisse les droits habituels. Un refus l'emporte sur un droit donné par un rôle, mais pas sur le propriétaire ni les administrateurs. On ne règle que des droits que l'on a soi-même.")}</p>
         <ul class="app-ow-key" aria-hidden="true">
-            <li><Icon icon=lu::LuCheck small=true/>"Autoriser"</li>
-            <li><Icon icon=lu::LuMinus small=true/>"Hériter"</li>
-            <li><Icon icon=lu::LuX small=true/>"Refuser"</li>
+            <li><Icon icon=lu::LuCheck small=true/>{t("Autoriser")}</li>
+            <li><Icon icon=lu::LuMinus small=true/>{t("Hériter")}</li>
+            <li><Icon icon=lu::LuX small=true/>{t("Refuser")}</li>
         </ul>
         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
         <p class="k-sr" role="status">{move || status.get()}</p>
         <Show when=move || list.with(Option::is_some) fallback=move || view! { <div aria-busy="true"><div class="k-skeleton app-skel-block"></div></div> }>
             <div class="app-roles">
                 <div class="app-roles-list">
-                    <ul aria-label="Rôles et membres de ce salon">
-                        <For each=move || targets.get() key=|t| t.id let:t>
+                    <ul aria-label=t("Rôles et membres de ce salon")>
+                        <For each=move || targets.get() key=|tg| tg.id let:tg>
                             <li class="app-role">
-                                <button type="button" class="app-role-pick" aria-current=move || (selected.get() == t.id).then_some("true")
-                                    on:click=move |_| selected.set(t.id)>
+                                <button type="button" class="app-role-pick" aria-current=move || (selected.get() == tg.id).then_some("true")
+                                    on:click=move |_| selected.set(tg.id)>
                                     <span class="app-role-icon" aria-hidden="true">
-                                        {if t.kind == OverwriteKind::Role { view! { <i class="app-role-dot"></i> }.into_any() } else { view! { <Icon icon=lu::LuUser small=true/> }.into_any() }}
+                                        {if tg.kind == OverwriteKind::Role { view! { <i class="app-role-dot"></i> }.into_any() } else { view! { <Icon icon=lu::LuUser small=true/> }.into_any() }}
                                     </span>
-                                    <span class="app-ellipsis">{move || name_of(t)}</span>
-                                    <Show when=move || drafts.with(|d| d.contains_key(&t.id))><span class="k-sr">" (modifications non enregistrées)"</span></Show>
-                                    <Show when=move || { effective(t.id) != (0, 0) }><span class="k-sr">" (réglé)"</span></Show>
+                                    <span class="app-ellipsis">{move || name_of(tg)}</span>
+                                    <Show when=move || drafts.with(|d| d.contains_key(&tg.id))><span class="k-sr">" ("{t("modifications non enregistrées")}")"</span></Show>
+                                    <Show when=move || { effective(tg.id) != (0, 0) }><span class="k-sr">" ("{t("réglé")}")"</span></Show>
                                 </button>
                             </li>
                         </For>
                     </ul>
                     <form class="k-field" on:submit=add>
-                        <label class="k-label" for="ow-add">"Ajouter un rôle ou un membre"</label>
+                        <label class="k-label" for="ow-add">{t("Ajouter un rôle ou un membre")}</label>
                         <div class="app-add-row">
                             <select id="ow-add" class="k-select" on:change=move |e| pick.set(event_target_value(&e))>
-                                <option value="" prop:selected=move || pick.get().is_empty()>"Choisis dans la liste"</option>
-                                <optgroup label="Rôles">
+                                <option value="" prop:selected=move || pick.get().is_empty()>{t("Choisis dans la liste")}</option>
+                                <optgroup label=t("Rôles")>
                                     {move || candidates.get().0.into_iter().map(|r| view! { <option value=format!("r:{}", r.id)>{r.name}</option> }).collect_view()}
                                 </optgroup>
-                                <optgroup label="Membres">
+                                <optgroup label=t("Membres")>
                                     {move || candidates.get().1.into_iter().map(|m| {
                                         let label = format!("{} (@{})", m.nick.clone().unwrap_or_else(|| m.user.name().to_string()), m.user.username);
                                         view! { <option value=format!("m:{}", m.user.id)>{label}</option> }
                                     }).collect_view()}
                                 </optgroup>
                             </select>
-                            <button type="submit" class="k-btn" disabled=move || pick.get().is_empty()>"Ajouter"</button>
+                            <button type="submit" class="k-btn" disabled=move || pick.get().is_empty()>{t("Ajouter")}</button>
                         </div>
                     </form>
                 </div>
                 <div class="app-roles-edit">
                     {move || {
                         let id = selected.get();
-                        targets.with(|t| t.iter().find(|x| x.id == id).copied()).map(|t| view! {
-                            <h3 class="app-roles-title">{move || name_of(t)}</h3>
-                            <Show when=move || !editable(t)>
-                                <p class="app-hint">"Son rang est égal ou supérieur au tien : tu ne peux pas changer ses réglages."</p>
+                        targets.with(|tg| tg.iter().find(|x| x.id == id).copied()).map(|tg| view! {
+                            <h3 class="app-roles-title">{move || name_of(tg)}</h3>
+                            <Show when=move || !editable(tg)>
+                                <p class="app-hint">{t("Son rang est égal ou supérieur au tien : tu ne peux pas changer ses réglages.")}</p>
                             </Show>
-                            {rows(t)}
+                            {rows(tg)}
                             <div>
-                                <button type="button" class="k-btn k-btn--ghost" disabled=move || !editable(t) on:click=move |_| reset(t)>
-                                    "Tout remettre sur « Hériter »"
+                                <button type="button" class="k-btn k-btn--ghost" disabled=move || !editable(tg) on:click=move |_| reset(tg)>
+                                    {t("Tout remettre sur « Hériter »")}
                                 </button>
                             </div>
                         })
@@ -947,10 +955,10 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
                 </div>
             </div>
             <Show when=dirty>
-                <div class="app-savebar" role="region" aria-label="Modifications des permissions">
-                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/><span class="app-bar-long">"Modifications non enregistrées"</span><span class="app-bar-short">"Non enregistré"</span></span>
-                    <button type="button" class="k-btn k-btn--ghost" on:click=cancel>"Annuler"</button>
-                    <button type="button" class="k-btn k-btn--primary" on:click=save aria-busy=move || busy.get().to_string()>"Enregistrer"</button>
+                <div class="app-savebar" role="region" aria-label=t("Modifications des permissions")>
+                    <span role="status"><Icon icon=lu::LuCircleAlert small=true/><span class="app-bar-long">{t("Modifications non enregistrées")}</span><span class="app-bar-short">{t("Non enregistré")}</span></span>
+                    <button type="button" class="k-btn k-btn--ghost" on:click=cancel>{t("Annuler")}</button>
+                    <button type="button" class="k-btn k-btn--primary" on:click=save aria-busy=move || busy.get().to_string()>{t("Enregistrer")}</button>
                 </div>
             </Show>
         </Show>

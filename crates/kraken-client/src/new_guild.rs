@@ -13,6 +13,7 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 
+use crate::i18n::{lang, t, tf};
 use crate::icon_picker::{IconFile, IconPicker};
 use crate::icons::{Icon, lu};
 use crate::shell::first_text;
@@ -74,8 +75,8 @@ fn Card(template: &'static Template, chosen: RwSignal<&'static str>) -> impl Int
                 prop:checked=move || chosen.get() == id on:change=move |_| chosen.set(id)/>
             <span class="app-tpl-icon"><Icon icon=template_icon(id)/></span>
             <span class="app-tpl-body">
-                <b>{template.name}</b>
-                <span id=desc>{template.description}</span>
+                <b>{t(template.name)}</b>
+                <span id=desc>{t(template.description)}</span>
             </span>
             <span class="app-tpl-check" aria-hidden="true"><Icon icon=lu::LuCheck small=true/></span>
         </label>
@@ -94,7 +95,7 @@ pub fn CreateGuild() -> impl IntoView {
         if !typed.get_untracked()
             && let Some(u) = s.me.get()
         {
-            name.set(format!("Serveur de {}", u.name()));
+            name.set(tf("Serveur de {nom}", &[("nom", u.name())]));
         }
     });
     let code = RwSignal::new(String::new());
@@ -163,9 +164,9 @@ pub fn CreateGuild() -> impl IntoView {
                     if let Some(st) = staged.get_untracked() {
                         match crate::api::set_guild_icon(gid, &st.file.bytes, st.file.mime).await {
                             Ok(g) => s.update_guild(g),
-                            Err(e) => s.notice.set(Some(format!(
-                                "Le serveur est créé, mais son icône n'a pas pu être envoyée : {} Tu peux la choisir dans les paramètres du serveur, rubrique « Vue d'ensemble ».",
-                                e.message
+                            Err(e) => s.notice.set(Some(tf(
+                                "Le serveur est créé, mais son icône n'a pas pu être envoyée : {erreur} Tu peux la choisir dans les paramètres du serveur, rubrique « Vue d'ensemble ».",
+                                &[("erreur", &e.message)],
                             ))),
                         }
                     }
@@ -189,31 +190,31 @@ pub fn CreateGuild() -> impl IntoView {
         let raw = code.get_untracked();
         let c = raw.trim().trim_end_matches('/').rsplit('/').next().unwrap_or_default().to_string();
         if c.is_empty() {
-            join_error.set(Some("Colle un lien ou un code d'invitation.".into()));
+            join_error.set(Some(t("Colle un lien ou un code d'invitation.")));
             return;
         }
         navigate(&format!("/invite/{c}"), Default::default());
     };
     view! {
-        <Header><h1 class="app-title">"Crée ton serveur"</h1></Header>
+        <Header><h1 class="app-title">{t("Crée ton serveur")}</h1></Header>
         <div class="app-friends app-ng">
             <form class="app-ng-form" on:submit=submit>
-                <p class="app-hint">"Un espace pour ta bande, avec des salons textuels et vocaux. Choisis un point de départ : tu pourras tout changer ensuite."</p>
+                <p class="app-hint">{t("Un espace pour ta bande, avec des salons textuels et vocaux. Choisis un point de départ : tu pourras tout changer ensuite.")}</p>
                 <section aria-labelledby="ng-tpl-h" class="app-ng-sec">
-                    <h2 id="ng-tpl-h" class="app-ov-h">"Modèle"</h2>
+                    <h2 id="ng-tpl-h" class="app-ov-h">{t("Modèle")}</h2>
                     <div class="app-tpls" role="radiogroup" aria-labelledby="ng-tpl-h">
-                        {templates::ALL.iter().map(|t| view! { <Card template=t chosen=chosen/> }).collect_view()}
+                        {templates::ALL.iter().map(|tpl| view! { <Card template=tpl chosen=chosen/> }).collect_view()}
                     </div>
                     <div class="app-ng-made" aria-live="polite">
-                        <p class="k-label">"Sera créé :"</p>
+                        <p class="k-label">{t("Sera créé :")}</p>
                         <ul>
                             {move || template.get().slots().map(|slot| {
                                 let voice = slot.kind == SlotKind::Voice;
                                 view! {
                                     <li>
                                         <Icon icon=if voice { lu::LuVolume2 } else { lu::LuHash } small=true/>
-                                        <span class="k-sr">{if voice { "Salon vocal " } else { "Salon textuel " }}</span>
-                                        {slot.name}
+                                        <span class="k-sr">{if voice { t("Salon vocal") } else { t("Salon textuel") }}" "</span>
+                                        {slot.name.get(lang())}
                                     </li>
                                 }
                             }).collect_view()}
@@ -222,7 +223,7 @@ pub fn CreateGuild() -> impl IntoView {
                 </section>
                 <section class="app-ng-sec">
                     <label class="k-field">
-                        <span class="k-label">"Nom du serveur"</span>
+                        <span class="k-label">{t("Nom du serveur")}</span>
                         <input class="k-input" required minlength="2" maxlength="100" bind:value=name
                             node_ref=name_input on:input=move |_| typed.set(true)
                             aria-invalid=move || (error.get().is_some() && name_error.get()).then_some("true")
@@ -230,11 +231,11 @@ pub fn CreateGuild() -> impl IntoView {
                     </label>
                 </section>
                 <section aria-labelledby="ng-icon-h" class="app-ng-sec">
-                    <h2 id="ng-icon-h" class="app-ov-h">"Icône " <span class="app-hint">"(facultative)"</span></h2>
+                    <h2 id="ng-icon-h" class="app-ov-h">{t("Icône")}" "<span class="app-hint">{t("(facultative)")}</span></h2>
                     <IconPicker id="ng-icon" has_icon=Signal::derive(move || staged.get().is_some()) busy=busy error=icon_error
                         on_pick=on_pick on_remove=on_remove>
                         <span class="app-gicon-preview" role="img"
-                            aria-label=move || if staged.get().is_some() { "Icône choisie" } else { "Pas d'icône : les initiales du serveur" }>
+                            aria-label=move || if staged.get().is_some() { t("Icône choisie") } else { t("Pas d'icône : les initiales du serveur") }>
                             {move || match staged.get() {
                                 Some(st) => view! { <StagedImage staged=st/> }.into_any(),
                                 None => initials(&name.get()).into_any(),
@@ -246,26 +247,26 @@ pub fn CreateGuild() -> impl IntoView {
                     <div class="k-banner k-banner--warning app-ng-error" id="ng-err" role="alert">
                         <Icon icon=lu::LuCircleAlert/>
                         <span>{move || error.get()}</span>
-                        <button class="k-btn" type="button" node_ref=retry on:click={ let again = create2.clone(); move |_| again() }>"Réessayer"</button>
+                        <button class="k-btn" type="button" node_ref=retry on:click={ let again = create2.clone(); move |_| again() }>{t("Réessayer")}</button>
                     </div>
                 </Show>
                 <div class="app-ng-actions">
-                    <a class="k-btn k-btn--ghost" href="/channels/@me">"Annuler"</a>
+                    <a class="k-btn k-btn--ghost" href="/channels/@me">{t("Annuler")}</a>
                     <button class="k-btn k-btn--primary k-btn--lg" type="submit" aria-busy=move || busy.get().to_string() disabled=move || busy.get()>
-                        "Créer le serveur"
+                        {t("Créer le serveur")}
                     </button>
                 </div>
-                <p class="k-hint app-ng-status" role="status">{move || busy.get().then_some("Création…")}</p>
+                <p class="k-hint app-ng-status" role="status">{move || busy.get().then(|| t("Création…"))}</p>
             </form>
             <form on:submit=join class="app-ng-join">
                 <label class="k-field">
-                    <span class="k-label">"Tu as déjà une invitation ?"</span>
+                    <span class="k-label">{t("Tu as déjà une invitation ?")}</span>
                     <input class="k-input" placeholder="https://…/invite/AbC123xy" bind:value=code aria-describedby="cj-e"/>
                     <Show when=move || join_error.get().is_some()>
                         <span class="k-error" id="cj-e" role="alert">{move || join_error.get()}</span>
                     </Show>
                 </label>
-                <button class="k-btn" type="submit">"Rejoindre"</button>
+                <button class="k-btn" type="submit">{t("Rejoindre")}</button>
             </form>
         </div>
     }

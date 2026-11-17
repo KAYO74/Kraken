@@ -6,14 +6,51 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
+use kraken_core::i18n::Lang;
+
+use crate::i18n::{lang, t, tf};
+
 pub type ApiResult<T> = Result<T, ApiError>;
 
 fn network() -> ApiError {
     ApiError {
         code: "network".into(),
-        message: "Le serveur ne répond pas. Vérifie ta connexion.".into(),
+        message: t("Le serveur ne répond pas. Vérifie ta connexion."),
         timeout_until: None,
     }
+}
+
+thread_local! {
+    /// Les gabarits à `{variables}` de `i18n/en/server.tsv` (clés françaises), du plus précis au plus général.
+    static SERVER_TEMPLATES: Vec<String> =
+        kraken_core::pattern::templates_of(&kraken_core::i18n::parse_catalog(include_str!("../i18n/en/server.tsv")));
+}
+
+/// Le message d'une erreur du serveur dans la langue de l'interface. Le serveur écrit ses messages en français :
+/// le texte est la clé du catalogue (`i18n/en/server.tsv`). Un message où le serveur a glissé une valeur (« Ce salon a
+/// déjà 50 messages épinglés… ») n'y est pas tel quel : on retrouve son gabarit (« … a déjà {n} messages épinglés… »),
+/// on en tire la valeur, et on remplit le gabarit de la langue (voir `kraken_core::pattern`) ; la valeur reste telle
+/// quelle, sauf un libellé `{champ}` que le catalogue traduit. Un message sans entrée reste en français.
+fn server_text(message: &str) -> String {
+    let exact = t(message);
+    if exact != message || lang() == Lang::Fr {
+        return exact;
+    }
+    SERVER_TEMPLATES
+        .with(|templates| {
+            kraken_core::pattern::translate(templates, message, |key| {
+                let found = t(key);
+                (found != key).then_some(found)
+            })
+        })
+        .unwrap_or_else(|| message.to_string())
+}
+
+/// Une erreur du serveur, avec son message dans la langue de l'interface (voir [`server_text`]). C'est le seul
+/// endroit qui traduit un message du serveur : tout ce qui affiche `ApiError.message` le reçoit déjà traduit.
+fn from_server(mut e: ApiError) -> ApiError {
+    e.message = server_text(&e.message);
+    e
 }
 
 async fn call<T: DeserializeOwned>(method: Method, path: &str, body: Option<impl Serialize>) -> ApiResult<T> {
@@ -30,7 +67,7 @@ async fn call<T: DeserializeOwned>(method: Method, path: &str, body: Option<impl
     if resp.ok() {
         resp.json().await.map_err(|_| network())
     } else {
-        Err(resp.json().await.unwrap_or_else(|_| network()))
+        Err(resp.json().await.map_or_else(|_| network(), from_server))
     }
 }
 
@@ -131,7 +168,7 @@ pub fn upload<F: Fn(f64) + 'static>(
             finish(if (200..300).contains(&status) {
                 serde_json::from_str(&text).map_err(|_| network())
             } else {
-                Err(serde_json::from_str(&text).unwrap_or_else(|_| network()))
+                Err(serde_json::from_str(&text).map_or_else(|_| network(), from_server))
             });
         })
     };
@@ -164,9 +201,15 @@ pub async fn logout() -> ApiResult<()> {
     call(Method::POST, "/auth/logout", NO_BODY).await
 }
 
-/// Crée un serveur d'après un modèle (`kraken_core::templates`).
+/// Crée un serveur d'après un modèle (`kraken_core::templates`). La langue de l'interface part avec la demande :
+/// le serveur nomme les catégories et les salons du modèle dans cette langue, comme l'aperçu de la page.
 pub async fn create_guild(name: &str, template: &str) -> ApiResult<GuildState> {
-    call(Method::POST, "/guilds", Some(CreateGuild { name: name.into(), template: Some(template.into()) })).await
+    let body = CreateGuild {
+        name: name.into(),
+        template: Some(template.into()),
+        lang: Some(crate::i18n::lang().tag().into()),
+    };
+    call(Method::POST, "/guilds", Some(body)).await
 }
 
 /// Renomme le serveur.
@@ -375,17 +418,21 @@ async fn send_image<T: DeserializeOwned>(
     if resp.ok() {
         resp.json().await.map_err(|_| network())
     } else if resp.status() == 413 {
-        Err(resp.json().await.unwrap_or_else(|_| too_large(max)))
+        Err(resp.json().await.map_or_else(|_| too_large(max), from_server))
     } else {
-        Err(resp.json().await.unwrap_or_else(|_| network()))
+        Err(resp.json().await.map_or_else(|_| network(), from_server))
     }
 }
 
 fn too_large(max: usize) -> ApiError {
-    let size = if max >= 1024 * 1024 { format!("{} Mo", max / (1024 * 1024)) } else { format!("{} Ko", max / 1024) };
+    let size = if max >= 1024 * 1024 {
+        tf("{n} Mo", &[("n", &(max / (1024 * 1024)).to_string())])
+    } else {
+        tf("{n} Ko", &[("n", &(max / 1024).to_string())])
+    };
     ApiError {
         code: "too_large".into(),
-        message: format!("Cette image pèse trop lourd : {size} au plus."),
+        message: tf("Cette image pèse trop lourd : {taille} au plus.", &[("taille", &size)]),
         timeout_until: None,
     }
 }

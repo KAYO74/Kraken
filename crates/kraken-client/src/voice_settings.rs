@@ -7,7 +7,8 @@
 //! du système, et un appareil débranché retombe sur celui-là sans rien dire), `kraken.echo`,
 //! `kraken.noise`, `kraken.agc` (`on` par défaut, `off`), `kraken.ptt` (`off` par défaut, `on`),
 //! `kraken.ptt_key` (un `KeyboardEvent.code`) et `kraken.ptt_label` (son nom, tel que la personne le lit
-//! sur son clavier : « A » pour la touche que `code` appelle `KeyQ` sur un clavier AZERTY).
+//! sur son clavier : « A » pour la touche que `code` appelle `KeyQ` sur un clavier AZERTY ; absent pour une touche
+//! qui n'écrit rien, dont le nom suit la langue de l'interface).
 //!
 //! Le micro et la caméra choisis servent à la prochaine prise ; pendant un appel, un changement remplace
 //! la piste en direct (`Voice::switch_mic`, `Voice::switch_camera`). La sortie audio se pose sur tous les
@@ -26,8 +27,10 @@ use wasm_bindgen_futures::JsFuture;
 use web_sys::{AudioContext, HtmlMediaElement, KeyboardEvent, MediaDeviceInfo, MediaDeviceKind, MediaStream};
 
 use crate::call;
+use crate::i18n::{t, tf};
 use crate::icons::{Icon, lu};
 use crate::store::store;
+use crate::tk;
 use crate::voice::{self, Voice};
 
 pub const MIC: &str = "kraken.mic";
@@ -40,11 +43,12 @@ pub const PTT: &str = "kraken.ptt";
 const PTT_KEY: &str = "kraken.ptt_key";
 const PTT_LABEL: &str = "kraken.ptt_label";
 
-const DEFAULT: &str = "Par défaut du système";
+// Des clés de traduction : `t(…)` à l'affichage (les messages d'erreur gardés dans un signal restent des clés).
+const DEFAULT: &str = tk!("Par défaut du système");
 const NEEDS_HTTPS: &str =
-    "Le micro et la caméra demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).";
-const TAB_REFUSED: &str = "La touche Tab sert à naviguer dans la page : choisis-en une autre.";
-const ENTER_REFUSED: &str = "La touche Entrée seule ne peut pas servir : choisis-en une autre.";
+    tk!("Le micro et la caméra demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).");
+const TAB_REFUSED: &str = tk!("La touche Tab sert à naviguer dans la page : choisis-en une autre.");
+const ENTER_REFUSED: &str = tk!("La touche Entrée seule ne peut pas servir : choisis-en une autre.");
 /// Le micro se referme un peu après le relâchement : la fin d'un mot n'est pas coupée.
 const RELEASE_MS: u32 = 200;
 /// L'annonce vocale attend que l'état se pose : des appuis rapprochés ne la font pas bavarder.
@@ -118,19 +122,19 @@ async fn enumerate() -> Devices {
         }
         out.named |= !label.is_empty();
         let (bucket, name) = match info.kind() {
-            MediaDeviceKind::Audioinput => (&mut out.inputs, "Micro"),
-            MediaDeviceKind::Audiooutput => (&mut out.outputs, "Sortie"),
-            MediaDeviceKind::Videoinput => (&mut out.cameras, "Caméra"),
+            MediaDeviceKind::Audioinput => (&mut out.inputs, tk!("Micro {n}")),
+            MediaDeviceKind::Audiooutput => (&mut out.outputs, tk!("Sortie {n}")),
+            MediaDeviceKind::Videoinput => (&mut out.cameras, tk!("Caméra {n}")),
             _ => continue,
         };
-        let label = if label.is_empty() { format!("{name} {}", bucket.len() + 1) } else { label };
+        let label = if label.is_empty() { tf(name, &[("n", &(bucket.len() + 1).to_string())]) } else { label };
         bucket.push(Device { id, label });
     }
     out
 }
 
 /// Une seule demande d'accès au micro et à la caméra, pour que le navigateur donne leur nom aux appareils.
-/// Les pistes obtenues sont arrêtées aussitôt. L'erreur dit ce qu'il faut à la personne.
+/// Les pistes obtenues sont arrêtées aussitôt. L'erreur dit ce qu'il faut à la personne (une clé de traduction).
 async fn allow_access() -> Result<(), &'static str> {
     let Some(d) = voice::devices() else { return Err(NEEDS_HTTPS) };
     for constraints in [r#"{"audio":true,"video":true}"#, r#"{"audio":true}"#, r#"{"video":true}"#] {
@@ -142,24 +146,24 @@ async fn allow_access() -> Result<(), &'static str> {
                 return Ok(());
             }
             Err(e) if voice::error_name(&e).as_deref() == Some("NotAllowedError") => {
-                return Err("Le navigateur a refusé l'accès : les appareils gardent un nom générique.");
+                return Err(tk!("Le navigateur a refusé l'accès : les appareils gardent un nom générique."));
             }
             Err(_) => {}
         }
     }
-    Err("Aucun micro ni aucune caméra n'a été trouvé sur cet appareil.")
+    Err(tk!("Aucun micro ni aucune caméra n'a été trouvé sur cet appareil."))
 }
 
-/// Ce que le micro refusé ou absent dit à la personne.
+/// Ce que le micro refusé ou absent dit à la personne (une clé de traduction : `t(…)` à l'affichage).
 fn mic_failure(e: &wasm_bindgen::JsValue) -> &'static str {
     match voice::error_name(e).as_deref() {
         Some("NotFoundError" | "OverconstrainedError" | "DevicesNotFoundError") => {
-            "Aucun micro n'a été trouvé sur cet appareil."
+            tk!("Aucun micro n'a été trouvé sur cet appareil.")
         }
         Some("NotReadableError" | "AbortError" | "TrackStartError") => {
-            "Le micro n'a pas pu démarrer : une autre application l'utilise peut-être."
+            tk!("Le micro n'a pas pu démarrer : une autre application l'utilise peut-être.")
         }
-        _ => "Le navigateur a refusé l'accès au micro",
+        _ => tk!("Le navigateur a refusé l'accès au micro"),
     }
 }
 
@@ -217,6 +221,7 @@ struct Probe {
 #[component]
 fn DeviceSelect(
     id: &'static str,
+    /// Une clé de traduction.
     label: &'static str,
     options: Signal<Vec<Device>>,
     current: RwSignal<String>,
@@ -228,13 +233,13 @@ fn DeviceSelect(
     });
     view! {
         <div class="k-field app-device-select">
-            <label class="k-label" for=id>{label}</label>
+            <label class="k-label" for=id>{t(label)}</label>
             <select class="k-select" id=id on:change=move |e| {
                 let picked = event_target_value(&e);
                 current.set(picked.clone());
                 on_pick.run(picked);
             }>
-                <option value="" prop:selected=move || shown.get().is_empty()>{DEFAULT}</option>
+                <option value="" prop:selected=move || shown.get().is_empty()>{t(DEFAULT)}</option>
                 <For each=move || options.get() key=|d| (d.id.clone(), d.label.clone()) let:d>
                     {
                         let id = d.id.clone();
@@ -250,6 +255,7 @@ fn DeviceSelect(
 #[component]
 fn Switch(
     id: &'static str,
+    /// Le nom et l'explication : des clés de traduction.
     label: &'static str,
     hint: &'static str,
     on: RwSignal<bool>,
@@ -258,7 +264,7 @@ fn Switch(
     let described = format!("{id}-h");
     view! {
         <div class="k-setting">
-            <label for=id>{label}</label>
+            <label for=id>{t(label)}</label>
             <input id=id type="checkbox" role="switch" class="k-switch" aria-describedby=described.clone()
                 prop:checked=move || on.get()
                 on:change=move |e| {
@@ -266,7 +272,7 @@ fn Switch(
                     on.set(now);
                     on_change.run(now);
                 }/>
-            <p id=described>{hint}</p>
+            <p id=described>{t(hint)}</p>
         </div>
     }
 }
@@ -282,7 +288,7 @@ fn CameraPreview(stream: RwSignal<Option<MediaStream>, LocalStorage>) -> impl In
     view! {
         <div class="app-cam">
             <video class="k-tile-video" data-mirror node_ref=el autoplay playsinline muted prop:muted=true
-                aria-label="Image de ta caméra"></video>
+                aria-label=t("Image de ta caméra")></video>
         </div>
     }
 }
@@ -509,7 +515,8 @@ pub fn VoiceSettings() -> impl IntoView {
             code => {
                 let key = PttKey::from_event(code, &e.key());
                 remember(PTT_KEY, Some(&key.code));
-                remember(PTT_LABEL, Some(&key.label));
+                // Le nom d'une touche sans caractère (« Espace ») suit la langue : on ne garde que ce que la touche écrit.
+                remember(PTT_LABEL, Some(key.label.as_str()).filter(|l| *l != key_label(&key.code)));
                 v.ptt_key.set(Some(key));
                 captured_at.set_value(js_sys::Date::now());
                 end_capture(None);
@@ -537,91 +544,91 @@ pub fn VoiceSettings() -> impl IntoView {
     view! {
         <div class="app-prefs">
             <p class="app-hint">
-                "Ces réglages restent sur cet appareil. Un changement s'applique tout de suite, même pendant un appel."
+                {t("Ces réglages restent sur cet appareil. Un changement s'applique tout de suite, même pendant un appel.")}
             </p>
-            {(!secure).then(|| view! { <p class="app-hint">{NEEDS_HTTPS}</p> })}
+            {(!secure).then(|| view! { <p class="app-hint">{t(NEEDS_HTTPS)}</p> })}
 
             <section class="app-choice-group" aria-labelledby="vv-devices-t">
-                <h3 id="vv-devices-t" class="app-prefs-title">"Appareils"</h3>
+                <h3 id="vv-devices-t" class="app-prefs-title">{t("Appareils")}</h3>
                 {move || (secure && list.with(|l| l.loaded && !l.named)).then(|| view! {
                     <div class="app-choice-group">
                         <p id="vv-access-h" class="app-hint">
-                            "Le navigateur n'affiche le nom de tes appareils qu'une fois l'accès au micro et à la caméra autorisé."
+                            {t("Le navigateur n'affiche le nom de tes appareils qu'une fois l'accès au micro et à la caméra autorisé.")}
                         </p>
                         <button type="button" class="k-btn k-btn--sm app-device-btn" aria-describedby="vv-access-h"
-                            disabled=move || asking.get() on:click=allow>"Autoriser l'accès"</button>
-                        {move || access_error.get().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
+                            disabled=move || asking.get() on:click=allow>{t("Autoriser l'accès")}</button>
+                        {move || access_error.get().map(|e| view! { <p class="k-error" role="alert">{t(e)}</p> })}
                     </div>
                 })}
-                <DeviceSelect id="vv-mic" label="Entrée audio" options=inputs current=mic on_pick=pick_mic/>
+                <DeviceSelect id="vv-mic" label=tk!("Entrée audio") options=inputs current=mic on_pick=pick_mic/>
                 {if sink {
                     view! {
-                        <DeviceSelect id="vv-speaker" label="Sortie audio" options=outputs current=speaker on_pick=pick_speaker/>
+                        <DeviceSelect id="vv-speaker" label=tk!("Sortie audio") options=outputs current=speaker on_pick=pick_speaker/>
                     }.into_any()
                 } else {
                     view! {
                         <p class="app-hint">
-                            "Ton navigateur ne permet pas de choisir la sortie audio : le son sort sur l'appareil par défaut du système (Chrome et Edge savent le faire)."
+                            {t("Ton navigateur ne permet pas de choisir la sortie audio : le son sort sur l'appareil par défaut du système (Chrome et Edge savent le faire).")}
                         </p>
                     }.into_any()
                 }}
-                <DeviceSelect id="vv-cam" label="Caméra" options=cameras current=cam on_pick=pick_cam/>
+                <DeviceSelect id="vv-cam" label=tk!("Caméra") options=cameras current=cam on_pick=pick_cam/>
             </section>
 
             <section class="app-choice-group" aria-labelledby="vv-test-t">
-                <h3 id="vv-test-t" class="app-prefs-title">"Test du micro"</h3>
-                <p id="vv-test-h" class="app-hint">"Parle : la barre monte avec ta voix. Rien n'est enregistré ni rejoué dans tes haut-parleurs."</p>
+                <h3 id="vv-test-t" class="app-prefs-title">{t("Test du micro")}</h3>
+                <p id="vv-test-h" class="app-hint">{t("Parle : la barre monte avec ta voix. Rien n'est enregistré ni rejoué dans tes haut-parleurs.")}</p>
                 <button type="button" class="k-btn app-device-btn" aria-describedby="vv-test-h" disabled=!secure
                     on:click=move |_| if testing.get_untracked() { stop_test() } else { start_test() }>
                     <Icon icon=lu::LuMic/>
-                    {move || if testing.get() { "Arrêter le test" } else { "Tester le micro" }}
+                    {move || if testing.get() { t("Arrêter le test") } else { t("Tester le micro") }}
                 </button>
                 <div class="app-meter-row">
-                    <span id="vv-meter-l" class="k-label">"Niveau du micro"</span>
+                    <span id="vv-meter-l" class="k-label">{t("Niveau du micro")}</span>
                     <div class="app-meter" role="meter" aria-labelledby="vv-meter-l" aria-valuemin="0" aria-valuemax="100"
                         aria-valuenow=move || level.get().to_string()>
                         <span style:width=move || format!("{}%", level.get())></span>
                     </div>
                 </div>
-                {move || test_error.get().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
+                {move || test_error.get().map(|e| view! { <p class="k-error" role="alert">{t(e)}</p> })}
             </section>
 
             <section class="app-choice-group" aria-labelledby="vv-cam-t">
-                <h3 id="vv-cam-t" class="app-prefs-title">"Aperçu de la caméra"</h3>
-                <p id="vv-cam-h" class="app-hint">"La caméra ne s'allume que pendant l'aperçu, et s'éteint quand tu quittes cette page."</p>
+                <h3 id="vv-cam-t" class="app-prefs-title">{t("Aperçu de la caméra")}</h3>
+                <p id="vv-cam-h" class="app-hint">{t("La caméra ne s'allume que pendant l'aperçu, et s'éteint quand tu quittes cette page.")}</p>
                 <button type="button" class="k-btn app-device-btn" aria-describedby="vv-cam-h" disabled=!secure
                     on:click=move |_| if previewing.get_untracked() { stop_preview() } else { start_preview() }>
                     <Icon icon=lu::LuVideo/>
-                    {move || if previewing.get() { "Arrêter l'aperçu" } else { "Aperçu de la caméra" }}
+                    {move || if previewing.get() { t("Arrêter l'aperçu") } else { t("Aperçu de la caméra") }}
                 </button>
                 {move || preview.with(Option::is_some).then(|| view! { <CameraPreview stream=preview/> })}
-                {move || preview_error.get().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
+                {move || preview_error.get().map(|e| view! { <p class="k-error" role="alert">{t(e)}</p> })}
             </section>
 
             <section aria-labelledby="vv-sound-t">
-                <h3 id="vv-sound-t" class="app-prefs-title">"Traitement du son"</h3>
-                <Switch id="vv-echo" label="Annulation d'écho" on=echo on_change=set_echo
-                    hint="Retire de ton micro le son qui sort de tes haut-parleurs."/>
-                <Switch id="vv-noise" label="Suppression du bruit" on=noise on_change=set_noise
-                    hint="Atténue les bruits de fond : clavier, ventilateur, rue."/>
-                <Switch id="vv-agc" label="Réglage automatique du volume" on=agc on_change=set_agc
-                    hint="Garde ta voix à un niveau régulier, que tu parles fort ou doucement."/>
+                <h3 id="vv-sound-t" class="app-prefs-title">{t("Traitement du son")}</h3>
+                <Switch id="vv-echo" label=tk!("Annulation d'écho") on=echo on_change=set_echo
+                    hint=tk!("Retire de ton micro le son qui sort de tes haut-parleurs.")/>
+                <Switch id="vv-noise" label=tk!("Suppression du bruit") on=noise on_change=set_noise
+                    hint=tk!("Atténue les bruits de fond : clavier, ventilateur, rue.")/>
+                <Switch id="vv-agc" label=tk!("Réglage automatique du volume") on=agc on_change=set_agc
+                    hint=tk!("Garde ta voix à un niveau régulier, que tu parles fort ou doucement.")/>
             </section>
 
             <section aria-labelledby="vv-ptt-t">
-                <h3 id="vv-ptt-t" class="app-prefs-title">"Appuyer pour parler"</h3>
-                <Switch id="vv-ptt" label="Appuyer pour parler" on=ptt on_change=toggle_ptt
-                    hint="Ton micro ne s'ouvre que tant que tu tiens la touche choisie, et se referme un instant après (0,2 s). Ça ne marche que lorsque la fenêtre est au premier plan : un raccourci global viendra avec l'appli de bureau."/>
+                <h3 id="vv-ptt-t" class="app-prefs-title">{t("Appuyer pour parler")}</h3>
+                <Switch id="vv-ptt" label=tk!("Appuyer pour parler") on=ptt on_change=toggle_ptt
+                    hint=tk!("Ton micro ne s'ouvre que tant que tu tiens la touche choisie, et se referme un instant après (0,2 s). Ça ne marche que lorsque la fenêtre est au premier plan : un raccourci global viendra avec l'appli de bureau.")/>
                 <Show when=move || ptt.get()>
                     <div class="k-setting app-ptt-key">
-                        <b id="vv-ptt-key-l">"Touche pour parler"</b>
+                        <b id="vv-ptt-key-l">{t("Touche pour parler")}</b>
                         <p id="vv-ptt-key-h" role="status">
                             {move || if capturing.get() {
-                                "Appuie sur une touche… Échap annule"
+                                t("Appuie sur une touche… Échap annule")
                             } else if v.ptt_key.with(Option::is_none) {
-                                "Aucune touche choisie : le micro reste ouvert comme d'habitude."
+                                t("Aucune touche choisie : le micro reste ouvert comme d'habitude.")
                             } else {
-                                "Clique pour changer de touche."
+                                t("Clique pour changer de touche.")
                             }}
                         </p>
                         <button type="button" class="k-btn" id="vv-ptt-key" aria-labelledby="vv-ptt-key-l vv-ptt-key"
@@ -631,14 +638,14 @@ pub fn VoiceSettings() -> impl IntoView {
                             data-no-shortcuts=move || capturing.get().then_some("")
                             on:click=on_key_click on:keydown=on_key on:keyup=on_key_up on:blur=move |_| capturing.set(false)>
                             {move || if capturing.get() {
-                                "En attente…".into_any()
+                                t("En attente…").into_any()
                             } else if let Some(key) = v.ptt_key.get() {
                                 view! { <span class="k-kbd"><kbd>{key.label}</kbd></span> }.into_any()
                             } else {
-                                "Choisir une touche".into_any()
+                                t("Choisir une touche").into_any()
                             }}
                         </button>
-                        {move || key_error.get().map(|e| view! { <p id="vv-ptt-key-err" class="k-error app-ptt-err" role="alert">{e}</p> })}
+                        {move || key_error.get().map(|e| view! { <p id="vv-ptt-key-err" class="k-error app-ptt-err" role="alert">{t(e)}</p> })}
                     </div>
                 </Show>
             </section>
@@ -684,28 +691,27 @@ fn key_label(code: &str) -> String {
         return digit.into();
     }
     if let Some(digit) = code.strip_prefix("Numpad").filter(|d| d.len() == 1) {
-        return format!("Pavé {digit}");
+        return tf("Pavé {digit}", &[("digit", digit)]);
     }
     match code {
-        "Space" => "Espace",
-        "ControlLeft" => "Ctrl gauche",
-        "ControlRight" => "Ctrl droite",
-        "ShiftLeft" => "Maj gauche",
-        "ShiftRight" => "Maj droite",
-        "AltLeft" => "Alt",
-        "AltRight" => "Alt Gr",
-        "CapsLock" => "Verr. maj.",
-        "Backspace" => "Retour arrière",
-        "ArrowUp" => "Flèche haut",
-        "ArrowDown" => "Flèche bas",
-        "ArrowLeft" => "Flèche gauche",
-        "ArrowRight" => "Flèche droite",
-        "Backquote" => "`",
-        "Minus" => "-",
-        "Equal" => "=",
-        other => other,
+        "Space" => t("Espace"),
+        "ControlLeft" => t("Ctrl gauche"),
+        "ControlRight" => t("Ctrl droite"),
+        "ShiftLeft" => t("Maj gauche"),
+        "ShiftRight" => t("Maj droite"),
+        "AltLeft" => t("Alt"),
+        "AltRight" => t("Alt Gr"),
+        "CapsLock" => t("Verr. maj."),
+        "Backspace" => t("Retour arrière"),
+        "ArrowUp" => t("Flèche haut"),
+        "ArrowDown" => t("Flèche bas"),
+        "ArrowLeft" => t("Flèche gauche"),
+        "ArrowRight" => t("Flèche droite"),
+        "Backquote" => "`".into(),
+        "Minus" => "-".into(),
+        "Equal" => "=".into(),
+        other => other.into(),
     }
-    .into()
 }
 
 thread_local! {
@@ -822,9 +828,9 @@ pub fn init_ptt(v: Voice) {
                 }
                 let muted = v.mute.get_untracked() || v.deaf.get_untracked();
                 v.ptt_say.set(match (held, muted) {
-                    (false, _) => "Micro fermé",
-                    (true, true) => "Micro coupé",
-                    (true, false) => "Micro ouvert",
+                    (false, _) => tk!("Micro fermé"),
+                    (true, true) => tk!("Micro coupé"),
+                    (true, false) => tk!("Micro ouvert"),
                 });
             });
         }

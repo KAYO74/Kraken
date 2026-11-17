@@ -944,6 +944,51 @@ async fn reserved_usernames_are_refused_at_signup_and_on_change_but_existing_acc
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn a_persian_display_name_keeps_its_half_space_between_letters(pool: PgPool) {
+    let (base, _) = spawn_with(pool, |c| c.auth_per_min = 100_000).await;
+    let lou = Who::new(&base, "lou").await;
+    // « می‌خواهم » et « کتاب‌خانه » : le demi-espace (U+200C) entre deux lettres est gardé tel quel.
+    let name = "می\u{200C}خواهم کتاب\u{200C}خانه";
+    let (s, v) = lou
+        .call(
+            Method::PATCH,
+            "/users/@me",
+            Some(json!({"display_name": name, "bio": "نیم\u{200C}فاصله", "pronouns": "او"})),
+        )
+        .await;
+    assert_eq!(
+        (s.as_u16(), v["display_name"].as_str(), v["bio"].as_str()),
+        (200, Some(name), Some("نیم\u{200C}فاصله"))
+    );
+    let (_, me) = lou.call(Method::GET, "/users/@me", None).await;
+    assert_eq!(me["display_name"].as_str(), Some(name));
+    // Un nom de serveur persan aussi.
+    let (s, g) = lou.call(Method::POST, "/guilds", Some(json!({"name": "کتاب\u{200C}خانه"}))).await;
+    assert_eq!((s.as_u16(), g["guild"]["name"].as_str()), (201, Some("کتاب\u{200C}خانه")), "{g}");
+
+    // En tête, en queue, doublé, ou entre deux lettres d'une autre écriture que l'arabe : refusé ; les autres invisibles aussi.
+    for bad in [
+        "\u{200C}کتاب",
+        "کتاب\u{200C}",
+        "کتاب\u{200C}\u{200C}خانه",
+        "a\u{200C}b",
+        "м\u{200C}ир",
+        "山\u{200C}田",
+        "کتاب\u{200B}خانه",
+        "کتاب\u{202E}خانه",
+    ] {
+        for field in ["display_name", "bio", "pronouns"] {
+            let (s, v) = lou.call(Method::PATCH, "/users/@me", Some(json!({ field: bad }))).await;
+            assert_eq!((s.as_u16(), code(&v)), (400, "invalid_chars"), "{field} : {bad:?}");
+        }
+        let (s, v) = lou.call(Method::POST, "/guilds", Some(json!({"name": bad}))).await;
+        assert_eq!(s.as_u16(), 400, "serveur {bad:?} : {v}");
+    }
+    let (_, me) = lou.call(Method::GET, "/users/@me", None).await;
+    assert_eq!(me["display_name"].as_str(), Some(name), "un refus ne change rien");
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
 async fn invisible_characters_are_refused_in_profile_text_but_joined_emoji_pass(pool: PgPool) {
     // Beaucoup de modifications d'affilée : le plafond par minute n'est pas ce qu'on teste ici.
     let (base, _) = spawn_with(pool, |c| c.auth_per_min = 100_000).await;
