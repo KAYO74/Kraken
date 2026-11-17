@@ -388,6 +388,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_size_refusal_has_an_english_text_in_the_catalogue() {
+        for max in [1, 1024 * 1024, 25 * 1024 * 1024, 26_000_000] {
+            crate::error::coverage::assert_translated(&too_large(max).2);
+        }
+        assert_eq!(too_large(25 * 1024 * 1024).2, "Ce fichier pèse trop lourd : 25 Mo au plus.");
+    }
+
+    #[test]
     fn names_are_cleaned() {
         assert_eq!(clean_name("../../etc/passwd"), "passwd");
         assert_eq!(clean_name("C:\\Users\\moi\\photo.png"), "photo.png");

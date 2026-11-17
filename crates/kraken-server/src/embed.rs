@@ -53,7 +53,7 @@ pub async fn run(state: &AppState, job: &Job) -> Result<(), String> {
         .get("message_id")
         .and_then(|v| v.as_str())
         .and_then(|s| s.parse().ok())
-        .ok_or("message_id manquant")?;
+        .ok_or("message_id manquant")?; // i18n-ok : erreur de tâche (journal), pas un message de l'API
     if !state.cfg.link_previews {
         return Ok(());
     }

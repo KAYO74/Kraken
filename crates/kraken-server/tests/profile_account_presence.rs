@@ -966,12 +966,14 @@ async fn a_persian_display_name_keeps_its_half_space_between_letters(pool: PgPoo
     let (s, g) = lou.call(Method::POST, "/guilds", Some(json!({"name": "کتاب\u{200C}خانه"}))).await;
     assert_eq!((s.as_u16(), g["guild"]["name"].as_str()), (201, Some("کتاب\u{200C}خانه")), "{g}");
 
-    // En tête, en queue, doublé, ou entre deux lettres latines : refusé ; les autres invisibles aussi.
+    // En tête, en queue, doublé, ou entre deux lettres d'une autre écriture que l'arabe : refusé ; les autres invisibles aussi.
     for bad in [
         "\u{200C}کتاب",
         "کتاب\u{200C}",
         "کتاب\u{200C}\u{200C}خانه",
         "a\u{200C}b",
+        "м\u{200C}ир",
+        "山\u{200C}田",
         "کتاب\u{200B}خانه",
         "کتاب\u{202E}خانه",
     ] {

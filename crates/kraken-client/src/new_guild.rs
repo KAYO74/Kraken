@@ -13,19 +13,12 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 
-use crate::i18n::{t, tf};
+use crate::i18n::{lang, t, tf};
 use crate::icon_picker::{IconFile, IconPicker};
 use crate::icons::{Icon, lu};
 use crate::shell::first_text;
 use crate::store::store;
-use crate::tk;
 use crate::ui::{Header, initials};
-
-/// Le nom d'un salon du modèle, dans la langue de l'interface. Au catalogue, `annonces` est déjà le type de salon
-/// « salon d'annonces » (`shell.rs`) : le salon du modèle a sa propre clé (voir `guild::label`).
-fn slot_name(name: &str) -> String {
-    if name == "annonces" { crate::guild::label(tk!("annonces{contexte}")) } else { t(name) }
-}
 
 /// Ce que dessine la carte d'un modèle.
 fn template_icon(id: &str) -> icondata_core::Icon {
@@ -221,7 +214,7 @@ pub fn CreateGuild() -> impl IntoView {
                                     <li>
                                         <Icon icon=if voice { lu::LuVolume2 } else { lu::LuHash } small=true/>
                                         <span class="k-sr">{if voice { t("Salon vocal") } else { t("Salon textuel") }}" "</span>
-                                        {slot_name(slot.name)}
+                                        {slot.name.get(lang())}
                                     </li>
                                 }
                             }).collect_view()}

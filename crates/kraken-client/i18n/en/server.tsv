@@ -1,6 +1,9 @@
-# Catalogue anglais, groupe « server » : les messages d'erreur du serveur (français, statiques), traduits à
-# l'affichage par api.rs (`from_server`). Le français doit être le texte exact du serveur. Un message où une
-# valeur est glissée (format!) n'y est pas : il reste en français. Voir ../README.md et `i18n-check.py --server`.
+# Catalogue anglais, groupe « server » : les messages d'erreur du serveur (français), traduits à l'affichage par
+# api.rs (`from_server`). Le français doit être le texte exact du serveur. Un message où une valeur est glissée
+# (format!, constante du noyau) y est en gabarit à {variables} (même convention que `tf`) : le client le retrouve,
+# en tire les valeurs et remplit le gabarit anglais ; la valeur reste telle quelle (`{f}` : un nom de champ
+# technique), sauf `{champ}` : un libellé français que le catalogue traduit quand il le connaît. Les gabarits du
+# serveur n'ont pas de variables voisines. Voir ../README.md et `i18n-check.py --server`.
 
 # Connexion, session, accès (error.rs, auth.rs)
 Identifiant ou mot de passe incorrect.	Incorrect username or password.
@@ -21,6 +24,7 @@ Trop d'essais. Attends une minute.	Too many attempts. Wait a minute.
 Erreur du serveur, réessaie.	Server error. Try again.
 
 # Comptes, profil, mot de passe
+Adresse e-mail invalide.	Invalid email address.
 Mot de passe : 8 caractères au minimum.	Password: at least 8 characters.
 Pseudo : 2 à 32 caractères parmi a-z, 0-9, _ et .	Username: 2 to 32 characters from a-z, 0-9, _ and .
 Ce pseudo est réservé : choisis-en un autre.	This username is reserved: choose another one.
@@ -35,6 +39,7 @@ C'est ton propre pseudo.	That's your own username.
 
 # Fichiers, images, emojis
 Trop de fichiers en attente : envoie un message ou retire-en avant d'en ajouter.	Too many pending files: send a message or remove some before adding more.
+Envoi interrompu.	Upload interrupted.
 Ce fichier est vide.	This file is empty.
 Ce fichier n'est pas une image lisible : choisis un PNG, un JPEG, un WebP ou un GIF.	This file isn't a readable image: choose a PNG, JPEG, WebP or GIF.
 20 emojis différents au plus sur un message.	At most 20 different emojis per message.
@@ -61,6 +66,7 @@ Un serveur ou un salon, l'un des deux.	Provide exactly one: a server or a channe
 Les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés dans un nom ou un motif.	Invisible characters (zero-width space, text direction change, filler) aren't allowed in a name or pattern.
 Le nom d'un rôle compte de 1 à 100 caractères.	A role name is 1 to 100 characters long.
 Cette couleur n'existe pas dans la palette.	This color isn't in the palette.
+Droit inconnu.	Unknown permission.
 @everyone ne peut être ni renommé, ni supprimé, ni donné.	@everyone can't be renamed, deleted or assigned.
 Ce changement te retirerait l'accès à ce salon, ou le droit de le gérer.	This change would remove your access to this channel, or your permission to manage it.
 Le nom retapé ne correspond pas à celui du serveur.	The name you typed doesn't match the server's name.
@@ -104,3 +110,43 @@ Ce salon n'est pas un salon vocal.	This channel isn't a voice channel.
 Ton application est trop ancienne pour les appels : mets-la à jour.	Your app is too old for calls: update it.
 Offre WebRTC trop longue.	WebRTC offer too long.
 Connexion vocale refusée : offre WebRTC inattendue.	Voice connection refused: unexpected WebRTC offer.
+
+# Messages à valeur glissée : limites, valeurs refusées, attentes
+Déjà utilisé : {f}.	Already in use: {f}.
+Valeur refusée : {f}.	Value rejected: {f}.
+Ce serveur a déjà ses {n} emojis : retires-en un pour en ajouter.	This server already has its {n} emojis: remove one to add another.
+Ce salon a déjà {n} messages épinglés : désépingles-en un d'abord.	This channel already has {n} pinned messages: unpin one first.
+Un groupe réunit de 3 à {n} personnes, toi compris.	A group has 3 to {n} people, including you.
+Ce groupe est complet : {n} personnes au plus.	This group is full: {n} people at most.
+Le nom d'un salon compte de 1 à {n} caractères, sans caractère de contrôle.	A channel name is 1 to {n} characters long, with no control characters.
+Un serveur compte {n} salons et catégories au plus.	A server can have at most {n} channels and categories.
+Le sujet tient en {n} caractères au plus, et seuls les salons d'écriture en ont un.	A topic is {n} characters at most, and only text channels have one.
+Tu as déjà {n} invitations actives. Révoque-en une.	You already have {n} active invitations. Revoke one.
+Une invitation sert {n} fois au plus (0 : sans limite).	An invitation can be used {n} times at most (0: no limit).
+{n} réglages de droits au plus par salon.	At most {n} permission settings per channel.
+Le nom tient en {n} caractères au plus.	The name is {n} characters at most.
+La raison tient en {n} caractères au plus.	The reason is {n} characters at most.
+On peut effacer les messages de {n} heures au plus.	You can delete messages from the last {n} hours at most.
+{n} rôles au plus, et l'ordre doit les citer tous.	At most {n} roles, and the order must list them all.
+Mode lent : encore {n} s avant ton prochain message.	Slow mode: {n} s until your next message.
+Tu as déjà changé ton pseudo {n} fois en une heure. Réessaie dans {d} s.	You've already changed your username {n} times in an hour. Try again in {d} s.
+Tu as déjà changé ton pseudo {n} fois en une heure. Réessaie dans {d} min.	You've already changed your username {n} times in an hour. Try again in {d} min.
+Ce salon vocal est complet ({n} personnes au plus).	This voice channel is full ({n} people at most).
+Aucun compte ne porte le pseudo « {nom} ». Vérifie son orthographe.	No account has the username "{nom}". Check the spelling.
+`{f}` : un identifiant attendu.	`{f}` must be an ID.
+
+# Profil : le libellé du champ ({champ}) est traduit à part
+{champ} : {n} caractères au plus.	{champ}: {n} characters at most.
+{champ} : {n} caractères au plus, sans retour à la ligne.	{champ}: {n} characters at most, no line breaks.
+{champ} : les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés.	{champ}: invisible characters (zero-width space, text direction change, filler) aren't allowed.
+{champ} : écris au moins un caractère visible, ou laisse le champ vide.	{champ}: write at least one visible character, or leave the field empty.
+
+# Images, animations et fichiers : limites de poids et de forme
+Ce fichier pèse trop lourd : {n} Mo au plus.	This file is too large: {n} MB at most.
+Cette image pèse trop lourd : {n} Mo au plus.	This image is too large: {n} MB at most.
+Cette image pèse trop lourd : {n} Ko au plus.	This image is too large: {n} KB at most.
+Cette image est trop petite : {n} pixels de côté au moins.	This image is too small: it must be at least {n} pixels on each side.
+Cette image est trop grande : {n} pixels de côté et {m} millions de pixels au plus. Réduis-la avant de l'envoyer.	This image is too big: {n} pixels per side and {m} million pixels at most. Reduce it before uploading.
+Cette image est trop allongée : son grand côté ne doit pas dépasser {n} fois son petit côté.	This image is too elongated: its long side must not exceed {n} times its short side.
+Cette animation est trop lourde à afficher : {n} pixels de côté et {m} images au plus.	This animation is too heavy to display: {n} pixels per side and {m} frames at most.
+Cette animation est trop allongée : elle doit rester presque carrée ({n} pour 1 au plus).	This animation is too elongated: it must stay almost square ({n} to 1 at most).

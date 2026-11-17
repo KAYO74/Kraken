@@ -11,7 +11,7 @@ Mode d'emploi et conventions : crates/kraken-client/i18n/README.md.
                                                   (`// i18n-ok` en fin de ligne : français à ne pas traduire, ignoré)
     python3 scripts/i18n-check.py --grep Fermer   les entrées de catalogue qui contiennent ce texte
     python3 scripts/i18n-check.py --missing       les lignes « français<TAB> » à compléter (clés sans entrée anglaise)
-    python3 scripts/i18n-check.py --server        les messages français du serveur absents de server.tsv
+    python3 scripts/i18n-check.py --server        les messages français du serveur (format! compris) que server.tsv ne couvre pas
 
 Contrôle complet. ERREURS (code de sortie 1) : un littéral passé à t(, tf(, tn(, tnf( ou tk!( sans entrée
 dans une langue ; une entrée en double (dans un fichier ou entre fichiers) ; une ligne de catalogue mal
@@ -32,7 +32,8 @@ CATALOGS = CLIENT / "i18n"
 SERVER_DIRS = [ROOT / "crates" / "kraken-server" / "src", ROOT / "crates" / "kraken-db" / "src"]
 # Les noms français des emojis du sélecteur (donnée du noyau) : le client les traduit à l'affichage avec `t(nom)`.
 EMOJI_SRC = ROOT / "crates" / "kraken-core" / "src" / "emoji.rs"
-# Les modèles de serveur (donnée du noyau) : leurs noms, descriptions et noms de salons sont traduits à l'affichage.
+# Les modèles de serveur (donnée du noyau) : le nom et la description d'une carte sont traduits à l'affichage ; les noms
+# des catégories et des salons, eux, existent déjà dans les deux langues dans le noyau (`Label`, jamais au catalogue).
 TEMPLATES_SRC = ROOT / "crates" / "kraken-core" / "src" / "templates.rs"
 # Fonctions dont les arguments littéraux sont des clés de traduction : nom -> numéros d'arguments (depuis 0).
 KEY_ARGS = {"t": (0,), "tf": (0,), "tn": (0, 1), "tnf": (0, 1), "tk!": (0,)}
@@ -297,6 +298,11 @@ def placeholders(text):
     return sorted(re.findall(r"\{([A-Za-z0-9_]+)\}", text))
 
 
+def shape(text):
+    """Un texte où chaque `{…}` est anonyme : `{MAX_PINS}` du serveur et `{n}` du catalogue se reconnaissent."""
+    return re.sub(r"\{[^{}]*\}", "{}", text)
+
+
 # ───────────── heuristique « français non enveloppé » ─────────────
 
 FRENCH_WORDS = set("""
@@ -415,22 +421,39 @@ def cmd_grep(needle):
     print(f"-- {hits} entrée(s)")
 
 
+SQL = re.compile(r"\s*(select|insert|update|delete|with|alter|create|drop|from)\b", re.I)
+# Les appels qui fabriquent une erreur d'API : une phrase qui finit par un point y est un message pour l'utilisateur.
+ERROR_CALLS = {"invalid", "AppError", "Self"}
+
+
 def cmd_server():
+    """Les messages français du serveur (`format!` compris) que le client ne sait pas traduire : ni dans `server.tsv`
+    tels quels, ni couverts par un de ses gabarits à `{variables}` (comparés sans le nom des variables)."""
     cat = {}
     errors = []
     if (CATALOGS / "en").is_dir():
         cat = load_catalog(CATALOGS / "en", errors)
+    known = set(cat) | {shape(k) for k in cat}
     rows = set()
     for f, tok, names, in_test in server_literals():
-        if in_test or tok.val in cat or not looks_french(tok.val) or " " not in tok.val.strip():
+        text = tok.val
+        if in_test or text in known or shape(text) in known or tok.line in ok_lines(f):
             continue
-        if any(n in DEV_CALLS or n in ("tracing", "info!", "warn!") for n in names):
+        # Pas des messages d'API : la base ne donne que des raisons (`DbError::Invalid("pin_limit")`), les tests et la
+        # graine des textes de démonstration, les tâches de fond et les aperçus de liens leurs journaux et leurs e-mails.
+        if "kraken-db" in f.parts or f.name.startswith("tests") or f.name in ("seed.rs", "jobs.rs", "fetch.rs"):
             continue
-        rows.add((rel(f), tok.line, re.sub(r"\s+", " ", tok.val).strip()))
+        if SQL.match(text) or any(n in DEV_CALLS or n in ("tracing", "info!", "warn!") for n in names):
+            continue
+        sentence = any(n in ERROR_CALLS for n in names) and text.rstrip().endswith((".", "…", "!", "?")) and " " in text.strip()
+        if not sentence and (not looks_french(text) or " " not in text.strip()):
+            continue
+        rows.add((rel(f), tok.line, re.sub(r"\s+", " ", text).strip()))
     for path, line, text in sorted(rows):
         print(f"{path}:{line}: {text if len(text) <= 110 else text[:107] + '...'}")
-    print(f"-- {len(rows)} message(s) français du serveur absents du catalogue (heuristique : à juger ; "
-          "un message avec une valeur interpolée reste en français)")
+    print(f"-- {len(rows)} message(s) français du serveur absents du catalogue (heuristique : à juger ; un message avec une "
+          "valeur glissée doit avoir son gabarit à {variables} dans server.tsv ; `// i18n-ok` en fin de ligne écarte un "
+          "texte qui n'est pas pour l'interface)")
 
 
 def cmd_missing():
@@ -460,8 +483,9 @@ def emoji_names():
 
 
 def template_names():
-    """Les textes des modèles de serveur de `kraken-core` : `name:`, `description:` et les noms de salons `text("…")`
-    et `voice("…")` de la constante `ALL` (les noms de catégories ne sont pas montrés par le client)."""
+    """Les textes français des cartes de modèles de `kraken-core` : `name:` et `description:` de la constante `ALL`.
+    Les noms des catégories et des salons (`group("fr", "en", …)`, `text("fr", "en")`, `voice("fr", "en")`) portent déjà
+    leur anglais dans le noyau : le catalogue ne les traduit pas."""
     if not TEMPLATES_SRC.is_file():
         return set()
     text = TEMPLATES_SRC.read_text(encoding="utf-8")
@@ -469,7 +493,7 @@ def template_names():
     end = text.find("\n];", start)
     body = text[start:end] if start >= 0 and end > start else ""
     lit = r'"((?:[^"\\]|\\.)*)"'
-    found = re.findall(r"\b(?:name|description):\s*" + lit, body) + re.findall(r"\b(?:text|voice)\(\s*" + lit, body)
+    found = re.findall(r"\b(?:name|description):\s*" + lit, body)
     return {decode(x) for x in found}
 
 
@@ -485,7 +509,7 @@ def cmd_check():
         if key:
             keys.setdefault(tok.val, []).append((f, tok.line))
     i18n_rs = (SRC / "i18n.rs").read_text(encoding="utf-8")
-    server_texts = {tok.val for _, tok, _, in_test in server_literals() if not in_test}
+    server_texts = {shape(tok.val) for _, tok, _, in_test in server_literals() if not in_test}
     emojis = emoji_names()
     templates = template_names()
     for lang_dir in lang_dirs:
@@ -511,7 +535,7 @@ def cmd_check():
             if lang == "en" and (re.search(r"\s[:?!;]", value) or "«" in value or "»" in value):
                 warnings.append(f"{rel(f)}:{no}: [{lang}] ponctuation française dans la traduction : {value[:60]!r}")
             if f.name == "server.tsv":
-                if key not in server_texts:
+                if shape(key) not in server_texts:
                     warnings.append(f"{rel(f)}:{no}: [{lang}] message absent des sources du serveur : {key[:60]!r}")
             elif key not in keys and key not in emojis and key not in templates:
                 warnings.append(f"{rel(f)}:{no}: [{lang}] entrée inutilisée : {key[:60]!r}")

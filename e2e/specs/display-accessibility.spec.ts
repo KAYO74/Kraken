@@ -836,6 +836,18 @@ test.describe('largeur mobile', () => {
     await page.goto('/settings/language');
     await a11y(page);
     await noScroll(page);
+    // La barre d'onglets défile de côté : l'onglet ouvert (« Langue et heure », le dernier) est amené dans la vue.
+    const tab = page.locator('.k-settings nav a[aria-current="page"]');
+    await expect(tab).toHaveText('Langue et heure');
+    await expect(tab).toBeInViewport({ ratio: 1 });
+    expect((await tab.boundingBox())!.x).toBeGreaterThanOrEqual(0);
+    // Un autre onglet ouvert vient à son tour au centre ; le premier revient en vue.
+    await page.getByRole('link', { name: 'Mon compte', exact: true }).click();
+    await expect(tab).toHaveText('Mon compte');
+    await expect(tab).toBeInViewport({ ratio: 1 });
+    await page.getByRole('link', { name: 'Langue et heure', exact: true }).click();
+    await expect(tab).toHaveText('Langue et heure');
+    await expect(tab).toBeInViewport({ ratio: 1 });
     const boxes = await group(page, "Format de l'heure").getByRole('radio').evaluateAll((r) => r.map((x) => x.closest('label')!.getBoundingClientRect()));
     expect(new Set(boxes.map((b) => Math.round(b.x))).size).toBe(1);
     boxes.slice(1).forEach((b, i) => expect(b.y).toBeGreaterThan(boxes[i].y));

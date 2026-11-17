@@ -447,7 +447,8 @@ Icône du serveur	Server icon
 Elle remplace les initiales du serveur dans la liste de gauche, chez tous ses membres.	It replaces the server's initials in the list on the left, for all its members.
 Icône actuelle du serveur	Current server icon
 
-# Modèles de serveur (kraken-core/src/templates.rs) : noms, descriptions et noms de salons, traduits à l'affichage
+# Modèles de serveur (kraken-core/src/templates.rs) : noms et descriptions des cartes, traduits à l'affichage ;
+# les noms des catégories et des salons viennent du noyau (`Label`), dans la langue choisie
 Vide	Empty
 Communauté	Community
 Jeux	Gaming
@@ -457,22 +458,3 @@ Annonces, règles et entraide, pour un club ou un projet.	Announcements, rules a
 Trouver des partenaires, parler pendant la partie.	Find teammates and talk during the game.
 Cours, devoirs et salles de travail vocales.	Classes, homework and voice study rooms.
 Discuter, partager ses photos, se retrouver en vocal.	Chat, share photos and hang out in voice.
-général	general
-annonces{contexte}	announcements{contexte}
-règles	rules
-aide	help
-recherche-de-joueurs	looking-for-players
-astuces	tips
-cours	classes
-devoirs	homework
-ressources	resources
-photos	photos
-sorties	outings
-Discussion libre	Open chat
-Partie 1	Game 1
-Partie 2	Game 2
-Pause	Break
-Salle de travail	Study room
-Révisions en groupe	Group study
-Le canapé	The couch
-Soirée film	Movie night

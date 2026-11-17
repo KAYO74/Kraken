@@ -5,6 +5,7 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use kraken_core::i18n::Lang;
 use kraken_core::perms;
 use kraken_proto::*;
 use serde::Deserialize;
@@ -62,7 +63,10 @@ pub async fn create_guild(
     auth: Auth,
     Json(req): Json<CreateGuild>,
 ) -> ApiResult<(StatusCode, Json<GuildState>)> {
-    let g = state.db.create_guild(auth.user.id, &req.name, req.template.as_deref()).await?;
+    // La langue de l'interface de celui qui crée : les catégories et les salons du modèle sont nommés dans cette
+    // langue ; une langue absente ou inconnue donne le français.
+    let lang = req.lang.as_deref().and_then(Lang::from_tag).unwrap_or(Lang::DEFAULT);
+    let g = state.db.create_guild_in(auth.user.id, &req.name, req.template.as_deref(), lang).await?;
     state.hub.send(&[auth.user.id], Event::GuildCreate(Box::new(g.clone())));
     Ok((StatusCode::CREATED, Json(g)))
 }

@@ -226,6 +226,66 @@ test.describe('navigateur en anglais', () => {
     await expect(html(page)).toHaveAttribute('lang', 'en');
     await expect(said(page, 'Example').first()).toHaveText('Example: 14:30');
   });
+
+  test('I18N-H13 à 390 px, après un changement de langue, l’onglet « Langue et heure » est dans la vue', async ({ signedIn }) => {
+    const { page } = await signedIn('en-US', { width: 390, height: 844 });
+    await page.goto('/settings/language');
+    const tab = page.locator('.k-settings nav a[aria-current="page"]');
+    await expect(tab).toHaveText('Language and time');
+    await expect(tab).toBeInViewport({ ratio: 1 });
+    // La page se recharge dans l'autre langue, sur le même onglet : il reste en vue (et dans l'autre sens aussi).
+    await page.getByRole('dialog', { name: 'Settings' }).getByRole('combobox', { name: 'Language' }).selectOption('fr');
+    await expect(html(page)).toHaveAttribute('lang', 'fr');
+    await expect(tab).toHaveText('Langue et heure');
+    await expect(tab).toBeInViewport({ ratio: 1 });
+    await page.getByRole('dialog', { name: 'Réglages' }).getByRole('combobox', { name: 'Langue' }).selectOption('en');
+    await expect(html(page)).toHaveAttribute('lang', 'en');
+    await expect(tab).toHaveText('Language and time');
+    await expect(tab).toBeInViewport({ ratio: 1 });
+  });
+
+  test('I18N-H14 messages du serveur à valeur en anglais : le gabarit est traduit, la valeur et le libellé du champ suivent', async ({ signedIn, allow }) => {
+    allow.push(/status of (40[0-9]|429)/); // le pseudo inconnu, le caractère invisible, le délai (429) : refusés exprès
+    const { page: p } = await signedIn('en-US');
+    const french = /Tu as|Réessaie|Aucun compte|caractères|invisibles|Nom affiché|Pronoms/;
+
+    // Un pseudo bien formé que personne ne porte : la valeur, mise en minuscules par le serveur, reste telle quelle.
+    await p.goto('/channels/@me');
+    await p.getByRole('tablist', { name: 'Filter friends' }).getByRole('tab', { name: 'Add a friend' }).click();
+    const add = p.getByRole('tabpanel', { name: 'Add a friend' });
+    await add.getByLabel("Your friend's username").fill('Nobody.Here_2');
+    await add.getByRole('button', { name: 'Send request' }).click();
+    await expect(add.getByRole('alert')).toHaveText('No account has the username "nobody.here_2". Check the spelling.');
+    expect(await p.locator('body').innerText()).not.toMatch(french);
+
+    // Un caractère invisible dans le profil : le libellé du champ (français côté serveur) est traduit lui aussi.
+    await p.goto('/settings/profiles');
+    const form = p.getByRole('form', { name: 'What others see' });
+    const alert = form.getByRole('alert');
+    await form.getByLabel('Display name').fill('a\u200Bb');
+    await form.getByRole('button', { name: 'Save' }).click();
+    await expect(alert).toHaveText("Display name: invisible characters (zero-width space, text direction change, filler) aren't allowed.");
+    await form.getByLabel('Display name').fill('');
+    await form.getByLabel('Pronouns').fill('a\u200Bb');
+    await form.getByRole('button', { name: 'Save' }).click();
+    await expect(alert).toHaveText("Pronouns: invisible characters (zero-width space, text direction change, filler) aren't allowed.");
+    expect(await p.locator('body').innerText()).not.toMatch(french);
+
+    // Le délai entre deux changements de pseudo : deux changements permis par heure, le troisième est refusé avec l'attente.
+    await p.goto('/settings/account');
+    const username = p.getByRole('form', { name: 'Username' });
+    for (const _ of [1, 2]) {
+      await username.getByLabel('New username').fill(unique('i18nc'));
+      await username.getByLabel('Current password').fill(PASSWORD);
+      await username.getByRole('button', { name: 'Change username' }).click();
+      await expect(username.getByRole('status').filter({ hasText: 'Your username is now @' })).toBeVisible();
+    }
+    await username.getByLabel('New username').fill(unique('i18nc'));
+    await username.getByLabel('Current password').fill(PASSWORD);
+    await username.getByRole('button', { name: 'Change username' }).click();
+    await expect(username.getByRole('alert')).toHaveText(/^You've already changed your username 2 times in an hour\. Try again in \d+ (s|min)\.$/);
+    expect(await p.locator('body').innerText()).not.toMatch(french);
+  });
 });
 
 // ───────── le choix d'une langue depuis un navigateur français ─────────
@@ -371,6 +431,10 @@ for (const [name, locale] of [['français', 'fr-FR'], ['anglais', 'en-US']] as c
       await expect(app.getByRole('combobox', { name: /^(Langue|Language)$/ })).toBeVisible();
       await noScroll(app);
       await a11y(app);
+      // La barre d'onglets défile de côté : l'onglet ouvert (« Langue et heure », le dernier) est dans la vue.
+      const tab = app.locator('.k-settings nav a[aria-current="page"]');
+      await expect(tab).toHaveText(/^(Langue et heure|Language and time)$/);
+      await expect(tab).toBeInViewport({ ratio: 1 });
       await app.goto('/settings/appearance');
       await expect(app.getByRole('group', { name: /^(Thème|Theme)$/ })).toBeVisible();
       await noScroll(app);

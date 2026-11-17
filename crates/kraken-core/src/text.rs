@@ -9,7 +9,7 @@ pub const ZWJ: char = '\u{200D}';
 pub const VS16: char = '\u{FE0F}';
 /// Le non-liant sans chasse (ZWNJ, « demi-espace ») : il sépare deux lettres sans espace visible, et la
 /// langue persane ne s'écrit pas correctement sans lui (« می‌خواهم »). Permis seulement entre deux lettres
-/// (voir [`has_hidden`]) ; partout ailleurs il reste invisible, donc refusé.
+/// d'écriture arabe (voir [`has_hidden`]) ; partout ailleurs il reste invisible, donc refusé.
 pub const ZWNJ: char = '\u{200C}';
 
 /// Les points de code « ignorables par défaut » d'Unicode (propriété `Default_Ignorable_Code_Point`,
@@ -52,22 +52,24 @@ pub fn has_visible(s: &str) -> bool {
     s.chars().any(|c| !c.is_whitespace() && !c.is_control() && !is_hidden(c) && c != ZWJ && c != VS16)
 }
 
-/// Une lettre latine (de l'ASCII aux latins étendus) : le ZWNJ n'y sert à rien, et entre deux lettres latines
-/// il ferait deux noms qui se lisent pareil sans être égaux.
-fn is_latin(c: char) -> bool {
-    c.is_ascii_alphabetic() || matches!(c, '\u{00C0}'..='\u{024F}' | '\u{1E00}'..='\u{1EFF}')
+/// Une lettre de l'écriture arabe (arabe, persan, ourdou, kurde…) : la seule où le ZWNJ a un sens (« می‌خواهم »).
+/// Entre deux lettres d'une autre écriture il ferait deux noms qui se lisent pareil sans être égaux
+/// (« мир » et « м‌ир », « ab » et « a‌b »).
+fn is_arabic_letter(c: char) -> bool {
+    c.is_alphabetic()
+        && matches!(u32::from(c), 0x0600..=0x06FF | 0x0750..=0x077F | 0x08A0..=0x08FF | 0xFB50..=0xFDFF | 0xFE70..=0xFEFF)
 }
 
-/// Le ZWNJ entre `prev` et `next` joint-il deux lettres ? Il en faut une de chaque côté (donc ni en tête, ni
-/// en queue, ni deux de suite), et au moins l'une n'est pas latine.
+/// Le ZWNJ entre `prev` et `next` joint-il deux lettres arabes ? Il en faut une de chaque côté (donc ni en tête,
+/// ni en queue, ni deux de suite), toutes deux d'écriture arabe.
 fn joins_letters(prev: Option<char>, next: Option<char>) -> bool {
     let (Some(a), Some(b)) = (prev, next) else { return false };
-    a.is_alphabetic() && b.is_alphabetic() && !(is_latin(a) && is_latin(b))
+    is_arabic_letter(a) && is_arabic_letter(b)
 }
 
 /// Le texte contient-il un caractère invisible refusé ? Tous ceux d'[`is_hidden`], sauf le ZWNJ placé entre deux
-/// lettres dont l'une au moins n'est pas latine (un mot persan). Le ZWNJ en tête ou en queue, doublé, ou
-/// entre deux lettres latines, reste refusé.
+/// lettres d'écriture arabe (un mot persan). Le ZWNJ en tête ou en queue, doublé, ou entre deux lettres d'une
+/// autre écriture (latin, cyrillique, grec, CJK…), reste refusé.
 pub fn has_hidden(s: &str) -> bool {
     let mut prev = None;
     let mut chars = s.chars().peekable();
@@ -146,7 +148,7 @@ pub fn initials_of(name: &str) -> String {
 }
 
 /// Un nom (rôle, salon, serveur) : rien d'invisible dedans (espace de largeur nulle, changement de
-/// sens d'écriture, remplisseur ; le ZWNJ entre deux lettres passe, voir [`has_hidden`]) et au moins un
+/// sens d'écriture, remplisseur ; le ZWNJ entre deux lettres arabes passe, voir [`has_hidden`]) et au moins un
 /// caractère visible.
 pub fn visible_name(s: &str) -> bool {
     !has_hidden(s) && has_visible(s)
@@ -169,14 +171,8 @@ mod tests {
     #[test]
     fn the_half_space_joins_letters_of_a_script_that_needs_it() {
         // Persan : « می‌خواهم » (je veux), « کتاب‌خانه » (bibliothèque), « نیم‌فاصله ».
-        for word in [
-            "می\u{200C}خواهم",
-            "کتاب\u{200C}خانه",
-            "نیم\u{200C}فاصله",
-            "Zoë کتاب\u{200C}خانه",
-            "a\u{200C}ک",
-            "ک\u{200C}a",
-        ] {
+        for word in ["می\u{200C}خواهم", "کتاب\u{200C}خانه", "نیم\u{200C}فاصله", "Zoë کتاب\u{200C}خانه"]
+        {
             assert!(!has_hidden(word), "{word:?}");
             assert!(visible_name(word), "{word:?}");
         }
@@ -197,8 +193,22 @@ mod tests {
             assert!(has_hidden(bad), "{bad:?}");
             assert!(!visible_name(bad), "{bad:?}");
         }
-        // Entre deux lettres latines il ne sert à rien : « ab » et « a‌b » se liraient pareil.
-        for bad in ["a\u{200C}b", "Zoë\u{200C}Lou", "é\u{200C}è", "ǆ\u{200C}a"] {
+        // Hors de l'écriture arabe il ne sert à rien et ferait des sosies : « ab » et « a‌b », « мир » et « м‌ир »,
+        // « 山田 » et « 山‌田 » se liraient pareil. Un mélange latin et arabe est refusé aussi.
+        for bad in [
+            "a\u{200C}b",
+            "Zoë\u{200C}Lou",
+            "é\u{200C}è",
+            "ǆ\u{200C}a",
+            "м\u{200C}ир",
+            "при\u{200C}вет",
+            "山\u{200C}田",
+            "α\u{200C}β",
+            "ש\u{200C}ל",
+            "a\u{200C}ک",
+            "ک\u{200C}a",
+        ] {
+            assert!(has_hidden(bad), "{bad:?}");
             assert!(!visible_name(bad), "{bad:?}");
         }
     }

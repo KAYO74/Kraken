@@ -44,55 +44,101 @@ fn shape(g: &GuildState) -> Vec<(String, Vec<(ChannelKind, String)>)> {
 async fn every_template_builds_its_structure_and_names_the_first_text_channel_as_system(pool: PgPool) {
     let db = Db::from_pool(pool);
     let own = user(&db, "lou").await;
-    for t in &templates::ALL {
-        let g = db.create_guild(own.id, "Abysse", Some(t.id)).await.unwrap();
-        let want: Vec<_> = t
-            .groups
-            .iter()
-            .map(|grp| {
-                (
-                    grp.name.to_string(),
-                    grp.slots
-                        .iter()
-                        .map(|s| {
-                            let kind = match s.kind {
-                                templates::SlotKind::Text => ChannelKind::Text,
-                                templates::SlotKind::Voice => ChannelKind::Voice,
-                            };
-                            (kind, s.name.to_string())
-                        })
-                        .collect(),
-                )
-            })
-            .collect();
-        assert_eq!(shape(&g), want, "{}", t.id);
-        // Les noms des salons textuels sont ceux que `clean_channel_name` garde tels quels.
-        for c in g.channels.iter().filter(|c| c.kind == ChannelKind::Text) {
-            let n = c.name.as_deref().unwrap();
-            assert_eq!(clean_channel_name(ChannelKind::Text, n).as_deref(), Ok(n), "{}", t.id);
-        }
-        // Salon système : le premier salon textuel du modèle.
-        let system: Option<Id> = sqlx::query_scalar("select system_channel_id from guilds where id = $1")
-            .bind(g.guild.id)
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
-        let first = g
-            .channels
-            .iter()
-            .find(|c| c.name.as_deref() == t.first_text().map(|s| s.name) && c.kind == ChannelKind::Text);
-        assert_eq!(system, first.map(|c| c.id), "{}", t.id);
-        // Pas de rôle en plus de @everyone, un seul membre, et rien dans le journal.
-        assert_eq!(g.roles.len(), 1, "{}", t.id);
-        assert_eq!((g.members.len(), g.guild.icon.clone()), (1, None));
-        assert!(
-            db.audit_log(g.guild.id, own.id, &AuditQuery { limit: 10, ..Default::default() })
+    for lang in Lang::ALL {
+        for t in &templates::ALL {
+            let g = db.create_guild_in(own.id, "Abysse", Some(t.id), lang).await.unwrap();
+            let want: Vec<_> = t
+                .groups
+                .iter()
+                .map(|grp| {
+                    (
+                        grp.name.get(lang).to_string(),
+                        grp.slots
+                            .iter()
+                            .map(|s| {
+                                let kind = match s.kind {
+                                    templates::SlotKind::Text => ChannelKind::Text,
+                                    templates::SlotKind::Voice => ChannelKind::Voice,
+                                };
+                                (kind, s.name.get(lang).to_string())
+                            })
+                            .collect(),
+                    )
+                })
+                .collect();
+            assert_eq!(shape(&g), want, "{} ({lang:?})", t.id);
+            // Les noms des salons textuels sont ceux que `clean_channel_name` garde tels quels, dans les deux langues.
+            for c in g.channels.iter().filter(|c| c.kind == ChannelKind::Text) {
+                let n = c.name.as_deref().unwrap();
+                assert_eq!(clean_channel_name(ChannelKind::Text, n).as_deref(), Ok(n), "{} ({lang:?})", t.id);
+            }
+            for c in g.channels.iter().filter(|c| c.kind != ChannelKind::Text) {
+                let n = c.name.as_deref().unwrap();
+                assert_eq!(clean_channel_name(c.kind, n).as_deref(), Ok(n), "{} ({lang:?})", t.id);
+            }
+            // Salon système : le premier salon textuel du modèle.
+            let system: Option<Id> = sqlx::query_scalar("select system_channel_id from guilds where id = $1")
+                .bind(g.guild.id)
+                .fetch_one(&db.pool)
                 .await
-                .unwrap()
-                .entries
-                .is_empty()
-        );
+                .unwrap();
+            let first = g
+                .channels
+                .iter()
+                .find(|c| c.name.as_deref() == t.first_text().map(|s| s.name.get(lang)) && c.kind == ChannelKind::Text);
+            assert_eq!(system, first.map(|c| c.id), "{} ({lang:?})", t.id);
+            // Pas de rôle en plus de @everyone, un seul membre, et rien dans le journal.
+            assert_eq!(g.roles.len(), 1, "{}", t.id);
+            assert_eq!((g.members.len(), g.guild.icon.clone()), (1, None));
+            assert!(
+                db.audit_log(g.guild.id, own.id, &AuditQuery { limit: 10, ..Default::default() })
+                    .await
+                    .unwrap()
+                    .entries
+                    .is_empty()
+            );
+        }
     }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_english_server_gets_english_names_and_french_stays_the_default(pool: PgPool) {
+    let db = Db::from_pool(pool);
+    let own = user(&db, "lou").await;
+    let en = db.create_guild_in(own.id, "Abyss", Some("communaute"), Lang::En).await.unwrap();
+    assert_eq!(
+        shape(&en),
+        [
+            (
+                "Welcome".to_string(),
+                vec![(ChannelKind::Text, "announcements".to_string()), (ChannelKind::Text, "rules".to_string())]
+            ),
+            (
+                "Discussions".to_string(),
+                vec![(ChannelKind::Text, "general".to_string()), (ChannelKind::Text, "help".to_string())]
+            ),
+            ("Voice channels".to_string(), vec![(ChannelKind::Voice, "Open chat".to_string())]),
+        ]
+    );
+    let empty = db.create_guild_in(own.id, "Abyss", None, Lang::En).await.unwrap();
+    assert_eq!(
+        shape(&empty),
+        [
+            ("Text channels".to_string(), vec![(ChannelKind::Text, "general".to_string())]),
+            ("Voice channels".to_string(), vec![(ChannelKind::Voice, "General".to_string())]),
+        ]
+    );
+    // Sans langue (`create_guild`), ou en français : l'ancienne structure, mot pour mot.
+    let fr = db.create_guild(own.id, "Abysse", Some("communaute")).await.unwrap();
+    let fr2 = db.create_guild_in(own.id, "Abysse", Some("communaute"), Lang::Fr).await.unwrap();
+    assert_eq!(shape(&fr), shape(&fr2));
+    assert_eq!(shape(&fr)[0].1[0].1, "annonces");
+    assert_eq!(shape(&fr)[2].0, "Salons vocaux");
+    // Un modèle inconnu reste refusé, quelle que soit la langue.
+    assert!(matches!(
+        db.create_guild_in(own.id, "Abyss", Some("nope"), Lang::En).await,
+        Err(DbError::Invalid("template"))
+    ));
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

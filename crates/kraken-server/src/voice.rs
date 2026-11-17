@@ -81,11 +81,7 @@ pub async fn join(
         Ok(Err(e)) => {
             crate::call::cancel(&state, cid, call).await;
             return Err(match e {
-                JoinError::Full => AppError(
-                    StatusCode::CONFLICT,
-                    "voice_full",
-                    format!("Ce salon vocal est complet ({MAX_VOICE_MEMBERS} personnes au plus)."),
-                ),
+                JoinError::Full => voice_full(),
                 JoinError::BadOffer(e) => {
                     tracing::debug!("vocal {uid} : {e}");
                     AppError::invalid("Connexion vocale refusée : offre WebRTC inattendue.")
@@ -242,8 +238,22 @@ async fn broadcast(db: &Db, hub: &Hub, s: VoiceState, before: Option<Id>) -> Res
     Ok(())
 }
 
+/// Le salon vocal n'a plus de place.
+fn voice_full() -> AppError {
+    AppError(
+        StatusCode::CONFLICT,
+        "voice_full",
+        format!("Ce salon vocal est complet ({MAX_VOICE_MEMBERS} personnes au plus)."),
+    )
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_full_channel_message_has_an_english_text_in_the_catalogue() {
+        crate::error::coverage::assert_translated(&super::voice_full().2);
+    }
+
     #[test]
     fn rtc_ips() {
         let ips = super::parse_ips(" 203.0.113.7, ,192.168.1.20,nimporte quoi,2001:db8::1");

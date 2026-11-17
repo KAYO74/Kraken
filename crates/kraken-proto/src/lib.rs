@@ -354,11 +354,15 @@ pub struct RenameEmoji {
 }
 
 /// `POST /guilds` : le nom, et le modèle de serveur (`kraken_core::templates`) ; sans modèle, « vide ».
+/// `lang` : la langue de l'interface (`fr`, `en`) dans laquelle bâtir les catégories et les salons du
+/// modèle ; absente ou inconnue, le français.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateGuild {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
 }
 
 /// `PATCH /guilds/{id}` : renommer le serveur.

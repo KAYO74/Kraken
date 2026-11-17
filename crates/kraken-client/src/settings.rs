@@ -4,6 +4,8 @@
 //! (`voice_settings.rs`) sont branchés ;
 //! les autres sections ont leur route et leur place dans la navigation.
 
+use gloo_timers::future::TimeoutFuture;
+use leptos::html;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::{use_navigate, use_params_map};
@@ -66,10 +68,29 @@ pub fn Settings() -> impl IntoView {
             <a class="k-navitem" href=format!("/settings/{slug}") aria-current=move || (section() == *slug).then_some("page")>{t(label)}</a>
         }
     }).collect_view();
+    // À 390 px la barre d'onglets défile de côté : l'onglet ouvert vient se placer au centre (après un changement de
+    // langue, la page se recharge sur « Langue et heure », le dixième onglet, hors de l'écran). Sans effet quand la
+    // liste est verticale et tient en entier. Même effet que la page des paramètres d'un serveur (`guild.rs`).
+    let tabs = NodeRef::<html::Nav>::new();
+    Effect::new(move || {
+        section();
+        spawn_local(async move {
+            TimeoutFuture::new(0).await;
+            // La fenêtre peut s'être fermée entre-temps : `try_` plutôt que de paniquer sur une référence retirée.
+            if let Some(a) =
+                tabs.try_get_untracked().flatten().and_then(|n| n.query_selector("a[aria-current]").ok().flatten())
+            {
+                let opts = web_sys::ScrollIntoViewOptions::new();
+                opts.set_inline(web_sys::ScrollLogicalPosition::Center);
+                opts.set_block(web_sys::ScrollLogicalPosition::Nearest);
+                a.scroll_into_view_with_scroll_into_view_options(&opts);
+            }
+        });
+    });
     view! {
         <div class="k-scrim app-settings" node_ref=root>
             <div class="k-settings" role="dialog" aria-modal="true" aria-label=t("Réglages")>
-                <nav aria-label=t("Sections des réglages")>{nav}</nav>
+                <nav aria-label=t("Sections des réglages") node_ref=tabs>{nav}</nav>
                 <main>
                     <div class="app-settings-top">
                         <h2>{move || t(SECTIONS.iter().find(|s| s.1 == section()).map(|s| s.2).unwrap_or(tk!("Réglages")))}</h2>

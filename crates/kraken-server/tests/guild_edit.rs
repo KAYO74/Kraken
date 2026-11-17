@@ -276,6 +276,72 @@ async fn a_template_builds_the_server_and_an_unknown_one_is_a_french_400(pool: P
 }
 
 #[sqlx::test(migrator = "kraken_db::MIGRATOR")]
+async fn the_template_is_built_in_the_language_of_the_request(pool: PgPool) {
+    let (base, _) = spawn(pool).await;
+    let lou = Who::new(&base, "lou").await;
+    // `(catégorie, [(genre, nom)])` du serveur créé, dans l'ordre.
+    type Shape = Vec<(String, Vec<(ChannelKind, String)>)>;
+    let make = |template: &'static str, lang: Option<Value>| {
+        let lou = &lou;
+        async move {
+            let mut body = json!({ "name": "Abyss", "template": template });
+            if let Some(l) = lang {
+                body["lang"] = l;
+            }
+            let (s, v) = lou.call(Method::POST, "/guilds", Some(body)).await;
+            assert_eq!(s, StatusCode::CREATED, "{v}");
+            let g: GuildState = serde_json::from_value(v).unwrap();
+            let mut cats: Vec<&Channel> = g.channels.iter().filter(|c| c.kind == ChannelKind::Category).collect();
+            cats.sort_by_key(|c| (c.position, c.id));
+            let shape: Shape = cats
+                .iter()
+                .map(|cat| {
+                    let mut kids: Vec<&Channel> = g.channels.iter().filter(|c| c.parent_id == Some(cat.id)).collect();
+                    kids.sort_by_key(|c| (c.position, c.id));
+                    (cat.name.clone().unwrap(), kids.iter().map(|c| (c.kind, c.name.clone().unwrap())).collect())
+                })
+                .collect();
+            shape
+        }
+    };
+    let text = |n: &str| (ChannelKind::Text, n.to_string());
+    let voice = |n: &str| (ChannelKind::Voice, n.to_string());
+    let community_en: Shape = vec![
+        ("Welcome".into(), vec![text("announcements"), text("rules")]),
+        ("Discussions".into(), vec![text("general"), text("help")]),
+        ("Voice channels".into(), vec![voice("Open chat")]),
+    ];
+    let community_fr: Shape = vec![
+        ("Accueil".into(), vec![text("annonces"), text("règles")]),
+        ("Discussions".into(), vec![text("général"), text("aide")]),
+        ("Salons vocaux".into(), vec![voice("Discussion libre")]),
+    ];
+
+    // `lang: "en"` (et une étiquette régionale) : tout est en anglais, comme l'aperçu du client.
+    for tag in ["en", "en-GB", "EN_us"] {
+        assert_eq!(make("communaute", Some(json!(tag))).await, community_en, "{tag}");
+    }
+    assert_eq!(
+        make("vide", Some(json!("en"))).await,
+        [("Text channels".to_string(), vec![text("general")]), ("Voice channels".to_string(), vec![voice("General")]),]
+    );
+
+    // Sans `lang`, avec `fr`, une langue inconnue ou vide : le français, comme avant.
+    for lang in [None, Some(json!("fr")), Some(json!("de")), Some(json!("")), Some(json!("english")), Some(json!(null))]
+    {
+        assert_eq!(make("communaute", lang.clone()).await, community_fr, "{lang:?}");
+    }
+    assert_eq!(
+        make("vide", None).await,
+        [("Salons textuels".to_string(), vec![text("général")]), ("Salons vocaux".to_string(), vec![voice("Général")]),]
+    );
+
+    // Un champ `lang` qui n'est pas du texte : refusé comme `template`.
+    let (s, _) = lou.call(Method::POST, "/guilds", Some(json!({ "name": "Autre", "lang": 3 }))).await;
+    assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test(migrator = "kraken_db::MIGRATOR")]
 async fn an_icon_is_set_seen_live_served_replaced_and_removed(pool: PgPool) {
     let (base, dir) = spawn(pool).await;
     let lou = Who::new(&base, "lou").await;

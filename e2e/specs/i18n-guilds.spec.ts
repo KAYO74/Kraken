@@ -52,12 +52,19 @@ const pairs = (lines: string[]) =>
     .map(([fr]) => fr);
 /** Les phrases françaises du catalogue « guilds » : ce qui ne doit plus se lire en anglais. */
 const FRENCH = pairs(catalog.slice(0, split));
-/** Les textes français des modèles (nom, description, salons) : traduits sur la page de création ; sur les pages d'un serveur
- *  né d'un modèle, ce sont les noms de ses salons, des données du serveur. */
-const TEMPLATES = catalog
-  .slice(split)
-  .filter((l) => l && !l.startsWith('#'))
-  .map((l) => l.split('\t') as [string, string])
+/** Les noms français et anglais des catégories et des salons des modèles : une seule table, dans `kraken-core`
+ *  (`group("Accueil", "Welcome", …)`, `text("annonces", "announcements")`). */
+const coreSource = readFileSync(join(__dirname, '../../crates/kraken-core/src/templates.rs'), 'utf8');
+const NAMES = [...coreSource.matchAll(/\b(?:text|voice|group)\(\s*"([^"]+)"\s*,\s*"([^"]+)"/g)].map((m) => [m[1], m[2]] as [string, string]);
+/** Les textes français des modèles (nom et description de la carte, noms des catégories et des salons) : traduits sur la page
+ *  de création ; sur les pages d'un serveur né d'un modèle en français, ce sont les noms de ses salons, des données du serveur. */
+const TEMPLATES = [
+  ...catalog
+    .slice(split)
+    .filter((l) => l && !l.startsWith('#'))
+    .map((l) => l.split('\t') as [string, string]),
+  ...NAMES,
+]
   .filter(([fr, en]) => fr !== en && fr.length >= 5 && !fr.includes('{'))
   .map(([fr]) => fr);
 
@@ -206,7 +213,131 @@ test('I18N-G1 créer un serveur avec un modèle : cartes, liste « Will be creat
   const gid = new URL(p.url()).pathname.split('/')[2];
   const g = await (await (await api(a.token)).get(`${API}/guilds/${gid}`)).json();
   expect(g.guild.name).toBe('Quarter');
-  expect(g.channels.map((c: { name: string }) => c.name)).toEqual(expect.arrayContaining(['devoirs', 'ressources', 'Révisions en groupe']));
+  // Le serveur est bâti en anglais, comme l'aperçu : la langue de l'interface part avec la demande.
+  expect(shapeOf(g)).toEqual({ cats: EN.etudes.cats, channels: EN.etudes.channels });
+  expect(await sidebarOf(p)).toEqual({ cats: EN.etudes.cats, channels: EN.etudes.channels });
+});
+
+/** Ce que chaque modèle bâtit, dans l'ordre d'affichage : le nom de la carte, les catégories et tous les salons. */
+type Built = { card: string; cats: string[]; channels: string[] };
+const EN: Record<string, Built> = {
+  vide: { card: 'Empty', cats: ['Text channels', 'Voice channels'], channels: ['general', 'General'] },
+  communaute: {
+    card: 'Community',
+    cats: ['Welcome', 'Discussions', 'Voice channels'],
+    channels: ['announcements', 'rules', 'general', 'help', 'Open chat'],
+  },
+  jeux: {
+    card: 'Gaming',
+    cats: ['Text channels', 'Voice channels'],
+    channels: ['general', 'looking-for-players', 'tips', 'Game 1', 'Game 2', 'Break'],
+  },
+  etudes: {
+    card: 'Study',
+    cats: ['Study', 'Voice channels'],
+    channels: ['general', 'classes', 'homework', 'resources', 'Study room', 'Group study', 'Break'],
+  },
+  amis: {
+    card: 'Friends',
+    cats: ['Text channels', 'Voice channels'],
+    channels: ['general', 'photos', 'outings', 'The couch', 'Movie night'],
+  },
+};
+const FR: Record<string, Built> = {
+  vide: { card: 'Vide', cats: ['Salons textuels', 'Salons vocaux'], channels: ['général', 'Général'] },
+  communaute: {
+    card: 'Communauté',
+    cats: ['Accueil', 'Discussions', 'Salons vocaux'],
+    channels: ['annonces', 'règles', 'général', 'aide', 'Discussion libre'],
+  },
+  jeux: {
+    card: 'Jeux',
+    cats: ['Salons textuels', 'Salons vocaux'],
+    channels: ['général', 'recherche-de-joueurs', 'astuces', 'Partie 1', 'Partie 2', 'Pause'],
+  },
+  etudes: {
+    card: 'Études',
+    cats: ['Travail', 'Salons vocaux'],
+    channels: ['général', 'cours', 'devoirs', 'ressources', 'Salle de travail', 'Révisions en groupe', 'Pause'],
+  },
+  amis: {
+    card: 'Amis',
+    cats: ['Salons textuels', 'Salons vocaux'],
+    channels: ['général', 'photos', 'sorties', 'Le canapé', 'Soirée film'],
+  },
+};
+
+/** Les catégories, puis tous les salons (catégorie par catégorie), d'un serveur tel que l'API le décrit. */
+function shapeOf(g: { channels: { id: string; name: string; kind: string; parent_id: string | null; position: number }[] }) {
+  const byPosition = (a: { position: number }, b: { position: number }) => a.position - b.position;
+  const cats = g.channels.filter((c) => c.kind === 'category').sort(byPosition);
+  return {
+    cats: cats.map((c) => c.name),
+    channels: cats.flatMap((cat) => g.channels.filter((c) => c.parent_id === cat.id).sort(byPosition).map((c) => c.name)),
+  };
+}
+/** La barre latérale du serveur ouvert : ses catégories et ses salons, dans l'ordre de la page. */
+const sidebarOf = (p: Page) =>
+  p.locator('.app-sidebar').evaluate((root) => ({
+    cats: [...root.querySelectorAll('.k-category')].map((e) => (e as HTMLElement).innerText.trim()),
+    channels: [...root.querySelectorAll('.app-chan .app-ellipsis')].map((e) => (e as HTMLElement).innerText.trim()),
+  }));
+/** La liste « Sera créé » : le nom de chaque salon, sans le mot caché qui en dit le genre. */
+const previewOf = (p: Page) =>
+  p.locator('.app-ng-made li').evaluateAll((els) =>
+    els.map((e) => (e.textContent ?? '').replace(/^\s*(Text channel|Voice channel|Salon textuel|Salon vocal)\s+/, '').trim()),
+  );
+
+/** Crée un serveur d'après chaque modèle, par la page : l'aperçu, le serveur bâti et la barre latérale disent les mêmes noms. */
+async function createFromEveryTemplate(a: Account, api: Api, names: Record<string, Built>, labels: { name: string; create: string; group: string }) {
+  const p = a.page;
+  for (const [id, want] of Object.entries(names)) {
+    await p.goto('/guilds/new');
+    await p.getByRole('radiogroup', { name: labels.group }).getByRole('radio', { name: new RegExp(`^${want.card}`) }).check({ force: true });
+    await expect(p.locator('.app-ng-made li')).toHaveCount(want.channels.length);
+    expect(await previewOf(p), `aperçu de ${id}`).toEqual(want.channels);
+    await p.getByLabel(labels.name).fill(`Harbor ${id}`);
+    await p.getByRole('button', { name: labels.create }).click();
+    await p.waitForURL(/\/channels\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+    const gid = new URL(p.url()).pathname.split('/')[2];
+    const g = await (await (await api(a.token)).get(`${API}/guilds/${gid}`)).json();
+    expect(shapeOf(g), `serveur ${id}`).toEqual({ cats: want.cats, channels: want.channels });
+    await expect(p.locator('.app-sidebar .app-chan').first()).toBeVisible();
+    expect(await sidebarOf(p), `barre latérale de ${id}`).toEqual({ cats: want.cats, channels: want.channels });
+    // Le premier salon textuel s'ouvre.
+    await expect(p.getByRole('heading', { name: want.channels[0], level: 1 })).toBeVisible();
+  }
+}
+
+test('I18N-G1b créer un serveur en anglais : pour chaque modèle, l’aperçu, le serveur bâti et la barre latérale ont les mêmes noms anglais', async ({ signedIn, api }) => {
+  test.setTimeout(120_000);
+  const a = await signedIn('en-US');
+  await createFromEveryTemplate(a, api, EN, { name: 'Server name', create: 'Create server', group: 'Template' });
+  // Aucun nom français de modèle dans la barre latérale du dernier serveur.
+  const seen = await everything(a.page);
+  expect(TEMPLATES.filter((k) => seen.includes(k))).toEqual([]);
+});
+
+test('I18N-G1c créer un serveur en français : rien ne change, l’aperçu, le serveur et la barre latérale gardent les noms français', async ({ signedIn, api }) => {
+  test.setTimeout(120_000);
+  const a = await signedIn('fr-FR');
+  await createFromEveryTemplate(a, api, FR, { name: 'Nom du serveur', create: 'Créer le serveur', group: 'Modèle' });
+});
+
+test('I18N-G1d l’API nomme le serveur dans la langue demandée ; sans langue ou avec une langue inconnue, en français', async ({ signedIn, api }) => {
+  const a = await signedIn('en-US');
+  const as = await api(a.token);
+  const make = async (data: Record<string, unknown>) => {
+    const res = await as.post(`${API}/guilds`, { data: { name: 'Harbor', template: 'communaute', ...data } });
+    expect(res.status(), await res.text()).toBe(201);
+    return shapeOf(await res.json());
+  };
+  for (const lang of ['en', 'en-GB', 'EN_us']) expect(await make({ lang }), lang).toEqual({ cats: EN.communaute.cats, channels: EN.communaute.channels });
+  for (const lang of ['fr', 'fr-CA', 'de', '', 'english', undefined]) expect(await make({ lang }), String(lang)).toEqual({ cats: FR.communaute.cats, channels: FR.communaute.channels });
+  // Sans modèle non plus : la structure d'avant, dans la langue demandée.
+  const plain = await as.post(`${API}/guilds`, { data: { name: 'Harbor', lang: 'en' } });
+  expect(shapeOf(await plain.json())).toEqual({ cats: EN.vide.cats, channels: EN.vide.channels });
+  expect((await as.post(`${API}/guilds`, { data: { name: 'Harbor', lang: 3 } })).status()).toBe(422);
 });
 
 // ───────── Réglages du serveur : Vue d'ensemble, Rôles ─────────

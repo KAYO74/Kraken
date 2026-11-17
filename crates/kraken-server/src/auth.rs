@@ -190,6 +190,12 @@ pub async fn me(auth: Auth) -> Json<User> {
     Json(auth.user)
 }
 
+/// Les libellés qui ouvrent les messages d'erreur du profil (« Bio : 190 caractères au plus. ») : le client les
+/// traduit avec son catalogue (`{champ}` des gabarits de `server.tsv`).
+pub(crate) const FIELD_NAME: &str = "Nom affiché";
+pub(crate) const FIELD_BIO: &str = "Bio";
+pub(crate) const FIELD_PRONOUNS: &str = "Pronoms";
+
 /// Texte du profil : coupé aux bords, vide pour effacer. `multiline` laisse les retours à la
 /// ligne (la bio), sinon aucun caractère de contrôle (nom, pronoms).
 fn profile_text(raw: &str, max: usize, multiline: bool, what: &str) -> ApiResult<Option<String>> {
@@ -198,10 +204,12 @@ fn profile_text(raw: &str, max: usize, multiline: bool, what: &str) -> ApiResult
     // Les séparateurs de ligne et de paragraphe Unicode comptent comme des retours à la ligne.
     let bad = |c: char| (c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')) && !(multiline && c == '\n');
     if text.chars().count() > max || text.chars().any(bad) {
-        return Err(AppError::invalid(format!(
-            "{what} : {max} caractères au plus{}.",
-            if multiline { "" } else { ", sans retour à la ligne" }
-        )));
+        // Deux phrases entières : le client en connaît le gabarit (`{champ} : {n} caractères au plus…`).
+        return Err(AppError::invalid(if multiline {
+            format!("{what} : {max} caractères au plus.")
+        } else {
+            format!("{what} : {max} caractères au plus, sans retour à la ligne.")
+        }));
     }
     // Espaces de largeur nulle, marques de sens d'écriture, remplisseurs, étiquettes… : tout ce
     // qu'Unicode ignore à l'affichage, sauf le liant et le sélecteur des emojis composés, et le non-liant
@@ -229,10 +237,9 @@ fn profile_text(raw: &str, max: usize, multiline: bool, what: &str) -> ApiResult
 /// Modifier son profil : nom affiché, bio, pronoms. Un champ absent reste tel quel, un champ vide
 /// est effacé. Le pseudo unique ne change pas ici ; il reste visible sous le nom.
 pub async fn update_me(State(state): State<AppState>, auth: Auth, Json(req): Json<UpdateMe>) -> ApiResult<Json<User>> {
-    let name =
-        req.display_name.as_deref().map(|n| profile_text(n, MAX_DISPLAY_NAME, false, "Nom affiché")).transpose()?;
-    let bio = req.bio.as_deref().map(|b| profile_text(b, MAX_BIO, true, "Bio")).transpose()?;
-    let pronouns = req.pronouns.as_deref().map(|p| profile_text(p, MAX_PRONOUNS, false, "Pronoms")).transpose()?;
+    let name = req.display_name.as_deref().map(|n| profile_text(n, MAX_DISPLAY_NAME, false, FIELD_NAME)).transpose()?;
+    let bio = req.bio.as_deref().map(|b| profile_text(b, MAX_BIO, true, FIELD_BIO)).transpose()?;
+    let pronouns = req.pronouns.as_deref().map(|p| profile_text(p, MAX_PRONOUNS, false, FIELD_PRONOUNS)).transpose()?;
     let patch = kraken_db::ProfilePatch {
         display_name: name.as_ref().map(Option::as_deref),
         bio: bio.as_ref().map(Option::as_deref),
@@ -423,6 +430,33 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::coverage::{assert_translated, english_of};
+
+    #[test]
+    fn the_profile_refusals_have_an_english_text_and_translate_their_field_label() {
+        let refusal = |raw: &str, max: usize, multiline: bool, what: &str| {
+            profile_text(raw, max, multiline, what).err().map(|e| e.2).unwrap()
+        };
+        let long = "x".repeat(300);
+        let cases = [
+            (refusal(&long, MAX_DISPLAY_NAME, false, FIELD_NAME), "Display name"),
+            (refusal(&long, MAX_BIO, true, FIELD_BIO), "Bio"),
+            (refusal(&long, MAX_PRONOUNS, false, FIELD_PRONOUNS), "Pronouns"),
+            (refusal("a\u{200B}b", MAX_BIO, true, FIELD_BIO), "Bio"),
+            (refusal("\u{200D}", MAX_BIO, true, FIELD_BIO), "Bio"),
+            (refusal("a\nb", MAX_DISPLAY_NAME, false, FIELD_NAME), "Display name"),
+        ];
+        for (fr, label) in cases {
+            assert_translated(&fr);
+            assert!(english_of(&fr).unwrap().starts_with(&format!("{label}: ")), "{fr:?} -> {:?}", english_of(&fr));
+        }
+        // Les messages français restent ceux d'avant, mot pour mot.
+        assert_eq!(
+            refusal(&long, MAX_DISPLAY_NAME, false, FIELD_NAME),
+            format!("Nom affiché : {MAX_DISPLAY_NAME} caractères au plus, sans retour à la ligne.")
+        );
+        assert_eq!(refusal(&long, MAX_BIO, true, FIELD_BIO), format!("Bio : {MAX_BIO} caractères au plus."));
+    }
 
     #[test]
     fn origin_is_the_public_url_or_the_host() {

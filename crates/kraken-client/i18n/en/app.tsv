@@ -80,8 +80,6 @@ Emoji ajouté.	Emoji added.
 Photo retirée.	Photo removed.
 Bannière retirée.	Banner removed.
 Emoji retiré.	Emoji removed.
-Cette image est trop petite : {n} pixels de côté au moins.	This image is too small: it must be at least {n} pixels on each side.
-Cette image pèse trop lourd : {n} Mo au plus.	This image is too large: {n} MB at most.
 Changer la photo	Change photo
 PNG, JPEG, WebP ou GIF, {n} Mo max. Un GIF ou un WebP animé reste animé (il n'est pas recadré).	PNG, JPEG, WebP or GIF, {n} MB max. An animated GIF or WebP stays animated (it isn't cropped).
 Ta bannière actuelle	Your current banner

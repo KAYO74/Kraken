@@ -9,7 +9,7 @@ en anglais. Un texte absent du catalogue reste en français (jamais de panne). O
 - Contrôle : `python3 scripts/i18n-check.py` (zéro erreur avant de rendre), `--todo [fichier…]` (les textes français
   pas encore enveloppés ; heuristique : relis aussi ton fichier à la main, et `// i18n-ok` en fin de ligne écarte un
   faux positif comme un nom d'exemple), `--missing` (les lignes `français<TAB>` à compléter), `--grep texte`
-  (cherche une entrée existante), `--server` (les messages du serveur pas encore dans `server.tsv`).
+  (cherche une entrée existante), `--server` (les messages du serveur, `format!` compris, que `server.tsv` ne couvre pas).
 
 ## Catalogue
 
@@ -51,6 +51,11 @@ Contenu des utilisateurs (messages, noms, sujets, bios), identifiants, classes C
 valeurs `data-*`, `console`/logs/`expect`, noms de produit (KRAKEN), codes d'erreur. Les noms de touches techniques
 (Ctrl, Maj) passent par le catalogue (« Maj » devient « Shift »).
 
+Les noms des catégories et des salons d'un **modèle de serveur** ne passent pas non plus par le catalogue : le serveur
+les bâtit dans la langue que le client lui envoie (`CreateGuild.lang`), et l'aperçu « Sera créé » montre les mêmes noms,
+lus dans `kraken_core::templates` (`Label { fr, en }`, une seule table). Seuls le nom et la description de la carte du
+modèle sont des clés du catalogue.
+
 ## Dates, heures, durées
 
 Toute mise en forme passe par la langue active : `crate::ui::clock` / `when` (12 h ou 24 h, réglage prioritaire),
@@ -61,10 +66,26 @@ latins (`-u-nu-latn`). Les initiales d'avatar : `ui::initials` (premier graphèm
 
 ## Erreurs du serveur
 
-Le serveur écrit des messages français statiques. `api.rs` (`from_server`, appelé là où `ApiError` est lu) les traduit
-avec `t()` : le message français est la clé, dans `en/server.tsv`. Un message avec une valeur glissée dedans reste en
-français. Rien ne se traduit ailleurs : `e.message` est déjà dans la bonne langue. `--server` liste les messages du
-serveur qui n'y sont pas encore.
+Le serveur écrit des messages français. `api.rs` (`from_server`, appelé là où `ApiError` est lu) les traduit : le
+message français est la clé, dans `en/server.tsv`. Rien ne se traduit ailleurs : `e.message` est déjà dans la bonne
+langue. `--server` liste les messages du serveur que le catalogue ne couvre pas.
+
+Un message où le serveur glisse une valeur (`format!`, une constante de `kraken_core`) y est en **gabarit** à
+`{variables}`, comme pour `tf` : `Ce salon a déjà {n} messages épinglés : désépingles-en un d'abord.`. Le client le
+retrouve (`kraken_core::pattern` : les morceaux fixes du gabarit, dans l'ordre, le dernier en queue du message ; le
+gabarit le plus précis d'abord), en tire les valeurs et remplit le gabarit anglais. Les valeurs restent telles quelles
+(un nombre, `{f}` : un nom de champ technique, un pseudo), sauf `{champ}` : un libellé français que le catalogue traduit
+quand il le connaît (« Nom affiché » devient « Display name »). Règles pour écrire un message de serveur à valeur :
+
+- une phrase entière dans chaque `format!` (pas une durée ou un suffixe collé après coup) : `--server` compare le texte
+  du code au gabarit en ignorant le nom des variables, et le test de `kraken-server/src/error.rs` instancie les erreurs
+  avec les vraies constantes ;
+- pas deux variables côte à côte (aucune frontière, le gabarit ne reconnaît rien) ;
+- un gabarit qui sert aussi au client (`Cette image est trop petite : {n} pixels de côté au moins.`) vit dans
+  `server.tsv` : une seule entrée par texte.
+
+Un nouveau message d'erreur du serveur : l'ajouter à `server.tsv` (gabarit s'il a une valeur) ; le test de couverture
+(`cargo test -p kraken-server error::`) et `--server` le disent sinon.
 
 ## Conventions d'anglais
 

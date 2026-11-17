@@ -59,3 +59,25 @@ pub async fn list(
     let q = q.parse()?;
     Ok(Json(state.db.audit_log(gid, auth.user.id, &q).await?))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_parameter_refusals_have_an_english_text_in_the_catalogue() {
+        let bad = |q: Params| q.parse().err().map(|e| e.2).unwrap();
+        let empty = || Params { before: None, limit: None, category: None, actor: None };
+        let msgs = [
+            bad(Params { before: Some("pas-un-id".into()), ..empty() }),
+            bad(Params { actor: Some("x".into()), ..empty() }),
+            bad(Params { limit: Some("beaucoup".into()), ..empty() }),
+            bad(Params { category: Some("autre".into()), ..empty() }),
+        ];
+        assert_eq!(msgs[0], "`before` : un identifiant attendu.");
+        assert_eq!(msgs[1], "`actor` : un identifiant attendu.");
+        for m in msgs {
+            crate::error::coverage::assert_translated(&m);
+        }
+    }
+}

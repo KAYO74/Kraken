@@ -20,6 +20,7 @@ mod reads;
 mod seed;
 mod social;
 
+use kraken_core::i18n::Lang;
 use kraken_core::perms;
 use kraken_proto::*;
 use sqlx::postgres::{PgPool, PgPoolOptions, PgRow};
@@ -654,8 +655,20 @@ impl Db {
     /// Crée le serveur, son rôle `@everyone` (id = id du serveur), les catégories et salons du modèle
     /// (`kraken_core::templates` ; sans modèle, « vide » : deux catégories, `#général` et un salon vocal) et
     /// fait du créateur le premier membre. Le premier salon textuel du modèle est le salon système. Un modèle
-    /// inconnu est refusé (`Invalid("template")`) avant d'écrire quoi que ce soit.
+    /// inconnu est refusé (`Invalid("template")`) avant d'écrire quoi que ce soit. Les noms sont français :
+    /// voir [`Db::create_guild_in`] pour une autre langue.
     pub async fn create_guild(&self, owner: Id, name: &str, template: Option<&str>) -> Result<GuildState> {
+        self.create_guild_in(owner, name, template, Lang::DEFAULT).await
+    }
+
+    /// [`Db::create_guild`], avec les catégories et les salons du modèle nommés dans cette langue.
+    pub async fn create_guild_in(
+        &self,
+        owner: Id,
+        name: &str,
+        template: Option<&str>,
+        lang: Lang,
+    ) -> Result<GuildState> {
         let name = guilds::clean_guild_name(name)?;
         let template = match template {
             None => kraken_core::templates::default_template(),
@@ -680,13 +693,13 @@ impl Db {
             .await?;
         let mut system = None;
         for group in template.groups {
-            let category = insert_channel(&mut tx, gid, None, ChannelKind::Category, group.name).await?;
+            let category = insert_channel(&mut tx, gid, None, ChannelKind::Category, group.name.get(lang)).await?;
             for slot in group.slots {
                 let kind = match slot.kind {
                     kraken_core::templates::SlotKind::Text => ChannelKind::Text,
                     kraken_core::templates::SlotKind::Voice => ChannelKind::Voice,
                 };
-                let id = insert_channel(&mut tx, gid, Some(category), kind, slot.name).await?;
+                let id = insert_channel(&mut tx, gid, Some(category), kind, slot.name.get(lang)).await?;
                 if kind == ChannelKind::Text && system.is_none() {
                     system = Some(id);
                 }
