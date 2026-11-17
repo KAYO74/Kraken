@@ -79,9 +79,11 @@ pub fn Friends() -> impl IntoView {
     let keys = move |e: leptos::ev::KeyboardEvent| {
         let i = TABS.iter().position(|x| x.0 == tab.get_untracked()).unwrap_or(0);
         let n = TABS.len();
+        // Les onglets se suivent de droite à gauche en RTL : la flèche droite revient en arrière (sens lu à l'événement).
+        let forward = if crate::i18n::is_rtl() { "ArrowLeft" } else { "ArrowRight" };
         let next = match e.key().as_str() {
-            "ArrowRight" => (i + 1) % n,
-            "ArrowLeft" => (i + n - 1) % n,
+            k if k == forward => (i + 1) % n,
+            "ArrowRight" | "ArrowLeft" => (i + n - 1) % n,
             "Home" => 0,
             "End" => n - 1,
             _ => return,
@@ -130,7 +132,7 @@ pub fn Friends() -> impl IntoView {
                     view! {
                         <div class="k-search app-search">
                             <Icon icon=lu::LuSearch/>
-                            <input class="k-input" type="search" placeholder=t("Chercher") aria-label=t("Chercher parmi tes amis") bind:value=query/>
+                            <input dir="auto" class="k-input" type="search" placeholder=t("Chercher") aria-label=t("Chercher parmi tes amis") bind:value=query/>
                         </div>
                         <h2 class="k-category">
                             {move || t(match tab.get() {
@@ -273,7 +275,7 @@ fn FriendRow(r: Relationship, error: RwSignal<Option<String>>, confirm: RwSignal
                 <b>{r.user.name().to_string()}</b>
                 <small>{move || {
                     let state = if friend { dot.get().label() } else { sub.clone() };
-                    format!("@{} · {state}", r.user.username)
+                    view! { <bdi dir="ltr">{format!("@{} · {state}", r.user.username)}</bdi> }
                 }}</small>
             </div>
             <div class="app-row-actions">{actions}</div>
@@ -326,7 +328,7 @@ fn AddFriend() -> impl IntoView {
             <h2>{t("Ajouter un ami")}</h2>
             <p class="app-hint" id="add-h">{t("Tape son pseudo KRAKEN, celui qui commence par @ sous son nom.")}</p>
             <div class="app-add-row">
-                <input class="k-input" placeholder=t("pseudo") aria-label=t("Pseudo de ton ami") bind:value=name
+                <input dir="ltr" class="k-input" placeholder=t("pseudo") aria-label=t("Pseudo de ton ami") bind:value=name
                     autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="33" required
                     aria-describedby="add-h" aria-invalid=move || error.get().is_some().then_some("true")
                     on:input=move |_| { error.set(None); done.set(None); }/>

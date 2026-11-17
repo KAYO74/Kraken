@@ -402,8 +402,11 @@ pub enum Target {
 #[derive(Clone, Copy, PartialEq)]
 struct MenuAt {
     target: Target,
+    /// Le point d'ancrage dans la fenêtre : le bord de début du menu (gauche), ou son bord de fin (droit) si `rtl`.
     x: f64,
     y: f64,
+    /// Le sens de la page à l'instant de l'événement (`dir` de `<html>`, lu à l'ouverture, pas au démarrage).
+    rtl: bool,
 }
 
 /// Menu et boîte ouverts dans la coquille.
@@ -428,7 +431,12 @@ impl NotifyUi {
     pub fn on_context(self, target: Target) -> impl Fn(leptos::ev::MouseEvent) + Copy {
         move |e: leptos::ev::MouseEvent| {
             e.prevent_default();
-            self.menu.set(Some(MenuAt { target, x: e.client_x() as f64, y: e.client_y() as f64 }));
+            self.menu.set(Some(MenuAt {
+                target,
+                x: e.client_x() as f64,
+                y: e.client_y() as f64,
+                rtl: crate::i18n::is_rtl(),
+            }));
         }
     }
 
@@ -441,8 +449,11 @@ impl NotifyUi {
                     .target()
                     .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
                     .map(|el| el.get_bounding_client_rect());
-                let (x, y) = rect.map_or((0.0, 0.0), |r| (r.left() + 16.0, r.bottom()));
-                self.menu.set(Some(MenuAt { target, x, y }));
+                let rtl = crate::i18n::is_rtl();
+                // Au clavier, le menu s'ouvre sous le début de l'élément : 16 px après son bord de début (gauche, ou droit en RTL).
+                let (x, y) =
+                    rect.map_or((0.0, 0.0), |r| (if rtl { r.right() - 16.0 } else { r.left() + 16.0 }, r.bottom()));
+                self.menu.set(Some(MenuAt { target, x, y, rtl }));
             }
         }
     }
@@ -573,7 +584,12 @@ pub fn TargetMenu() -> impl IntoView {
                 close(false);
                 u.dialog.set(Some(target));
             };
-            let style = format!("position: fixed; left: min({}px, 100vw - 220px); top: min({}px, 100vh - 160px)", m.x, m.y);
+            // Le menu reste dans la fenêtre : son bord de début à `x` (ou son bord de fin, en RTL), au plus à 220 px du bord opposé.
+            let style = if m.rtl {
+                format!("position: fixed; right: min(100vw - {}px, 100vw - 220px); top: min({}px, 100vh - 160px)", m.x, m.y)
+            } else {
+                format!("position: fixed; left: min({}px, 100vw - 220px); top: min({}px, 100vh - 160px)", m.x, m.y)
+            };
             view! {
                 <div class="k-menu" role="menu" aria-label=tf("Actions pour {nom}", &[("nom", &title)]) node_ref=root style=style on:keydown=keys>
                     <button type="button" role="menuitem" tabindex="-1" on:click=read>{t("Marquer comme lu")}<Icon icon=lu::LuCheckCheck small=true/></button>

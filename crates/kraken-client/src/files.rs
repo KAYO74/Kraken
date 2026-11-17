@@ -285,7 +285,7 @@ fn PendingTile(tray: Tray, channel: Id, key: u32) -> impl IntoView {
                     None => view! {
                         <div class="app-tile-file">
                             <Icon icon=lu::LuFile/>
-                            <span class="app-tile-name">{name()}</span>
+                            <span class="app-tile-name" dir="auto">{name()}</span>
                             <small>{move || item().map(|p| size_label(p.size)).unwrap_or_default()}</small>
                         </div>
                     }.into_any(),
@@ -303,7 +303,7 @@ fn PendingTile(tray: Tray, channel: Id, key: u32) -> impl IntoView {
                 {move || failed().map(|e| { let t = e.clone(); view! { <p class="app-tile-error" role="alert" title=t>{e}</p> } })}
             </div>
             <Show when=move || preview().is_some()>
-                <input type="text" class="k-input app-alt" maxlength="1024" placeholder=t("Description")
+                <input dir="auto" type="text" class="k-input app-alt" maxlength="1024" placeholder=t("Description")
                     aria-label=move || tf("Texte alternatif de {nom}", &[("nom", &name())]) bind:value=alt/>
             </Show>
         </li>
@@ -358,7 +358,7 @@ pub fn Attachments(channel: Id, files: Vec<Attachment>, viewer: RwSignal<Option<
             <div class="k-attachment">
                 <span class="k-attachment__icon"><Icon icon=lu::LuFile/></span>
                 <div>
-                    <a href=download.clone() download=a.filename.clone()>{a.filename.clone()}</a>
+                    <a href=download.clone() download=a.filename.clone() dir="auto">{a.filename.clone()}</a>
                     <div class="type-xs text-muted">{size_label(a.size)}</div>
                 </div>
                 <a class="k-btn k-btn--sm" href=download download=a.filename.clone() aria-label=label>{t("Télécharger")}</a>
@@ -387,16 +387,20 @@ pub fn Viewer(state: ViewerState, viewer: RwSignal<Option<ViewerState>>) -> impl
             index.set(n as usize);
         }
     };
-    let keys = window_event_listener(leptos::ev::keydown, move |e| match e.key().as_str() {
-        "ArrowLeft" => {
-            e.prevent_default();
-            step(-1)
+    // ← montre l'image d'avant en gauche-à-droite ; en RTL les images se suivent de droite à gauche, donc → revient en arrière.
+    let keys = window_event_listener(leptos::ev::keydown, move |e| {
+        let back = if crate::i18n::is_rtl() { "ArrowRight" } else { "ArrowLeft" };
+        match e.key().as_str() {
+            k if k == back => {
+                e.prevent_default();
+                step(-1)
+            }
+            "ArrowLeft" | "ArrowRight" => {
+                e.prevent_default();
+                step(1)
+            }
+            _ => {}
         }
-        "ArrowRight" => {
-            e.prevent_default();
-            step(1)
-        }
-        _ => {}
     });
     on_cleanup(move || keys.remove());
     let url = move || current().map(|a| api::attachment_url(channel, a.id)).unwrap_or_default();
@@ -410,7 +414,7 @@ pub fn Viewer(state: ViewerState, viewer: RwSignal<Option<ViewerState>>) -> impl
             <div class="k-dialog app-viewer" role="dialog" aria-modal="true" aria-label=t("Visionneuse d'images")>
                 <header class="app-viewer-bar">
                     <div class="app-viewer-name">
-                        <b class="app-ellipsis">{move || current().map(|a| a.filename).unwrap_or_default()}</b>
+                        <b class="app-ellipsis" dir="auto">{move || current().map(|a| a.filename).unwrap_or_default()}</b>
                         <small>{move || {
                             let size = current().map(|a| size_label(a.size)).unwrap_or_default();
                             if count > 1 {
@@ -434,13 +438,13 @@ pub fn Viewer(state: ViewerState, viewer: RwSignal<Option<ViewerState>>) -> impl
                     </button>
                 </header>
                 <div class="app-viewer-stage">
-                    <button type="button" class="k-btn k-btn--icon app-viewer-nav" aria-label=t("Image précédente") title=t("Précédente (←)")
+                    <button type="button" class="k-btn k-btn--icon app-viewer-nav" aria-label=t("Image précédente") title=crate::i18n::mirror_arrows(t("Précédente (←)"))
                         disabled=move || index.get() == 0 hidden={count < 2} on:click=move |_| step(-1)>
                         <Icon icon=lu::LuChevronLeft/>
                     </button>
                     <img src=move || format!("{}/preview", url())
                         alt=move || current().map(|a| a.alt.unwrap_or(a.filename)).unwrap_or_default()/>
-                    <button type="button" class="k-btn k-btn--icon app-viewer-nav" aria-label=t("Image suivante") title=t("Suivante (→)")
+                    <button type="button" class="k-btn k-btn--icon app-viewer-nav" aria-label=t("Image suivante") title=crate::i18n::mirror_arrows(t("Suivante (→)"))
                         disabled=move || { index.get() + 1 >= count } hidden={count < 2} on:click=move |_| step(1)>
                         <Icon icon=lu::LuChevronRight/>
                     </button>
@@ -496,10 +500,10 @@ pub fn EmbedCard(
             {is_wide.then(img.clone())}
             <small>
                 {favicon.map(|src| view! { <img src=src alt="" width="16" height="16"/> })}
-                <span class="app-ellipsis">{host}</span>
+                <span class="app-ellipsis" dir="auto">{host}</span>
             </small>
-            <a href=embed.url.clone() target="_blank" rel="noopener noreferrer nofollow ugc">{title}</a>
-            {embed.description.clone().map(|d| view! { <p>{d}</p> })}
+            <a href=embed.url.clone() target="_blank" rel="noopener noreferrer nofollow ugc" dir="auto">{title}</a>
+            {embed.description.clone().map(|d| view! { <p dir="auto">{d}</p> })}
             {(!is_wide).then(img)}
             {mine.then(|| view! {
                 <button type="button" class="k-btn k-btn--icon app-embed-x" aria-label=t("Retirer l'aperçu") title=t("Retirer l'aperçu")

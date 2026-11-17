@@ -221,7 +221,7 @@ pub fn AvatarBlock() -> impl IntoView {
             {move || s.me.get().map(|u| view! { <Avatar user=u size="xl"/> })}
             <div class="app-avatar-side">
                 {move || s.me.get().map(|u| view! {
-                    <div><b class="text-strong">{u.name().to_string()}</b><div class="type-sm text-muted">{format!("@{}", u.username)}</div></div>
+                    <div><b class="text-strong">{u.name().to_string()}</b><div class="type-sm text-muted"><bdi dir="ltr">{format!("@{}", u.username)}</bdi></div></div>
                 })}
                 <div class="app-avatar-actions">
                     <input id="avatar-file" class="k-sr app-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif"
