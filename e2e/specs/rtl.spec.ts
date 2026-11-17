@@ -62,10 +62,10 @@ async function openGuild(u: User, api: Api, name = 'Récif corallien') {
   return { gid: g.guild.id as string, text, voice };
 }
 /** Envoie un message et attend qu'il soit confirmé (plus d'envoi en cours : requis avant axe). */
-async function post(p: Page, text: string) {
+async function post(p: Page, text: string, shown = text.split('\n')[0]) {
   await say(p, 'général', text);
   await expect(p.locator('article[data-pending]')).toHaveCount(0);
-  await expect(messages(p).filter({ hasText: text.split('\n')[0] })).toHaveCount(1);
+  await expect(messages(p).filter({ hasText: shown })).toHaveCount(1);
 }
 
 // ───────── bureau : la coquille et les messages ─────────
@@ -124,15 +124,16 @@ for (const lang of LANGS) {
     await msg.hover();
     await expect(bar).toBeVisible();
     const l = { msg: await rect(msg), bar: await rect(bar) };
-    // Gauche à droite : la barre colle au bord droit du message, à 20 px.
-    near(l.msg.r - l.bar.r, 20, 1);
+    // Gauche à droite : la barre colle au bord droit du message (à `inset-inline-end`).
+    const gap = l.msg.r - l.bar.r;
+    expect(gap).toBeGreaterThan(0);
     await p.mouse.move(0, 0);
     await expect(bar).toBeHidden();
     await rtl(p, lang);
     await msg.hover();
     await expect(bar).toBeVisible();
     const r = { msg: await rect(msg), bar: await rect(bar) };
-    near(r.bar.x - r.msg.x, 20, 1);
+    near(r.bar.x - r.msg.x, gap, 1); // la même distance, au bord de fin (gauche)
     expect(r.bar.x + r.bar.w / 2).toBeLessThan(r.msg.x + r.msg.w / 2);
     await inView(p, r.bar, 'barre des actions');
     // Répondre : la barre « Tu réponds à… » garde son bouton fermer au bout (à gauche).
@@ -141,8 +142,12 @@ for (const lang of LANGS) {
     await expect(replying).toBeVisible();
     const rr = await rect(replying);
     const close = await rect(replying.getByRole('button'));
-    near(close.x - rr.x, 8 + 1, 3); // fermer au bord de fin (space-2 de marge intérieure + bordure)
-    expect(close.x).toBeLessThan(rr.x + rr.w / 2);
+    expect(close.x).toBeLessThan(rr.x + rr.w / 2); // fermer au bord de fin (à gauche)
+    await ltr(p);
+    const lr = await rect(replying);
+    const lclose = await rect(replying.getByRole('button'));
+    near(close.x - rr.x, lr.r - lclose.r, 1); // la même marge, du côté opposé
+    expect(lclose.x).toBeGreaterThan(lr.x + lr.w / 2);
   });
 }
 
@@ -150,20 +155,27 @@ test('RTL-3 menus : compte, menu contextuel (placé près du curseur, jamais hor
   const a = await user('rtl3');
   await openGuild(a, api);
   const p = a.page;
-  await rtl(p, 'ar');
-  const rail = await rect(p.locator('.app-rail'));
-  // Mon compte : la carte s'ouvre du côté du fil (à gauche du rail), dans la fenêtre.
-  await p.getByRole('button', { name: /^Mon compte/ }).click();
+  // Mon compte, en gauche à droite : la carte s'ouvre du côté du fil (à droite du bouton).
   const card = p.locator('#me-card');
+  await p.getByRole('button', { name: /^Mon compte/ }).click();
+  await expect(card).toBeVisible();
+  const lc = await rect(card);
+  await p.keyboard.press('Escape');
+  await expect(card).toBeHidden();
+  await rtl(p, 'ar');
+  // En droite à gauche : le miroir exact (elle s'ouvre à gauche du bouton), dans la fenêtre.
+  await p.getByRole('button', { name: /^Mon compte/ }).click();
   await expect(card).toBeVisible();
   const c = await rect(card);
-  leftOf(c, rail);
+  near(c.x, W(p) - lc.r, 1);
+  near(c.w, lc.w, 1);
+  near(c.b, lc.b, 2); // toujours posée sur le bas (l'interligne plus haut en arabe l'allonge vers le haut)
   await inView(p, c, 'carte Mon compte');
   await p.keyboard.press('Escape');
   await expect(card).toBeHidden();
 
   // Menu contextuel d'un salon : son bord de fin (droit) touche le curseur ; près d'un bord, il reste dans la fenêtre.
-  const channel = p.locator('.app-sidebar').getByRole('link', { name: 'général' });
+  const channel = p.locator('.app-sidebar').getByRole('link', { name: 'général', exact: true });
   const menu = p.getByRole('menu');
   const box = (await channel.boundingBox())!;
   const cx = box.x + box.width / 2;
@@ -174,7 +186,7 @@ test('RTL-3 menus : compte, menu contextuel (placé près du curseur, jamais hor
   await inView(p, m1, 'menu contextuel au centre');
   await p.keyboard.press('Escape');
   for (const x of [4, 120, W(p) - 4]) {
-    await channel.dispatchEvent('contextmenu', { clientX: x, clientY: 300, bubbles: true, cancelable: true });
+    await channel.evaluate((e, cx) => e.dispatchEvent(new MouseEvent('contextmenu', { clientX: cx, clientY: 300, bubbles: true, cancelable: true })), x);
     await expect(menu).toBeVisible();
     const m = await rect(menu);
     await inView(p, m, `menu contextuel à x=${x}`);
@@ -192,12 +204,21 @@ test('RTL-3 menus : compte, menu contextuel (placé près du curseur, jamais hor
   await p.keyboard.press('Escape');
 
   // Sélecteur d'emojis : ancré au bord de fin du fil (à gauche), dans la fenêtre.
+  const picker = p.locator('.app-picker');
+  await ltr(p); // le même sélecteur en gauche à droite : ancré au bord droit du fil
+  await p.getByRole('button', { name: 'Insérer un emoji' }).click();
+  await expect(picker).toBeVisible();
+  const lpk = await rect(picker);
+  const lchat = await rect(p.locator('.app-chat'));
+  await p.keyboard.press('Escape');
+  await expect(picker).toHaveCount(0);
+  await rtl(p, 'ar');
   const chat = await rect(p.locator('.app-chat'));
   await p.getByRole('button', { name: 'Insérer un emoji' }).click();
-  const picker = p.locator('.app-picker');
   await expect(picker).toBeVisible();
   const pk = await rect(picker);
-  near(pk.x - chat.x, 16, 1.5);
+  near(pk.x - chat.x, lchat.r - lpk.r, 1.5);
+  near(pk.w, lpk.w, 1);
   await inView(p, pk, 'sélecteur d’emojis');
   await a11y(p);
 });
@@ -261,10 +282,12 @@ test.describe('390 px', () => {
       const open = p.getByRole('button', { name: 'Ouvrir la navigation' });
       // Gauche à droite : fermé hors de l'écran à gauche, ouvert collé à gauche.
       expect((await rect(rail)).r).toBeLessThanOrEqual(0);
+      const closedNav = await rect(nav); // fermée, masquée (visibility) : hors de la vue
+      await expect(nav).toBeHidden();
       await open.click();
       await expect(app).toHaveAttribute('data-drawer', 'open');
       await expect(rail).toBeVisible();
-      near((await rect(rail)).x, 0, 0.5);
+      await expect.poll(async () => (await rect(rail)).x).toBeCloseTo(0, 0);
       leftOf(await rect(rail), await rect(nav));
       await p.locator('.app-scrim').click({ position: { x: 380, y: 400 } });
       await expect(app).not.toHaveAttribute('data-drawer', 'open');
@@ -273,7 +296,8 @@ test.describe('390 px', () => {
       await rtl(p, lang);
       await p.waitForTimeout(300);
       expect((await rect(rail)).x).toBeGreaterThanOrEqual(W(p));
-      expect((await rect(nav)).x).toBeGreaterThanOrEqual(W(p) - 1);
+      near((await rect(nav)).x, W(p) - closedNav.r, 1); // la même position, en miroir
+      await expect(nav).toBeHidden();
       await open.click();
       await expect(app).toHaveAttribute('data-drawer', 'open');
       await expect(rail).toBeVisible();
@@ -291,8 +315,8 @@ test.describe('390 px', () => {
       const members = p.locator('.app-aside--members');
       await expect(members).toBeVisible();
       const mb = await rect(members);
-      near(mb.x, 0, 0.5);
-      await inView(p, mb, 'liste des membres');
+      await expect.poll(async () => (await rect(members)).x).toBeCloseTo(0, 0);
+      await inView(p, await rect(members), 'liste des membres');
       await noOverflow(p);
     });
   }
@@ -307,8 +331,9 @@ test.describe('390 px', () => {
     // Gauche à droite : la barre défile vers la droite (scrollLeft positif) jusqu'au dernier onglet.
     const scrolled = async () => nav.evaluate((e) => ({ left: e.scrollLeft, max: e.scrollWidth - e.clientWidth }));
     expect((await scrolled()).max).toBeGreaterThan(50);
-    await rtl(p, 'ar');
     const links = nav.getByRole('link');
+    const lFirst = (await rect(links.first())).x - (await rect(nav)).x; // marge avant le premier onglet, au bord de début
+    await rtl(p, 'ar');
     const last = links.last();
     await last.click();
     await expect(last).toHaveAttribute('aria-current', 'page');
@@ -323,10 +348,10 @@ test.describe('390 px', () => {
     await expect(first).toHaveAttribute('aria-current', 'page');
     await expect.poll(async () => Math.abs((await scrolled()).left)).toBeLessThan(2);
     const f = await rect(first);
-    near(f.r, (await rect(nav)).r - 20, 8); // le premier onglet au bord de début (droit)
+    near((await rect(nav)).r - f.r, lFirst, 1); // le premier onglet au bord de début (droit), même marge
     // Une page de réglages longue ne déborde pas de côté.
     await noOverflow(p);
-    expect(await p.locator('.k-settings main').evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
+    expect(await dialog.locator('main').evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
   });
 });
 
@@ -339,10 +364,10 @@ test('RTL-7 Réglages (bureau) : la liste des rubriques à droite, le contenu à
   await p.getByRole('link', { name: 'Réglages utilisateur' }).click();
   const dialog = p.getByRole('dialog', { name: 'Réglages' });
   await expect(dialog).toBeVisible();
-  const l = { nav: await rect(dialog.locator('nav')), main: await rect(dialog.locator('main')), box: await rect(dialog.locator('.k-settings')) };
+  const l = { nav: await rect(dialog.locator('nav')), main: await rect(dialog.locator('main')), box: await rect(dialog) };
   leftOf(l.nav, l.main);
   await rtl(p, 'fa');
-  const r = { nav: await rect(dialog.locator('nav')), main: await rect(dialog.locator('main')), box: await rect(dialog.locator('.k-settings')) };
+  const r = { nav: await rect(dialog.locator('nav')), main: await rect(dialog.locator('main')), box: await rect(dialog) };
   rightOf(r.nav, r.main);
   near(r.box.x, l.box.x, 1); // la fenêtre reste centrée
   near(r.nav.x - r.box.x, r.box.w - l.nav.w - 1, 2); // la liste colle au bord droit de la fenêtre
@@ -424,7 +449,7 @@ test('RTL-10 onglets des rôles (Affichage, Permissions, Membres) : même règle
   const { gid } = await openGuild(a, api);
   const p = a.page;
   await p.goto(`/guilds/${gid}/settings/roles`);
-  const dialog = p.getByRole('dialog', { name: /Récif corallien/ });
+  const dialog = p.getByRole('dialog', { name: 'Paramètres du serveur' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: /tout le monde/ }).click();
   const tabs = dialog.getByRole('tablist').getByRole('tab');
@@ -462,9 +487,9 @@ test('RTL-11 Ctrl+K : fenêtre centrée, icône au début (à droite), raccourci
   const lead = await rect(row.locator('.app-sw-lead'));
   const name = await rect(row.locator('.app-sw-name'));
   rightOf(lead, name);
-  // La croix de fermeture est au bord de début (à droite) de la fenêtre, comme le champ au bord de fin.
+  // Le bouton de fermeture suit le champ : au bord de fin (à gauche).
   const x = await rect(dialog.locator('.app-sw-field .k-btn'));
-  rightOf(x, await rect(box));
+  leftOf(x, await rect(box));
   // Les raccourcis (↑ ↓ ↵ Échap) restent de gauche à droite.
   const kbd = dialog.locator('.k-kbd').first();
   expect(await css(kbd, 'direction')).toBe('ltr');
@@ -492,10 +517,15 @@ test('RTL-12 fenêtre des invitations et fenêtres à pied : boutons au bord de 
   const copy = await rect(dialog.getByRole('button', { name: 'Copier le lien' }));
   // Le pied range ses boutons au bord de fin (gauche) : « Fermer » (le premier) à droite de « Copier le lien ».
   rightOf(close, copy);
-  near(copy.x - d.x, 28 + 1, 2);
   // Le nom du serveur dans le titre est isolé : une phrase ne mêle pas son sens d'écriture à celui du nom.
   expect(await dialog.getByRole('heading').innerText()).toContain('⁨Récif corallien⁩');
   await a11y(p);
+  // Le miroir exact de la même fenêtre en gauche à droite : le bouton du bord de fin est au bord droit.
+  await ltr(p);
+  const lc = await rect(dialog.getByRole('button', { name: 'Copier le lien' }));
+  const ld = await rect(dialog);
+  near(ld.r - lc.r, copy.x - d.x, 1);
+  leftOf(await rect(dialog.getByRole('button', { name: 'Fermer' })), lc);
 });
 
 // ───────── appel ─────────
@@ -569,8 +599,10 @@ test('RTL-15 texte bidirectionnel : messages « auto », code de gauche à droit
   const p = a.page;
   await post(p, 'سلام دنیا، این یک پیام است');
   await post(p, 'Hello world, a plain message');
-  await post(p, '```\nconst x = 1; // code\n```');
-  await post(p, 'voir `inline_code` ici');
+  await post(p, '```\nconst x = 1; // code\n```', 'const x = 1');
+  await post(p, 'voir `inline_code` ici', 'voir inline_code ici');
+  const lpre = await rect(p.locator('pre.app-code'));
+  const lcode = await rect(p.locator('pre.app-code code'));
   await rtl(p, 'fa');
   const para = (text: string) => messages(p).filter({ hasText: text }).locator('p[dir=auto]').first();
   expect(await css(para('سلام دنیا'), 'direction')).toBe('rtl');
@@ -584,7 +616,7 @@ test('RTL-15 texte bidirectionnel : messages « auto », code de gauche à droit
   // Le code est calé au bord gauche du bloc (début d'un texte de gauche à droite), pas à droite.
   const pr = await rect(pre);
   const cr = await rect(code);
-  near(cr.x - pr.x, 16 + 1, 2);
+  near(cr.x - pr.x, lcode.x - lpre.x, 1); // la même marge qu'en gauche à droite
   const inline = p.locator('code.app-code-inline');
   expect(await css(inline, 'direction')).toBe('ltr');
   expect(await css(inline, 'unicode-bidi')).toBe('isolate');
@@ -620,8 +652,8 @@ test('RTL-16 icônes : celles qui indiquent un sens se retournent, les autres no
   // Règle générale : une icône est retournée si et seulement si elle porte `k-flip` (la pile des catégories tourne, elle, d'un quart de tour).
   const wrong = await p.evaluate(() =>
     [...document.querySelectorAll('svg.k-icon')]
-      .filter((s) => !s.closest('.k-category'))
-      .filter((s) => (getComputedStyle(s).transform === 'matrix(-1, 0, 0, 1, 0, 0)') !== s.classList.contains('k-flip'))
+      .filter((s) => !s.closest('.k-category') && s.getClientRects().length > 0)
+      .filter((s) => (['matrix(-1, 0, 0, 1, 0, 0)', 'scaleX(-1)'].includes(getComputedStyle(s).transform)) !== s.classList.contains('k-flip'))
       .map((s) => s.parentElement?.outerHTML.slice(0, 80)),
   );
   expect(wrong).toEqual([]);
@@ -669,7 +701,7 @@ test('RTL-18 polices du système : arabe et persan, hébreu, interligne ; Inter 
   const p = a.page;
   const requests: string[] = [];
   p.on('request', (r) => ['font', 'stylesheet'].includes(r.resourceType()) && requests.push(`${r.resourceType()} ${r.url()}`));
-  await post(p, '```\nlet a = 1;\n```');
+  await post(p, '```\nlet a = 1;\n```', 'let a = 1');
   const body = p.locator('body');
   const font = () => body.evaluate((e) => getComputedStyle(e).fontFamily);
   const line = () => body.evaluate((e) => parseFloat(getComputedStyle(e).lineHeight));
