@@ -26,9 +26,10 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{AudioContext, HtmlMediaElement, KeyboardEvent, MediaDeviceInfo, MediaDeviceKind, MediaStream};
 
-use crate::call;
+use crate::call::{self, OpenInBrowser};
 use crate::i18n::{t, tf};
 use crate::icons::{Icon, lu};
+use crate::native_voice::{self, Device as NativeDevice};
 use crate::store::store;
 use crate::tk;
 use crate::voice::{self, Voice};
@@ -49,6 +50,14 @@ const NEEDS_HTTPS: &str =
     tk!("Le micro et la caméra demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).");
 const TAB_REFUSED: &str = tk!("La touche Tab sert à naviguer dans la page : choisis-en une autre.");
 const ENTER_REFUSED: &str = tk!("La touche Entrée seule ne peut pas servir : choisis-en une autre.");
+// Vocal natif (appli de bureau Linux) : des clés de traduction, comme les textes ci-dessus.
+const NATIVE_INTRO: &str = tk!(
+    "Ces réglages restent sur cet appareil. Le micro et la sortie choisis servent au prochain appel : pour en changer pendant un appel, quitte le salon et rejoins-le."
+);
+const NATIVE_LEVELS: &str =
+    tk!("Le volume du micro et celui des autres s'appliquent tout de suite, même pendant un appel.");
+const NATIVE_TEST: &str =
+    tk!("Le test du micro n'existe pas encore dans l'appli Linux. Pendant un appel, la barre suit ton micro.");
 /// Le micro se referme un peu après le relâchement : la fin d'un mot n'est pas coupée.
 const RELEASE_MS: u32 = 200;
 /// L'annonce vocale attend que l'état se pose : des appuis rapprochés ne la font pas bavarder.
@@ -293,9 +302,22 @@ fn CameraPreview(stream: RwSignal<Option<MediaStream>, LocalStorage>) -> impl In
     }
 }
 
-/// Réglages › Voix et vidéo (S10).
+/// Réglages › Voix et vidéo (S10) : ceux du navigateur (WebRTC), ou ceux du moteur natif de l'appli de bureau Linux.
 #[component]
 pub fn VoiceSettings() -> impl IntoView {
+    // Le moteur natif n'est connu qu'un instant après le démarrage : le choix suit le signal.
+    view! {
+        {move || if voice::native() {
+            view! { <NativeVoiceSettings/> }.into_any()
+        } else {
+            view! { <WebVoiceSettings/> }.into_any()
+        }}
+    }
+}
+
+/// Les réglages quand le navigateur a WebRTC : appareils, test du micro, caméra, traitements du son, appuyer pour parler.
+#[component]
+fn WebVoiceSettings() -> impl IntoView {
     let v = store().voice;
     let secure = voice::devices().is_some();
     let sink = can_sink();
@@ -490,57 +512,6 @@ pub fn VoiceSettings() -> impl IntoView {
     let (noise, set_noise) = processing(NOISE);
     let (agc, set_agc) = processing(AGC);
 
-    // Appuyer pour parler.
-    let ptt = v.ptt;
-    let capturing = RwSignal::new(false);
-    let key_error = RwSignal::new(None::<&'static str>);
-    let captured_at = StoredValue::new(0f64);
-    let toggle_ptt = move |on: bool| remember_flag(PTT, on);
-    let end_capture = move |error: Option<&'static str>| {
-        capturing.set(false);
-        key_error.set(error);
-    };
-    let on_key = move |e: KeyboardEvent| {
-        if !capturing.get_untracked() {
-            return;
-        }
-        // Rien de ce qui est tapé pendant le choix ne doit sortir du champ (Échap fermerait les réglages).
-        e.prevent_default();
-        e.stop_propagation();
-        match e.code().as_str() {
-            "Escape" => end_capture(None),
-            "Tab" => key_error.set(Some(TAB_REFUSED)),
-            "Enter" | "NumpadEnter" => key_error.set(Some(ENTER_REFUSED)),
-            "" | "Unidentified" => {}
-            code => {
-                let key = PttKey::from_event(code, &e.key());
-                remember(PTT_KEY, Some(&key.code));
-                // Le nom d'une touche sans caractère (« Espace ») suit la langue : on ne garde que ce que la touche écrit.
-                remember(PTT_LABEL, Some(key.label.as_str()).filter(|l| *l != key_label(&key.code)));
-                v.ptt_key.set(Some(key));
-                captured_at.set_value(js_sys::Date::now());
-                end_capture(None);
-            }
-        }
-    };
-    let on_key_up = move |e: KeyboardEvent| {
-        // Espace relâché sur le bouton le « clique » : ce clic-là n'est pas un nouveau choix.
-        if capturing.get_untracked() || js_sys::Date::now() - captured_at.get_value() < 400.0 {
-            e.prevent_default();
-        }
-    };
-    let on_key_click = move |_| {
-        if js_sys::Date::now() - captured_at.get_value() < 400.0 {
-            return;
-        }
-        if capturing.get_untracked() {
-            end_capture(None);
-        } else {
-            key_error.set(None);
-            capturing.set(true);
-        }
-    };
-
     view! {
         <div class="app-prefs">
             <p class="app-hint">
@@ -615,6 +586,173 @@ pub fn VoiceSettings() -> impl IntoView {
                     hint=tk!("Garde ta voix à un niveau régulier, que tu parles fort ou doucement.")/>
             </section>
 
+            <PttSettings/>
+        </div>
+    }
+}
+
+/// Un curseur de niveau (de 0 à `max`, 1 : inchangé) avec sa valeur écrite à côté.
+#[component]
+fn LevelSlider(
+    id: &'static str,
+    /// Une clé de traduction.
+    label: &'static str,
+    max: f32,
+    level: RwSignal<f32>,
+    key: &'static str,
+) -> impl IntoView {
+    view! {
+        <div class="k-field">
+            <label class="k-label" for=id>{t(label)}</label>
+            <div class="app-level">
+                <input id=id type="range" class="k-slider" min="0" max=max.to_string() step=native_voice::LEVEL_STEP.to_string()
+                    prop:value=move || level.get().to_string()
+                    aria-valuetext=move || native_voice::percent(level.get())
+                    on:input=move |e| {
+                        let now = event_target_value(&e).parse::<f32>().map_or(1.0, |x| x.clamp(0.0, max));
+                        level.set(now);
+                        native_voice::remember_level(key, now);
+                    }/>
+                <output for=id>{move || native_voice::percent(level.get())}</output>
+            </div>
+        </div>
+    }
+}
+
+/// Les réglages quand l'appel passe par le moteur natif de l'appli de bureau Linux : les micros et haut-parleurs du système
+/// (relevés par le moteur), le gain et le volume (tout de suite, même en appel), appuyer pour parler. Le test du micro, la
+/// caméra, l'annulation d'écho et la réduction du bruit n'existent pas : la page le dit.
+#[component]
+fn NativeVoiceSettings() -> impl IntoView {
+    let v = store().voice;
+    let inputs = RwSignal::new(Vec::<Device>::new());
+    let outputs = RwSignal::new(Vec::<Device>::new());
+    let error = RwSignal::new(None::<String>);
+    // Le nom d'un appareil, avec « (par défaut) » pour celui que « Par défaut du système » désigne.
+    let named = |d: NativeDevice| Device {
+        label: if d.is_default { tf(native_voice::BY_DEFAULT, &[("nom", &d.name)]) } else { d.name },
+        id: d.id,
+    };
+    spawn_local(async move {
+        match native_voice::devices().await {
+            Ok(found) => {
+                inputs.try_set(found.inputs.into_iter().map(named).collect());
+                outputs.try_set(found.outputs.into_iter().map(named).collect());
+            }
+            Err(e) => {
+                error.try_set(Some(e));
+            }
+        }
+    });
+    let mic = RwSignal::new(stored(native_voice::MIC).unwrap_or_default());
+    let speaker = RwSignal::new(stored(native_voice::SPEAKER).unwrap_or_default());
+    let pick_mic = move |id: String| remember(native_voice::MIC, Some(&id));
+    let pick_speaker = move |id: String| remember(native_voice::SPEAKER, Some(&id));
+    let level = move || ((v.mic_level.get() * 100.0).round() as u32).min(100);
+
+    view! {
+        <div class="app-prefs">
+            <p class="app-hint">{t(NATIVE_INTRO)}</p>
+
+            <section class="app-choice-group" aria-labelledby="vn-devices-t">
+                <h3 id="vn-devices-t" class="app-prefs-title">{t("Appareils")}</h3>
+                {move || error.get().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
+                <DeviceSelect id="vv-mic" label=tk!("Entrée audio") options=Signal::from(inputs) current=mic on_pick=pick_mic/>
+                <DeviceSelect id="vv-speaker" label=tk!("Sortie audio") options=Signal::from(outputs) current=speaker on_pick=pick_speaker/>
+            </section>
+
+            <section class="app-choice-group" aria-labelledby="vn-levels-t">
+                <h3 id="vn-levels-t" class="app-prefs-title">{t("Niveaux")}</h3>
+                <p class="app-hint">{t(NATIVE_LEVELS)}</p>
+                <LevelSlider id="vn-gain" label=tk!("Volume du micro") max=native_voice::MAX_GAIN level=v.native_gain key=native_voice::GAIN/>
+                <LevelSlider id="vn-volume" label=tk!("Volume des autres") max=native_voice::MAX_VOLUME level=v.native_volume
+                    key=native_voice::VOLUME/>
+            </section>
+
+            <section class="app-choice-group" aria-labelledby="vn-test-t">
+                <h3 id="vn-test-t" class="app-prefs-title">{t("Test du micro")}</h3>
+                <p id="vn-test-h" class="app-hint">{t(NATIVE_TEST)}</p>
+                <div class="app-meter-row">
+                    <span id="vn-meter-l" class="k-label">{t("Niveau du micro")}</span>
+                    <div class="app-meter" role="meter" aria-labelledby="vn-meter-l" aria-describedby="vn-test-h" aria-valuemin="0"
+                        aria-valuemax="100" aria-valuenow=move || level().to_string()>
+                        <span style:width=move || format!("{}%", level())></span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="app-choice-group" aria-labelledby="vn-cam-t">
+                <h3 id="vn-cam-t" class="app-prefs-title">{t("Caméra")}</h3>
+                <p class="app-hint">{t(native_voice::NO_VIDEO)}</p>
+                <div class="app-native-open"><OpenInBrowser small=true/></div>
+            </section>
+
+            <section class="app-choice-group" aria-labelledby="vn-sound-t">
+                <h3 id="vn-sound-t" class="app-prefs-title">{t("Traitement du son")}</h3>
+                <p class="app-hint">{t(native_voice::NO_ECHO_CANCEL)}</p>
+            </section>
+
+            <PttSettings/>
+        </div>
+    }
+}
+
+/// Appuyer pour parler : le réglage et la touche. Les mêmes avec le navigateur et avec le moteur natif.
+#[component]
+fn PttSettings() -> impl IntoView {
+    let v = store().voice;
+    // Appuyer pour parler.
+    let ptt = v.ptt;
+    let capturing = RwSignal::new(false);
+    let key_error = RwSignal::new(None::<&'static str>);
+    let captured_at = StoredValue::new(0f64);
+    let toggle_ptt = move |on: bool| remember_flag(PTT, on);
+    let end_capture = move |error: Option<&'static str>| {
+        capturing.set(false);
+        key_error.set(error);
+    };
+    let on_key = move |e: KeyboardEvent| {
+        if !capturing.get_untracked() {
+            return;
+        }
+        // Rien de ce qui est tapé pendant le choix ne doit sortir du champ (Échap fermerait les réglages).
+        e.prevent_default();
+        e.stop_propagation();
+        match e.code().as_str() {
+            "Escape" => end_capture(None),
+            "Tab" => key_error.set(Some(TAB_REFUSED)),
+            "Enter" | "NumpadEnter" => key_error.set(Some(ENTER_REFUSED)),
+            "" | "Unidentified" => {}
+            code => {
+                let key = PttKey::from_event(code, &e.key());
+                remember(PTT_KEY, Some(&key.code));
+                // Le nom d'une touche sans caractère (« Espace ») suit la langue : on ne garde que ce que la touche écrit.
+                remember(PTT_LABEL, Some(key.label.as_str()).filter(|l| *l != key_label(&key.code)));
+                v.ptt_key.set(Some(key));
+                captured_at.set_value(js_sys::Date::now());
+                end_capture(None);
+            }
+        }
+    };
+    let on_key_up = move |e: KeyboardEvent| {
+        // Espace relâché sur le bouton le « clique » : ce clic-là n'est pas un nouveau choix.
+        if capturing.get_untracked() || js_sys::Date::now() - captured_at.get_value() < 400.0 {
+            e.prevent_default();
+        }
+    };
+    let on_key_click = move |_| {
+        if js_sys::Date::now() - captured_at.get_value() < 400.0 {
+            return;
+        }
+        if capturing.get_untracked() {
+            end_capture(None);
+        } else {
+            key_error.set(None);
+            capturing.set(true);
+        }
+    };
+
+    view! {
             <section aria-labelledby="vv-ptt-t">
                 <h3 id="vv-ptt-t" class="app-prefs-title">{t("Appuyer pour parler")}</h3>
                 <Switch id="vv-ptt" label=tk!("Appuyer pour parler") on=ptt on_change=toggle_ptt
@@ -649,7 +787,6 @@ pub fn VoiceSettings() -> impl IntoView {
                     </div>
                 </Show>
             </section>
-        </div>
     }
 }
 

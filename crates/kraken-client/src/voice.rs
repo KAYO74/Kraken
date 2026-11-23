@@ -7,6 +7,10 @@
 //! Les objets JavaScript (connexion, pistes) vivent dans `SESSION`, hors des signaux. Chaque
 //! connexion a son numéro (`GEN`) : un rappel d'une connexion fermée ne touche plus à rien.
 //!
+//! Sans WebRTC dans le navigateur (WebKitGTK de l'appli de bureau Linux), l'appel passe par le moteur
+//! natif de l'appli (`native_voice.rs`) : voix seulement, la page garde la même session, les mêmes
+//! états et les mêmes boutons.
+//!
 //! Contrôle à distance : celui qui regarde un écran demande à le contrôler ; le serveur relaie
 //! demande, réponse, actions et fin par le canal de données. Seule l'appli de bureau peut être
 //! contrôlée : la page lui passe les actions (`remote_input`), et c'est elle qui demande l'accord,
@@ -36,6 +40,7 @@ use web_sys::{
 };
 
 use crate::i18n::{t, tf};
+use crate::native_voice;
 use crate::store::Store;
 use crate::tk;
 use crate::voice_settings::{self as vs, PttKey};
@@ -174,8 +179,13 @@ pub struct Voice {
     pub confirming: RwSignal<Option<Id>>,
     pub controller: RwSignal<Option<Id>>,
     pub share_note: RwSignal<Option<(Id, ShareNote)>>,
+    /// Vocal natif : gain du micro et volume de sortie réglés dans Voix et vidéo (1 : inchangé), et le niveau
+    /// du micro relevé pendant l'appel (de 0 à 1).
+    pub native_gain: RwSignal<f32>,
+    pub native_volume: RwSignal<f32>,
+    pub mic_level: RwSignal<f32>,
     /// Mon compte (celui du `Store`).
-    me: RwSignal<Option<User>>,
+    pub(crate) me: RwSignal<Option<User>>,
 }
 
 type Handler = Closure<dyn FnMut(JsValue)>;
@@ -252,7 +262,7 @@ fn bump() -> u64 {
     })
 }
 
-fn current(n: u64) -> bool {
+pub(crate) fn current(n: u64) -> bool {
     GEN.with(Cell::get) == n
 }
 
@@ -261,8 +271,25 @@ fn with_session<R>(f: impl FnOnce(&mut Session) -> R) -> Option<R> {
 }
 
 /// Le navigateur sait faire du WebRTC.
-pub fn supported() -> bool {
+pub fn browser_webrtc() -> bool {
     js_sys::Reflect::has(&window(), &"RTCPeerConnection".into()).unwrap_or(false)
+}
+
+/// Les appels vocaux marchent ici : par le WebRTC du navigateur, ou par le moteur natif de l'appli de bureau Linux
+/// (qui n'est connu qu'un instant après le démarrage : dans une vue, cette fonction suit le signal).
+pub fn supported() -> bool {
+    browser_webrtc() || native_voice::available()
+}
+
+/// L'appel passe par le moteur natif : le navigateur n'a pas WebRTC et l'appli de bureau a de quoi le remplacer. La
+/// voix seulement : ni caméra, ni partage d'écran, ni écran des autres. Suit le signal, comme [`supported`].
+pub fn native() -> bool {
+    !browser_webrtc() && native_voice::available()
+}
+
+/// [`native`] pour le code qui ne suit rien (gestionnaires, tâches asynchrones).
+fn native_now() -> bool {
+    !browser_webrtc() && native_voice::available_now()
 }
 
 /// Pourquoi les appels vocaux manquent : l'appli de bureau sans WebRTC d'abord (le navigateur du système en a), puis une
@@ -520,12 +547,20 @@ impl Voice {
             confirming: RwSignal::new(None),
             controller: RwSignal::new(None),
             share_note: RwSignal::new(None),
+            native_gain: RwSignal::new(native_voice::stored_level(native_voice::GAIN, native_voice::MAX_GAIN)),
+            native_volume: RwSignal::new(native_voice::stored_level(native_voice::VOLUME, native_voice::MAX_VOLUME)),
+            mic_level: RwSignal::new(0.0),
             me,
         }
     }
 
-    fn mic_off(&self) -> bool {
+    pub(crate) fn mic_off(&self) -> bool {
         self.mute.get_untracked() || self.deaf.get_untracked()
+    }
+
+    /// Appuyer pour parler garde le micro fermé : le réglage est actif, une touche est choisie, et elle n'est pas tenue.
+    pub(crate) fn ptt_closed(&self) -> bool {
+        self.ptt.get_untracked() && self.ptt_key.with_untracked(Option::is_some) && !self.ptt_held.get_untracked()
     }
 
     /// Appuyer pour parler est en marche : le réglage est actif et une touche est choisie (suit les signaux).
@@ -536,8 +571,7 @@ impl Voice {
     /// La piste du micro laisse passer le son : ni coupé par moi, ni fermé par appuyer pour parler (la touche
     /// n'est pas tenue). `self_mute`, lui, n'est que ma sourdine : appuyer pour parler ne la change pas.
     fn mic_open(&self) -> bool {
-        let gated = self.ptt.get_untracked() && self.ptt_key.with_untracked(Option::is_some);
-        !self.mic_off() && (!gated || self.ptt_held.get_untracked())
+        !self.mic_off() && !self.ptt_closed()
     }
 
     /// Pose l'état ouvert ou fermé sur la piste du micro de la session.
@@ -548,6 +582,8 @@ impl Voice {
         {
             t.set_enabled(open);
         }
+        // Avec le moteur natif, il n'y a pas de piste : le même état part par `native_voice_set`.
+        self.push_native();
     }
 
     /// En vocal, ou en train d'y entrer : il y a une connexion à quitter.
@@ -578,6 +614,9 @@ impl Voice {
     }
 
     async fn connect(self, n: u64, channel: Id) -> Result<(), String> {
+        if native_now() {
+            return self.connect_native(n, channel).await;
+        }
         if !supported() {
             return Err(unsupported_message());
         }
@@ -839,6 +878,8 @@ impl Voice {
         if let Some(s) = SESSION.take() {
             s.close();
         }
+        native_voice::stop();
+        self.mic_level.set(0.0);
         self.streaming.set(false);
         self.camera.set(false);
         self.camera_error.set(None);
@@ -852,7 +893,7 @@ impl Voice {
     }
 
     /// `why` est une clé de traduction : la raison s'affiche traduite.
-    fn lost(self, why: &str) {
+    pub(crate) fn lost(self, why: &str) {
         self.teardown();
         self.status.set(Status::Lost(t(why)));
     }
@@ -920,6 +961,12 @@ impl Voice {
 
     /// Micro réactivé alors que la session n'en a pas (refusé au départ) : on le redemande.
     fn ensure_mic(self) {
+        // Le moteur natif ne change pas de micro à chaud : sans micro à l'entrée, il en faut un nouvel appel.
+        if native_voice::no_mic() {
+            self.mute.set(true);
+            self.notice.set(Some(t(native_voice::NO_MIC)));
+            return;
+        }
         if with_session(|s| s.mic.is_none()) != Some(true) {
             return;
         }
@@ -994,6 +1041,10 @@ impl Voice {
 
     /// Partage l'écran. À appeler dans le clic : le navigateur l'exige pour ouvrir son choix.
     pub fn share(self) {
+        // Le moteur natif ne partage pas l'écran : le bouton est grisé, et ceci tient aussi dans le code.
+        if native_now() {
+            return;
+        }
         let Some(d) = devices().filter(|_| can_share()) else { return };
         let n = GEN.with(Cell::get);
         let Ok(wanted) = js_sys::JSON::parse(r#"{"video":{"frameRate":{"ideal":30,"max":30}},"audio":true}"#) else {
@@ -1089,7 +1140,7 @@ impl Voice {
     }
 
     fn start_camera(self) {
-        if CAMERA_ASKED.get() || !self.active() {
+        if CAMERA_ASKED.get() || !self.active() || native_now() {
             return;
         }
         self.camera_error.set(None);
@@ -1396,6 +1447,12 @@ pub fn init(store: Store) {
         v.apply_mic();
     });
     vs::init_ptt(v);
+    // Vocal natif : le gain du micro et le volume de sortie réglés dans Voix et vidéo s'appliquent tout de suite.
+    Effect::new(move || {
+        let (_, _) = (v.native_gain.get(), v.native_volume.get());
+        v.push_native();
+    });
+    native_voice::init();
     Effect::new(move || {
         let (Some(user), Some(room)) = (v.watching.get(), v.room.get()) else { return };
         let streams = store.present(room.guild, room.channel).iter().any(|s| s.user_id == user && s.streaming);

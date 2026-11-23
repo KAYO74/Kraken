@@ -21,6 +21,7 @@ use wasm_bindgen_futures::JsFuture;
 
 use crate::i18n::{t, tf, tn};
 use crate::icons::{Icon, lu};
+use crate::native_voice;
 use crate::store::{Store, store};
 use crate::tk;
 use crate::ui::{Avatar, Header, initials};
@@ -129,8 +130,9 @@ fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
         let r = v.room.get().filter(|r| r.channel != channel)?;
         s.channel(r.channel).and_then(|c| c.name)
     });
-    let supported = voice::supported();
-    let insecure = supported && voice::devices().is_none();
+    // Ces trois lectures suivent le signal du vocal natif : l'appli de bureau le connaît un instant après le démarrage.
+    let supported = voice::supported;
+    let insecure = move || voice::supported() && !voice::native() && voice::devices().is_none();
     view! {
         <div class="app-call-lobby">
             <span class="app-call-icon" aria-hidden="true"><Icon icon=lu::LuVolume2/></span>
@@ -149,13 +151,14 @@ fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
                     </For>
                 </ul>
             </Show>
-            <button class="k-btn k-btn--primary k-btn--lg" disabled=!supported on:click=move |_| v.join(guild, channel)>
+            <button class="k-btn k-btn--primary k-btn--lg" disabled=move || !supported() on:click=move |_| v.join(guild, channel)>
                 <Icon icon=lu::LuPhone/>{t("Rejoindre")}
             </button>
+            {move || voice::native().then(|| view! { <NativeLimits id="lobby-native-why"/> })}
             {move || elsewhere.get().map(|c| view! { <p class="app-hint">{tf("Tu quitteras {salon}.", &[("salon", &c)])}</p> })}
             {move || error().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
-            {(!supported).then(|| view! { <p class="k-error">{voice::unsupported_message()}</p>{voice::desktop().then(|| view! { <OpenInBrowser/> })}<p class="app-hint">{voice::unsupported_details()}</p> })}
-            {insecure.then(|| view! { <p class="app-hint">{t(voice::INSECURE)}</p> })}
+            {move || (!supported()).then(|| view! { <p class="k-error">{voice::unsupported_message()}</p>{voice::desktop().then(|| view! { <OpenInBrowser/> })}<p class="app-hint">{voice::unsupported_details()}</p> })}
+            {move || insecure().then(|| view! { <p class="app-hint">{t(voice::INSECURE)}</p> })}
         </div>
     }
 }
@@ -166,6 +169,18 @@ fn Call(guild: Option<Id>, channel: Id) -> impl IntoView {
     let s = store();
     let v = s.voice;
     let who = Memo::new(move |_| present(s, guild, channel).into_iter().map(|x| x.user_id).collect::<Vec<_>>());
+    // Vocal natif : qui partage son écran ou allume sa caméra sans que son image puisse s'afficher ici.
+    let unseen = Memo::new(move |_| {
+        if !voice::native() {
+            return Vec::new();
+        }
+        let me = s.my_id();
+        present(s, guild, channel)
+            .into_iter()
+            .filter(|x| Some(x.user_id) != me && (x.streaming || x.camera))
+            .map(|x| member(s, guild, x.user_id).1)
+            .collect::<Vec<_>>()
+    });
     view! {
         <div class="app-call-main">
             {move || match v.status.get() {
@@ -217,6 +232,15 @@ fn Call(guild: Option<Id>, channel: Id) -> impl IntoView {
                     </div>
                 }
             })}
+            {move || {
+                let who = unseen.get();
+                (!who.is_empty()).then(|| view! {
+                    <div class="k-banner" role="status">
+                        <Icon icon=lu::LuMonitorOff/>
+                        <span>{tf(native_voice::CANT_SHOW, &[("noms", &names(&who))])}</span>
+                    </div>
+                })
+            }}
             {move || v.watching.get().map(|u| view! { <Stage guild=guild user=u/> })}
             <ul class="app-tiles" aria-label=t("Participants")>
                 <For each=move || who.get() key=|u| *u let:u>
@@ -280,7 +304,7 @@ fn Tile(guild: Option<Id>, channel: Id, user: Id) -> impl IntoView {
                 </Show>
                 <Show when=live><span class="k-badge k-badge--live">{t("En direct")}</span></Show>
             </div>
-            <Show when=move || live() && !me>
+            <Show when=move || live() && !me && !voice::native()>
                 <button class="k-btn k-btn--sm" aria-label=watch_label.clone() aria-pressed=move || watched().to_string()
                     on:click=move |_| v.watch(if watched() { None } else { Some(user) })>
                     <Icon icon=lu::LuMonitorPlay small=true/>
@@ -629,18 +653,23 @@ pub fn DeafToggle(#[prop(optional)] big: bool) -> impl IntoView {
 #[component]
 fn CallBar(private: bool) -> impl IntoView {
     let v = store().voice;
-    let share_ok = voice::can_share();
+    let can_share = voice::can_share();
     let why = if voice::devices().is_none() {
         t("Le partage d'écran demande l'instance en HTTPS (ou ouverte via localhost).")
     } else {
         t("Ce navigateur ne permet pas de partager l'écran.")
     };
+    // Vocal natif : ni caméra ni partage d'écran, dit par une phrase visible sous la barre.
+    let native = voice::native;
+    let share_ok = move || can_share && !native();
     let share_label = move || if v.streaming.get() { t("Arrêter le partage") } else { t("Partager ton écran") };
     // Sans le droit « Caméra » : bouton désactivé, la raison en infobulle et lue par `aria-describedby`.
     // Une caméra déjà allumée reste éteignable si le droit disparaît en cours d'appel.
-    let cam_blocked = move || !v.camera.get() && v.camera_denied();
+    let cam_blocked = move || !v.camera.get() && !native() && v.camera_denied();
     let cam_title = move || {
-        if cam_blocked() {
+        if native() {
+            t(native_voice::NO_VIDEO)
+        } else if cam_blocked() {
             t(voice::CAM_NO_RIGHT)
         } else if v.camera.get() {
             t("Couper la caméra")
@@ -658,16 +687,17 @@ fn CallBar(private: bool) -> impl IntoView {
             <MicToggle big=true/>
             <DeafToggle big=true/>
             <button class="k-callbtn" data-on=move || v.camera.get().then_some("")
-                disabled=move || cam_blocked() || matches!(v.status.get(), Status::Lost(_) | Status::Off)
+                disabled=move || native() || cam_blocked() || matches!(v.status.get(), Status::Lost(_) | Status::Off)
                 aria-label=t("Caméra") title=cam_title aria-pressed=move || v.camera.get().to_string()
-                aria-describedby=move || cam_blocked().then_some("call-cam-why")
+                aria-describedby=move || if native() { Some("call-native-why") } else { cam_blocked().then_some("call-cam-why") }
                 on:click=move |_| v.toggle_camera()>
                 {move || if v.camera.get() { view! { <Icon icon=lu::LuVideo/> } } else { view! { <Icon icon=lu::LuVideoOff/> } }}
                 <span>{t("Caméra")}</span>
             </button>
             <button class="k-callbtn" data-on=move || v.streaming.get().then_some("")
-                disabled=move || !share_ok || matches!(v.status.get(), Status::Lost(_) | Status::Off)
-                aria-label=share_label title=share_label aria-describedby=(!share_ok).then_some("call-share-why")
+                disabled=move || !share_ok() || matches!(v.status.get(), Status::Lost(_) | Status::Off)
+                aria-label=share_label title=move || if native() { t(native_voice::NO_VIDEO) } else { share_label() }
+                aria-describedby=move || if native() { Some("call-native-why") } else { (!can_share).then_some("call-share-why") }
                 on:click=move |_| if v.streaming.get_untracked() { v.stop_share() } else { v.share() }>
                 {move || if v.streaming.get() { view! { <Icon icon=lu::LuScreenShareOff/> } } else { view! { <Icon icon=lu::LuScreenShare/> } }}
                 <span>{share_label}</span>
@@ -700,7 +730,8 @@ fn CallBar(private: bool) -> impl IntoView {
                 </span>
             })}
         </div>
-        {(!share_ok).then(|| view! { <p class="app-hint app-call-why" id="call-share-why">{why}</p> })}
+        {move || native().then(|| view! { <NativeLimits id="call-native-why"/> })}
+        {move || (!can_share && !native()).then(|| view! { <p class="app-hint app-call-why" id="call-share-why">{why.clone()}</p> })}
         {move || cam_blocked().then(|| view! { <p class="app-hint app-call-why" id="call-cam-why">{t(voice::CAM_NO_RIGHT)}</p> })}
     }
 }
@@ -942,11 +973,11 @@ pub fn DmCall(channel: Id) -> impl IntoView {
                                     }
                                 </For>
                             </ul>
-                            <button class="k-btn k-btn--primary" disabled=!voice::supported() title=(!voice::supported()).then(voice::unsupported_message)
-                                aria-describedby=(!voice::supported()).then_some("dmcall-nosupport") on:click=move |_| v.join(None, channel)>
+                            <button class="k-btn k-btn--primary" disabled=move || !voice::supported() title=move || (!voice::supported()).then(voice::unsupported_message)
+                                aria-describedby=move || (!voice::supported()).then_some("dmcall-nosupport") on:click=move |_| v.join(None, channel)>
                                 <Icon icon=lu::LuPhone/>{t("Rejoindre l'appel")}
                             </button>
-                            {(!voice::supported()).then(|| view! { <p class="k-error app-dmcall-error" id="dmcall-nosupport">{voice::unsupported_message()}</p>{voice::desktop().then(|| view! { <OpenInBrowser/> })} })}
+                            {move || (!voice::supported()).then(|| view! { <p class="k-error app-dmcall-error" id="dmcall-nosupport">{voice::unsupported_message()}</p>{voice::desktop().then(|| view! { <OpenInBrowser/> })} })}
                         </div>
                     }.into_any()
                 } else {
@@ -966,13 +997,25 @@ pub fn DmCall(channel: Id) -> impl IntoView {
 /// Appli de bureau sans WebRTC (WebKitGTK de Linux) : continuer dans le navigateur du système. L'erreur a sa place
 /// réservée (un paragraphe `alert` toujours là, sur sa ligne, d'une ligne de haut) : rien ne bouge quand elle arrive.
 #[component]
-fn OpenInBrowser(#[prop(optional)] small: bool) -> impl IntoView {
+pub(crate) fn OpenInBrowser(#[prop(optional)] small: bool) -> impl IntoView {
     let failed = RwSignal::new(None::<String>);
     view! {
         <button class="k-btn" class:k-btn--sm=small on:click=move |_| spawn_local(async move { failed.set(voice::open_in_browser().await.err()) })>
             <Icon icon=lu::LuExternalLink small=small/>{t("Ouvrir dans mon navigateur")}
         </button>
         <p class="k-error app-open-error" role="alert">{move || failed.get()}</p>
+    }
+}
+
+/// Vocal natif (appli de bureau Linux) : ce que l'appel ne fait pas encore, dit en toutes lettres, et le moyen d'y
+/// arriver par le navigateur du système. `id` : ce que citent les boutons grisés par `aria-describedby`.
+#[component]
+fn NativeLimits(id: &'static str) -> impl IntoView {
+    view! {
+        <div class="app-native-note">
+            <p class="app-hint" id=id>{t(native_voice::NO_VIDEO)}</p>
+            <OpenInBrowser small=true/>
+        </div>
     }
 }
 
@@ -985,9 +1028,12 @@ pub fn call_title(normal: String) -> String {
 }
 
 /// Le même pourquoi, pour les lecteurs d'écran : un texte caché que le bouton grisé cite par `aria-describedby=id`. Rien quand les
-/// appels marchent.
-pub fn call_note(id: &str) -> Option<impl IntoView + use<>> {
-    (!voice::supported()).then(|| view! { <span class="k-sr" id=id.to_string()>{voice::unsupported_message()}</span> })
+/// appels marchent. Suit le signal du vocal natif, connu un instant après le démarrage.
+pub fn call_note(id: &str) -> impl IntoView + use<> {
+    let id = id.to_string();
+    move || {
+        (!voice::supported()).then(|| view! { <span class="k-sr" id=id.clone()>{voice::unsupported_message()}</span> })
+    }
 }
 
 /// Dans l'en-tête d'un MP ou d'un groupe sans appel en cours : lancer l'appel.
@@ -997,13 +1043,12 @@ pub fn StartCall(channel: Id, #[prop(into)] blocked: Signal<bool>) -> impl IntoV
     let v = s.voice;
     let idle =
         Memo::new(move |_| v.room.get().is_none_or(|r| r.channel != channel) && present(s, None, channel).is_empty());
-    let supported = voice::supported();
     let note = format!("call-no-{channel}");
     view! {
         <Show when=move || idle.get()>
-            <button class="k-btn k-btn--icon" aria-label=t("Démarrer un appel") title=call_title(t("Démarrer un appel"))
-                aria-describedby=(!supported).then(|| note.clone())
-                disabled=move || blocked.get() || !supported on:click=move |_| v.join(None, channel)>
+            <button class="k-btn k-btn--icon" aria-label=t("Démarrer un appel") title=move || call_title(t("Démarrer un appel"))
+                aria-describedby={ let note = note.clone(); move || (!voice::supported()).then(|| note.clone()) }
+                disabled=move || blocked.get() || !voice::supported() on:click=move |_| v.join(None, channel)>
                 <Icon icon=lu::LuPhoneCall/>
             </button>
             {call_note(&note)}
@@ -1110,12 +1155,12 @@ fn RingCard(call: kraken_proto::Call) -> impl IntoView {
         <div class="app-ring-card" role="alertdialog" aria-label=tf("Appel de {nom}", &[("nom", &who)]) aria-describedby=format!("ring-{cid}")>
             {face(account, &who, "md")}
             <p id=format!("ring-{cid}")><b class="app-ellipsis"><bdi>{who.clone()}</bdi></b><span>{line}</span></p>
-            <button class="k-btn k-btn--sm k-btn--primary" disabled=!voice::supported() title=(!voice::supported()).then(voice::unsupported_message)
-                aria-describedby=(!voice::supported()).then(|| format!("ring-no-{cid}")) on:click=answer>
+            <button class="k-btn k-btn--sm k-btn--primary" disabled=move || !voice::supported() title=move || (!voice::supported()).then(voice::unsupported_message)
+                aria-describedby=move || (!voice::supported()).then(|| format!("ring-no-{cid}")) on:click=answer>
                 <Icon icon=lu::LuPhone small=true/><span>{t("Rejoindre")}</span>
             </button>
             {call_note(&format!("ring-no-{cid}"))}
-            {(voice::desktop() && !voice::supported()).then(|| view! {
+            {move || (voice::desktop() && !voice::supported()).then(|| view! {
                 <p class="app-ring-why">{t(RING_WHY)}</p>
                 <OpenInBrowser small=true/>
             })}

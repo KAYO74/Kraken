@@ -237,3 +237,30 @@ L'appli de bureau n'a pas les appels vocaux ici : son navigateur intégré (WebK
 Ouvrir dans mon navigateur	In meinem Browser öffnen
 Impossible d'ouvrir le navigateur.	Der Browser konnte nicht geöffnet werden.
 Pas de vocal dans l'appli de bureau : réponds depuis ton navigateur.	Kein Sprachchat in der Desktop-App: Antworte über deinen Browser.
+# Vocal natif de l'appli de bureau Linux (étape 2b) : réglages, avis du moteur, ce qui manque.
+Pas de caméra ni de partage d'écran dans l'appli Linux pour l'instant : ouvre cette page dans ton navigateur.	Noch keine Kamera und keine Bildschirmfreigabe in der Linux-App: Öffne diese Seite in deinem Browser.
+Écran partagé ou caméra allumée chez {noms} : l'image ne s'affiche pas dans l'appli Linux pour l'instant. Ouvre cette page dans ton navigateur pour la voir.	Bildschirm geteilt oder Kamera an bei {noms}: Das Bild wird in der Linux-App noch nicht angezeigt. Öffne diese Seite in deinem Browser, um es zu sehen.
+Pas d'annulation d'écho ni de réduction de bruit dans l'appli Linux pour l'instant : un casque évite l'écho.	Noch keine Echounterdrückung und keine Rauschunterdrückung in der Linux-App: Mit einem Headset gibt es kein Echo.
+{nom} (par défaut)	{nom} (Standard)
+{n} %	{n} %
+Aucun micro n'est utilisable : tu es en sourdine. Branche-en un, puis quitte le salon et rejoins-le.	Kein Mikrofon verwendbar: Du bist stummgeschaltet. Schließe eins an, verlasse dann den Kanal und tritt wieder bei.
+L'audio ne répond plus : le micro ou les haut-parleurs ont été débranchés ou repris par une autre application.	Der Ton antwortet nicht mehr: Mikrofon oder Lautsprecher wurden getrennt oder von einer anderen Anwendung übernommen.
+Le vocal natif ne répond pas.	Der native Sprachchat antwortet nicht.
+Impossible d'ouvrir une connexion réseau pour le vocal.	Für den Sprachchat konnte keine Netzwerkverbindung geöffnet werden.
+Le vocal natif n'a pas pu démarrer.	Der native Sprachchat konnte nicht gestartet werden.
+La réponse du serveur est illisible.	Die Antwort des Servers ist nicht lesbar.
+Le micro ou les haut-parleurs sont inutilisables.	Mikrofon oder Lautsprecher sind nicht verwendbar.
+Le vocal est arrêté.	Der Sprachchat wurde beendet.
+Aucun appel vocal en cours.	Kein Sprachanruf läuft.
+Micro indisponible : tu entres micro coupé.	Mikrofon nicht verfügbar: Du trittst stummgeschaltet bei.
+Haut-parleurs indisponibles : tu n'entendras personne.	Lautsprecher nicht verfügbar: Du wirst niemanden hören.
+Ni micro ni haut-parleurs utilisables : vérifie le son du système.	Weder Mikrofon noch Lautsprecher verwendbar: Prüfe die Audioeinstellungen deines Systems.
+Cette version de KRAKEN n'a pas de pilote audio.	Diese Version von KRAKEN hat keinen Audiotreiber.
+Le vocal natif n'existe que sous Linux.	Den nativen Sprachchat gibt es nur unter Linux.
+Le vocal natif s'est arrêté brutalement.	Der native Sprachchat wurde unerwartet beendet.
+Ces réglages restent sur cet appareil. Le micro et la sortie choisis servent au prochain appel : pour en changer pendant un appel, quitte le salon et rejoins-le.	Diese Einstellungen bleiben auf diesem Gerät. Das gewählte Mikrofon und die gewählte Ausgabe gelten für deinen nächsten Anruf: Um sie während eines Anrufs zu ändern, verlasse den Kanal und tritt wieder bei.
+Le volume du micro et celui des autres s'appliquent tout de suite, même pendant un appel.	Mikrofonlautstärke und die Lautstärke der anderen gelten sofort, auch während eines Anrufs.
+Le test du micro n'existe pas encore dans l'appli Linux. Pendant un appel, la barre suit ton micro.	Den Mikrofontest gibt es in der Linux-App noch nicht. Während eines Anrufs folgt die Leiste deinem Mikrofon.
+Niveaux	Lautstärke
+Volume du micro	Mikrofonlautstärke
+Volume des autres	Lautstärke der anderen

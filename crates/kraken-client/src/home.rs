@@ -218,9 +218,9 @@ fn FriendRow(r: Relationship, error: RwSignal<Option<String>>, confirm: RwSignal
                 <button class="k-btn k-btn--icon" aria-label=tf("Écrire à {nom}", &[("nom", &name)]) title=t("Message") on:click=move |_| write()>
                     <Icon icon=lu::LuMessageCircle/>
                 </button>
-                <button class="k-btn k-btn--icon" aria-label=tf("Appeler {nom}", &[("nom", &name)]) title=crate::call::call_title(t("Appeler"))
-                    aria-describedby=(!crate::voice::supported()).then(|| format!("call-no-{uid}"))
-                    disabled=!crate::voice::supported() on:click=move |_| ring()>
+                <button class="k-btn k-btn--icon" aria-label=tf("Appeler {nom}", &[("nom", &name)]) title=move || crate::call::call_title(t("Appeler"))
+                    aria-describedby=move || (!crate::voice::supported()).then(|| format!("call-no-{uid}"))
+                    disabled=move || !crate::voice::supported() on:click=move |_| ring()>
                     <Icon icon=lu::LuPhone/>
                 </button>
                 {crate::call::call_note(&format!("call-no-{uid}"))}

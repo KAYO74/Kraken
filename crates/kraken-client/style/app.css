@@ -294,6 +294,15 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-dmcall-error { margin: 0; padding: var(--space-3) var(--space-4); text-align: center; }
 /* Erreur de « Ouvrir dans mon navigateur » : sa ligne est réservée, vide ou pleine, et seule sur sa ligne (rien ne bouge). */
 .app-open-error { flex-basis: 100%; min-block-size: 1lh; margin: 0; text-align: center; }
+/* Vocal natif (appli de bureau Linux) : la phrase qui dit ce qui manque, puis « Ouvrir dans mon navigateur ». Sous la barre de
+   l'appel et dans le salon avant d'entrer, centrés ; dans les réglages, au début de la ligne. */
+.app-native-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-2) var(--space-3);
+  padding: 0 var(--space-4) var(--space-4); text-align: center; }
+.app-native-note > p { flex-basis: 100%; margin: 0; }
+.app-native-open { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+/* Réglages › Voix et vidéo (vocal natif) : un curseur et sa valeur, sur une ligne. */
+.app-level { display: flex; align-items: center; gap: var(--space-4); width: min(100%, var(--size-card)); }
+.app-level > output { flex: none; min-inline-size: 5ch; text-align: end; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
 .app-ring-card .app-ring-why { flex: 1 1 100%; }
 /* Dans la carte, `.app-ring-card p` (grise, flex: 1) passerait devant : la ligne réservée garde sa pleine largeur et son rouge. */
 .app-ring-card .app-open-error { flex: 1 1 100%; order: 1; min-inline-size: 0; color: var(--danger); }

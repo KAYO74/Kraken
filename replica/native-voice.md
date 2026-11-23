@@ -31,11 +31,10 @@ page), annulation d'écho (casque conseillé), contrôle à distance.
      (nouveau chargement) et avec l'appli. Paquets : `.deb` dépend de `libasound2 | libasound2t64`, `.rpm` de `alsa-lib` ;
      version 0.27.0. Exemple `examples/bridge.rs` : le `Controller` synthétique servi en HTTP sous les mêmes noms, pour les tests
      de bout en bout du client web (voir plus bas).
-   - **2b. À faire** : le client web (Leptos) choisit le vocal natif quand son navigateur n'a pas WebRTC et que
-     `native_voice_available` répond `true` ; il poste l'offre à `POST /channels/{id}/voice`, rend la réponse à
-     `native_voice_answer`, relève `native_voice_poll` (« poll »), règle par `native_voice_set` ; Réglages › Voix et vidéo avec les
-     périphériques natifs (`native_voice_devices`) ; tests Playwright contre le `bridge`.
-3. Finitions selon les retours : réduction de bruit (nnnoiseless), appui pour parler, niveaux, message clair sur ce qui manque.
+   - **2b. Fait** (le client web, `crates/kraken-client/src/native_voice.rs` ; rien ne change pour un navigateur ni pour Windows et
+     macOS) : voir « Côté page (étape 2b) » plus bas.
+3. Finitions selon les retours : réduction de bruit (nnnoiseless), appui pour parler global, vrai test du micro, niveaux par
+   participant. (Le message clair sur ce qui manque est fait à l'étape 2b.)
 
 **Décisions.** La page fait l'appel HTTP (`POST /channels/{id}/voice`, elle a la session) : le natif fabrique l'offre, la page la
 poste, puis rend la réponse au natif. Pas de chiffrement de bout en bout aujourd'hui (rien à faire). Opus lié statiquement si
@@ -70,3 +69,49 @@ expose `POST /native_voice_available|start|answer|set|poll|stop|devices` avec le
 d'arguments de l'`invoke` : `{"opts": …}`, `{"sdp": …}`, `{"patch": …}`), plus `GET /stats?freqs=440,880`. Une erreur répond 400 avec
 une chaîne JSON (ce que `invoke` rejette). CORS permissif (origine de la requête, prévol compris). Deux ponts de fréquences
 différentes (440 et 880 Hz) dans le même salon se vérifient l'un l'autre par `/stats`.
+
+## Côté page (étape 2b)
+
+**Détection.** `native_voice::init()` (appelée par `voice::init`) demande `native_voice_available` une seule fois, seulement si la page
+est dans l'appli de bureau (`voice::desktop()`) et que le navigateur n'a pas `RTCPeerConnection`. `voice::supported()` = WebRTC du
+navigateur **ou** moteur natif (un signal global : les vues qui le lisent se mettent à jour quand le moteur répond) ;
+`voice::native()` = pas de WebRTC et un moteur natif. Sans l'un ni l'autre : le message d'avant et « Ouvrir dans mon navigateur ».
+
+**Appel.** `Voice::connect` passe par `connect_native` quand `native()` : `native_voice_start` (micro et sortie choisis dans les
+réglages, gain, volume, `self_mute` et `self_deaf` de la page) → `api::voice_join` avec le `VoiceJoin` tel quel →
+`native_voice_answer {sdp}` → un relevé de `native_voice_poll` toutes les 120 ms (`follow`) qui alimente `status`
+(`connecting` → `Connecting`, `connected` → `Connected`, `lost` → `Lost` avec le motif en phrase de la page et « Reconnecter »),
+`speaking` (ceux que le moteur entend, et soi quand `self_speaking`), `mic_level` et l'avis de panne audio (`audio_error`). Cinq
+relevés de suite en erreur, ou `null` (le moteur n'a plus d'appel), sont un appel perdu. `teardown` (quitter, changer de salon,
+perdu, page fermée) fait `native_voice_stop`. Les commandes `start`, `answer` et `stop` passent par une file : elles arrivent au
+moteur dans l'ordre, même si la personne quitte avant la réponse du serveur. La génération `GEN` / `current(n)` écarte les
+réponses tardives.
+
+**Réglages en appel.** Micro coupé, son coupé, gain et volume partent par `native_voice_set {patch}` avec les quatre valeurs du
+moment ; les changements qui se suivent sont regroupés (un appel en route, un seul suivant). Appuyer pour parler : le gain passe à 0
+touche relâchée (pas de `self_mute`, la sourdine reste maître). Micro introuvable (`self_mute` rendu par `start`, `audio_error`) :
+la page se met en sourdine et le dit ; le rouvrir demande un nouvel appel (le moteur ne change pas de micro à chaud).
+
+**Ce que la page dit en toutes lettres.** « Pas de caméra ni de partage d'écran dans l'appli Linux pour l'instant : ouvre cette page
+dans ton navigateur. » sous la barre d'appel, sous « Rejoindre », dans Réglages › Voix et vidéo, avec « Ouvrir dans mon navigateur » ;
+« Caméra » et « Partager ton écran » grisés (`aria-describedby` sur cette phrase) ; un bandeau quand un participant partage son écran ou
+allume sa caméra (son image ne s'affiche pas) et pas de bouton « Regarder » ; pas d'annulation d'écho ni de réduction de bruit
+(« un casque évite l'écho ») ; pas de test du micro (une barre de niveau suit le micro pendant l'appel). Les phrases du moteur
+(`ENGINE_TEXTS`) sont traduites par leur texte exact, une phrase inconnue donne un message générique (détail dans la console).
+
+**Réglages › Voix et vidéo.** `NativeVoiceSettings` : entrée et sortie audio (liste de `native_voice_devices`, « Par défaut du
+système » en premier, l'appareil du système marqué « par défaut »), clés `kraken.native.mic` et `kraken.native.speaker` (un
+appareil débranché depuis : `start` retombe sur celui du système) ; « Volume du micro » (0 à 400 %, `kraken.native.gain`) et
+« Volume des autres » (0 à 200 %, `kraken.native.volume`), pris tout de suite en appel ; changer d'appareil vaut pour le prochain
+appel (dit dans la page). `PttSettings` est partagé avec la version navigateur.
+
+**Tests.** `e2e/specs/native-voice.spec.ts`. Partie (a) : `invoke` simulé en JavaScript (`F04-V1` à `V10`). Partie (b) `F04-B1` : le
+vrai `bridge` (lancé par le test sur un port libre, `BRIDGE_IPS=127.0.0.1`) et le vrai SFU ; un vrai Chromium (micro factice) et un
+faux bureau dont l'`invoke` passe par le pont entrent dans le même salon ; le `GET /stats` du pont dit que le natif a entendu A, A
+voit le natif « parler » (la sinusoïde), le natif coupé n'est plus « parlant », A partage son écran (le natif reste connecté et le
+dit), quitter laisse le pont sans appel ; deux tours de suite. La page n'ayant pas le droit d'appeler le pont par `fetch` (CSP
+`connect-src 'self'`), l'`invoke` du faux bureau passe par une fonction exposée de Playwright. La CI construit le pont avant les
+tests (`cargo build --release --example bridge -p kraken-voice-native --no-default-features`).
+
+**Limites connues.** Jamais essayé sur une vraie carte son (cpal / ALSA / PulseAudio / PipeWire) ; les tests e2e couvrent le salon
+vocal, pas les appels de MP ni de groupe avec le moteur ; pas d'écho annulé ; pas de caméra ni de partage d'écran.

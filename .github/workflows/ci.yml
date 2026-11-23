@@ -196,6 +196,9 @@ jobs:
           tool: wasm-bindgen-cli@0.2.129
       - run: ./scripts/build-client.sh
       - run: cargo build -p kraken-server
+      - name: Construire le pont du vocal natif (sans cpal ni ALSA)
+        # Le test e2e du vocal natif (native-voice.spec.ts) le lance lui-même : target/release/examples/bridge
+        run: cargo build --release --example bridge -p kraken-voice-native --no-default-features
       - name: Lancer le serveur avec les données de démo
         run: |
           nohup ./target/debug/kraken-server --seed > server.log 2>&1 &

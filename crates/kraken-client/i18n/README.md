@@ -276,7 +276,7 @@ est le miroir exact de sa position en LTR : `x_rtl = largeur_fenêtre - droite_l
 ## Conventions d'allemand
 
 L'allemand (`de`, « Deutsch », de gauche à droite) est la quatrième langue de l'interface. Son catalogue (`de/*.tsv`) se
-construit par-dessus l'anglais (repli `de` → `en` → `fr`) ; il est complet (1 477 textes, comme l'anglais et le persan) et `PARTIAL` est vide. Écrit
+construit par-dessus l'anglais (repli `de` → `en` → `fr`) ; il est complet (1 503 textes, comme l'anglais et le persan) et `PARTIAL` est vide. Écrit
 par Claude, sans relecture par une personne de langue allemande : une relecture est la bienvenue.
 
 - **Tutoiement** (« du », « dein », « dir »), comme le français « tu » : jamais le « Sie » de politesse ni « Ihr/Ihre ». Ton
