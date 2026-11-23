@@ -730,8 +730,11 @@ test('I18N-G5 Invitations et Bannis : durées, utilisations, états, copie, rév
 
 // ───────── Journal d'audit ─────────
 
-test('I18N-G6 Journal d’audit : chaque action est une phrase anglaise entière, avec motif, précisions, avant / après et filtres', async ({ signedIn, api }) => {
+test('I18N-G6 Journal d’audit : chaque action est une phrase anglaise entière, avec motif, précisions, avant / après et filtres', async ({ signedIn, api, allow }) => {
   test.setTimeout(90_000);
+  // La page connectée reçoit en direct l'icône posée puis retirée aussitôt par ce test : si elle va la charger
+  // après la suppression, l'image répond 404. C'est la course du test, pas un défaut de la page.
+  allow.push(/status of 404/);
   const a = await signedIn('en-US');
   const sam = await register(api, 'sam');
   const lea = await register(api, 'lea');

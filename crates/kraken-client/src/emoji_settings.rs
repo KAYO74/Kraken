@@ -343,7 +343,7 @@ fn Row(
             <span class="app-emoji-thumb" aria-hidden="true"><EmojiImg id=id name=first/></span>
             <div>
                 <Show when=move || !editing() fallback=move || view! { <RenameField guild=guild id=id name=name() renaming=renaming/> }>
-                    <b class="app-emoji-code">{move || shortcode(&name())}</b>
+                    <b class="app-emoji-code"><bdi dir="ltr">{move || shortcode(&name())}</bdi></b>
                     <small>{by}</small>
                 </Show>
             </div>
@@ -425,7 +425,7 @@ fn RenameField(guild: Id, id: Id, name: String, renaming: RwSignal<Option<Id>>) 
     let (err_id2, hint_id2) = (err_id.clone(), hint_id.clone());
     view! {
         <form class="app-emoji-rename" on:submit=submit>
-            <input class="k-input" type="text" node_ref=field autocomplete="off" spellcheck="false" maxlength="32"
+            <input dir="ltr" class="k-input" type="text" node_ref=field autocomplete="off" spellcheck="false" maxlength="32"
                 aria-label=tf("Nouveau nom de {code}", &[("code", &shortcode(&name))])
                 aria-invalid=move || error.get().is_some().then_some("true")
                 aria-describedby=move || if error.get().is_some() { format!("{hint_id2} {err_id2}") } else { hint_id2.clone() }
@@ -545,7 +545,7 @@ fn AddDialog(guild: Id, ready: Ready, added: Callback<Emoji>, close: Callback<()
                             <span class="app-emoji-add-preview" data-animated=preview.0.then_some("")>{shown}</span>
                             <div class="k-field">
                                 <label class="k-label" for="emoji-name">{t("Nom")}</label>
-                                <input id="emoji-name" class="k-input" type="text" autocomplete="off" spellcheck="false" maxlength="32" autofocus
+                                <input dir="ltr" id="emoji-name" class="k-input" type="text" autocomplete="off" spellcheck="false" maxlength="32" autofocus
                                     node_ref=field
                                     aria-invalid=move || field_error.get().is_some().then_some("true")
                                     aria-describedby=move || if field_error.get().is_some() { "emoji-name-h emoji-name-e" } else { "emoji-name-h" }

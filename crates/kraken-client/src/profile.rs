@@ -128,10 +128,10 @@ fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: 
             <div class="app-card-avatar">
                 {move || view! { <Avatar user=face.get() size=size status=dot/> }}
             </div>
-            <p class="app-card-name" id=name_id>{name}</p>
+            <p class="app-card-name" id=name_id><bdi>{name}</bdi></p>
             <p class="app-card-handle">
-                {move || format!("@{}", user.get().username)}
-                {move || user.get().pronouns.filter(|p| !p.is_empty()).map(|p| view! { <span class="app-card-pronouns">{p}</span> })}
+                <bdi dir="ltr">{move || format!("@{}", user.get().username)}</bdi>
+                {move || user.get().pronouns.filter(|p| !p.is_empty()).map(|p| view! { <span class="app-card-pronouns"><bdi>{p}</bdi></span> })}
             </p>
             <p class="app-card-status">
                 <span class="app-dot-inline"><StatusDot status=dot/></span>
@@ -141,7 +141,7 @@ fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: 
             {move || user.get().bio.filter(|b| !b.is_empty()).map(|b| view! {
                 <section class="app-card-section" aria-label=t("À propos")>
                     <h3 class="app-card-label">{t("À propos")}</h3>
-                    <p class="app-card-bio">{b}</p>
+                    <p class="app-card-bio" dir="auto">{b}</p>
                 </section>
             })}
             <dl class="app-card-dates">
@@ -158,7 +158,7 @@ fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: 
                     <ul class="app-chips">
                         {roles.into_iter().map(|r| view! {
                             <li class="app-chip" data-role-color=r.color.map(|c| c.to_string())>
-                                <span class="app-role-dot" aria-hidden="true"></span>{r.name}
+                                <span class="app-role-dot" aria-hidden="true"></span><bdi>{r.name}</bdi>
                             </li>
                         }).collect_view()}
                     </ul>
@@ -400,15 +400,15 @@ pub fn ProfileSettings() -> impl IntoView {
             <form class="app-profile-form" on:submit=save aria-labelledby="profile-form-t">
                 <h3 id="profile-form-t" class="app-profile-title">{t("Ce que les autres voient")}</h3>
                 <label class="k-label" for="display-name">{t("Nom affiché")}</label>
-                <input id="display-name" class="k-input" maxlength=MAX_DISPLAY_NAME.to_string() placeholder=username bind:value=display
+                <input dir="auto" id="display-name" class="k-input" maxlength=MAX_DISPLAY_NAME.to_string() placeholder=username bind:value=display
                     aria-describedby="display-name-h" autocomplete="nickname"/>
                 <p id="display-name-h" class="k-hint">{move || tf("Ton pseudo unique @{pseudo} ne change pas ici : il reste écrit en dessous.", &[("pseudo", &username())])}</p>
                 <label class="k-label" for="pronouns">{t("Pronoms")}</label>
-                <input id="pronouns" class="k-input" maxlength=MAX_PRONOUNS.to_string() placeholder=t("elle/elles, il/lui, iel/iels…") bind:value=pronouns
+                <input dir="auto" id="pronouns" class="k-input" maxlength=MAX_PRONOUNS.to_string() placeholder=t("elle/elles, il/lui, iel/iels…") bind:value=pronouns
                     aria-describedby="pronouns-h"/>
                 <p id="pronouns-h" class="k-hint">{move || tf("Facultatif. {n} / {max}", &[("n", &units(&pronouns.get()).to_string()), ("max", &MAX_PRONOUNS.to_string())])}</p>
                 <label class="k-label" for="bio">{t("À propos de toi")}</label>
-                <textarea id="bio" class="k-input app-bio" rows="4" maxlength=MAX_BIO.to_string() bind:value=bio aria-describedby="bio-h"
+                <textarea dir="auto" id="bio" class="k-input app-bio" rows="4" maxlength=MAX_BIO.to_string() bind:value=bio aria-describedby="bio-h"
                     placeholder=t("Quelques mots sur toi, tes jeux, ta façon de discuter…")></textarea>
                 <p id="bio-h" class="k-hint app-count">{move || format!("{} / {MAX_BIO}", units(&bio.get()))}</p>
                 <div class="app-profile-save">

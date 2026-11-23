@@ -35,7 +35,7 @@ use web_sys::{
     RtcRtpTransceiverInit, RtcSdpType, RtcSessionDescriptionInit, RtcTrackEvent,
 };
 
-use crate::i18n::t;
+use crate::i18n::{t, tf};
 use crate::store::Store;
 use crate::tk;
 use crate::voice_settings::{self as vs, PttKey};
@@ -47,7 +47,13 @@ pub const INSECURE: &str =
      demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).");
 const MIC_DENIED: &str =
     tk!("Micro refusé ou introuvable : tu es en sourdine. Autorise le micro dans ton navigateur, puis réactive-le.");
-pub const NO_WEBRTC: &str = tk!("Ton navigateur ne permet pas les appels vocaux. Essaie avec un navigateur récent.");
+const NO_WEBRTC_OFF: &str = tk!(
+    "Ton navigateur ne permet pas les appels vocaux : WebRTC y est absent ou désactivé. Essaie avec un navigateur récent (Chrome, Firefox, Edge ou Safari) ou avec l'appli de bureau."
+);
+const NO_WEBRTC_HTTP: &str = tk!(
+    "Ton navigateur ne permet pas les appels vocaux sur cette page : elle est en HTTP, et WebRTC n'y est pas disponible. Ouvre l'instance en HTTPS (ou sur cet ordinateur, via localhost), ou essaie un autre navigateur."
+);
+const WEBRTC_REFUSED: &str = tk!("Le navigateur a refusé de démarrer l'appel vocal ({détail}).");
 const LOST: &str = tk!("Connexion vocale perdue.");
 const CAM_DENIED: &str = tk!("Le navigateur a refusé l'accès à la caméra");
 const CAM_MISSING: &str = tk!("Aucune caméra n'a été trouvée sur cet appareil.");
@@ -251,6 +257,33 @@ fn with_session<R>(f: impl FnOnce(&mut Session) -> R) -> Option<R> {
 /// Le navigateur sait faire du WebRTC.
 pub fn supported() -> bool {
     js_sys::Reflect::has(&window(), &"RTCPeerConnection".into()).unwrap_or(false)
+}
+
+/// Pourquoi les appels vocaux manquent : une page en HTTP hors de cet ordinateur d'abord (le plus courant), sinon
+/// un navigateur sans WebRTC ou qui l'a désactivé.
+pub fn unsupported_message() -> String {
+    t(if window().is_secure_context() { NO_WEBRTC_OFF } else { NO_WEBRTC_HTTP })
+}
+
+/// De quoi savoir sur quel navigateur et quelle page le WebRTC manque, pour le dire en une ligne (et dans la console).
+pub fn unsupported_details() -> String {
+    let w = window();
+    let page = if w.is_secure_context() { t("HTTPS ou localhost") } else { t("HTTP") };
+    let browser = w.navigator().user_agent().unwrap_or_default();
+    let line = tf(
+        "Détails : page en {page} · RTCPeerConnection absent · {navigateur}",
+        &[("page", &page), ("navigateur", &browser)],
+    );
+    web_sys::console::warn_1(&line.clone().into());
+    line
+}
+
+/// L'erreur du navigateur qui a refusé `new RTCPeerConnection`, en une ligne : `Nom : message`.
+fn js_error_line(e: &JsValue) -> String {
+    match e.dyn_ref::<js_sys::Error>() {
+        Some(err) => format!("{} : {}", String::from(err.name()), String::from(err.message())),
+        None => e.as_string().unwrap_or_else(|| "?".to_string()),
+    }
 }
 
 /// Micro et écran : absents d'une page en HTTP hors de cet ordinateur.
@@ -529,7 +562,7 @@ impl Voice {
 
     async fn connect(self, n: u64, channel: Id) -> Result<(), String> {
         if !supported() {
-            return Err(t(NO_WEBRTC));
+            return Err(unsupported_message());
         }
         let mic = match devices() {
             None => {
@@ -552,7 +585,11 @@ impl Voice {
         }
         let cfg = RtcConfiguration::new();
         cfg.set_bundle_policy(RtcBundlePolicy::MaxBundle);
-        let pc = RtcPeerConnection::new_with_configuration(&cfg).map_err(|_| t(NO_WEBRTC))?;
+        let pc = RtcPeerConnection::new_with_configuration(&cfg).map_err(|e| {
+            let detail = js_error_line(&e);
+            web_sys::console::warn_1(&format!("RTCPeerConnection : {detail}").into());
+            tf(WEBRTC_REFUSED, &[("détail", &detail)])
+        })?;
         let init = RtcRtpTransceiverInit::new();
         init.set_direction(RtcRtpTransceiverDirection::Sendonly);
         let mic_track = mic.as_ref().and_then(|m| track(m, "audio"));

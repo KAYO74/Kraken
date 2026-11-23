@@ -747,7 +747,7 @@ fn Row(entry: AuditEntry) -> impl IntoView {
                             <div>
                                 <dt>{label}</dt>
                                 {values.into_iter().map(|(which, v)| view! {
-                                    <dd><span class="app-audit-which">{which}</span><span>{v}</span></dd>
+                                    <dd><span class="app-audit-which">{which}</span><span><bdi>{v}</bdi></span></dd>
                                 }).collect_view()}
                             </div>
                         }).collect_view()}

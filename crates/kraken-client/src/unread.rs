@@ -402,8 +402,11 @@ pub enum Target {
 #[derive(Clone, Copy, PartialEq)]
 struct MenuAt {
     target: Target,
+    /// Le point d'ancrage dans la fenêtre : le bord de début du menu (gauche), ou son bord de fin (droit) si `rtl`.
     x: f64,
     y: f64,
+    /// Le sens de la page à l'instant de l'événement (`dir` de `<html>`, lu à l'ouverture, pas au démarrage).
+    rtl: bool,
 }
 
 /// Menu et boîte ouverts dans la coquille.
@@ -428,7 +431,12 @@ impl NotifyUi {
     pub fn on_context(self, target: Target) -> impl Fn(leptos::ev::MouseEvent) + Copy {
         move |e: leptos::ev::MouseEvent| {
             e.prevent_default();
-            self.menu.set(Some(MenuAt { target, x: e.client_x() as f64, y: e.client_y() as f64 }));
+            self.menu.set(Some(MenuAt {
+                target,
+                x: e.client_x() as f64,
+                y: e.client_y() as f64,
+                rtl: crate::i18n::is_rtl(),
+            }));
         }
     }
 
@@ -441,8 +449,11 @@ impl NotifyUi {
                     .target()
                     .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
                     .map(|el| el.get_bounding_client_rect());
-                let (x, y) = rect.map_or((0.0, 0.0), |r| (r.left() + 16.0, r.bottom()));
-                self.menu.set(Some(MenuAt { target, x, y }));
+                let rtl = crate::i18n::is_rtl();
+                // Au clavier, le menu s'ouvre sous le début de l'élément : 16 px après son bord de début (gauche, ou droit en RTL).
+                let (x, y) =
+                    rect.map_or((0.0, 0.0), |r| (if rtl { r.right() - 16.0 } else { r.left() + 16.0 }, r.bottom()));
+                self.menu.set(Some(MenuAt { target, x, y, rtl }));
             }
         }
     }
@@ -475,6 +486,22 @@ async fn save(t: Target, req: SetNotify) -> Result<NotifySetting, String> {
     crate::api::set_notify(&req).await.map_err(|e| e.message)
 }
 
+/// Pose le menu d'après sa taille **mesurée** (jamais une constante : la hauteur change avec la langue et la police) : son coin de début
+/// au point d'ancrage, ramené dans la fenêtre si sa hauteur ou sa largeur le ferait déborder en bas ou du côté de fin.
+fn place(menu: &web_sys::HtmlElement, at: &MenuAt) {
+    let win = web_sys::window().expect("fenêtre");
+    let size = |v: Result<JsValue, JsValue>| v.ok().and_then(|v| v.as_f64()).unwrap_or(f64::INFINITY);
+    let (vw, vh) = (size(win.inner_width()), size(win.inner_height()));
+    let (w, h) = (f64::from(menu.offset_width()), f64::from(menu.offset_height()));
+    let top = at.y.min(vh - h).max(0.0);
+    // Gauche à droite : `left` ; droite à gauche : `right`, mesuré depuis le bord droit de la fenêtre.
+    let (side, from) = if at.rtl { ("right", vw - at.x) } else { ("left", at.x) };
+    let along = from.min(vw - w).max(0.0);
+    let style = menu.style();
+    let _ = style.set_property("top", &format!("{top}px"));
+    let _ = style.set_property(side, &format!("{along}px"));
+}
+
 /// Menu contextuel d'un serveur ou d'un salon : flèches, Début, Fin, Échap.
 #[component]
 pub fn TargetMenu() -> impl IntoView {
@@ -489,9 +516,12 @@ pub fn TargetMenu() -> impl IntoView {
         }
     };
     Effect::new(move || {
-        if u.menu.get().is_some() {
+        if let Some(at) = u.menu.get() {
             if before.get_value().is_none() {
                 before.set_value(document().active_element().and_then(|e| e.dyn_into().ok()));
+            }
+            if let Some(menu) = root.get() {
+                place(&menu, &at);
             }
             if let Some(first) = root.get().and_then(|r| r.query_selector("[role=menuitem]").ok().flatten())
                 && let Ok(h) = first.dyn_into::<web_sys::HtmlElement>()
@@ -573,7 +603,13 @@ pub fn TargetMenu() -> impl IntoView {
                 close(false);
                 u.dialog.set(Some(target));
             };
-            let style = format!("position: fixed; left: min({}px, 100vw - 220px); top: min({}px, 100vh - 160px)", m.x, m.y);
+            // Le menu reste dans la fenêtre : son bord de début à `x` (ou son bord de fin, en RTL). Ce premier placement est une estimation
+            // (au plus 220 px de large, 160 de haut) ; `place` le recale d'après la taille mesurée dès que le menu est dans la page.
+            let style = if m.rtl {
+                format!("position: fixed; right: min(100vw - {}px, 100vw - 220px); top: min({}px, 100vh - 160px)", m.x, m.y)
+            } else {
+                format!("position: fixed; left: min({}px, 100vw - 220px); top: min({}px, 100vh - 160px)", m.x, m.y)
+            };
             view! {
                 <div class="k-menu" role="menu" aria-label=tf("Actions pour {nom}", &[("nom", &title)]) node_ref=root style=style on:keydown=keys>
                     <button type="button" role="menuitem" tabindex="-1" on:click=read>{t("Marquer comme lu")}<Icon icon=lu::LuCheckCheck small=true/></button>
@@ -712,7 +748,7 @@ pub fn NotifyDialog(target: Target) -> impl IntoView {
                     </fieldset>
                     {server_default.then(|| view! {
                         <div class="k-setting">
-                            <label for="notify-everyone">{t("Ignorer @everyone et @here")}</label>
+                            <label for="notify-everyone">{tf("Ignorer {everyone} et {here}", &[("everyone", "@everyone"), ("here", "@here")])}</label>
                             <input id="notify-everyone" type="checkbox" role="switch" class="k-switch" prop:checked=move || suppress.get()
                                 on:change=move |e| apply(SetNotify { suppress_everyone: Some(event_target_checked(&e)), ..Default::default() })/>
                             <p>{t("Ces appels à tout le serveur ne comptent plus comme des mentions.")}</p>

@@ -443,7 +443,8 @@ fn option_view(
         .into_iter()
         .map(|(text, hit)| if hit { view! { <mark>{text}</mark> }.into_any() } else { text.into_any() })
         .collect_view();
-    let detail = (!e.detail.is_empty()).then(|| view! { <small class="app-sw-detail">{e.detail.clone()}</small> });
+    let detail =
+        (!e.detail.is_empty()).then(|| view! { <small class="app-sw-detail" dir="auto">{e.detail.clone()}</small> });
     view! {
         <div class="k-option app-sw-opt" role="option" id=id aria-selected=move || (at.get() == index).to_string()
             on:mousedown=|e| e.prevent_default()
@@ -451,7 +452,7 @@ fn option_view(
             on:click=move |_| pick.run(index)>
             <span class="app-sw-lead">{lead}</span>
             <span class="k-sr">{e.kind}" "</span>
-            <span class="app-sw-name">{name}</span>
+            <span class="app-sw-name"><bdi>{name}</bdi></span>
             <UnreadText on=unread/>
             <span class="app-sw-dot" aria-hidden="true" hidden=move || !unread.get()></span>
             <MentionBadge count=mentions/>
@@ -573,7 +574,7 @@ pub fn Switcher() -> impl IntoView {
             <div class="k-dialog app-sw" role="dialog" aria-modal="true" aria-label=t("Aller vers") on:click=|e| e.stop_propagation()>
                 <div class="app-sw-top">
                     <div class="app-sw-field">
-                        <input class="k-input" type="text" role="combobox" aria-autocomplete="list" autocomplete="off" spellcheck="false"
+                        <input dir="auto" class="k-input" type="text" role="combobox" aria-autocomplete="list" autocomplete="off" spellcheck="false"
                             autocapitalize="off" enterkeyhint="go" maxlength="100" autofocus
                             aria-label=t("Salon, personne ou serveur") placeholder=t("Aller vers un salon, une personne, un serveur")
                             aria-describedby="sw-hint"

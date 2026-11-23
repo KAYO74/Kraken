@@ -39,8 +39,9 @@ pub const COLOR_NAMES: [&str; ROLE_COLORS as usize] = [
 /// Traduit un libellé des tables du serveur (droits, sections). Un texte français que le catalogue traduit déjà
 /// autrement ailleurs (« Se connecter » : ouvrir une session, ou rejoindre un vocal ; « Aperçu » : celui du thème, ou
 /// celui d'un salon) porte un `{contexte}` vide : invisible en français, il en fait une entrée de catalogue à part.
+/// `{mention}` : le mot `@everyone`, jeton technique qui s'isole d'une phrase de droite à gauche (comme tout `tf`).
 pub(crate) fn label(key: &str) -> String {
-    tf(key, &[("contexte", "")])
+    tf(key, &[("contexte", ""), ("mention", "@everyone")])
 }
 
 pub(crate) type Perm = (u64, &'static str, &'static str);
@@ -106,7 +107,7 @@ pub(crate) const CATEGORIES: &[(&str, &[Perm])] = &[
             (
                 perms::MENTION_EVERYONE,
                 tk!("Mentionner tout le monde"),
-                tk!("Prévenir tous les membres d'un coup avec @everyone."),
+                tk!("Prévenir tous les membres d'un coup avec {mention}."),
             ),
             (perms::MANAGE_MESSAGES, tk!("Gérer les messages"), tk!("Supprimer les messages des autres.")),
             (perms::READ_HISTORY, tk!("Lire l'historique"), tk!("Relire les messages envoyés avant son arrivée.")),
@@ -228,7 +229,7 @@ pub fn GuildSettings() -> impl IntoView {
         <div class="k-scrim app-settings" node_ref=root>
             <div class="k-settings" role="dialog" aria-modal="true" aria-label=t("Paramètres du serveur")>
                 <nav aria-label=t("Sections des paramètres du serveur") node_ref=nav>
-                    <h3>{move || title.get()}</h3>
+                    <h3><bdi>{move || title.get()}</bdi></h3>
                     {move || gid.get().map(|g| {
                         let open = open.get();
                         SECTIONS.iter().filter(|(slug, _)| open.contains(slug)).map(|(slug, lbl)| view! {
@@ -504,7 +505,7 @@ fn Roles(guild: Id) -> impl IntoView {
                                     <button class="app-role-pick" aria-current=move || (selected.get() == Some(id)).then_some("true")
                                         on:click=move |_| selected.set(Some(id))>
                                         <i class="app-role-dot" data-color=move || role().and_then(|r| r.color).map(|c| c.to_string())></i>
-                                        <span class="app-ellipsis">{name}</span>
+                                        <span class="app-ellipsis"><bdi>{name}</bdi></span>
                                         <Show when=move || unsaved(id)><span class="k-sr">" ("{t("modifications non enregistrées")}")"</span></Show>
                                         <span class="app-role-count" title=t("Membres qui ont ce rôle")>
                                             <Icon icon=lu::LuUsers small=true/>{move || count(id)}
@@ -524,7 +525,7 @@ fn Roles(guild: Id) -> impl IntoView {
                     <li class="app-role app-role--base">
                         <button class="app-role-pick" aria-current=move || (selected.get() == Some(guild)).then_some("true")
                             on:click=move |_| selected.set(Some(guild))>
-                            <i class="app-role-dot"></i><span class="app-ellipsis">{t("@tout le monde")}</span>
+                            <i class="app-role-dot"></i><span class="app-ellipsis"><bdi>{t("@tout le monde")}</bdi></span>
                             <Show when=move || unsaved(guild)><span class="k-sr">" ("{t("modifications non enregistrées")}")"</span></Show>
                             <span class="app-role-count" title=t("Membres qui ont ce rôle")>
                                 <Icon icon=lu::LuUsers small=true/>{move || count(guild)}
@@ -576,9 +577,11 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>, drafts: Draft
     let keys = move |e: leptos::ev::KeyboardEvent| {
         let i = ROLE_TABS.iter().position(|x| x.0 == tab.get_untracked()).unwrap_or(0);
         let n = ROLE_TABS.len();
+        // Les onglets se suivent de droite à gauche en RTL : la flèche droite revient en arrière (sens lu à l'événement).
+        let forward = if crate::i18n::is_rtl() { "ArrowLeft" } else { "ArrowRight" };
         let next = match e.key().as_str() {
-            "ArrowRight" => (i + 1) % n,
-            "ArrowLeft" => (i + n - 1) % n,
+            k if k == forward => (i + 1) % n,
+            "ArrowRight" | "ArrowLeft" => (i + n - 1) % n,
             "Home" => 0,
             "End" => n - 1,
             _ => return,
@@ -649,7 +652,7 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>, drafts: Draft
         view! {
             <div class="k-field">
                 <label class="k-label" for="role-name">{t("Nom du rôle")}</label>
-                <input id="role-name" class="k-input" maxlength="100" autocomplete="off" disabled=move || !editable()
+                <input dir="auto" id="role-name" class="k-input" maxlength="100" autocomplete="off" disabled=move || !editable()
                     prop:value=move || draft.get().map(|d| d.name).unwrap_or_default()
                     on:input=move |e| { let v = event_target_value(&e); edit(drafts, guild, role, |d| d.name = v) }/>
             </div>
@@ -745,7 +748,7 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>, drafts: Draft
     };
     view! {
         <Show when=move || current().is_some()>
-            <h3 class="app-roles-title">{move || current().map(|r| role_label(guild, &r)).unwrap_or_default()}</h3>
+            <h3 class="app-roles-title"><bdi>{move || current().map(|r| role_label(guild, &r)).unwrap_or_default()}</bdi></h3>
             <div class="k-tabs" role="tablist" aria-label=t("Réglages du rôle") node_ref=tablist on:keydown=keys>{tab_buttons()}</div>
             <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
             <div id="role-panel" role="tabpanel" class="app-roles-panel" tabindex="-1" aria-labelledby=move || {
@@ -757,7 +760,7 @@ fn RoleEditor(guild: Id, role: Id, selected: RwSignal<Option<Id>>, drafts: Draft
                     RoleTab::Permissions => view! {
                         <div class="k-search app-search">
                             <Icon icon=lu::LuSearch/>
-                            <input class="k-input" type="search" placeholder=t("Chercher un droit") aria-label=t("Chercher un droit")
+                            <input dir="auto" class="k-input" type="search" placeholder=t("Chercher un droit") aria-label=t("Chercher un droit")
                                 prop:value=move || query.get() on:input=move |e| query.set(event_target_value(&e))/>
                         </div>
                         {permissions()}
@@ -830,7 +833,7 @@ fn RoleMembers(guild: Id, role: Id, editable: Signal<bool>) -> impl IntoView {
                     prop:value=move || pick.get() on:change=move |e| pick.set(event_target_value(&e))>
                     <option value="">{t("Choisis un membre")}</option>
                     {move || candidates.get().into_iter().map(|m| {
-                        let label = format!("{} (@{})", m.nick.clone().unwrap_or_else(|| m.user.name().to_string()), m.user.username);
+                        let label = crate::ui::member_label(&m.nick.clone().unwrap_or_else(|| m.user.name().to_string()), &m.user.username);
                         view! { <option value=m.user.id.to_string()>{label}</option> }
                     }).collect_view()}
                 </select>
@@ -847,7 +850,7 @@ fn RoleMembers(guild: Id, role: Id, editable: Signal<bool>) -> impl IntoView {
                     view! {
                         <li class="k-dm">
                             <Avatar user=m.user.clone() size="md"/>
-                            <div class="app-ellipsis">{name.clone()}<small>{format!("@{}", m.user.username)}</small></div>
+                            <div class="app-ellipsis"><bdi>{name.clone()}</bdi><small><bdi dir="ltr">{format!("@{}", m.user.username)}</bdi></small></div>
                             <button class="k-btn k-btn--sm" aria-label=tf("Retirer {nom} de ce rôle", &[("nom", &name)]) disabled=move || !can()
                                 on:click=move |_| set(uid, false)>{t("Retirer")}</button>
                         </li>
@@ -1018,7 +1021,7 @@ fn Invites(guild: Id) -> impl IntoView {
                         InviteState::Exhausted => Some(t("Épuisée")),
                     };
                     let by = i.inviter.as_ref().map_or_else(|| t("un compte supprimé"), |u| u.name().to_string());
-                    let channel = i.channel_name.clone().map(|n| format!(" · #{n}")).unwrap_or_default();
+                    let channel = i.channel_name.clone().map(|n| view! { " · "<bdi>{format!("#{n}")}</bdi> });
                     let used = if i.max_uses == 0 { format!("{} / ∞", i.uses) } else { format!("{} / {}", i.uses, i.max_uses) };
                     let used_text = match (i.uses, i.max_uses) {
                         (n, 0) => tn("{n} utilisation, sans limite", "{n} utilisations, sans limite", n),
@@ -1115,8 +1118,8 @@ fn Bans(guild: Id) -> impl IntoView {
                         <li class="app-row">
                             <Avatar user=b.user.clone() size="md"/>
                             <div>
-                                <b>{name.clone()}</b>
-                                <small>{format!("@{} · {}", b.user.username, when(b.created_at))}</small>
+                                <b><bdi>{name.clone()}</bdi></b>
+                                <small><bdi dir="ltr">{format!("@{} · {}", b.user.username, when(b.created_at))}</bdi></small>
                                 <small class="app-ban-reason">{b.reason.clone().map(|r| tf("Raison : {raison}", &[("raison", &r)])).unwrap_or_else(|| t("Aucune raison donnée"))}</small>
                             </div>
                             <button class="k-btn" aria-label=tf("Lever le bannissement de {nom}", &[("nom", &name)]) on:click=move |_| unban(uid)>{t("Lever le bannissement")}</button>
@@ -1157,7 +1160,7 @@ fn Ownership(guild: Id) -> impl IntoView {
                 <select id="owner-to" class="k-select" prop:value=move || target.get() on:change=move |e| target.set(event_target_value(&e))>
                     <option value="">{t("Choisis un membre")}</option>
                     {move || others.get().into_iter().map(|m| {
-                        let label = format!("{} (@{})", m.nick.clone().unwrap_or_else(|| m.user.name().to_string()), m.user.username);
+                        let label = crate::ui::member_label(&m.nick.clone().unwrap_or_else(|| m.user.name().to_string()), &m.user.username);
                         view! { <option value=m.user.id.to_string()>{label}</option> }
                     }).collect_view()}
                 </select>
@@ -1236,7 +1239,7 @@ fn DeleteGuildDialog(guild: Id, close: Callback<()>) -> impl IntoView {
                         </div>
                         <div class="k-field">
                             <label class="k-label" for="dg-name">{t("Tape le nom du serveur")}</label>
-                            <input id="dg-name" class="k-input" autocomplete="off" spellcheck="false" aria-describedby="dg-hint"
+                            <input dir="auto" id="dg-name" class="k-input" autocomplete="off" spellcheck="false" aria-describedby="dg-hint"
                                 prop:value=move || typed.get() on:input=move |e| typed.set(event_target_value(&e))/>
                             <small id="dg-hint" class="app-hint app-wrap">{tf("Pour confirmer, retape : {nom}", &[("nom", &name)])}</small>
                         </div>
@@ -1325,7 +1328,7 @@ pub fn TimeoutDialog(guild: Id, user: User, close: Callback<()>) -> impl IntoVie
                         </fieldset>
                         <div class="k-field">
                             <label class="k-label" for="to-reason">{t("Raison (facultatif)")}</label>
-                            <input id="to-reason" class="k-input" maxlength=MAX_REASON autocomplete="off"
+                            <input dir="auto" id="to-reason" class="k-input" maxlength=MAX_REASON autocomplete="off"
                                 prop:value=move || reason.get() on:input=move |e| reason.set(event_target_value(&e))/>
                         </div>
                         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
@@ -1391,7 +1394,7 @@ pub fn MemberDialog(guild: Id, user: Id, close: Callback<()>) -> impl IntoView {
                         <header class="app-member-head">
                             <Avatar user=m.user.clone() size="lg"/>
                             <div>
-                                <h2 id="mb-t" data-role-color=color.map(|c| c.to_string())>{name}</h2>
+                                <h2 id="mb-t" data-role-color=color.map(|c| c.to_string())><bdi>{name}</bdi></h2>
                                 <small class="app-hint">{tf("@{pseudo} · membre depuis {date}", &[("pseudo", &m.user.username), ("date", &when(m.joined_at))])}</small>
                             </div>
                         </header>
@@ -1423,7 +1426,7 @@ pub fn MemberDialog(guild: Id, user: Id, close: Callback<()>) -> impl IntoView {
                                             <input id=id.clone() type="checkbox" class="app-pick-box" disabled={let e = editable.clone(); move || !e()}
                                                 prop:checked=held on:change=move |e| toggle(rid, event_target_checked(&e))/>
                                             <label for=id.clone()>
-                                                <i class="app-role-dot" data-color=r.color.map(|c| c.to_string())></i>{r.name.clone()}
+                                                <i class="app-role-dot" data-color=r.color.map(|c| c.to_string())></i><bdi>{r.name.clone()}</bdi>
                                             </label>
                                         </li>
                                     </Show>

@@ -44,7 +44,12 @@ pub fn Body(content: String, mentions: Vec<User>, everyone: bool, guild: Option<
                 view! { <blockquote class="app-quote" dir="auto">{inline(v, &lk)}</blockquote> }.into_any()
             }
             Block::Code { lang, text } => {
-                view! { <pre class="app-code" data-lang=lang><code>{text}</code></pre> }.into_any()
+                // Une ligne longue défile dans la boîte du bloc : il est atteignable au clavier (`tabindex`, règle axe
+                // `scrollable-region-focusable`) et se nomme pour les lecteurs d'écran.
+                view! {
+                    <pre class="app-code" data-lang=lang tabindex="0" role="region" aria-label=t("Bloc de code")><code>{text}</code></pre>
+                }
+                .into_any()
             }
         })
         .collect_view();
@@ -76,14 +81,14 @@ fn one(i: Inline, lk: &Rc<Lookup>) -> AnyView {
                 let title = format!("@{}", u.username);
                 view! { <span class="app-mention" data-me=me title=title>"@"{u.name().to_string()}</span> }.into_any()
             }
-            None => format!("@{name}").into_any(),
+            None => view! { <bdi dir="ltr">{format!("@{name}")}</bdi> }.into_any(),
         },
         Inline::Everyone | Inline::Here => {
             let word = if i == Inline::Everyone { "@everyone" } else { "@here" };
             if lk.everyone {
                 view! { <span class="app-mention" data-me="">{word}</span> }.into_any()
             } else {
-                word.into_any()
+                view! { <bdi dir="ltr">{word}</bdi> }.into_any()
             }
         }
         Inline::Emoji { name, id } => view! { <crate::emoji::EmojiImg id=id name=name/> }.into_any(),
@@ -91,7 +96,7 @@ fn one(i: Inline, lk: &Rc<Lookup>) -> AnyView {
             Some((_, g, c)) => {
                 view! { <a class="app-mention" href=format!("/channels/{g}/{c}")>"#"{name}</a> }.into_any()
             }
-            None => format!("#{name}").into_any(),
+            None => view! { <bdi>{format!("#{name}")}</bdi> }.into_any(),
         },
     }
 }

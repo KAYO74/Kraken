@@ -239,7 +239,7 @@ fn UsernameForm() -> impl IntoView {
                 &[("pseudo", &current()), ("n", &kraken_proto::USERNAME_CHANGES_PER_WINDOW.to_string())],
             )}</p>
             <label class="k-field"><span class="k-label">{t("Nouveau pseudo")}</span>
-                <input class="k-input" name="new-username" autocomplete="off" autocapitalize="none" spellcheck="false" required
+                <input dir="ltr" class="k-input" name="new-username" autocomplete="off" autocapitalize="none" spellcheck="false" required
                     minlength="2" maxlength="32" pattern="[a-zA-Z0-9_.]+" bind:value=name
                     aria-describedby=move || if culprit.get() == Some(Culprit::Value) { "acct-username-h acct-username-err" } else { "acct-username-h" }
                     aria-invalid=move || (culprit.get() == Some(Culprit::Value)).then_some("true")/></label>
@@ -325,7 +325,7 @@ fn EmailForm() -> impl IntoView {
                 )}</p>
             </Show>
             <label class="k-field"><span class="k-label">{t("Nouvelle adresse e-mail")}</span>
-                <input class="k-input" type="email" name="new-email" autocomplete="email" required maxlength="254" bind:value=email
+                <input dir="ltr" class="k-input" type="email" name="new-email" autocomplete="email" required maxlength="254" bind:value=email
                     aria-describedby=move || if culprit.get() == Some(Culprit::Value) { "acct-email-h acct-email-err" } else { "acct-email-h" }
                     aria-invalid=move || (culprit.get() == Some(Culprit::Value)).then_some("true")/></label>
             <label class="k-field"><span class="k-label">{t("Mot de passe actuel")}</span>
@@ -435,7 +435,7 @@ fn Messaging() -> impl IntoView {
                                 view! {
                                     <li class="k-dm app-blocked-row">
                                         <Avatar user=u.clone() size="md"/>
-                                        <div class="app-ellipsis">{name.clone()}<small>{format!("@{}", u.username)}</small></div>
+                                        <div class="app-ellipsis"><bdi>{name.clone()}</bdi><small><bdi dir="ltr">{format!("@{}", u.username)}</bdi></small></div>
                                         <button class="k-btn k-btn--sm" aria-label=tf("Débloquer {nom}", &[("nom", &name)]) on:click=move |_| unblock(id)>{t("Débloquer")}</button>
                                     </li>
                                 }

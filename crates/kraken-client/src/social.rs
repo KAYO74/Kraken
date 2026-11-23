@@ -185,7 +185,7 @@ pub fn PeoplePicker(purpose: PickFor, close: Callback<()>) -> impl IntoView {
                         }}</p>
                         <div class="k-search">
                             <Icon icon=lu::LuSearch/>
-                            <input class="k-input" type="search" placeholder=t("Chercher un ami") aria-label=t("Chercher parmi tes amis")
+                            <input dir="auto" class="k-input" type="search" placeholder=t("Chercher un ami") aria-label=t("Chercher parmi tes amis")
                                 bind:value=query autofocus/>
                         </div>
                         <fieldset class="app-pick-list">
@@ -209,7 +209,7 @@ pub fn PeoplePicker(purpose: PickFor, close: Callback<()>) -> impl IntoView {
                                                         disabled=move || { !on() && count() >= room }
                                                         on:change=move |_| picked.update(|p| if p.contains(&id) { p.retain(|x| *x != id) } else { p.push(id) })/>
                                                     <Avatar user=u.clone() size="md"/>
-                                                    <span class="app-ellipsis"><b>{u.name().to_string()}</b><small>{format!("@{}", u.username)}</small></span>
+                                                    <span class="app-ellipsis"><b><bdi>{u.name().to_string()}</bdi></b><small><bdi dir="ltr">{format!("@{}", u.username)}</bdi></small></span>
                                                 </label>
                                             }
                                         }
@@ -221,7 +221,7 @@ pub fn PeoplePicker(purpose: PickFor, close: Callback<()>) -> impl IntoView {
                         <Show when=group>
                             <label class="k-field">
                                 <span class="k-label">{t("Nom du groupe (facultatif)")}</span>
-                                <input class="k-input" maxlength=MAX_GROUP_NAME.to_string() placeholder=t("Les prénoms des membres, sinon") bind:value=name/>
+                                <input dir="auto" class="k-input" maxlength=MAX_GROUP_NAME.to_string() placeholder=t("Les prénoms des membres, sinon") bind:value=name/>
                             </label>
                         </Show>
                         <Show when=move || error.get().is_some()><p class="k-error" role="alert">{move || error.get()}</p></Show>
@@ -268,7 +268,7 @@ pub fn RenameGroup(channel: Channel, close: Callback<()>) -> impl IntoView {
                     <div>
                         <label class="k-field">
                             <span class="k-label">{t("Nom du groupe")}</span>
-                            <input class="k-input" maxlength=MAX_GROUP_NAME.to_string() bind:value=name autofocus
+                            <input dir="auto" class="k-input" maxlength=MAX_GROUP_NAME.to_string() bind:value=name autofocus
                                 aria-describedby="ren-h" aria-invalid=move || error.get().is_some().then_some("true")/>
                         </label>
                         <p class="app-hint" id="ren-h">{t("Laisse vide pour afficher les prénoms des membres. Tout le groupe voit le changement.")}</p>
@@ -499,7 +499,7 @@ pub fn ConfirmDialog(what: Confirm, close: Callback<()>) -> impl IntoView {
                         {moderation.then(|| view! {
                             <div class="k-field">
                                 <label class="k-label" for="cf-reason">{t("Raison (facultatif)")}</label>
-                                <input id="cf-reason" class="k-input" maxlength=MAX_REASON autocomplete="off"
+                                <input dir="auto" id="cf-reason" class="k-input" maxlength=MAX_REASON autocomplete="off"
                                     prop:value=move || reason.get() on:input=move |e| reason.set(event_target_value(&e))/>
                             </div>
                         })}

@@ -93,7 +93,7 @@ pub fn Login() -> impl IntoView {
             <form on:submit=submit>
                 <div class="app-form">
                     <label class="k-field"><span class="k-label">{t("Pseudo ou e-mail")}</span>
-                        <input class="k-input" name="login" autocomplete="username" required bind:value=login autofocus/></label>
+                        <input dir="ltr" class="k-input" name="login" autocomplete="username" required bind:value=login autofocus/></label>
                     <label class="k-field"><span class="k-label">{t("Mot de passe")}</span>
                         <input class="k-input" name="password" type="password" autocomplete="current-password" required bind:value=password
                             aria-invalid=move || error.get().is_some().then_some("true") aria-describedby="login-e"/></label>
@@ -147,9 +147,9 @@ pub fn Register() -> impl IntoView {
             <form on:submit=submit>
                 <div class="app-form">
                     <label class="k-field"><span class="k-label">{t("E-mail")}</span>
-                        <input class="k-input" type="email" autocomplete="email" required bind:value=email autofocus/></label>
+                        <input dir="ltr" class="k-input" type="email" autocomplete="email" required bind:value=email autofocus/></label>
                     <label class="k-field"><span class="k-label">{t("Pseudo")}</span>
-                        <input class="k-input" autocomplete="username" required minlength="2" maxlength="32" pattern="[a-zA-Z0-9_.]+" bind:value=username aria-describedby="reg-h"/>
+                        <input dir="ltr" class="k-input" autocomplete="username" required minlength="2" maxlength="32" pattern="[a-zA-Z0-9_.]+" bind:value=username aria-describedby="reg-h"/>
                         <span class="app-hint" id="reg-h">{t("Lettres, chiffres, _ et . ; 2 à 32 caractères.")}</span></label>
                     <label class="k-field"><span class="k-label">{t("Mot de passe")}</span>
                         <input class="k-input" type="password" autocomplete="new-password" required minlength="8" bind:value=password/></label>
@@ -223,7 +223,7 @@ pub fn InvitePage() -> impl IntoView {
                         <header class="app-invite-head">
                             <crate::ui::GuildIcon guild=i.guild.clone() size="lg" cap=128/>
                             <p class="app-hint">{t("Une place t'attend dans")}</p>
-                            <h1>{i.guild.name.clone()}</h1>
+                            <h1><bdi>{i.guild.name.clone()}</bdi></h1>
                             <p class="app-hint">{tn("{n} membre", "{n} membres", i.member_count)}</p>
                         </header>
                         <Show when=move || error.get().is_some()><div><p class="k-error" role="alert">{move || error.get()}</p></div></Show>
@@ -269,7 +269,7 @@ pub fn ForgotPassword() -> impl IntoView {
                     <form on:submit=submit>
                         <div class="app-form">
                             <label class="k-field"><span class="k-label">{t("E-mail")}</span>
-                                <input class="k-input" type="email" autocomplete="email" required bind:value=email autofocus/></label>
+                                <input dir="ltr" class="k-input" type="email" autocomplete="email" required bind:value=email autofocus/></label>
                             {other.and_then(|r| r.err()).map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
                         </div>
                         <footer class="app-auth-foot">

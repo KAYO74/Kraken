@@ -76,7 +76,7 @@ test('S22-H1 créer un rôle, lui donner une couleur, le donner à un membre : l
   await owner.page.getByRole('tab', { name: 'Membres' }).click();
   await owner.page.getByLabel('Ajouter un membre à ce rôle').selectOption({ label: `${crew.name} (@${crew.name})` });
   await owner.page.getByRole('button', { name: 'Ajouter', exact: true }).click();
-  await expect(owner.page.getByRole('list', { name: 'Membres qui ont ce rôle' }).getByText(crew.name)).toBeVisible();
+  await expect(owner.page.getByRole('list', { name: 'Membres qui ont ce rôle' }).getByText(crew.name, { exact: true })).toBeVisible();
   await expect(owner.page.getByRole('button', { name: /^Capitaines/ }).first()).toContainText('1');
   await owner.page.keyboard.press('Escape');
   await expect(owner.page.getByRole('dialog', { name: 'Paramètres du serveur' })).toHaveCount(0);

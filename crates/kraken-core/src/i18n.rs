@@ -212,6 +212,31 @@ fn unescape(cell: &str) -> Option<String> {
 /// pas remplacée à son tour). Un `{nom}` sans valeur, ou une accolade qui n'enferme pas un nom
 /// (lettres, chiffres, `_`), reste tel quel.
 pub fn fill(template: &str, vars: &[(&str, &str)]) -> String {
+    fill_with(template, vars, false)
+}
+
+/// Isolat de premier fort (U+2068) et sa fin (U+2069) : le texte entre les deux garde son propre sens d'écriture et
+/// n'influence pas celui des mots autour.
+const FSI: char = '\u{2068}';
+const PDI: char = '\u{2069}';
+
+/// [`fill`] pour une interface de droite à gauche : chaque valeur qui contient une lettre (un nom, un pseudo, une
+/// adresse…) est isolée entre FSI et PDI, pour que `« {nom} »` ou `{auteur} a renommé…` ne mêle pas le sens d'un nom
+/// latin à celui d'une phrase arabe, et inversement. Un `@` ou un `#` collé devant la valeur (`@{pseudo}`) entre dans
+/// l'isolat, sinon `@nom` se lirait `nom@`. Une valeur sans lettre (un nombre, une heure) reste telle quelle.
+pub fn fill_isolated(template: &str, vars: &[(&str, &str)]) -> String {
+    fill_with(template, vars, true)
+}
+
+/// Un texte saisi par une personne (nom de rôle, de salon, de serveur, nom affiché) dans un endroit qui ne prend que du
+/// texte (un `<option>`, un `title`) : entre FSI et PDI, il garde son propre sens d'écriture et n'entraîne pas la ponctuation
+/// voisine (`(Équipe) Alpha!` ne devient pas `!Alpha (Équipe)` dans une page de droite à gauche). Un texte sans lettre (un
+/// nombre, un emoji seul) reste tel quel.
+pub fn isolate(text: &str) -> String {
+    if text.chars().any(char::is_alphabetic) { format!("{FSI}{text}{PDI}") } else { text.to_string() }
+}
+
+fn fill_with(template: &str, vars: &[(&str, &str)], isolate: bool) -> String {
     if !template.contains('{') {
         return template.to_string();
     }
@@ -226,7 +251,15 @@ pub fn fill(template: &str, vars: &[(&str, &str)]) -> String {
             .and_then(|end| vars.iter().find(|(k, _)| *k == &after[..end]).map(|(_, v)| (end, *v)));
         match named {
             Some((end, value)) => {
-                out.push_str(value);
+                if isolate && value.chars().any(char::is_alphabetic) {
+                    let sigil = if out.ends_with(['@', '#']) { out.pop() } else { None };
+                    out.push(FSI);
+                    out.extend(sigil);
+                    out.push_str(value);
+                    out.push(PDI);
+                } else {
+                    out.push_str(value);
+                }
                 rest = &after[end + 1..];
             }
             None => {
@@ -242,6 +275,29 @@ pub fn fill(template: &str, vars: &[(&str, &str)]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn isolated_fill_wraps_names_and_keeps_numbers() {
+        let vars = [("nom", "Marie"), ("n", "12"), ("pseudo", "marie_k")];
+        // Sans isolat, `fill` ne change rien.
+        assert_eq!(fill("Quitter « {nom} » ?", &vars), "Quitter « Marie » ?");
+        assert_eq!(fill_isolated("Quitter « {nom} » ?", &vars), "Quitter « \u{2068}Marie\u{2069} » ?");
+        // Un nombre n'est pas isolé ; une valeur absente laisse l'accolade.
+        assert_eq!(fill_isolated("{n} membres, {inconnu}", &vars), "12 membres, {inconnu}");
+        // `@` ou `#` collé devant la valeur entre dans l'isolat.
+        assert_eq!(fill_isolated("Ton pseudo est @{pseudo}.", &vars), "Ton pseudo est \u{2068}@marie_k\u{2069}.");
+        assert_eq!(fill_isolated("#{nom}", &vars), "\u{2068}#Marie\u{2069}");
+        // Pas d'accolade : le gabarit tel quel.
+        assert_eq!(fill_isolated("Bonjour", &vars), "Bonjour");
+    }
+
+    #[test]
+    fn isolate_wraps_only_text_with_letters() {
+        assert_eq!(isolate("(Équipe) Alpha!"), "\u{2068}(Équipe) Alpha!\u{2069}");
+        assert_eq!(isolate("@tout le monde"), "\u{2068}@tout le monde\u{2069}");
+        assert_eq!(isolate("12"), "12");
+        assert_eq!(isolate(""), "");
+    }
 
     #[test]
     fn tags_map_to_languages() {

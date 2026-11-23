@@ -102,7 +102,7 @@ pub fn VoiceRoom(channel: Channel) -> impl IntoView {
     view! {
         <Header>
             <Icon icon=lu::LuVolume2/>
-            <h1 class="app-title app-ellipsis">{title}</h1>
+            <h1 class="app-title app-ellipsis"><bdi>{title}</bdi></h1>
             <div class="app-header-tools">
                 <a class="k-btn k-btn--icon" href="/search" aria-label=t("Rechercher") title=t("Rechercher")><Icon icon=lu::LuSearch/></a>
                 <a class="k-btn k-btn--icon" href="/inbox" aria-label=t("Boîte de réception") title=t("Boîte de réception")><Icon icon=lu::LuInbox/></a>
@@ -134,7 +134,7 @@ fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
     view! {
         <div class="app-call-lobby">
             <span class="app-call-icon" aria-hidden="true"><Icon icon=lu::LuVolume2/></span>
-            <h2>{name}</h2>
+            <h2><bdi>{name}</bdi></h2>
             <p class="app-hint" aria-live="polite">{move || match who.with(Vec::len) {
                 0 => t("Personne pour l'instant."),
                 n => tn("{n} personne dans le salon", "{n} personnes dans le salon", n),
@@ -144,7 +144,7 @@ fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
                     <For each=move || who.get() key=|x| x.user_id let:x>
                         {
                             let (u, n) = member(s, guild, x.user_id);
-                            view! { <li>{face(u, &n, "sm")}<span class="app-ellipsis">{n.clone()}</span></li> }
+                            view! { <li>{face(u, &n, "sm")}<span class="app-ellipsis"><bdi>{n.clone()}</bdi></span></li> }
                         }
                     </For>
                 </ul>
@@ -154,7 +154,7 @@ fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
             </button>
             {move || elsewhere.get().map(|c| view! { <p class="app-hint">{tf("Tu quitteras {salon}.", &[("salon", &c)])}</p> })}
             {move || error().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
-            {(!supported).then(|| view! { <p class="k-error">{t(voice::NO_WEBRTC)}</p> })}
+            {(!supported).then(|| view! { <p class="k-error">{voice::unsupported_message()}</p><p class="app-hint">{voice::unsupported_details()}</p> })}
             {insecure.then(|| view! { <p class="app-hint">{t(voice::INSECURE)}</p> })}
         </div>
     }
@@ -271,7 +271,7 @@ fn Tile(guild: Option<Id>, channel: Id, user: Id) -> impl IntoView {
                 avatar()
             }}
             <div class="k-tile-name">
-                <span class="app-ellipsis">{label}</span>
+                <span class="app-ellipsis"><bdi>{label}</bdi></span>
                 <Show when=move || flag(|x| x.self_mute && !x.self_deaf)>
                     <span class="k-tile-flag" role="img" aria-label=t("micro coupé") title=t("Micro coupé")><Icon icon=lu::LuMicOff small=true/></span>
                 </Show>
@@ -563,7 +563,7 @@ fn Stage(guild: Option<Id>, user: Id) -> impl IntoView {
             </Show>
             <figcaption>
                 <span class="k-badge k-badge--live">{t("En direct")}</span>
-                <b class="app-ellipsis">{name.clone()}</b>
+                <b class="app-ellipsis"><bdi>{name.clone()}</bdi></b>
                 {
                     let request_label = request_label.clone();
                     move || if controlling.get() {
@@ -720,7 +720,7 @@ pub fn VoiceUsers(guild: Option<Id>, channel: Id, name: String, hidden: Signal<b
                         view! {
                             <li data-speaking=move || s.voice.speaking.with(|x| x.contains(&user)).then_some("")>
                                 {face(u, &n, "sm")}
-                                <span class="app-ellipsis">{n.clone()}</span>
+                                <span class="app-ellipsis"><bdi>{n.clone()}</bdi></span>
                                 {(x.self_mute && !x.self_deaf).then(|| view! {
                                     <span role="img" aria-label=t("micro coupé") title=t("Micro coupé")><Icon icon=lu::LuMicOff small=true/></span>
                                 })}
@@ -747,18 +747,20 @@ pub fn VoicePanel() -> impl IntoView {
     let v = s.voice;
     let place = Memo::new(move |_| {
         let r = v.room.get()?;
-        let (href, where_) = match r.guild {
+        // `where_` : le texte de l'info-bulle ; `parts` : le salon et le serveur, chacun isolé à l'affichage (deux noms saisis).
+        let (href, where_, parts) = match r.guild {
             Some(gid) => {
                 let g = s.guild(gid)?;
                 let c = g.channels.iter().find(|c| c.id == r.channel).and_then(|c| c.name.clone()).unwrap_or_default();
-                (format!("/channels/{gid}/{}", r.channel), format!("{c} / {}", g.guild.name))
+                let shown = format!("{c} / {}", g.guild.name);
+                (format!("/channels/{gid}/{}", r.channel), shown, Some((c, g.guild.name)))
             }
             None => {
                 let title = s.channel(r.channel).map(|c| crate::social::private_title(&c)).unwrap_or_default();
-                (format!("/channels/@me/{}", r.channel), tf("Appel avec {nom}", &[("nom", &title)]))
+                (format!("/channels/@me/{}", r.channel), tf("Appel avec {nom}", &[("nom", &title)]), None)
             }
         };
-        Some((r, href, where_))
+        Some((r, href, where_, parts))
     });
     let state = move || match v.status.get() {
         Status::Connected => ("on", tk!("En appel")),
@@ -767,13 +769,17 @@ pub fn VoicePanel() -> impl IntoView {
         Status::Lost(_) | Status::Off => ("lost", tk!("Connexion perdue")),
     };
     view! {
-        {move || place.get().map(|(r, href, where_)| {
+        {move || place.get().map(|(r, href, where_, parts)| {
+            let shown = match parts {
+                Some((c, g)) => view! { <bdi>{c}</bdi>" / "<bdi>{g}</bdi> }.into_any(),
+                None => where_.clone().into_any(),
+            };
             let leave = if r.guild.is_some() { t("Quitter le salon vocal") } else { t("Raccrocher") };
             view! {
                 <section class="k-voicebar" aria-label=t("Connexion vocale")>
                     <div>
                         <b data-state=move || state().0 role="status">{move || t(state().1)}</b>
-                        <a class="app-ellipsis" href=href title=where_.clone()>{where_.clone()}</a>
+                        <a class="app-ellipsis" href=href title=where_.clone()>{shown}</a>
                     </div>
                     <MicToggle/>
                     <DeafToggle/>
@@ -932,13 +938,15 @@ pub fn DmCall(channel: Id) -> impl IntoView {
                                 <For each=move || who.get() key=|x| x.user_id let:x>
                                     {
                                         let (u, n) = member(s, None, x.user_id);
-                                        view! { <li>{face(u, &n, "sm")}<span class="app-ellipsis">{n.clone()}</span></li> }
+                                        view! { <li>{face(u, &n, "sm")}<span class="app-ellipsis"><bdi>{n.clone()}</bdi></span></li> }
                                     }
                                 </For>
                             </ul>
-                            <button class="k-btn k-btn--primary" disabled=!voice::supported() on:click=move |_| v.join(None, channel)>
+                            <button class="k-btn k-btn--primary" disabled=!voice::supported() title=(!voice::supported()).then(voice::unsupported_message)
+                                aria-describedby=(!voice::supported()).then_some("dmcall-nosupport") on:click=move |_| v.join(None, channel)>
                                 <Icon icon=lu::LuPhone/>{t("Rejoindre l'appel")}
                             </button>
+                            {(!voice::supported()).then(|| view! { <p class="k-error app-dmcall-error" id="dmcall-nosupport">{voice::unsupported_message()}</p> })}
                         </div>
                     }.into_any()
                 } else {
@@ -955,6 +963,17 @@ pub fn DmCall(channel: Id) -> impl IntoView {
     }
 }
 
+/// L'infobulle d'un bouton d'appel : `normal`, ou pourquoi il est grisé quand WebRTC manque.
+pub fn call_title(normal: String) -> String {
+    if voice::supported() { normal } else { voice::unsupported_message() }
+}
+
+/// Le même pourquoi, pour les lecteurs d'écran : un texte caché que le bouton grisé cite par `aria-describedby=id`. Rien quand les
+/// appels marchent.
+pub fn call_note(id: &str) -> Option<impl IntoView + use<>> {
+    (!voice::supported()).then(|| view! { <span class="k-sr" id=id.to_string()>{voice::unsupported_message()}</span> })
+}
+
 /// Dans l'en-tête d'un MP ou d'un groupe sans appel en cours : lancer l'appel.
 #[component]
 pub fn StartCall(channel: Id, #[prop(into)] blocked: Signal<bool>) -> impl IntoView {
@@ -963,12 +982,15 @@ pub fn StartCall(channel: Id, #[prop(into)] blocked: Signal<bool>) -> impl IntoV
     let idle =
         Memo::new(move |_| v.room.get().is_none_or(|r| r.channel != channel) && present(s, None, channel).is_empty());
     let supported = voice::supported();
+    let note = format!("call-no-{channel}");
     view! {
         <Show when=move || idle.get()>
-            <button class="k-btn k-btn--icon" aria-label=t("Démarrer un appel") title=t("Démarrer un appel")
+            <button class="k-btn k-btn--icon" aria-label=t("Démarrer un appel") title=call_title(t("Démarrer un appel"))
+                aria-describedby=(!supported).then(|| note.clone())
                 disabled=move || blocked.get() || !supported on:click=move |_| v.join(None, channel)>
                 <Icon icon=lu::LuPhoneCall/>
             </button>
+            {call_note(&note)}
         </Show>
     }
 }
@@ -1071,10 +1093,12 @@ fn RingCard(call: kraken_proto::Call) -> impl IntoView {
     view! {
         <div class="app-ring-card" role="alertdialog" aria-label=tf("Appel de {nom}", &[("nom", &who)]) aria-describedby=format!("ring-{cid}")>
             {face(account, &who, "md")}
-            <p id=format!("ring-{cid}")><b class="app-ellipsis">{who.clone()}</b><span>{line}</span></p>
-            <button class="k-btn k-btn--sm k-btn--primary" disabled=!voice::supported() on:click=answer>
+            <p id=format!("ring-{cid}")><b class="app-ellipsis"><bdi>{who.clone()}</bdi></b><span>{line}</span></p>
+            <button class="k-btn k-btn--sm k-btn--primary" disabled=!voice::supported() title=(!voice::supported()).then(voice::unsupported_message)
+                aria-describedby=(!voice::supported()).then(|| format!("ring-no-{cid}")) on:click=answer>
                 <Icon icon=lu::LuPhone small=true/><span>{t("Rejoindre")}</span>
             </button>
+            {call_note(&format!("ring-no-{cid}"))}
             <button class="k-btn k-btn--sm k-btn--danger" on:click=decline>
                 <Icon icon=lu::LuPhoneOff small=true/><span>{decline_label()}</span>
             </button>

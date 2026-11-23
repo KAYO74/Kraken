@@ -93,6 +93,13 @@ def css(t):
     base = {**t["color"]}
     base["font-sans"] = t["font"]["sans"]
     base["font-mono"] = t["font"]["mono"]
+    base["font-arabic"] = t["font"]["arabic"]
+    base["font-hebrew"] = t["font"]["hebrew"]
+    # Sens d'écriture : 1 de gauche à droite, -1 sous html[dir="rtl"] (voir plus bas) ; les décalages en x qui n'ont pas de
+    # version logique (translateX d'un tiroir, ombre décalée, rotation d'un chevron) se multiplient par lui.
+    base["flip"] = 1
+    # Interligne : l'écriture arabe (diacritiques, hampes hautes) demande plus d'air que le latin ; 1 partout sauf :lang(ar|fa|he).
+    base["line-scale"] = 1
     base["text-scale"] = 1
     base["zoom"] = 1
     # Les unités de fenêtre sont multipliées par le zoom de body : ces longueurs valent le vrai écran.
@@ -101,7 +108,7 @@ def css(t):
     base["dvh"] = "calc(100dvh / var(--zoom))"
     for k, s in t["type"].items():
         base["text-%s-size" % k] = "calc(%s * var(--text-scale))" % rem(s["size"])
-        base["text-%s-line" % k] = "calc(%s * var(--text-scale))" % rem(s["line"])
+        base["text-%s-line" % k] = "calc(%s * var(--text-scale) * var(--line-scale))" % rem(s["line"])
         base["text-%s-weight" % k] = s["weight"]
     for k, v in t["weight"].items():
         base["weight-%s" % k] = v
@@ -124,7 +131,11 @@ def css(t):
            "   data-density=\"compact\" ; data-contrast=\"high\" ; data-motion=\"reduce\". Le client les pose avant le premier rendu (boot.js). */",
            "/* Points de rupture (pas de variables CSS dans @media) : %s */" % ", ".join(
                "%s %dpx" % (k, v) for k, v in t["layout"].items() if k.startswith("bp-")),
-           "", ":root {", "  color-scheme: dark;", decls(base), "}", ""]
+           "", ":root {", "  color-scheme: dark;", decls(base), "}",
+           '/* Droit-à-gauche : <html dir="rtl"> (posé par le client d\'après la langue). `--flip` vaut alors -1 ; voir components.css. */',
+           ':root[dir="rtl"] { --flip: -1; }',
+           "/* Interligne par écriture : plus aéré en arabe et en persan, un peu en hébreu (le latin garde 1). */",
+           ":root:lang(ar), :root:lang(fa) { --line-scale: 1.25; }", ":root:lang(he) { --line-scale: 1.1; }", ""]
     for name, over in th.items():
         scheme = "light" if name == "light" else "dark"
         out += [':root[data-theme="%s"] {' % name, "  color-scheme: %s;" % scheme, decls(over), "}", ""]

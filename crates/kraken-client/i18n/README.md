@@ -87,6 +87,70 @@ quand il le connaît (« Nom affiché » devient « Display name »). Règles po
 Un nouveau message d'erreur du serveur : l'ajouter à `server.tsv` (gabarit s'il a une valeur) ; le test de couverture
 (`cargo test -p kraken-server error::`) et `--server` le disent sinon.
 
+## Droit-à-gauche
+
+Arabe, persan, hébreu : la mise en page est prête, les traductions viennent après (aucune langue de droite à gauche
+n'est encore dans `Lang`). `boot.js` pose `<html dir="rtl">` pour `ar`, `fa`, `he` (la même table que `Lang::dir`), et
+**tout suit l'attribut en direct** : les tests de `e2e/specs/rtl.spec.ts` le basculent à la main (`dir="rtl"` et `lang="fa"`
+dans la console) sur une interface encore française. Pour voir un écran : `document.documentElement.dir = "rtl"`.
+
+**Feuilles de style : que des propriétés logiques.** `margin-inline-start`, `padding-inline-end`, `inset-inline-start`,
+`border-inline-start`, `text-align: start`, `border-start-start-radius`, `float: inline-end`, `resize: inline`. Jamais
+`left`, `right`, `margin-left`, `border-right`, `text-align: left`, `float: left`, `border-top-left-radius`. Un raccourci à
+quatre valeurs aux côtés inégaux (`padding: 4px 8px 4px 12px`) s'écrit `padding-block` et `padding-inline`. Ce qui n'a pas de
+version logique se multiplie par `--flip` (`1`, et `-1` sous `html[dir="rtl"]`, jetons dans `tokens.css`) :
+`translateX(calc(-120% * var(--flip)))` pour un tiroir, `box-shadow: inset calc(3px * var(--flip)) 0 0 …`,
+`rotate(calc(-90deg * var(--flip)))`. Un dégradé « to right », un `background-position` ou un `transform-origin` en
+pourcentage de gauche se double d'un bloc `[dir="rtl"]`.
+
+**Le garde-fou** : `python3 scripts/css-logical-check.py` (la CI le lance à côté de `replica/design/tokens.py`) échoue sur
+toute propriété physique de `style/app.css` et `replica/design/components.css`. Ce qui est vraiment physique (un centrage
+symétrique, une aiguille, un miroir de caméra) se garde avec `/* physical-ok: la raison */` sur **la même ligne** ; la raison
+est obligatoire, et un marqueur sur une ligne sans rien de physique est refusé aussi. `-v` liste les lignes écartées.
+
+**Icônes.** Une icône qui indique un sens (flèche, chevron, répondre, envoyer, sortir, coin fléché, lien externe, panneau
+latéral) se retourne : la classe `k-flip` (`:root[dir="rtl"] .k-flip { transform: scaleX(-1) }`). `icons.rs` l'ajoute seul
+aux icônes de la liste `DIRECTIONAL` ; une nouvelle icône fléchée s'y ajoute, et `<Icon flip=true …/>` force le cas rare
+(une icône ordinaire qui porte une direction ici). Ne se retournent pas : lecture, micro, caméra, cloche, croix, coche,
+épingle, trombone, point d'interrogation, tout ce qui n'a pas de gauche ni de droite.
+
+**Code Rust.** `crate::i18n::is_rtl()` lit `<html dir>` **à chaque appel** (jamais dans un `static`, jamais gardé au
+démarrage) : à appeler à l'événement ou au rendu. Le sens des flèches du clavier suit le sens visuel : dans une barre
+d'onglets, `ArrowRight` va à l'onglet suivant en LTR et à l'onglet précédent en RTL (et inversement pour `ArrowLeft`) ;
+dans la grille d'emojis, `kraken_core::grid::Move::mirrored()` ; dans la visionneuse d'images, ← passe à la suivante en
+RTL. Un texte qui nomme ces flèches (`t("Précédente (←)")`) passe par `crate::i18n::mirror_arrows(…)`. Le menu contextuel
+garde dans sa `MenuAt` le sens lu à l'ouverture : son bord de fin touche le curseur, et il reste dans la fenêtre. Les
+menus ancrés en CSS (`inset-inline-start: calc(100% + …)`) n'ont rien à calculer. `scrollLeft` est **négatif** en RTL
+(Chrome, Firefox, Safari) : ne lis jamais `scrollLeft` sans penser au signe, ni `getBoundingClientRect().left` comme « le
+début ».
+
+**Texte bidirectionnel.**
+
+- Un champ de texte libre (message, nom de serveur, bio, nom affiché, recherche) : `dir="auto"` ; la direction suit la
+  saisie. Un champ technique (pseudo, e-mail, lien, code d'invitation, mot de passe) : `dir="ltr"`.
+- Un fragment technique au milieu d'une phrase (pseudo `@nom`, e-mail, adresse, code, nombre ou date) : `<bdi dir="ltr">…</bdi>`
+  (les `<bdi>` de la liste des noms de la PR #31 sont gardés), ou la classe `k-ltr` sur un élément en ligne. Les liens et les
+  mentions d'un message, `pre`, `code`, `samp` et `.k-kbd` sont déjà `direction: ltr; unicode-bidi: isolate`, calés au début.
+- Un texte saisi par une personne (nom de rôle, de serveur, de catégorie ou de salon, nom affiché, sujet, nom de groupe) : `<bdi>…</bdi>` autour du
+  texte dans le DOM (`bdi` oriente d'après les lettres du nom et l'isole : « (Équipe) Alpha! » ne devient pas « !Alpha (Équipe) »), jamais `dir="auto"`
+  sur un bloc qui s'aligne (le nom suivrait le sens du nom, pas celui de l'interface). Dans une ligne qui se coupe par `…` (`.app-ellipsis`…), un `bdi`
+  premier enfant porte la coupure en RTL (règle de fin de `app.css`). Dans un `<option>` ou un `title` (du texte seul) : `crate::i18n::isolated(&nom)`,
+  et `crate::ui::member_label(nom, pseudo)` pour « Nom (@pseudo) ». Un jeton technique d'une phrase (`@everyone`) passe par une `{variable}` de `tf`.
+- `tf` et `tnf` isolent chaque valeur insérée (U+2068 … U+2069, `kraken_core::i18n::fill_isolated`) quand la page est de droite
+  à gauche : un nom en latin au milieu d'une phrase arabe ne retourne pas la ponctuation voisine. Un `@` ou un `#` collé
+  devant une `{variable}` est repris dans l'isolat. Les nombres de `{n}` restent nus. Côté traduction : mets la ponctuation
+  de la phrase **hors** de la variable (`« {name} : … »`), jamais une marque de sens d'écriture dans le catalogue.
+
+**Polices et interligne.** Un bloc `:lang(ar), :lang(fa), :lang(he)` (fin de `components.css`) prend une pile de polices du
+**système** : jetons `font.arabic` et `font.hebrew`, avec Inter d'abord pour le latin, puis la première police du système qui
+a l'écriture. Aucun fichier de police, aucune requête réseau. `--line-scale` (1 par défaut, 1,25 en arabe et en persan, 1,1 en
+hébreu) agrandit l'interligne ; l'espacement des lettres et l'italique sont coupés en arabe et en persan (écriture cursive).
+Le code garde JetBrains Mono.
+
+**Écrire un composant** : propriétés logiques (le garde-fou le dit), `dir="auto"` ou `<bdi>` autour de ce qu'un utilisateur a
+écrit, `k-flip` sur ce qui pointe, `--flip` sur ce qui se décale ; puis un test de géométrie dans `rtl.spec.ts` (la boîte
+est le miroir exact de sa position en LTR : `x_rtl = largeur_fenêtre - droite_ltr`).
+
 ## Conventions d'anglais
 
 - Ton neutre et naturel, jamais mot à mot : « Se connecter » devient « Sign in », « Créer un serveur » « Create server ».

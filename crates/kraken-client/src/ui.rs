@@ -185,6 +185,11 @@ pub fn StatusDot(#[prop(into)] status: Signal<Dot>) -> impl IntoView {
     view! { <i class=move || format!("k-presence k-presence--{}", status.get().class()) aria-hidden="true"></i> }
 }
 
+/// « Nom (@pseudo) » pour un `<option>` (qui ne prend que du texte) : chaque morceau saisi est isolé quand la page est de droite à gauche.
+pub fn member_label(name: &str, username: &str) -> String {
+    format!("{} ({})", crate::i18n::isolated(name), crate::i18n::isolated(&format!("@{username}")))
+}
+
 /// Une teinte stable par compte (1 à 8, somme des octets de l'id), pour reconnaître les gens d'un
 /// coup d'œil : l'avatar sans photo, la bannière sans image.
 pub fn tint(id: kraken_proto::Id) -> String {

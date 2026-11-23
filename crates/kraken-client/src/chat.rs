@@ -413,8 +413,8 @@ fn ChannelView(channel: Channel) -> impl IntoView {
     view! {
         <Header>
             <Icon icon=header_icon/>
-            <h1 class="app-title app-ellipsis">{move || title.get()}</h1>
-            {move || s.channel(cid).and_then(|c| c.topic).map(|t| { let tip = t.clone(); view! { <span class="app-topic app-ellipsis" title=tip>{t}</span> } })}
+            <h1 class="app-title app-ellipsis"><bdi>{move || title.get()}</bdi></h1>
+            {move || s.channel(cid).and_then(|c| c.topic).map(|t| { let tip = crate::i18n::isolated(&t); view! { <span class="app-topic app-ellipsis" title=tip><bdi>{t}</bdi></span> } })}
             <div class="app-header-tools app-header-tools--chat">
                 {(!is_dm).then(|| view! {
                     <a class="k-btn k-btn--icon" href=format!("/channels/{}/{cid}/threads", channel.guild_id.unwrap()) aria-label=t("Fils") title=t("Fils")><Icon icon=lu::LuMessageSquareText/></a>
@@ -982,7 +982,7 @@ fn EditBox(msg: Message) -> impl IntoView {
     let cancel = move || chat.editing.set(None);
     view! {
         <form class="k-msg-edit" on:submit=move |e| { e.prevent_default(); save(); }>
-            <textarea class="k-input" rows="2" aria-label=t("Modifier le message") node_ref=area bind:value=chat.edit_text
+            <textarea dir="auto" class="k-input" rows="2" aria-label=t("Modifier le message") node_ref=area bind:value=chat.edit_text
                 on:keydown=move |e| {
                     if e.key() == "Escape" { e.prevent_default(); e.stop_propagation(); cancel(); }
                     else if e.key() == "Enter" && !e.shift_key() && !e.is_composing() { e.prevent_default(); save2(); }
@@ -1516,7 +1516,7 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
                         <li role="option" id=opt_id(i) aria-selected=move || (active.get() == i).to_string()
                             on:mousedown=move |e| { e.prevent_default(); pick(i); }>
                             {sg.emoji.map(|e| view! { <span class="app-suggest-emoji" aria-hidden="true"><EmojiImg id=e.id name=e.name/></span> })}
-                            <b>{sg.label}</b><small>{sg.detail}</small>
+                            <b dir="auto">{sg.label}</b><small dir="auto">{sg.detail}</small>
                         </li>
                     }).collect_view()}
                 </ul>
@@ -1540,7 +1540,7 @@ fn Composer(placeholder: Signal<String>) -> impl IntoView {
                     title=t("Joindre un fichier") on:click=move |_| { if let Some(i) = picker.get_untracked() { i.click() } }>
                     <Icon icon=lu::LuPaperclip/>
                 </button>
-                <textarea rows="1" disabled=locked
+                <textarea dir="auto" rows="1" disabled=locked
                     placeholder=move || lock_text().unwrap_or_else(|| placeholder.get())
                     aria-label=move || lock_text().unwrap_or_else(|| placeholder.get())
                     bind:value=text node_ref=chat.composer
@@ -1627,7 +1627,7 @@ fn Members(guild: Id) -> impl IntoView {
                     let head = role.as_ref().map(|r| (r.name.clone(), r.color)).or_else(|| groups.with_untracked(|g| (g.len() > 1).then(|| (t("Membres"), None))));
                     view! {
                         {head.map(|(name, color)| view! {
-                            <h3 class="app-group" data-role-color=color.map(|c| c.to_string())>{format!("{name} — {count}")}</h3>
+                            <h3 class="app-group" data-role-color=color.map(|c| c.to_string())><bdi>{name}</bdi>{format!(" — {count}")}</h3>
                         })}
                         <ul class="app-members" aria-label=role.as_ref().map(|r| tf("Membres : {role}", &[("role", &r.name)]))>
                             <For each=move || members.clone() key=|m| (m.user.id, m.user.display_name.clone(), m.user.avatar.clone(), m.nick.clone()) let:m>
@@ -1666,7 +1666,7 @@ fn Members(guild: Id) -> impl IntoView {
                                                     <Show when=is_owner>
                                                         <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" "{t("(propriétaire)")}</span></span>
                                                     </Show>
-                                                    <small>{format!("@{}", m.user.username)}</small>
+                                                    <small><bdi dir="ltr">{format!("@{}", m.user.username)}</bdi></small>
                                                     <Show when=move || excluded.get().is_some()>
                                                         <small class="app-timeout">
                                                             <Icon icon=lu::LuTimer small=true/>
@@ -1757,7 +1757,7 @@ fn GroupMembers(channel: Id) -> impl IntoView {
                                         {is_owner.then(|| view! {
                                             <span class="app-owner"><Icon icon=lu::LuCrown small=true/><span class="k-sr">" "{t("(propriétaire)")}</span></span>
                                         })}
-                                        <small>{format!("@{}", u.username)}</small>
+                                        <small><bdi dir="ltr">{format!("@{}", u.username)}</bdi></small>
                                     </span>
                                 </button>
                                 {removable.then(|| view! {

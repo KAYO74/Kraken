@@ -168,6 +168,7 @@ Retirer l'aperçu	Remove preview
 # Markdown (markdown.rs)
 Afficher le contenu masqué	Show hidden content
 Contenu masqué	Hidden content
+Bloc de code	Code block
 
 # Messages épinglés (pins.rs)
 Message épinglé.	Message pinned.
@@ -216,7 +217,7 @@ rien	nothing
 Chaque nouveau message peut s'afficher sur le bureau.	Every new message can show up on your desktop.
 Seulement quand on te nomme, répond à ton message ou appelle tout le monde.	Only when someone mentions you, replies to your message or pings everyone.
 Aucune notification, et plus de compteur de mentions.	No notifications and no mention counter.
-Ignorer @everyone et @here	Ignore @everyone and @here
+Ignorer {everyone} et {here}	Ignore {everyone} and {here}
 Ces appels à tout le serveur ne comptent plus comme des mentions.	These server-wide pings no longer count as mentions.
 en sourdine	muted
 

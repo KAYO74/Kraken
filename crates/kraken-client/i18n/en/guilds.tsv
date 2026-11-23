@@ -272,7 +272,7 @@ Envoyer des images et des fichiers.	Send images and files.
 Ajouter des réactions	Add Reactions
 Réagir à un message avec un émoji.	React to a message with an emoji.
 Mentionner tout le monde	Mention Everyone
-Prévenir tous les membres d'un coup avec @everyone.	Notify all members at once with @everyone.
+Prévenir tous les membres d'un coup avec {mention}.	Notify all members at once with {mention}.
 Gérer les messages	Manage Messages
 Supprimer les messages des autres.	Delete other people's messages.
 Lire l'historique	Read Message History

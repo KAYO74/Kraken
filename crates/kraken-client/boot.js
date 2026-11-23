@@ -22,6 +22,9 @@
     if (value === null) root.removeAttribute(name); else root.setAttribute(name, value);
   }
 
+  // Vieux WebKit : WebRTC sous son nom préfixé seulement. Sans cet alias le client croit les appels vocaux absents.
+  if (!window.RTCPeerConnection && window.webkitRTCPeerConnection) window.RTCPeerConnection = window.webkitRTCPeerConnection;
+
   // Langue de l'interface (même choix et même règle que src/i18n.rs) : `<html lang dir>` avant le client WASM.
   var chosen = read("kraken.lang", ["auto", "fr", "en"], "auto");
   try { if (chosen === "auto") chosen = window.sessionStorage.getItem("kraken.lang") || "auto"; } catch (e) { /* stockage refusé */ }
@@ -34,7 +37,10 @@
     }
   }
   root.setAttribute("lang", lang);
-  root.setAttribute("dir", "ltr");
+  // Sens d'écriture : la même table que `Lang::dir` (kraken-core). Aucune langue de droite à gauche n'est livrée encore (`lang` vaut
+  // fr ou en) : la table est prête pour l'arabe, le persan et l'hébreu, que la feuille de style et le client suivent en direct.
+  var rtl = ["ar", "fa", "he"];
+  root.setAttribute("dir", rtl.indexOf(lang) >= 0 ? "rtl" : "ltr");
 
   set("data-theme", read("kraken.theme", ["auto", "dark", "light", "black"], "dark"));
   var text = read("kraken.text", ["14", "16", "18", "20"], "16");
