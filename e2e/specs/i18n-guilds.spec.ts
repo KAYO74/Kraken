@@ -333,7 +333,7 @@ test('I18N-G1d l’API nomme le serveur dans la langue demandée ; sans langue o
     return shapeOf(await res.json());
   };
   for (const lang of ['en', 'en-GB', 'EN_us']) expect(await make({ lang }), lang).toEqual({ cats: EN.communaute.cats, channels: EN.communaute.channels });
-  for (const lang of ['fr', 'fr-CA', 'de', '', 'english', undefined]) expect(await make({ lang }), String(lang)).toEqual({ cats: FR.communaute.cats, channels: FR.communaute.channels });
+  for (const lang of ['fr', 'fr-CA', 'nl', '', 'english', undefined]) expect(await make({ lang }), String(lang)).toEqual({ cats: FR.communaute.cats, channels: FR.communaute.channels });
   // Sans modèle non plus : la structure d'avant, dans la langue demandée.
   const plain = await as.post(`${API}/guilds`, { data: { name: 'Harbor', lang: 'en' } });
   expect(shapeOf(await plain.json())).toEqual({ cats: EN.vide.cats, channels: EN.vide.channels });

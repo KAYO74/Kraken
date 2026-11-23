@@ -1138,3 +1138,20 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 :root[dir="rtl"] :is(.app-ellipsis, .k-dm > div, .app-guild-head h2, .app-row b, .app-tile-name, .app-sw-name, .app-sw-detail) > bdi:first-child,
 :root[dir="rtl"] .app-ellipsis > b > bdi:first-child {
   display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+
+/* Allemand : de longs mots composés (« Benachrichtigungseinstellungen »). Le texte courant se coupe en fin de ligne avec un trait d'union
+   (césure automatique d'après <html lang="de">, donc seulement dans cette langue) ; jamais les champs de saisie, le code, les pseudos ni les
+   liens. Les libellés étroits (boutons, onglets, pastilles, navigation) passent à la ligne n'importe où plutôt que de déborder. Une première
+   passe : le designer regarde les débordements en rendu, rien d'autre n'est refait ici. */
+:lang(de) :is(p, li, dd, label, legend, summary, h1, h2, h3, h4, small, figcaption, .k-label, .k-hint, .app-hint, .app-card-label, .k-empty) {
+  hyphens: auto; }
+:lang(de) :is(code, kbd, samp, pre, input, textarea, select, option, a[href], time, bdi, .app-mention, .app-code, .app-emoji-code) { hyphens: manual; }
+:lang(de) :is(.k-btn, .k-tab, .k-badge, .k-navitem, .app-chip) { overflow-wrap: anywhere; }
+/* Un bouton à texte (ni icône, ni lien) peut passer sur plusieurs lignes ; seul, il garde ses 40 px d'avant. */
+:lang(de) .k-btn:not(.k-btn--icon, .k-btn--link) { white-space: normal; height: auto; min-height: 40px; padding-block: var(--space-2);
+  line-height: 1.25; text-align: center; }
+:lang(de) .k-btn--sm:not(.k-btn--icon, .k-btn--link) { min-height: 32px; padding-block: var(--space-1); }
+:lang(de) .k-btn--lg:not(.k-btn--icon, .k-btn--link) { min-height: 48px; }
+@media (max-width: 639px), (pointer: coarse) {
+  :lang(de) :is(.app-pins-close, .app-pin-actions .k-btn) { min-height: var(--size-option-row-mobile); }
+}
