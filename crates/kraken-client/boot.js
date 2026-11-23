@@ -22,6 +22,9 @@
     if (value === null) root.removeAttribute(name); else root.setAttribute(name, value);
   }
 
+  // Vieux WebKit : WebRTC sous son nom préfixé seulement. Sans cet alias le client croit les appels vocaux absents.
+  if (!window.RTCPeerConnection && window.webkitRTCPeerConnection) window.RTCPeerConnection = window.webkitRTCPeerConnection;
+
   // Langue de l'interface (même choix et même règle que src/i18n.rs) : `<html lang dir>` avant le client WASM.
   var chosen = read("kraken.lang", ["auto", "fr", "en"], "auto");
   try { if (chosen === "auto") chosen = window.sessionStorage.getItem("kraken.lang") || "auto"; } catch (e) { /* stockage refusé */ }

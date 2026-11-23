@@ -154,7 +154,7 @@ fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
             </button>
             {move || elsewhere.get().map(|c| view! { <p class="app-hint">{tf("Tu quitteras {salon}.", &[("salon", &c)])}</p> })}
             {move || error().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
-            {(!supported).then(|| view! { <p class="k-error">{t(voice::NO_WEBRTC)}</p> })}
+            {(!supported).then(|| view! { <p class="k-error">{voice::unsupported_message()}</p><p class="app-hint">{voice::unsupported_details()}</p> })}
             {insecure.then(|| view! { <p class="app-hint">{t(voice::INSECURE)}</p> })}
         </div>
     }

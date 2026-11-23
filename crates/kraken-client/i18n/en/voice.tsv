@@ -86,7 +86,12 @@ Appel de {nom}	Call from {nom}
 # Session vocale : avertissements et erreurs (voice.rs)
 Connexion non sécurisée : tu peux écouter et regarder, mais parler et partager ton écran demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).	Insecure connection: you can listen and watch, but speaking and sharing your screen require the instance to be served over HTTPS (or opened on this computer, via localhost).
 Micro refusé ou introuvable : tu es en sourdine. Autorise le micro dans ton navigateur, puis réactive-le.	Microphone denied or not found: you're muted. Allow the microphone in your browser, then unmute.
-Ton navigateur ne permet pas les appels vocaux. Essaie avec un navigateur récent.	Your browser doesn't support voice calls. Try a recent browser.
+Ton navigateur ne permet pas les appels vocaux : WebRTC y est absent ou désactivé. Essaie avec un navigateur récent (Chrome, Firefox, Edge ou Safari) ou avec l'appli de bureau.	Your browser doesn't support voice calls: WebRTC is missing or turned off. Try a recent browser (Chrome, Firefox, Edge or Safari) or the desktop app.
+Ton navigateur ne permet pas les appels vocaux sur cette page : elle est en HTTP, et WebRTC n'y est pas disponible. Ouvre l'instance en HTTPS (ou sur cet ordinateur, via localhost), ou essaie un autre navigateur.	Your browser doesn't support voice calls on this page: it is served over HTTP, and WebRTC isn't available there. Open the instance over HTTPS (or on this computer, via localhost), or try another browser.
+Le navigateur a refusé de démarrer l'appel vocal ({détail}).	The browser refused to start the voice call ({détail}).
+HTTPS ou localhost	HTTPS or localhost
+HTTP	HTTP
+Détails : page en {page} · RTCPeerConnection absent · {navigateur}	Details: page over {page} · RTCPeerConnection missing · {navigateur}
 Connexion vocale perdue.	Voice connection lost.
 Le navigateur a refusé l'accès à la caméra	The browser denied access to the camera
 Aucune caméra n'a été trouvée sur cet appareil.	No camera was found on this device.

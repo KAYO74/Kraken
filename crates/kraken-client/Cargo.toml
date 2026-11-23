@@ -17,7 +17,7 @@ wasm-bindgen = "=0.2.129"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = [
-    "Storage", "Window", "Document", "Element", "HtmlElement", "KeyboardEvent", "Location", "Navigator", "Clipboard",
+    "console", "Storage", "Window", "Document", "Element", "HtmlElement", "KeyboardEvent", "Location", "Navigator", "Clipboard",
     "HtmlInputElement", "File", "FileList", "Blob", "Url", "HtmlCanvasElement", "CanvasRenderingContext2d",
     "HtmlImageElement", "HtmlDocument", "MediaQueryList",
     # Images animées : première image (createImageBitmap) d'un GIF ou d'un WebP animé.
