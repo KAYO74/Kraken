@@ -55,8 +55,8 @@ test('I18N-H1 français par défaut : connexion et inscription, <html lang="fr" 
   const language = page.getByRole('combobox', { name: 'Langue' });
   await expect(language).toHaveValue('auto');
   // « Langue de l'appareil », puis chaque langue dans son écriture, avec son attribut `lang`.
-  expect(await language.locator('option').allTextContents()).toEqual(["Langue de l'appareil", 'Français', 'English']);
-  expect(await language.locator('option').evaluateAll((o) => o.map((x) => x.getAttribute('lang')))).toEqual([null, 'fr', 'en']);
+  expect(await language.locator('option').allTextContents()).toEqual(["Langue de l'appareil", 'Français', 'English', 'فارسی']);
+  expect(await language.locator('option').evaluateAll((o) => o.map((x) => x.getAttribute('lang')))).toEqual([null, 'fr', 'en', 'fa']);
   await expect(language).toHaveAccessibleDescription('Le changement recharge la page.');
   await expect(page.getByText('Le changement recharge la page.')).toBeVisible();
   await a11y(page);
@@ -109,7 +109,7 @@ test.describe('navigateur en anglais', () => {
     await expect(page.getByRole('link', { name: 'Terms' })).toBeVisible();
     const language = page.getByRole('combobox', { name: 'Language' });
     await expect(language).toHaveValue('auto');
-    expect(await language.locator('option').allTextContents()).toEqual(['Device language', 'Français', 'English']);
+    expect(await language.locator('option').allTextContents()).toEqual(['Device language', 'Français', 'English', 'فارسی']);
     await expect(language).toHaveAccessibleDescription('Changing it reloads the page.');
     await a11y(page);
     // Un message du serveur (français, statique) s'affiche traduit.
@@ -180,7 +180,7 @@ test.describe('navigateur en anglais', () => {
     const language = dialog.getByRole('combobox', { name: 'Language' });
     await expect(language).toHaveValue('auto');
     await expect(language).toHaveAccessibleDescription('Changing it reloads the page.');
-    expect(await language.locator('option').allTextContents()).toEqual(['Device language', 'Français', 'English']);
+    expect(await language.locator('option').allTextContents()).toEqual(['Device language', 'Français', 'English', 'فارسی']);
     await expect(dialog.getByRole('group', { name: 'Time format' })).toBeVisible();
     // Le navigateur est anglais, l'heure automatique est celle de l'anglais américain.
     await expect(said(page, 'Example').first()).toHaveText('Example: 2:30 PM');
