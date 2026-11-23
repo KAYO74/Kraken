@@ -140,6 +140,7 @@ Aucun compte ne porte le pseudo « {nom} ». Vérifie son orthographe.	No accoun
 {champ} : {n} caractères au plus, sans retour à la ligne.	{champ}: {n} characters at most, no line breaks.
 {champ} : les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés.	{champ}: invisible characters (zero-width space, text direction change, filler) aren't allowed.
 {champ} : écris au moins un caractère visible, ou laisse le champ vide.	{champ}: write at least one visible character, or leave the field empty.
+Bio	Bio
 
 # Images, animations et fichiers : limites de poids et de forme
 Ce fichier pèse trop lourd : {n} Mo au plus.	This file is too large: {n} MB at most.

@@ -139,6 +139,7 @@ Aucun compte ne porte le pseudo « {nom} ». Vérifie son orthographe.	حساب�
 {champ} : {n} caractères au plus, sans retour à la ligne.	{champ}: حداکثر {n} کاراکتر، بدون خط جدید.
 {champ} : les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés.	{champ}: کاراکترهای نامرئی (فاصله با عرض صفر، تغییر جهت نوشتار، پرکننده) پذیرفته نمی‌شوند.
 {champ} : écris au moins un caractère visible, ou laisse le champ vide.	{champ}: دست‌کم یک کاراکتر قابل مشاهده بنویسید یا فیلد را خالی بگذارید.
+Bio	درباره من
 
 # Images, animations et fichiers : limites de poids et de forme
 Ce fichier pèse trop lourd : {n} Mo au plus.	حجم این فایل بیش از حد است: حداکثر {n} مگابایت.

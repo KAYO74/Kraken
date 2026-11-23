@@ -114,6 +114,12 @@ fn fold(text: &str, max: usize) -> Folded {
     f
 }
 
+/// Un texte replié comme pour la recherche (minuscules, sans accents, habitudes de frappe du persan et de l'arabe :
+/// demi-espace, ك et ي, chiffres), pour comparer des débuts de mots hors du commutateur (complétion de `@` et de `#`).
+pub fn fold_key(text: &str) -> String {
+    fold(text, usize::MAX).chars.into_iter().collect()
+}
+
 /// La requête repliée, espaces de bord retirés et suites d'espaces réduites à une.
 fn query_of(raw: &str) -> Vec<char> {
     // On replie d'abord : un demi-espace persan en bord de requête devient une espace, qu'il faut aussi retirer.
@@ -280,6 +286,14 @@ mod tests {
 
     fn tier(q: &str, t: &str) -> Option<Tier> {
         find(q, t).map(|m| m.tier)
+    }
+
+    #[test]
+    fn fold_key_gives_the_same_key_as_the_search() {
+        assert_eq!(fold_key("علی رضایی"), fold_key("علي رضايي"));
+        assert!(fold_key("رضا‌ها").starts_with(&fold_key("رضا ")));
+        assert_eq!(fold_key("Ève ۱"), "eve 1");
+        assert_eq!(fold_key(""), "");
     }
 
     #[test]

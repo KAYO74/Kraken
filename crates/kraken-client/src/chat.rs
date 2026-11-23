@@ -1,7 +1,7 @@
 //! Salon textuel de serveur (S05), conversation privée (S19) ; le salon vocal (S18) est dans `call`.
 
 use gloo_timers::future::TimeoutFuture;
-use kraken_core::perms;
+use kraken_core::{perms, search};
 use kraken_proto::{Channel, ChannelKind, Emoji, Id, MAX_MESSAGE_LEN, Message, User};
 use leptos::html;
 use leptos::portal::Portal;
@@ -1259,9 +1259,14 @@ fn suggestions(chat: Chat, sign: char, q: &str) -> Vec<Suggestion> {
                 v
             }
         };
+        // Comme dans Ctrl+K : « @علي » trouve « علی », « @رضا » trouve « رضا‌ » (demi-espace), « @1 » trouve « ۱ ».
+        let folded = search::fold_key(q);
         for (u, nick) in people {
             let shown = nick.unwrap_or_else(|| u.name().to_string());
-            if u.username.starts_with(q) || shown.to_lowercase().split_whitespace().any(|w| w.starts_with(q)) {
+            if u.username.starts_with(q)
+                || search::fold_key(&u.username).starts_with(&folded)
+                || search::fold_key(&shown).split_whitespace().any(|w| w.starts_with(&folded))
+            {
                 out.push(Suggestion {
                     insert: format!("@{} ", u.username),
                     label: shown,
@@ -1306,7 +1311,7 @@ fn suggestions(chat: Chat, sign: char, q: &str) -> Vec<Suggestion> {
     } else if let Some(g) = chat.guild.and_then(|g| s.guild(g)) {
         for c in g.channels.iter().filter(|c| c.kind.is_textual()) {
             let Some(name) = c.name.clone() else { continue };
-            if name.to_lowercase().starts_with(q) && !name.chars().any(char::is_whitespace) {
+            if search::fold_key(&name).starts_with(&search::fold_key(q)) && !name.chars().any(char::is_whitespace) {
                 out.push(Suggestion {
                     insert: format!("#{name} "),
                     label: format!("#{name}"),

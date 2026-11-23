@@ -70,6 +70,7 @@ Suit la langue de l'interface.	از زبان رابط پیروی می‌کند.
 24 h	24 ساعته
 AM	ق.ظ.
 PM	ب.ظ.
+2:30 PM	2:30 ب.ظ.
 
 # Apparence et accessibilité (display.rs)
 Automatique (système)	خودکار (سیستم)

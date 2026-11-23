@@ -481,6 +481,37 @@ test('I18N-F15 Ctrl+K en persan : demi-espace tapé comme une espace, chiffres p
   }
 });
 
+test('I18N-F16 complétion de @ et de # en persan : « علي » et « رضايي » arabes, ۱ et demi-espace trouvent la personne et le salon', async ({ signedIn, api }) => {
+  const a = await signedIn('fa-IR');
+  const b = await signedIn('fa-IR');
+  const asA = await api(a.token);
+  const asB = await api(b.token);
+  expect((await asB.patch(`${API}/users/@me`, { data: { display_name: 'علی رضایی' } })).status()).toBe(200);
+  const res = await asA.post(`${API}/guilds`, { data: { name: 'Abyss', template: 'jeux', lang: 'fa' } });
+  expect(res.status(), await res.text()).toBe(201);
+  const g = await res.json();
+  const general = g.channels.find((c: { kind: string; name: string }) => c.kind === 'text' && c.name === 'عمومی');
+  const { code } = await (await asA.post(`${API}/channels/${general.id}/invites`, { data: {} })).json();
+  expect((await asB.post(`${API}/invites/${code}`)).status()).toBeLessThan(300);
+  const { page } = a;
+  await page.goto(`/channels/${g.guild.id}/${general.id}`);
+  await expect(page.getByRole('heading', { name: 'عمومی', level: 1 })).toBeVisible();
+  const box = page.locator('textarea').first();
+  const list = page.getByRole('listbox');
+  // « @ » : le nom affiché est écrit avec « ی » persans ; les touches « ي » arabes le trouvent aussi.
+  for (const typed of ['@علی', '@علي', '@رضایی', '@رضايي']) {
+    await box.fill('');
+    await box.pressSequentially(typed);
+    await expect(list.getByRole('option', { name: /علی رضایی/ }), typed).toBeVisible();
+  }
+  // « # » : le salon « نکته‌ها » (demi-espace) se trouve par ses premières lettres, avec « ك » arabe aussi.
+  for (const typed of ['#نکته', '#نكته']) {
+    await box.fill('');
+    await box.pressSequentially(typed);
+    await expect(list.getByRole('option', { name: /#نکته\u200cها/ }), typed).toBeVisible();
+  }
+});
+
 // ───────── le français et l'anglais ne changent pas ─────────
 
 test('I18N-F12 le français et l’anglais restent de gauche à droite, sans une lettre persane hors du sélecteur', async ({ browser, baseURL }) => {
