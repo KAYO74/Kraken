@@ -125,10 +125,12 @@ pub const ALL: [Template; 5] = [
         name: "Vide",
         description: "Un salon textuel et un vocal, à compléter.",
         groups: &[
-            group("Salons textuels", "Text channels", &[text("général", "general").fa("عمومی")])
-                .fa("کانال\u{200c}های متنی"),
-            group("Salons vocaux", "Voice channels", &[voice("Général", "General").fa("عمومی")])
-                .fa("کانال\u{200c}های صوتی"),
+            group("Salons textuels", "Text channels", &[text("général", "general").fa("عمومی").de("allgemein")])
+                .fa("کانال\u{200c}های متنی")
+                .de("Textkanäle"),
+            group("Salons vocaux", "Voice channels", &[voice("Général", "General").fa("عمومی").de("Allgemein")])
+                .fa("کانال\u{200c}های صوتی")
+                .de("Sprachkanäle"),
         ],
     },
     Template {
@@ -139,17 +141,27 @@ pub const ALL: [Template; 5] = [
             group(
                 "Accueil",
                 "Welcome",
-                &[text("annonces", "announcements").fa("اطلاعیه\u{200c}ها"), text("règles", "rules").fa("قوانین")],
+                &[
+                    text("annonces", "announcements").fa("اطلاعیه\u{200c}ها").de("ankündigungen"),
+                    text("règles", "rules").fa("قوانین").de("regeln"),
+                ],
             )
-            .fa("خوش\u{200c}آمدگویی"),
+            .fa("خوش\u{200c}آمدگویی")
+            .de("Willkommen"),
             group(
                 "Discussions",
                 "Discussions",
-                &[text("général", "general").fa("عمومی"), text("aide", "help").fa("کمک")],
+                &[text("général", "general").fa("عمومی").de("allgemein"), text("aide", "help").fa("کمک").de("hilfe")],
             )
-            .fa("گفتگوها"),
-            group("Salons vocaux", "Voice channels", &[voice("Discussion libre", "Open chat").fa("گفتگوی آزاد")])
-                .fa("کانال\u{200c}های صوتی"),
+            .fa("گفتگوها")
+            .de("Gespräche"),
+            group(
+                "Salons vocaux",
+                "Voice channels",
+                &[voice("Discussion libre", "Open chat").fa("گفتگوی آزاد").de("Offene Runde")],
+            )
+            .fa("کانال\u{200c}های صوتی")
+            .de("Sprachkanäle"),
         ],
     },
     Template {
@@ -161,22 +173,26 @@ pub const ALL: [Template; 5] = [
                 "Salons textuels",
                 "Text channels",
                 &[
-                    text("général", "general").fa("عمومی"),
-                    text("recherche-de-joueurs", "looking-for-players").fa("یافتن-هم\u{200c}تیمی"),
-                    text("astuces", "tips").fa("نکته\u{200c}ها"),
+                    text("général", "general").fa("عمومی").de("allgemein"),
+                    text("recherche-de-joueurs", "looking-for-players")
+                        .fa("یافتن-هم\u{200c}تیمی")
+                        .de("spielpartner-gesucht"),
+                    text("astuces", "tips").fa("نکته\u{200c}ها").de("tipps"),
                 ],
             )
-            .fa("کانال\u{200c}های متنی"),
+            .fa("کانال\u{200c}های متنی")
+            .de("Textkanäle"),
             group(
                 "Salons vocaux",
                 "Voice channels",
                 &[
-                    voice("Partie 1", "Game 1").fa("بازی 1"),
-                    voice("Partie 2", "Game 2").fa("بازی 2"),
-                    voice("Pause", "Break").fa("استراحت"),
+                    voice("Partie 1", "Game 1").fa("بازی 1").de("Spiel 1"),
+                    voice("Partie 2", "Game 2").fa("بازی 2").de("Spiel 2"),
+                    voice("Pause", "Break").fa("استراحت").de("Pause"),
                 ],
             )
-            .fa("کانال\u{200c}های صوتی"),
+            .fa("کانال\u{200c}های صوتی")
+            .de("Sprachkanäle"),
         ],
     },
     Template {
@@ -188,23 +204,25 @@ pub const ALL: [Template; 5] = [
                 "Travail",
                 "Study",
                 &[
-                    text("général", "general").fa("عمومی"),
-                    text("cours", "classes").fa("درس\u{200c}ها"),
-                    text("devoirs", "homework").fa("تکلیف\u{200c}ها"),
-                    text("ressources", "resources").fa("منابع"),
+                    text("général", "general").fa("عمومی").de("allgemein"),
+                    text("cours", "classes").fa("درس\u{200c}ها").de("kurse"),
+                    text("devoirs", "homework").fa("تکلیف\u{200c}ها").de("hausaufgaben"),
+                    text("ressources", "resources").fa("منابع").de("materialien"),
                 ],
             )
-            .fa("مطالعه"),
+            .fa("مطالعه")
+            .de("Lernen"),
             group(
                 "Salons vocaux",
                 "Voice channels",
                 &[
-                    voice("Salle de travail", "Study room").fa("اتاق مطالعه"),
-                    voice("Révisions en groupe", "Group study").fa("مرور گروهی"),
-                    voice("Pause", "Break").fa("استراحت"),
+                    voice("Salle de travail", "Study room").fa("اتاق مطالعه").de("Lernraum"),
+                    voice("Révisions en groupe", "Group study").fa("مرور گروهی").de("Lerngruppe"),
+                    voice("Pause", "Break").fa("استراحت").de("Pause"),
                 ],
             )
-            .fa("کانال\u{200c}های صوتی"),
+            .fa("کانال\u{200c}های صوتی")
+            .de("Sprachkanäle"),
         ],
     },
     Template {
@@ -216,18 +234,23 @@ pub const ALL: [Template; 5] = [
                 "Salons textuels",
                 "Text channels",
                 &[
-                    text("général", "general").fa("عمومی"),
-                    text("photos", "photos").fa("عکس\u{200c}ها"),
-                    text("sorties", "outings").fa("دورهمی\u{200c}ها"),
+                    text("général", "general").fa("عمومی").de("allgemein"),
+                    text("photos", "photos").fa("عکس\u{200c}ها").de("fotos"),
+                    text("sorties", "outings").fa("دورهمی\u{200c}ها").de("unternehmungen"),
                 ],
             )
-            .fa("کانال\u{200c}های متنی"),
+            .fa("کانال\u{200c}های متنی")
+            .de("Textkanäle"),
             group(
                 "Salons vocaux",
                 "Voice channels",
-                &[voice("Le canapé", "The couch").fa("مبل"), voice("Soirée film", "Movie night").fa("شب فیلم")],
+                &[
+                    voice("Le canapé", "The couch").fa("مبل").de("Die Couch"),
+                    voice("Soirée film", "Movie night").fa("شب فیلم").de("Filmabend"),
+                ],
             )
-            .fa("کانال\u{200c}های صوتی"),
+            .fa("کانال\u{200c}های صوتی")
+            .de("Sprachkanäle"),
         ],
     },
 ];

@@ -3,3 +3,163 @@
 # Mêmes {variables} que le français, tutoiement (« du »), guillemets „…“, pas d'espace avant « : ? ! ; », chiffres latins.
 # Un texte absent d'ici s'affiche en anglais (repli), puis en français.
 # Fichier en construction : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui reste à traduire.
+# Connexion, session, accès (error.rs, auth.rs)
+# Requêtes, saisie, limites
+# Comptes, profil, mot de passe
+# Fichiers, images, emojis
+# Épingles
+# Serveurs, salons, rôles, droits
+# Invitations
+# Modération, rangs, propriétaire
+# Amis, blocages, messages privés, groupes
+# Vocal
+# Messages à valeur glissée : limites, valeurs refusées, attentes
+# Profil : le libellé du champ ({champ}) est traduit à part
+# Images, animations et fichiers : limites de poids et de forme
+
+# Connexion, session, accès (error.rs, auth.rs)
+Identifiant ou mot de passe incorrect.	Benutzername oder Passwort falsch.
+Session absente ou expirée.	Sitzung fehlt oder ist abgelaufen.
+Tu n'as pas la permission de faire ça.	Dafür hast du keine Berechtigung.
+Introuvable.	Nicht gefunden.
+Cette invitation n'existe pas ou a été révoquée.	Diese Einladung existiert nicht oder wurde widerrufen.
+Mot de passe incorrect.	Falsches Passwort.
+Ce pseudo est déjà pris.	Dieser Benutzername ist schon vergeben.
+Un compte existe déjà avec cette adresse.	Mit dieser Adresse gibt es bereits ein Konto.
+
+# Requêtes, saisie, limites
+nonce trop long	Nonce zu lang
+Pas d'invitation pour un MP.	Für eine Direktnachricht gibt es keine Einladung.
+Trop d'essais. Attends une minute.	Zu viele Versuche. Warte eine Minute.
+`limit` : un nombre attendu.	`limit`: Eine Zahl wird erwartet.
+`category` : membres, roles, salons, invitations, emojis ou serveur.	`category`: membres, roles, salons, invitations, emojis oder serveur.
+Erreur du serveur, réessaie.	Serverfehler. Versuche es noch einmal.
+
+# Comptes, profil, mot de passe
+Adresse e-mail invalide.	Ungültige E-Mail-Adresse.
+Mot de passe : 8 caractères au minimum.	Passwort: mindestens 8 Zeichen.
+Pseudo : 2 à 32 caractères parmi a-z, 0-9, _ et .	Benutzername: 2 bis 32 Zeichen aus a-z, 0-9, _ und .
+Ce pseudo est réservé : choisis-en un autre.	Dieser Benutzername ist reserviert: Wähle einen anderen.
+Mot de passe refusé.	Passwort abgelehnt.
+C'est déjà ton pseudo.	Das ist schon dein Benutzername.
+C'est déjà ton adresse e-mail.	Das ist schon deine E-Mail-Adresse.
+Choisis un mot de passe différent de l'actuel.	Wähle ein Passwort, das sich vom aktuellen unterscheidet.
+Lien invalide ou expiré.	Ungültiger oder abgelaufener Link.
+Cette instance n'envoie pas d'e-mails. Demande à son administrateur.	Diese Instanz versendet keine E-Mails. Wende dich an ihre Administration.
+Lien invalide ou expiré. Refais une demande.	Ungültiger oder abgelaufener Link. Fordere einen neuen an.
+C'est ton propre pseudo.	Das ist dein eigener Benutzername.
+
+# Fichiers, images, emojis
+Trop de fichiers en attente : envoie un message ou retire-en avant d'en ajouter.	Zu viele Dateien warten auf den Versand: Sende eine Nachricht oder entferne welche, bevor du weitere hinzufügst.
+Envoi interrompu.	Versand unterbrochen.
+Ce fichier est vide.	Diese Datei ist leer.
+Ce fichier n'est pas une image lisible : choisis un PNG, un JPEG, un WebP ou un GIF.	Diese Datei ist kein lesbares Bild: Wähle ein PNG, JPEG, WebP oder GIF.
+20 emojis différents au plus sur un message.	Höchstens 20 verschiedene Emojis pro Nachricht.
+Seuls les emojis de la sélection ou ceux de tes serveurs servent de réaction.	Als Reaktion eignen sich nur die Emojis der Auswahl oder die Emojis deiner Server.
+Le nom d'un emoji compte de 2 à 32 caractères : lettres sans accent, chiffres et _.	Ein Emoji-Name hat 2 bis 32 Zeichen: Buchstaben ohne Akzent, Ziffern und _.
+
+# Épingles
+Seuls les messages écrits (texte ou réponse) peuvent être épinglés.	Nur geschriebene Nachrichten (Text oder Antwort) können angeheftet werden.
+Le message d'origine n'est plus dans ce salon.	Die ursprüngliche Nachricht ist nicht mehr in diesem Kanal.
+Tu ne peux pas épingler ni désépingler ici : tu as bloqué cette personne.	Du kannst hier nichts anheften und auch keine Anheftung aufheben: Du hast diese Person blockiert.
+Tu ne peux pas épingler ni désépingler ici : la conversation est bloquée.	Du kannst hier nichts anheften und auch keine Anheftung aufheben: Die Unterhaltung ist blockiert.
+
+# Serveurs, salons, rôles, droits
+C'est le dernier salon d'écriture du serveur : crée-en un autre avant de le supprimer.	Das ist der letzte Textkanal des Servers: Erstelle zuerst einen anderen, bevor du ihn löschst.
+Ce nom est déjà pris dans ce serveur.	Dieser Name ist auf diesem Server schon vergeben.
+Le nom d'un serveur compte de 2 à 100 caractères.	Ein Servername hat 2 bis 100 Zeichen.
+Le nom du serveur contient un caractère interdit (tabulation, saut de ligne ou autre caractère de contrôle).	Der Servername enthält ein unzulässiges Zeichen (Tabulator, Zeilenumbruch oder ein anderes Steuerzeichen).
+Ce modèle de serveur n'existe pas.	Diese Servervorlage existiert nicht.
+Mode lent : aucun, 5 s, 10 s, 30 s, 1 min, 5 min, 15 min ou 1 h, et seulement dans un salon d'écriture.	Langsammodus: aus, 5 s, 10 s, 30 s, 1 Min., 5 Min., 15 Min. oder 1 Std., und nur in einem Textkanal.
+Cette catégorie n'existe pas ou n'est pas visible.	Diese Kategorie existiert nicht oder ist nicht sichtbar.
+Un droit ne peut pas être à la fois autorisé et refusé.	Eine Berechtigung kann nicht gleichzeitig erlaubt und verweigert sein.
+Ce réglage existe déjà pour un autre genre de cible (rôle ou membre).	Diese Einstellung gibt es schon für eine andere Art von Ziel (Rolle oder Mitglied).
+Un serveur ou un salon, l'un des deux.	Gib entweder einen Server oder einen Kanal an.
+Les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés dans un nom ou un motif.	Unsichtbare Zeichen (Leerzeichen ohne Breite, Wechsel der Schreibrichtung, Füllzeichen) sind in einem Namen oder Muster nicht erlaubt.
+Le nom d'un rôle compte de 1 à 100 caractères.	Ein Rollenname hat 1 bis 100 Zeichen.
+Cette couleur n'existe pas dans la palette.	Diese Farbe gibt es in der Palette nicht.
+Droit inconnu.	Unbekannte Berechtigung.
+@everyone ne peut être ni renommé, ni supprimé, ni donné.	@everyone kann weder umbenannt noch gelöscht noch vergeben werden.
+Ce changement te retirerait l'accès à ce salon, ou le droit de le gérer.	Mit dieser Änderung würdest du den Zugriff auf diesen Kanal oder die Berechtigung zu seiner Verwaltung verlieren.
+Le nom retapé ne correspond pas à celui du serveur.	Der erneut eingegebene Name stimmt nicht mit dem Namen des Servers überein.
+
+# Invitations
+Cette invitation a expiré. Demande-en une nouvelle.	Diese Einladung ist abgelaufen. Frag nach einer neuen.
+Cette invitation a déjà servi autant de fois que permis. Demande-en une nouvelle.	Diese Einladung wurde schon so oft verwendet, wie erlaubt ist. Frag nach einer neuen.
+Une invitation dure 7 jours au plus, ou n'expire jamais.	Eine Einladung gilt höchstens 7 Tage oder läuft nie ab.
+
+# Modération, rangs, propriétaire
+Une exclusion temporaire dure de 1 minute à 28 jours.	Ein Timeout dauert zwischen 1 Minute und 28 Tagen.
+Une sourdine dure de 1 minute à 30 jours, ou sans fin.	Eine Stummschaltung dauert zwischen 1 Minute und 30 Tagen oder unbegrenzt.
+Tu ne peux pas faire ça sur toi-même.	Das kannst du nicht bei dir selbst tun.
+Son rang est égal ou supérieur au tien (le propriétaire est intouchable).	Der Rang dieser Person ist gleich oder höher als deiner (der Besitzer ist unantastbar).
+Tu possèdes ce serveur : transfère-le à un autre membre avant de le quitter.	Dir gehört dieser Server: Übertrage ihn an ein anderes Mitglied, bevor du ihn verlässt.
+Seul le propriétaire peut faire ça.	Das kann nur der Besitzer.
+Un administrateur ne peut pas être exclu temporairement.	Administratoren können nicht in den Timeout geschickt werden.
+Tu as été banni de ce serveur.	Du wurdest von diesem Server gebannt.
+Tu es exclu temporairement : tu peux lire, mais pas écrire, réagir, envoyer de fichier ni parler.	Du bist im Timeout: Du kannst lesen, aber nicht schreiben, reagieren, Dateien senden oder sprechen.
+
+# Amis, blocages, messages privés, groupes
+Vous êtes déjà amis.	Ihr seid schon befreundet.
+Ta demande est déjà partie : elle attend sa réponse dans « En attente ».	Deine Anfrage ist schon raus: Sie wartet unter „Ausstehend“ auf eine Antwort.
+Tu as bloqué ce compte. Débloque-le d'abord, dans l'onglet « Bloqués ».	Du hast dieses Konto blockiert. Hebe die Blockierung zuerst auf, im Tab „Blockiert“.
+Cette personne n'accepte pas de demande d'ami de ta part.	Diese Person nimmt keine Freundschaftsanfragen von dir an.
+Tu as bloqué cette personne : débloque-la pour lui écrire.	Du hast diese Person blockiert: Hebe die Blockierung auf, um ihr zu schreiben.
+Ton message n'a pas pu être remis : cette personne ne reçoit pas de message de ta part.	Deine Nachricht konnte nicht zugestellt werden: Diese Person empfängt keine Nachrichten von dir.
+Pour écrire à quelqu'un, soyez amis ou membres d'un même serveur.	Um jemandem zu schreiben, müsst ihr befreundet oder Mitglieder desselben Servers sein.
+Seuls tes amis peuvent entrer dans un groupe que tu crées ou complètes.	Nur deine Freunde können einer Gruppe beitreten, die du erstellst oder erweiterst.
+Seul le propriétaire du groupe peut en retirer quelqu'un.	Nur der Besitzer der Gruppe kann jemanden daraus entfernen.
+Tu as bloqué cette personne : débloque-la pour l'appeler.	Du hast diese Person blockiert: Hebe die Blockierung auf, um sie anzurufen.
+Impossible d'appeler cette personne : elle ne reçoit pas d'appel de ta part.	Anruf nicht möglich: Diese Person empfängt keine Anrufe von dir.
+Écris le pseudo de la personne à ajouter.	Gib den Benutzernamen der Person ein, die du hinzufügen möchtest.
+Aucun compte ne porte ce pseudo : il ne contient que des minuscules, chiffres, points et tirets bas.	Kein Konto hat diesen Benutzernamen: Er enthält nur Kleinbuchstaben, Ziffern, Punkte und Unterstriche.
+Seuls « friend » et « blocked » se choisissent.	Nur „friend“ und „blocked“ stehen zur Wahl.
+Choisis au moins une personne.	Wähle mindestens eine Person.
+
+# Vocal
+Le vocal n'est pas disponible sur cette instance.	Der Sprachchat ist auf dieser Instanz nicht verfügbar.
+Ce salon n'est pas un salon vocal.	Dieser Kanal ist kein Sprachkanal.
+Ton application est trop ancienne pour les appels : mets-la à jour.	Deine App ist zu alt für Anrufe: Aktualisiere sie.
+Offre WebRTC trop longue.	WebRTC-Offer zu lang.
+Connexion vocale refusée : offre WebRTC inattendue.	Sprachverbindung abgelehnt: unerwartetes WebRTC-Offer.
+
+# Messages à valeur glissée : limites, valeurs refusées, attentes
+Déjà utilisé : {f}.	Bereits verwendet: {f}.
+Valeur refusée : {f}.	Wert abgelehnt: {f}.
+Ce serveur a déjà ses {n} emojis : retires-en un pour en ajouter.	Dieser Server hat schon seine {n} Emojis: Entferne eines, um ein neues hinzuzufügen.
+Ce salon a déjà {n} messages épinglés : désépingles-en un d'abord.	Dieser Kanal hat schon {n} angeheftete Nachrichten: Hebe zuerst die Anheftung einer Nachricht auf.
+Un groupe réunit de 3 à {n} personnes, toi compris.	Eine Gruppe umfasst 3 bis {n} Personen, dich eingeschlossen.
+Ce groupe est complet : {n} personnes au plus.	Diese Gruppe ist voll: höchstens {n} Personen.
+Le nom d'un salon compte de 1 à {n} caractères, sans caractère de contrôle.	Ein Kanalname hat 1 bis {n} Zeichen, ohne Steuerzeichen.
+Un serveur compte {n} salons et catégories au plus.	Ein Server kann höchstens {n} Kanäle und Kategorien haben.
+Le sujet tient en {n} caractères au plus, et seuls les salons d'écriture en ont un.	Das Kanalthema hat höchstens {n} Zeichen, und nur Textkanäle haben eines.
+Tu as déjà {n} invitations actives. Révoque-en une.	Du hast schon {n} aktive Einladungen. Widerrufe eine.
+Une invitation sert {n} fois au plus (0 : sans limite).	Eine Einladung kann höchstens {n}-mal verwendet werden (0: unbegrenzt).
+{n} réglages de droits au plus par salon.	Höchstens {n} Berechtigungseinstellungen pro Kanal.
+Le nom tient en {n} caractères au plus.	Der Name hat höchstens {n} Zeichen.
+La raison tient en {n} caractères au plus.	Der Grund hat höchstens {n} Zeichen.
+On peut effacer les messages de {n} heures au plus.	Nachrichten lassen sich höchstens für die letzten {n} Stunden löschen.
+{n} rôles au plus, et l'ordre doit les citer tous.	Höchstens {n} Rollen, und die Reihenfolge muss alle nennen.
+Mode lent : encore {n} s avant ton prochain message.	Langsammodus: noch {n} s bis zu deiner nächsten Nachricht.
+Tu as déjà changé ton pseudo {n} fois en une heure. Réessaie dans {d} s.	Du hast deinen Benutzernamen in einer Stunde schon {n}-mal geändert. Versuche es in {d} s erneut.
+Tu as déjà changé ton pseudo {n} fois en une heure. Réessaie dans {d} min.	Du hast deinen Benutzernamen in einer Stunde schon {n}-mal geändert. Versuche es in {d} Min. erneut.
+Ce salon vocal est complet ({n} personnes au plus).	Dieser Sprachkanal ist voll (höchstens {n} Personen).
+Aucun compte ne porte le pseudo « {nom} ». Vérifie son orthographe.	Kein Konto hat den Benutzernamen „{nom}“. Prüfe die Schreibweise.
+`{f}` : un identifiant attendu.	`{f}`: Eine ID wird erwartet.
+
+# Profil : le libellé du champ ({champ}) est traduit à part
+{champ} : {n} caractères au plus.	{champ}: höchstens {n} Zeichen.
+{champ} : {n} caractères au plus, sans retour à la ligne.	{champ}: höchstens {n} Zeichen, ohne Zeilenumbrüche.
+{champ} : les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés.	{champ}: Unsichtbare Zeichen (Leerzeichen ohne Breite, Wechsel der Schreibrichtung, Füllzeichen) sind nicht erlaubt.
+{champ} : écris au moins un caractère visible, ou laisse le champ vide.	{champ}: Schreibe mindestens ein sichtbares Zeichen oder lasse das Feld leer.
+Bio	Bio
+
+# Images, animations et fichiers : limites de poids et de forme
+Ce fichier pèse trop lourd : {n} Mo au plus.	Diese Datei ist zu groß: höchstens {n} MB.
+Cette image pèse trop lourd : {n} Mo au plus.	Dieses Bild ist zu groß: höchstens {n} MB.
+Cette image pèse trop lourd : {n} Ko au plus.	Dieses Bild ist zu groß: höchstens {n} KB.
+Cette image est trop petite : {n} pixels de côté au moins.	Dieses Bild ist zu klein: Jede Seite muss mindestens {n} Pixel lang sein.
+Cette image est trop grande : {n} pixels de côté et {m} millions de pixels au plus. Réduis-la avant de l'envoyer.	Dieses Bild ist zu groß: höchstens {n} Pixel pro Seite und {m} Millionen Pixel insgesamt. Verkleinere es vor dem Senden.
+Cette image est trop allongée : son grand côté ne doit pas dépasser {n} fois son petit côté.	Dieses Bild ist zu langgezogen: Seine lange Seite darf nicht mehr als das {n}-Fache seiner kurzen Seite betragen.
+Cette animation est trop lourde à afficher : {n} pixels de côté et {m} images au plus.	Diese Animation ist zu aufwendig für die Anzeige: höchstens {n} Pixel pro Seite und {m} Einzelbilder.
+Cette animation est trop allongée : elle doit rester presque carrée ({n} pour 1 au plus).	Diese Animation ist zu langgezogen: Sie muss fast quadratisch bleiben (höchstens {n} zu 1).

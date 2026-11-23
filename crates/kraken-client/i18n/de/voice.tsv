@@ -3,3 +3,233 @@
 # Mêmes {variables} que le français, tutoiement (« du »), guillemets „…“, pas d'espace avant « : ? ! ; », chiffres latins.
 # Un texte absent d'ici s'affiche en anglais (repli), puis en français.
 # Fichier en construction : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui reste à traduire.
+
+# Salon vocal, appels des MP et des groupes (call.rs)
+Quelqu'un	Jemand
+Salon vocal {nom}	Sprachkanal {nom}
+Personne pour l'instant.	Noch niemand da.
+{n} personne dans le salon	{n} Person im Kanal
+{n} personnes dans le salon	{n} Personen im Kanal
+Tu quitteras {salon}.	Du verlässt {salon}.
+Connexion au salon vocal…	Verbindung zum Sprachkanal wird hergestellt…
+Connexion à l'appel…	Verbindung zum Anruf wird hergestellt…
+Connexion instable : on attend le retour du réseau…	Instabile Verbindung: Wir warten, bis das Netzwerk wieder da ist…
+Reconnecter	Neu verbinden
+Masquer ce message	Diese Meldung ausblenden
+Le contrôle de l'écran de {nom} a pris fin.	Die Steuerung des Bildschirms von {nom} wurde beendet.
+{nom} a refusé ta demande de contrôle.	{nom} hat deine Steuerungsanfrage abgelehnt.
+Quelqu'un d'autre contrôle déjà l'écran de {nom}.	Der Bildschirm von {nom} wird bereits von jemand anderem gesteuert.
+{nom} partage depuis un navigateur : pour être contrôlé, il faut partager depuis l'appli de bureau KRAKEN.	{nom} teilt über einen Browser: Für die Steuerung muss der Bildschirm über die KRAKEN-Desktop-App geteilt werden.
+{nom} partage une fenêtre ou un onglet : le contrôle demande le partage d'un écran entier.	{nom} teilt ein Fenster oder einen Tab: Für die Steuerung muss ein ganzer Bildschirm geteilt werden.
+Le contrôle à distance n'est pas possible sur l'ordinateur de {nom} pour l'instant.	Die Fernsteuerung ist auf dem Computer von {nom} momentan nicht möglich.
+Participants	Teilnehmende
+Arrêter de regarder	Nicht mehr ansehen
+Regarder	Ansehen
+Regarder l'écran de {nom}	Bildschirm von {nom} ansehen
+{nom} (toi)	{nom} (du)
+Aperçu de ta caméra	Vorschau deiner Kamera
+Caméra de {nom}	Kamera von {nom}
+Aperçu de ton écran partagé	Vorschau deines geteilten Bildschirms
+micro coupé	stummgeschaltet
+Micro coupé	Stummgeschaltet
+son coupé	Ton aus
+Son coupé	Ton aus
+caméra allumée	Kamera an
+Caméra allumée	Kamera an
+En direct	Live
+Tu contrôles l'écran de {nom}. Échap pour relâcher (Maj+Échap envoie Échap).	Du steuerst den Bildschirm von {nom}. Mit Esc gibst du die Steuerung frei (Umschalt+Esc sendet Esc).
+Demander le contrôle de l'écran de {nom}	Steuerung des Bildschirms von {nom} anfragen
+Écran partagé par {nom}	Von {nom} geteilter Bildschirm
+Chargement de l'écran…	Bildschirm wird geladen…
+Arrêter le contrôle	Steuerung beenden
+Demande envoyée…	Anfrage gesendet…
+Annuler la demande	Anfrage abbrechen
+Demander le contrôle	Steuerung anfragen
+Plein écran	Vollbild
+Couper le micro	Stummschalten
+Réactiver le micro	Stummschaltung aufheben
+Couper le son	Ton ausschalten
+Réactiver le son	Ton einschalten
+Le partage d'écran demande l'instance en HTTPS (ou ouverte via localhost).	Zum Teilen des Bildschirms muss die Instanz über HTTPS (oder über localhost) aufgerufen werden.
+Ce navigateur ne permet pas de partager l'écran.	Dieser Browser kann den Bildschirm nicht teilen.
+Arrêter le partage	Teilen beenden
+Partager ton écran	Bildschirm teilen
+Couper la caméra	Kamera ausschalten
+Activer la caméra	Kamera einschalten
+Commandes de l'appel	Anrufsteuerung
+Raccrocher	Anruf beenden
+Quitter	Verlassen
+Quitter le salon vocal	Sprachkanal verlassen
+Appuyer pour parler :	Push-to-Talk:
+Micro ouvert	Mikrofon offen
+Dans {nom}	In {nom}
+Appel avec {nom}	Anruf mit {nom}
+En appel	Im Anruf
+Connexion instable	Instabile Verbindung
+Connexion perdue	Verbindung verloren
+Connexion vocale	Sprachverbindung
+Contrôle à distance de ton écran	Fernsteuerung deines Bildschirms
+{nom} contrôle ton écran.	{nom} steuert deinen Bildschirm.
+{nom} demande à contrôler ton écran (souris et clavier).	{nom} möchte deinen Bildschirm steuern (Maus und Tastatur).
+Réponds dans la fenêtre de KRAKEN qui vient de s'ouvrir.	Antworte im KRAKEN-Fenster, das sich gerade geöffnet hat.
+Accepter	Annehmen
+Refuser{contexte}	Ablehnen{contexte}
+{nom} a demandé à contrôler ton écran. Le contrôle à distance n'est possible que depuis l'appli de bureau KRAKEN : partage ton écran depuis l'appli pour l'accepter.	{nom} hat darum gebeten, deinen Bildschirm zu steuern. Die Fernsteuerung ist nur über die KRAKEN-Desktop-App möglich: Teile deinen Bildschirm über die App, um die Anfrage anzunehmen.
+{nom} a demandé à contrôler ton écran, mais tu partages une fenêtre ou un onglet. Partage ton écran entier pour pouvoir l'accepter.	{nom} hat darum gebeten, deinen Bildschirm zu steuern, aber du teilst ein Fenster oder einen Tab. Teile deinen ganzen Bildschirm, um die Anfrage annehmen zu können.
+{liste} et {dernier}	{liste} und {dernier}
+Appel	Anruf
+Dans l'appel	Im Anruf
+Rejoindre l'appel	Anruf beitreten
+Ça sonne chez {noms}…	Es klingelt bei {noms}…
+Démarrer un appel	Anruf starten
+Appels entrants	Eingehende Anrufe
+t'appelle dans {salon}	ruft dich in {salon} an
+t'appelle	ruft dich an
+Appel de {nom}	Anruf von {nom}
+
+# Session vocale : avertissements et erreurs (voice.rs)
+Connexion non sécurisée : tu peux écouter et regarder, mais parler et partager ton écran demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).	Unsichere Verbindung: Du kannst zuhören und zusehen, aber zum Sprechen und zum Teilen deines Bildschirms muss die Instanz über HTTPS (oder auf diesem Computer über localhost) aufgerufen werden.
+Micro refusé ou introuvable : tu es en sourdine. Autorise le micro dans ton navigateur, puis réactive-le.	Mikrofon verweigert oder nicht gefunden: Du bist stummgeschaltet. Erlaube das Mikrofon in deinem Browser und hebe dann die Stummschaltung auf.
+Ton navigateur ne permet pas les appels vocaux : WebRTC y est absent ou désactivé. Essaie avec un navigateur récent (Chrome, Firefox, Edge ou Safari) ou avec l'appli de bureau.	Dein Browser unterstützt keine Sprachanrufe: WebRTC fehlt oder ist deaktiviert. Probiere einen aktuellen Browser (Chrome, Firefox, Edge oder Safari) oder die Desktop-App aus.
+Ton navigateur ne permet pas les appels vocaux sur cette page : elle est en HTTP, et WebRTC n'y est pas disponible. Ouvre l'instance en HTTPS (ou sur cet ordinateur, via localhost), ou essaie un autre navigateur.	Dein Browser unterstützt auf dieser Seite keine Sprachanrufe: Sie wird über HTTP geladen, und WebRTC ist dort nicht verfügbar. Öffne die Instanz über HTTPS (oder auf diesem Computer über localhost) oder probiere einen anderen Browser aus.
+Le navigateur a refusé de démarrer l'appel vocal ({détail}).	Der Browser hat den Start des Sprachanrufs verweigert ({détail}).
+HTTPS ou localhost	HTTPS oder localhost
+HTTP	HTTP
+Détails : page en {page} · RTCPeerConnection absent · {navigateur}	Details: Seite über {page} · RTCPeerConnection fehlt · {navigateur}
+Connexion vocale perdue.	Sprachverbindung verloren.
+Le navigateur a refusé l'accès à la caméra	Der Browser hat den Zugriff auf die Kamera verweigert
+Aucune caméra n'a été trouvée sur cet appareil.	Auf diesem Gerät wurde keine Kamera gefunden.
+La caméra n'a pas pu démarrer : une autre application l'utilise peut-être.	Die Kamera konnte nicht gestartet werden: Vielleicht verwendet sie gerade eine andere App.
+La caméra s'est arrêtée : elle a été débranchée ou reprise par une autre application.	Die Kamera wurde angehalten: Sie wurde getrennt oder von einer anderen App übernommen.
+La caméra demande l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).	Für die Kamera muss die Instanz über HTTPS (oder auf diesem Computer über localhost) aufgerufen werden.
+Tu n'as pas le droit d'allumer ta caméra sur ce serveur.	Du darfst deine Kamera auf diesem Server nicht einschalten.
+Le micro choisi n'a pas pu démarrer : l'appel garde celui qui était utilisé.	Das gewählte Mikrofon konnte nicht gestartet werden: Der Anruf nutzt weiter das bisherige.
+L'appli de bureau ne répond pas.	Die Desktop-App antwortet nicht.
+Le navigateur n'a pas pu préparer l'appel.	Der Browser konnte den Anruf nicht vorbereiten.
+La réponse du serveur n'a pas convenu au navigateur.	Der Browser konnte die Antwort des Servers nicht akzeptieren.
+Connexion impossible : le port UDP du vocal est sans doute bloqué entre toi et le serveur.	Verbindung nicht möglich: Der UDP-Port für Sprache ist wahrscheinlich zwischen dir und dem Server blockiert.
+Le navigateur a refusé une mise à jour de l'appel.	Der Browser hat eine Aktualisierung des Anrufs abgelehnt.
+Connexion vocale coupée par le serveur, ou reprise depuis un autre appareil.	Sprachverbindung vom Server getrennt oder von einem anderen Gerät übernommen.
+Le partage d'écran n'a pas pu démarrer.	Das Teilen des Bildschirms konnte nicht gestartet werden.
+
+# Réglages › Voix et vidéo (voice_settings.rs)
+Par défaut du système	Systemstandard
+Le micro et la caméra demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).	Für Mikrofon und Kamera muss die Instanz über HTTPS (oder auf diesem Computer über localhost) aufgerufen werden.
+La touche Tab sert à naviguer dans la page : choisis-en une autre.	Die Tab-Taste dient zum Navigieren auf der Seite: Wähle eine andere.
+La touche Entrée seule ne peut pas servir : choisis-en une autre.	Die Eingabetaste allein kann nicht verwendet werden: Wähle eine andere.
+Micro {n}	Mikrofon {n}
+Sortie {n}	Lautsprecher {n}
+Caméra {n}	Kamera {n}
+Le navigateur a refusé l'accès : les appareils gardent un nom générique.	Der Browser hat den Zugriff verweigert: Die Geräte behalten einen allgemeinen Namen.
+Aucun micro ni aucune caméra n'a été trouvé sur cet appareil.	Auf diesem Gerät wurden weder Mikrofon noch Kamera gefunden.
+Aucun micro n'a été trouvé sur cet appareil.	Auf diesem Gerät wurde kein Mikrofon gefunden.
+Le micro n'a pas pu démarrer : une autre application l'utilise peut-être.	Das Mikrofon konnte nicht gestartet werden: Vielleicht verwendet es gerade eine andere App.
+Le navigateur a refusé l'accès au micro	Der Browser hat den Zugriff auf das Mikrofon verweigert
+Image de ta caméra	Bild deiner Kamera
+Ces réglages restent sur cet appareil. Un changement s'applique tout de suite, même pendant un appel.	Diese Einstellungen bleiben auf diesem Gerät. Änderungen gelten sofort, auch während eines Anrufs.
+Appareils	Geräte
+Le navigateur n'affiche le nom de tes appareils qu'une fois l'accès au micro et à la caméra autorisé.	Der Browser zeigt die Namen deiner Geräte erst an, wenn der Zugriff auf Mikrofon und Kamera erlaubt ist.
+Autoriser l'accès	Zugriff erlauben
+Entrée audio	Audioeingang
+Sortie audio	Audioausgabe
+Ton navigateur ne permet pas de choisir la sortie audio : le son sort sur l'appareil par défaut du système (Chrome et Edge savent le faire).	Dein Browser kann die Audioausgabe nicht auswählen: Der Ton wird über das Standardgerät des Systems ausgegeben (Chrome und Edge können das).
+Test du micro	Mikrofontest
+Parle : la barre monte avec ta voix. Rien n'est enregistré ni rejoué dans tes haut-parleurs.	Sprich: Der Balken steigt mit deiner Stimme. Es wird nichts aufgenommen und nichts über deine Lautsprecher abgespielt.
+Arrêter le test	Test beenden
+Tester le micro	Mikrofon testen
+Niveau du micro	Mikrofonpegel
+Aperçu de la caméra	Kameravorschau
+La caméra ne s'allume que pendant l'aperçu, et s'éteint quand tu quittes cette page.	Die Kamera wird nur während der Vorschau eingeschaltet und geht aus, wenn du diese Seite verlässt.
+Arrêter l'aperçu	Vorschau beenden
+Traitement du son	Audioverarbeitung
+Annulation d'écho	Echounterdrückung
+Retire de ton micro le son qui sort de tes haut-parleurs.	Verhindert, dass dein Mikrofon den Ton aus deinen Lautsprechern aufnimmt.
+Suppression du bruit	Rauschunterdrückung
+Atténue les bruits de fond : clavier, ventilateur, rue.	Dämpft Hintergrundgeräusche: Tastatur, Lüfter, Straße.
+Réglage automatique du volume	Automatische Lautstärkeregelung
+Garde ta voix à un niveau régulier, que tu parles fort ou doucement.	Hält deine Stimme auf einem gleichmäßigen Pegel, egal ob du laut oder leise sprichst.
+Appuyer pour parler	Push-to-Talk
+Ton micro ne s'ouvre que tant que tu tiens la touche choisie, et se referme un instant après (0,2 s). Ça ne marche que lorsque la fenêtre est au premier plan : un raccourci global viendra avec l'appli de bureau.	Dein Mikrofon öffnet sich nur, solange du die gewählte Taste gedrückt hältst, und schließt sich einen Moment nach dem Loslassen (0,2 s). Das funktioniert nur, wenn das Fenster im Vordergrund ist: Ein globales Tastenkürzel kommt mit der Desktop-App.
+Touche pour parler	Push-to-Talk-Taste
+Appuie sur une touche… Échap annule	Drücke eine Taste… Esc bricht ab
+Aucune touche choisie : le micro reste ouvert comme d'habitude.	Keine Taste gewählt: Dein Mikrofon bleibt wie gewohnt offen.
+Clique pour changer de touche.	Klicke, um die Taste zu ändern.
+En attente…	Warten…
+Choisir une touche	Taste wählen
+Micro fermé	Mikrofon geschlossen
+
+# Noms des touches (voice_settings.rs, shortcuts.rs)
+Pavé {digit}	Ziffernblock {digit}
+Espace	Leertaste
+Ctrl	Strg
+Ctrl gauche	Strg links
+Ctrl droite	Strg rechts
+Maj	Umschalt
+Maj gauche	Umschalt links
+Maj droite	Umschalt rechts
+Majuscule	Umschalt
+Alt	Alt
+Alt Gr	Alt Gr
+Option	Option
+Commande	Befehl
+Verr. maj.	Feststelltaste
+Retour arrière	Rücktaste
+Flèche haut	Pfeil nach oben
+Flèche bas	Pfeil nach unten
+Flèche gauche	Pfeil nach links
+Flèche droite	Pfeil nach rechts
+flèche haut	Pfeil nach oben
+flèche bas	Pfeil nach unten
+Échap	Esc
+Entrée	Eingabe
+ou	oder
+
+# Raccourcis clavier (shortcuts.rs)
+Navigation	Navigation
+Aller vers un salon, une personne ou un serveur	Zu einem Kanal, einer Person oder einem Server springen
+Salon précédent	Vorheriger Kanal
+Salon suivant	Nächster Kanal
+Serveur précédent	Vorheriger Server
+Serveur suivant	Nächster Server
+Salon non lu précédent	Vorheriger ungelesener Kanal
+Salon non lu suivant	Nächster ungelesener Kanal
+Envoyer le message	Nachricht senden
+Aller à la ligne	Neue Zeile
+Modifier mon dernier message (saisie vide)	Meine letzte Nachricht bearbeiten (leeres Eingabefeld)
+Annuler la réponse ou la modification	Antwort oder Bearbeitung abbrechen
+Couper ou réactiver le micro	Stummschalten oder Stummschaltung aufheben
+Couper ou réactiver le son	Ton aus- oder einschalten
+Afficher les raccourcis clavier	Tastenkürzel anzeigen
+Fermer la fenêtre ouverte	Geöffnetes Fenster schließen
+Lecture seule : ces raccourcis ne se changent pas encore, et aucun ne marche hors de la fenêtre de KRAKEN (pas de raccourci global pour l'instant).	Schreibgeschützt: Diese Tastenkürzel lassen sich noch nicht ändern, und keines funktioniert außerhalb des KRAKEN-Fensters (vorerst kein globales Tastenkürzel).
+Son coupé, micro coupé	Ton aus, stummgeschaltet
+Son réactivé	Ton wieder an
+Micro réactivé	Stummschaltung aufgehoben
+
+# Quick Switcher (switcher.rs)
+Récents	Zuletzt
+Personnes	Personen
+Salon vocal privé	Privater Sprachkanal
+Annonces	Ankündigungen
+Groupe	Gruppe
+Message privé	Direktnachricht
+Personne{contexte}	Person{contexte}
+Aller vers…	Springen zu…
+Aucun lieu récent	Keine kürzlich besuchten Orte
+{n} lieu récent	{n} kürzlich besuchter Ort
+{n} lieux récents	{n} kürzlich besuchte Orte
+Aucun résultat	Keine Ergebnisse
+{n} résultat	{n} Ergebnis
+{n} résultats	{n} Ergebnisse
+Rien de récent	Nichts Aktuelles
+Tape le nom d'un salon, d'une personne ou d'un serveur.	Gib den Namen eines Kanals, einer Person oder eines Servers ein.
+Aucun résultat pour « {saisie} »	Keine Ergebnisse für „{saisie}“
+Aller vers	Springen zu
+Salon, personne ou serveur	Kanal, Person oder Server
+Aller vers un salon, une personne, un serveur	Zu einem Kanal, einer Person, einem Server springen
+Fermer (Échap)	Schließen (Esc)
+\# salons · @ personnes et messages privés · * serveurs	# Kanäle · @ Personen und Direktnachrichten · * Server
+Résultats	Ergebnisse
+choisir	auswählen
+ouvrir	öffnen
+fermer	schließen
