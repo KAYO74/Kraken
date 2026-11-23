@@ -35,10 +35,18 @@
 //! lecture suit l'horloge du périphérique de sortie. « Parle » : une des 15 dernières trames (300 ms)
 //! dépasse -40 dBFS.
 //!
+//! # La page
+//!
+//! [`control::Controller`] est la seule surface que la page web utilise (par les commandes Tauri de l'appli
+//! de bureau) : mêmes appels, avec des types qui passent en JSON, des erreurs en français et un mode
+//! synthétique pour les tests de bout en bout.
+//!
 //! Pas d'annulation d'écho (casque conseillé), pas d'image (écran, caméra), pas de chiffrement de
 //! bout en bout (le serveur n'en a pas non plus).
 
+mod analysis;
 pub mod audio;
+pub mod control;
 #[cfg(feature = "device")]
 pub mod device;
 mod engine;
