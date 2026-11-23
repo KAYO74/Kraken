@@ -58,6 +58,13 @@ pub async fn instance(State(state): State<AppState>) -> Json<Instance> {
     Json(i)
 }
 
+/// La langue de l'interface que le client annonce avec une demande (`lang` de `CreateGuild`, `RegisterReq`, `EmailReq`,
+/// `ChangeEmail`) : un code (`fr`, `en`, `fa`) ou une étiquette régionale (`fa-IR`, `en_GB`), sans tenir compte de la casse.
+/// Absente ou inconnue : le français.
+pub(crate) fn request_lang(tag: Option<&str>) -> Lang {
+    tag.and_then(Lang::from_tag).unwrap_or(Lang::DEFAULT)
+}
+
 pub async fn create_guild(
     State(state): State<AppState>,
     auth: Auth,
@@ -65,7 +72,7 @@ pub async fn create_guild(
 ) -> ApiResult<(StatusCode, Json<GuildState>)> {
     // La langue de l'interface de celui qui crée : les catégories et les salons du modèle sont nommés dans cette
     // langue ; une langue absente ou inconnue donne le français.
-    let lang = req.lang.as_deref().and_then(Lang::from_tag).unwrap_or(Lang::DEFAULT);
+    let lang = request_lang(req.lang.as_deref());
     let g = state.db.create_guild_in(auth.user.id, &req.name, req.template.as_deref(), lang).await?;
     state.hub.send(&[auth.user.id], Event::GuildCreate(Box::new(g.clone())));
     Ok((StatusCode::CREATED, Json(g)))

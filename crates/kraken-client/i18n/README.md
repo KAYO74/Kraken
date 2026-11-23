@@ -63,6 +63,7 @@ erreurs, comme en anglais. Les entrées en trop (clé absente du code) restent d
 7. **Tests** : `e2e/specs/i18n-fa.spec.ts` est le modèle (sélecteur, rechargement, repli, `navigator.languages`, dates et
    durées, 390 px, axe), et les options attendues du sélecteur dans `i18n.spec.ts` et `display-accessibility.spec.ts`.
 8. **Écriture de droite à gauche** : rien à écrire de plus, voir « Droit-à-gauche ».
+9. **E-mails du serveur** : une branche de plus dans chacune des trois fonctions de `kraken-core/src/mails.rs` (voir « E-mails du serveur »).
 
 ## Envelopper un texte
 
@@ -137,6 +138,28 @@ quand il le connaît (« Nom affiché » devient « Display name »). Règles po
 
 Un nouveau message d'erreur du serveur : l'ajouter à `server.tsv` (gabarit s'il a une valeur) ; le test de couverture
 (`cargo test -p kraken-server error::`) et `--server` le disent sinon.
+
+## E-mails du serveur
+
+Les trois e-mails du serveur (confirmation de l'adresse à l'inscription, nouveau mot de passe, confirmation d'une nouvelle
+adresse) ne passent **pas** par le catalogue : ils partent dans la langue de l'interface de la personne, et leurs textes
+vivent côté serveur, dans **`kraken-core/src/mails.rs`** (`verify_email`, `reset_password`, `email_change`, chacun rend un
+`Mail { subject, body }` ; une branche `Lang::Fr`, `Lang::En`, `Lang::Fa` par e-mail, le français étant le texte d'origine).
+
+- **Le chemin de la langue** : le client joint `lang` (`crate::i18n::lang().code()`) à l'inscription, à « Mot de passe oublié ? »
+  et au changement d'adresse (`api.rs`, champ facultatif de `RegisterReq`, `EmailReq` et `ChangeEmail`) ; le serveur le lit comme
+  celui de `CreateGuild` (`api::request_lang`, `Lang::from_tag` : `fa-IR` vaut `fa`, absent ou inconnu vaut le français) et met le
+  code normalisé (`fr|en|fa`) dans la charge utile de la tâche ; `jobs.rs` le relit (`payload_lang`) et ne contient aucun texte.
+  Une tâche sans `lang` (déjà en file avant la 0.24.0) part en français.
+- **Ajouter une langue** : après la variante de `Lang` (voir « Ajouter une langue »), le compilateur montre les trois `match` de
+  `mails.rs` à compléter ; les tests de ce fichier parcourent `Lang::ALL` et vérifient chaque langue (lien seul sur sa ligne,
+  pseudo, KRAKEN, aucune `{variable}` restante, chiffres, lettres et marques propres à la langue). Une langue que `Lang` ne connaît pas (`de`) n'a pas de
+  modèle : sa demande reçoit les e-mails en français.
+- **Persan** : mêmes conventions que l'interface (« Conventions de persan ») : forme « شما » sous-entendue, impératifs polis,
+  chiffres latins (« 24 ساعت », « 30 دقیقه »), « ی » et « ک » persans, demi-espace entre deux lettres seulement, « ، ؟ ؛ », aucune
+  marque de sens d'écriture, KRAKEN et le pseudo en latin, le lien seul sur sa ligne.
+- **Contrôle** : `cargo test -p kraken-core mails`, `cargo test -p kraken-server jobs::` (sujet RFC 2047 en UTF-8 et corps UTF-8
+  de chaque langue) et `cargo test -p kraken-server --test mail_lang` (la langue envoyée, normalisée dans la file).
 
 ## Droit-à-gauche
 

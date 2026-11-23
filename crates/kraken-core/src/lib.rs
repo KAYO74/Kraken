@@ -1,13 +1,14 @@
 //! Domaine sans I/O : moteur de permissions, markdown des messages, emojis, non-lus et
 //! notifications, reconnaissance des images de profil, texte de profil, durées, recherche du Quick Switcher, nom d'une touche pressée selon la disposition,
 //! modèles de serveur, langues de l'interface et catalogues de traduction, reconnaissance d'un message d'après son
-//! gabarit à `{variables}`.
+//! gabarit à `{variables}`, e-mails du serveur dans la langue de l'interface.
 
 pub mod emoji;
 pub mod grid;
 pub mod i18n;
 pub mod image;
 pub mod keys;
+pub mod mails;
 pub mod markdown;
 pub mod notify;
 pub mod pattern;

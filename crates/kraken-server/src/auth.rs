@@ -147,10 +147,16 @@ pub async fn register(
     let email = req.email.trim();
     check_email(email)?;
     check_password(&req.password)?;
+    // La langue de l'interface : l'e-mail de confirmation part dans cette langue (le code normalisé `fr|en|fa` suit
+    // la tâche, qui peut attendre dans la file ; une langue absente ou inconnue donne le français).
+    let lang = crate::api::request_lang(req.lang.as_deref());
     let hash = hash_password(req.password).await.ok_or_else(|| AppError::invalid("Mot de passe refusé."))?;
     let user = state.db.create_user(&username, email, hash).await?;
     if state.mailer.is_some() {
-        state.db.enqueue("email_verify", serde_json::json!({ "user_id": user.id }), None, 0).await?;
+        state
+            .db
+            .enqueue("email_verify", serde_json::json!({ "user_id": user.id, "lang": lang.code() }), None, 0)
+            .await?;
     }
     Ok((StatusCode::CREATED, open_session(&state, &headers, user).await?))
 }
@@ -300,9 +306,15 @@ pub async fn change_email(
     }
     if state.mailer.is_some() {
         state.db.set_pending_email(uid, email).await?;
+        let lang = crate::api::request_lang(req.lang.as_deref());
         state
             .db
-            .enqueue("email_change", serde_json::json!({ "user_id": uid }), Some(&format!("email_change:{uid}")), 0)
+            .enqueue(
+                "email_change",
+                serde_json::json!({ "user_id": uid, "lang": lang.code() }),
+                Some(&format!("email_change:{uid}")),
+                0,
+            )
             .await?;
         state.jobs_wake.notify_one();
     } else {
@@ -369,7 +381,11 @@ pub async fn reset(State(state): State<AppState>, Json(req): Json<EmailReq>) -> 
     }
     if let Some((uid, _)) = state.db.user_by_email(&req.email).await? {
         let key = format!("reset:{uid}");
-        state.db.enqueue("email_reset", serde_json::json!({ "user_id": uid }), Some(&key), 0).await?;
+        let lang = crate::api::request_lang(req.lang.as_deref());
+        state
+            .db
+            .enqueue("email_reset", serde_json::json!({ "user_id": uid, "lang": lang.code() }), Some(&key), 0)
+            .await?;
     }
     Ok(StatusCode::NO_CONTENT)
 }

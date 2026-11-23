@@ -188,9 +188,16 @@ pub fn upload<F: Fn(f64) + 'static>(
     }))
 }
 
+/// La langue de l'interface (`fr`, `en`, `fa`), qui part avec les demandes dont la réponse est un e-mail : le serveur
+/// l'écrit dans cette langue (inscription, mot de passe oublié, changement d'adresse).
+fn mail_lang() -> Option<String> {
+    Some(crate::i18n::lang().code().to_string())
+}
+
 pub async fn register(username: &str, email: &str, password: &str) -> ApiResult<AuthResp> {
-    call(Method::POST, "/auth/register", Some(json!({ "username": username, "email": email, "password": password })))
-        .await
+    let body =
+        RegisterReq { username: username.into(), email: email.into(), password: password.into(), lang: mail_lang() };
+    call(Method::POST, "/auth/register", Some(body)).await
 }
 
 pub async fn login(login: &str, password: &str) -> ApiResult<AuthResp> {
@@ -361,7 +368,8 @@ pub async fn change_username(username: &str, password: &str) -> ApiResult<User> 
 }
 
 pub async fn change_email(email: &str, password: &str) -> ApiResult<Account> {
-    call(Method::PUT, "/users/@me/email", Some(ChangeEmail { email: email.into(), password: password.into() })).await
+    let body = ChangeEmail { email: email.into(), password: password.into(), lang: mail_lang() };
+    call(Method::PUT, "/users/@me/email", Some(body)).await
 }
 
 pub async fn change_password(current: &str, new: &str) -> ApiResult<()> {
@@ -456,7 +464,7 @@ pub async fn delete_account(password: &str) -> ApiResult<()> {
 }
 
 pub async fn forgot_password(email: &str) -> ApiResult<()> {
-    call(Method::POST, "/auth/reset", Some(json!({ "email": email }))).await
+    call(Method::POST, "/auth/reset", Some(EmailReq { email: email.into(), lang: mail_lang() })).await
 }
 
 pub async fn reset_password(token: &str, password: &str) -> ApiResult<()> {

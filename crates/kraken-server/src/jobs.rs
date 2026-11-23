@@ -3,6 +3,8 @@
 
 use std::time::Duration;
 
+use kraken_core::i18n::Lang;
+use kraken_core::mails;
 use kraken_db::Job;
 use lettre::message::{Mailbox, SinglePart};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
@@ -124,6 +126,13 @@ async fn handle(state: &AppState, job: Job) {
     }
 }
 
+/// La langue d'un e-mail : le code `fr|en|fa` que l'inscription, la demande de nouveau mot de passe ou le changement
+/// d'adresse a mis dans la tâche (`api::request_lang`). Absent ou inconnu, le français : les tâches déjà en file quand
+/// ce champ est arrivé n'en ont pas, et partent comme avant.
+fn payload_lang(payload: &serde_json::Value) -> Lang {
+    payload.get("lang").and_then(|v| v.as_str()).and_then(Lang::from_tag).unwrap_or(Lang::DEFAULT)
+}
+
 /// Confirmation d'une nouvelle adresse : le lien part vers la nouvelle adresse (pas l'ancienne,
 /// qui reste celle du compte jusqu'au clic). Le jeton porte l'adresse qu'il confirme : une
 /// demande plus récente rend les liens précédents inutiles.
@@ -137,11 +146,9 @@ async fn email_change(state: &AppState, job: &Job) -> Result<(), String> {
     let token = new_token();
     state.db.create_email_change_token(uid, &to, &token_hash(&token), 24 * 60).await.map_err(|e| format!("{e:?}"))?;
     let base = state.cfg.public_url.trim_end_matches('/');
-    let body = format!(
-        "Bonjour {username},\n\nPour confirmer cette nouvelle adresse e-mail pour ton compte KRAKEN, ouvre ce lien dans les 24 heures :\n{base}/verify-email?token={token}\n\n\
-         Tu n'as rien demandé ? Ignore ce message : ton compte garde son adresse actuelle.\n"
-    );
-    mailer.send(&to, "Confirme ta nouvelle adresse e-mail KRAKEN", body).await
+    let mail =
+        mails::email_change(payload_lang(&job.payload), &username, &format!("{base}/verify-email?token={token}"));
+    mailer.send(&to, &mail.subject, mail.body).await
 }
 
 /// Crée le jeton au moment de l'envoi : il n'est jamais stocké en clair, même dans la file.
@@ -159,25 +166,13 @@ async fn email(state: &AppState, job: &Job, kind: &str) -> Result<(), String> {
     let ttl = if kind == "verify_email" { 24 * 60 } else { 30 };
     state.db.create_auth_token(uid, kind, &token_hash(&token), ttl).await.map_err(|e| format!("{e:?}"))?;
     let base = state.cfg.public_url.trim_end_matches('/');
-    let (subject, body) = if kind == "verify_email" {
-        (
-            "Confirme ton adresse e-mail KRAKEN",
-            format!(
-                "Bonjour {username},\n\nPour confirmer cette adresse, ouvre ce lien dans les 24 heures :\n{base}/verify-email?token={token}\n\n\
-                 Tu n'as pas créé de compte KRAKEN ? Tu peux ignorer ce message.\n"
-            ),
-        )
+    let lang = payload_lang(&job.payload);
+    let mail = if kind == "verify_email" {
+        mails::verify_email(lang, &username, &format!("{base}/verify-email?token={token}"))
     } else {
-        (
-            "Nouveau mot de passe KRAKEN",
-            format!(
-                "Bonjour {username},\n\nQuelqu'un, sans doute toi, a demandé un nouveau mot de passe pour ce compte. \
-                 Ce lien sert une seule fois, pendant 30 minutes :\n{base}/reset-password?token={token}\n\n\
-                 Si ce n'est pas toi, ne fais rien : ton mot de passe ne change pas.\n"
-            ),
-        )
+        mails::reset_password(lang, &username, &format!("{base}/reset-password?token={token}"))
     };
-    mailer.send(&to, subject, body).await
+    mailer.send(&to, &mail.subject, mail.body).await
 }
 
 #[cfg(test)]
@@ -249,5 +244,110 @@ mod tests {
         let (head, text) = decoded(&raw);
         assert!(head.to_ascii_lowercase().contains("content-type: text/plain; charset=utf-8"), "{head}");
         assert_eq!(text.trim_end(), plain.trim_end());
+    }
+
+    /// Le sujet d'un message tel qu'un client le lit (RFC 2047) : les mots codés (`=?utf-8?b?…?=` ou `?q?`) défaits, les
+    /// mots ASCII laissés tels quels (`lettre` ne code que ceux qui ont des lettres non latines : « KRAKEN » reste en
+    /// clair), les en-têtes dépliés ; l'espace entre deux mots codés ne compte pas, toute autre est gardée.
+    fn subject_of(head: &str) -> String {
+        let unfolded = head.replace("\r\n ", " ").replace("\r\n\t", " ");
+        let value = unfolded.lines().find_map(|l| l.strip_prefix("Subject: ")).expect("Subject présent").trim();
+        let mut bytes: Vec<u8> = Vec::new();
+        let mut after_encoded = false;
+        for word in value.split_whitespace() {
+            let Some(inner) = word.strip_prefix("=?").and_then(|w| w.strip_suffix("?=")) else {
+                if !bytes.is_empty() {
+                    bytes.push(b' ');
+                }
+                bytes.extend(word.as_bytes());
+                after_encoded = false;
+                continue;
+            };
+            if !bytes.is_empty() && !after_encoded {
+                bytes.push(b' ');
+            }
+            after_encoded = true;
+            let mut parts = inner.splitn(3, '?');
+            let (charset, encoding, data) = (parts.next().unwrap(), parts.next().unwrap(), parts.next().unwrap());
+            assert!(charset.eq_ignore_ascii_case("utf-8"), "sujet en UTF-8 : {charset}");
+            match encoding.to_ascii_lowercase().as_str() {
+                "b" => bytes.extend(base64::engine::general_purpose::STANDARD.decode(data).expect("base64 valide")),
+                "q" => {
+                    let d = data.as_bytes();
+                    let mut i = 0;
+                    while i < d.len() {
+                        match d[i] {
+                            b'_' => bytes.push(b' '),
+                            b'=' => {
+                                bytes.push(u8::from_str_radix(&data[i + 1..i + 3], 16).expect("=XX"));
+                                i += 2;
+                            }
+                            c => bytes.push(c),
+                        }
+                        i += 1;
+                    }
+                }
+                other => panic!("codage de mot inattendu : {other}"),
+            }
+        }
+        String::from_utf8(bytes).expect("sujet en UTF-8")
+    }
+
+    #[test]
+    fn every_mail_in_every_language_is_encoded_as_utf8_and_its_link_reads_back_intact() {
+        let from: Mailbox = "KRAKEN <no-reply@localhost>".parse().unwrap();
+        let token = "Zx9-_aB3".repeat(8);
+        let verify = format!("https://kraken.example.org/verify-email?token={token}");
+        let reset = format!("https://kraken.example.org/reset-password?token={token}");
+        for lang in Lang::ALL {
+            for (name, mail) in [
+                ("verify_email", mails::verify_email(lang, "lea", &verify)),
+                ("reset_password", mails::reset_password(lang, "lea", &reset)),
+                ("email_change", mails::email_change(lang, "lea", &verify)),
+            ] {
+                let what = format!("{name} ({lang:?})");
+                let link = if name == "reset_password" { &reset } else { &verify };
+                let msg = message(&from, "lea@example.org", &mail.subject, mail.body.clone()).unwrap();
+                let raw = String::from_utf8(msg.formatted()).unwrap();
+                let (head, text) = decoded(&raw);
+                let lower = head.to_ascii_lowercase();
+                assert!(lower.contains("mime-version: 1.0"), "{what} : MIME-Version absent :\n{head}");
+                assert!(lower.contains("content-type: text/plain; charset=utf-8"), "{what} : Content-Type :\n{head}");
+                assert_eq!(
+                    subject_of(&head),
+                    mail.subject,
+                    "{what} : le sujet décodé est celui qu'on a écrit :\n{head}"
+                );
+                assert_eq!(text.trim_end(), mail.body.trim_end(), "{what} : le corps décodé est celui qu'on a écrit");
+                assert!(
+                    text.lines().any(|l| l == link),
+                    "{what} : le lien tient sur une ligne, sans « =3D » ni coupure"
+                );
+                if lang == Lang::Fa {
+                    assert!(
+                        !head.contains(&mail.subject),
+                        "{what} : un sujet persan est codé, jamais en clair :\n{head}"
+                    );
+                    assert!(lower.contains("=?utf-8?"), "{what} : sujet codé RFC 2047 en UTF-8 :\n{head}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_job_asks_for_its_language_and_an_absent_or_unknown_one_is_french() {
+        use serde_json::json;
+        assert_eq!(payload_lang(&json!({"user_id": "x", "lang": "fa"})), Lang::Fa);
+        assert_eq!(payload_lang(&json!({"lang": "en"})), Lang::En);
+        assert_eq!(payload_lang(&json!({"lang": "fr"})), Lang::Fr);
+        assert_eq!(payload_lang(&json!({"lang": "fa-IR"})), Lang::Fa, "la même lecture que celle des demandes");
+        // Une tâche déjà en file à la mise à jour n'a pas de `lang` : elle part en français, comme avant.
+        assert_eq!(payload_lang(&json!({"user_id": "x"})), Lang::Fr);
+        assert_eq!(payload_lang(&json!({})), Lang::Fr);
+        assert_eq!(payload_lang(&json!({"lang": "xx"})), Lang::Fr);
+        assert_eq!(payload_lang(&json!({"lang": ""})), Lang::Fr);
+        assert_eq!(payload_lang(&json!({"lang": null})), Lang::Fr);
+        assert_eq!(payload_lang(&json!({"lang": 7})), Lang::Fr);
+        assert_eq!(payload_lang(&json!(null)), Lang::Fr);
     }
 }
