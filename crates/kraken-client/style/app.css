@@ -296,7 +296,7 @@ button.app-reply:hover span { color: var(--text-strong); }
 .app-open-error { flex-basis: 100%; min-block-size: 1lh; margin: 0; text-align: center; }
 .app-ring-card .app-ring-why { flex: 1 1 100%; }
 /* Dans la carte, `.app-ring-card p` (grise, flex: 1) passerait devant : la ligne réservée garde sa pleine largeur et son rouge. */
-.app-ring-card .app-open-error { flex: 1 1 100%; min-inline-size: 0; color: var(--danger); }
+.app-ring-card .app-open-error { flex: 1 1 100%; order: 1; min-inline-size: 0; color: var(--danger); }
 .app-dm-call { display: inline-flex; margin-inline-start: auto; color: var(--success); }
 .app-ring { position: fixed; inset-inline-end: var(--space-4); bottom: var(--space-4); z-index: var(--z-toast); display: grid; gap: var(--space-2);
   width: min(var(--size-card), calc(var(--vw) - 2 * var(--space-4))); }

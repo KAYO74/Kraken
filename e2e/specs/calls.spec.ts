@@ -301,6 +301,11 @@ test('F04-C8 appel entrant dans l’appli de bureau sans WebRTC : « Rejoindre �
   const err = ring.getByRole('alert').filter({ hasText: /Impossible d.ouvrir le navigateur/ });
   await expect(err).toBeVisible();
   expect((await ring.boundingBox())!.height).toBe(before!.height);
+  // Toute la largeur de la carte, sous « Ouvrir » et « Refuser ».
+  const eb = (await err.boundingBox())!;
+  const refuse = (await ring.getByRole('button', { name: 'Refuser' }).boundingBox())!;
+  expect(eb.width).toBeGreaterThan(before!.width * 0.6);
+  expect(eb.y).toBeGreaterThan(refuse.y);
   expect((await ring.getByRole('button', { name: 'Rejoindre' }).boundingBox())!.y).toBe(join!.y);
   const [red, grey] = await Promise.all([
     err.evaluate((e) => getComputedStyle(e).color),
