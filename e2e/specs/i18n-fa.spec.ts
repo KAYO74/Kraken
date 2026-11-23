@@ -529,6 +529,77 @@ test('I18N-F16 complétion de @ et de # en persan : « علي » et « رضاي�
   }
 });
 
+// ───────── e-mails du serveur : la langue de l'interface part avec la demande (PR #34) ─────────
+
+test('I18N-F17 e-mails du serveur : l’inscription et le mot de passe oublié envoient la langue de l’interface (fa, en), `lang` est accepté par l’API (étiquette régionale et langue inconnue compris), un mauvais type est refusé comme à la création d’un serveur', async ({ page, api, allow }) => {
+  // Le serveur de test n'a pas de SMTP : « mot de passe oublié » répond 501 (le message de l'interface le dit), c'est attendu.
+  allow.push(/auth\/reset/, /status of 5\d\d/);
+  const setLang = async (code: string) => {
+    await page.goto('/login');
+    await page.evaluate((c) => localStorage.setItem('kraken.lang', c), code);
+  };
+
+  // En persan : la demande d'inscription et celle du mot de passe oublié portent lang="fa" (la page ne lit pas l'e-mail).
+  await setLang('fa');
+  await page.goto('/forgot-password');
+  await expect(html(page)).toHaveAttribute('lang', 'fa');
+  await page.getByLabel('ایمیل', { exact: true }).fill('personne@example.org');
+  const reset = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`${API}/auth/reset`));
+  await page.getByRole('button', { name: 'ارسال پیوند', exact: true }).click();
+  expect((await reset).postDataJSON()).toEqual({ email: 'personne@example.org', lang: 'fa' });
+
+  const name = unique('mailfa');
+  await page.goto('/register');
+  await page.getByLabel('ایمیل', { exact: true }).fill(`${name}@example.org`);
+  await page.getByLabel('نام کاربری').fill(name); // le nom accessible porte aussi l’aide du champ
+  await page.getByLabel('رمز عبور', { exact: true }).fill(PASSWORD);
+  const register = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`${API}/auth/register`));
+  await page.getByRole('button', { name: 'ایجاد حساب کاربری من', exact: true }).click();
+  expect((await register).postDataJSON()).toEqual({ username: name, email: `${name}@example.org`, password: PASSWORD, lang: 'fa' });
+  await page.waitForURL('**/channels/@me');
+
+  // En anglais, puis en français : la langue de l'interface, rien d'autre.
+  for (const [code, label, button] of [['en', 'Email', 'Send link'], ['fr', 'E-mail', 'Envoyer le lien']] as const) {
+    await setLang(code);
+    await page.goto('/forgot-password');
+    await page.getByLabel(label, { exact: true }).fill('personne@example.org');
+    const sent = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`${API}/auth/reset`));
+    await page.getByRole('button', { name: button, exact: true }).click();
+    expect((await sent).postDataJSON().lang, code).toBe(code);
+  }
+
+  // Par l'API : `lang` est facultatif, une étiquette régionale ou une langue inconnue est acceptée (l'e-mail part alors dans la
+  // langue connue la plus proche, à défaut en français), comme `lang` de la création d'un serveur.
+  const anon = await api();
+  for (const lang of [undefined, 'fa', 'en', 'fr', 'fa-IR', 'xx']) {
+    const user = unique('mail');
+    const res = await anon.post(`${API}/auth/register`, { data: { username: user, email: `${user}@example.org`, password: PASSWORD, lang } });
+    expect(res.status(), `${lang} : ${await res.text()}`).toBe(201);
+  }
+  // Un mot de passe oublié avec `lang` : la demande est comprise (le serveur de test répond « pas d'e-mail » : 501, pas 4xx).
+  const noMail = await anon.post(`${API}/auth/reset`, { data: { email: 'personne@example.org', lang: 'fa' } });
+  expect(noMail.status()).toBe(501);
+  expect((await noMail.json()).code).toBe('no_email');
+  // Changer d'adresse (sans SMTP : tout de suite) avec `lang` : accepté.
+  const user = unique('mail');
+  const made = await anon.post(`${API}/auth/register`, { data: { username: user, email: `${user}@example.org`, password: PASSWORD, lang: 'fa' } });
+  const { token } = await made.json();
+  const as = await api(token);
+  const changed = await as.put(`${API}/users/@me/email`, { data: { email: `${user}.2@example.org`, password: PASSWORD, lang: 'fa-IR' } });
+  expect(changed.status(), await changed.text()).toBe(200);
+
+  // Un `lang` qui n'est pas du texte : le même refus que `POST /guilds` (le champ est typé), et aucun compte n'est créé.
+  const guild = await as.post(`${API}/guilds`, { data: { name: 'Abyss', lang: 7 } });
+  expect(guild.status()).toBeGreaterThanOrEqual(400);
+  expect(guild.status()).toBeLessThan(500);
+  const bad = unique('mail');
+  const refused = await anon.post(`${API}/auth/register`, { data: { username: bad, email: `${bad}@example.org`, password: PASSWORD, lang: 7 } });
+  expect(refused.status()).toBe(guild.status());
+  expect((await anon.post(`${API}/auth/login`, { data: { login: bad, password: PASSWORD } })).status()).toBe(401);
+  expect((await anon.post(`${API}/auth/reset`, { data: { email: 'personne@example.org', lang: ['fa'] } })).status()).toBe(guild.status());
+  expect((await as.put(`${API}/users/@me/email`, { data: { email: `${user}.3@example.org`, password: PASSWORD, lang: {} } })).status()).toBe(guild.status());
+});
+
 // ───────── le français et l'anglais ne changent pas ─────────
 
 test('I18N-F12 le français et l’anglais restent de gauche à droite, sans une lettre persane hors du sélecteur', async ({ browser, baseURL }) => {

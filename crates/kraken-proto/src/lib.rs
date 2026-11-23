@@ -34,11 +34,15 @@ impl User {
     }
 }
 
+/// `POST /auth/register`. `lang` : la langue de l'interface (`fr`, `en`, `fa`, ou une étiquette régionale comme `fa-IR`)
+/// dans laquelle écrire l'e-mail de confirmation ; absente ou inconnue, le français.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RegisterReq {
     pub username: String,
     pub email: String,
     pub password: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -48,9 +52,12 @@ pub struct LoginReq {
     pub password: String,
 }
 
+/// `POST /auth/reset` : mot de passe oublié. `lang` : comme pour [`RegisterReq`], la langue de l'e-mail.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EmailReq {
     pub email: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -95,11 +102,14 @@ pub struct ChangeUsername {
     pub password: String,
 }
 
-/// `PUT /users/@me/email` : changer son adresse e-mail. Le mot de passe actuel est exigé.
+/// `PUT /users/@me/email` : changer son adresse e-mail. Le mot de passe actuel est exigé. `lang` : comme pour
+/// [`RegisterReq`], la langue de l'e-mail de confirmation.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChangeEmail {
     pub email: String,
     pub password: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
 }
 
 /// `PUT /users/@me/password` : changer son mot de passe.
