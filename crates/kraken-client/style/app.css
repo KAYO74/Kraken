@@ -1155,3 +1155,10 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 @media (max-width: 639px), (pointer: coarse) {
   :lang(de) :is(.app-pins-close, .app-pin-actions .k-btn) { min-height: var(--size-option-row-mobile); }
 }
+/* Le titre d'un écran de réglages (« Benachrichtigungen », 18 lettres) peut rétrécir à côté du bouton de fermeture, se coupe en dernier
+   recours plutôt que de déborder, et prend la taille au-dessous sur un écran étroit : à texte 20 sur 390 px, la marge était de 2 px. */
+:lang(de) .app-settings-top { gap: var(--space-3); }
+:lang(de) .app-settings-top h2 { min-inline-size: 0; overflow-wrap: anywhere; }
+@media (max-width: 639px) {
+  :lang(de) .app-settings-top h2 { font-size: var(--text-lg-size); }
+}
