@@ -264,3 +264,53 @@ test('F04-C3 sonnerie sans réponse : elle s’arrête seule, « Appel manqué �
   expect((await (await asB.post(`${API}/channels/${dm}/voice`, { data: join })).json()).code).toBe('call_blocked');
   await expect(b.page.getByRole('button', { name: 'Démarrer un appel' })).toBeDisabled();
 });
+
+test('F04-C8 appel entrant dans l’appli de bureau sans WebRTC : « Rejoindre » grisé, la raison dite, « Ouvrir dans mon navigateur » à côté', async ({
+  user,
+  api,
+}) => {
+  const a = await user('appelant8');
+  const b = await user('appele8');
+  await befriend(api, a, b);
+  await b.context.addInitScript(() => {
+    const w = window as unknown as Record<string, unknown>;
+    delete w.RTCPeerConnection;
+    delete w.webkitRTCPeerConnection;
+    const calls: string[] = [];
+    w.__calls = calls;
+    w.__fail = false;
+    w.__TAURI_INTERNALS__ = {
+      invoke: (cmd: string) => (calls.push(cmd), cmd === 'open_in_browser' && w.__fail ? Promise.reject('non') : Promise.resolve(null)),
+    };
+  });
+  await b.page.reload();
+  await a.page.getByRole('tab', { name: 'Tous' }).click();
+  await a.page.getByRole('button', { name: `Appeler ${b.name}` }).click();
+  await inCall(a);
+  const ring = incoming(b.page, a.name);
+  await expect(ring).toBeVisible();
+  await expect(ring.getByRole('button', { name: 'Rejoindre' })).toBeDisabled();
+  await expect(ring).toContainText('Pas de vocal dans l\'appli de bureau : réponds depuis ton navigateur.');
+  await ring.getByRole('button', { name: 'Ouvrir dans mon navigateur' }).click();
+  await expect.poll(() => b.page.evaluate(() => (window as unknown as { __calls: string[] }).__calls)).toContain('open_in_browser');
+  // Un échec : la ligne d'erreur était réservée (la carte ne grandit pas, le bouton « Rejoindre » ne bouge pas) et elle est rouge.
+  const before = await ring.boundingBox();
+  const join = await ring.getByRole('button', { name: 'Rejoindre' }).boundingBox();
+  await b.page.evaluate(() => ((window as unknown as Record<string, unknown>).__fail = true));
+  await ring.getByRole('button', { name: 'Ouvrir dans mon navigateur' }).click();
+  const err = ring.getByRole('alert').filter({ hasText: /Impossible d.ouvrir le navigateur/ });
+  await expect(err).toBeVisible();
+  expect((await ring.boundingBox())!.height).toBe(before!.height);
+  // Toute la largeur de la carte, sous « Ouvrir » et « Refuser ».
+  const eb = (await err.boundingBox())!;
+  const refuse = (await ring.getByRole('button', { name: 'Refuser' }).boundingBox())!;
+  expect(eb.width).toBeGreaterThan(before!.width * 0.6);
+  expect(eb.y).toBeGreaterThan(refuse.y);
+  expect((await ring.getByRole('button', { name: 'Rejoindre' }).boundingBox())!.y).toBe(join!.y);
+  const [red, grey] = await Promise.all([
+    err.evaluate((e) => getComputedStyle(e).color),
+    ring.locator('p').first().evaluate((e) => getComputedStyle(e).color),
+  ]);
+  expect(red).not.toBe(grey);
+  await a11y(b.page);
+});

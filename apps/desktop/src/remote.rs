@@ -335,7 +335,7 @@ pub fn allow_origin(app: &AppHandle, url: &Url) {
         .remote(origin.clone())
         .local(false)
         .window("main");
-    for command in COMMANDS.iter().chain(crate::update::COMMANDS.iter()) {
+    for command in COMMANDS.iter().chain(crate::update::COMMANDS.iter()).chain(crate::media::COMMANDS.iter()) {
         capability = capability.permission(format!("allow-{}", command.replace('_', "-")));
     }
     if app.add_capability(capability).is_ok() {

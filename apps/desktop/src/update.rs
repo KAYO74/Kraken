@@ -240,8 +240,9 @@ pub async fn update_status(webview: Webview) -> Result<Status, String> {
     Ok(refresh(webview.app_handle(), false).await)
 }
 
-/// Ouvre une adresse https de GitHub (construite ici, jamais fournie par la page) dans le navigateur.
-fn open_external(url: &str) -> Result<(), String> {
+/// Ouvre une adresse (construite ici, jamais fournie par la page : celle de GitHub, ou de l'instance) dans le
+/// navigateur du système.
+pub(crate) fn open_external(url: &str) -> Result<(), String> {
     use std::process::Command;
     let mut command = if cfg!(target_os = "macos") {
         let mut c = Command::new("open");
@@ -256,7 +257,15 @@ fn open_external(url: &str) -> Result<(), String> {
         c.arg(url);
         c
     };
-    command.spawn().map(|_| ()).map_err(|_| "Impossible d'ouvrir le navigateur.".to_string())
+    // `wait` dans un fil : sans lui, chaque ouverture laisserait un processus zombie jusqu'à la fermeture de l'appli.
+    command
+        .spawn()
+        .map(|mut child| {
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+        })
+        .map_err(|_| "Impossible d'ouvrir le navigateur.".to_string())
 }
 
 /// Installe la mise à jour signée puis relance l'appli ; en repli, ouvre le téléchargement.
