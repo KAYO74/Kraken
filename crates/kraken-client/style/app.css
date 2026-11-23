@@ -1163,6 +1163,10 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 @media (max-width: 639px), (pointer: coarse) {
   :lang(de) :is(.app-pins-close, .app-pin-actions .k-btn) { min-height: var(--size-option-row-mobile); }
 }
+/* Raccourcis clavier : l'action et ses touches passent sur deux lignes quand le mot allemand (« Stummschaltung ») ne tient pas à côté d'elles. */
+:lang(de) .app-keys .k-shortcut { flex-wrap: wrap; }
+:lang(de) .app-keys dt { overflow-wrap: break-word; }
+:lang(de) .app-keys dd { margin-inline-start: auto; }
 /* Un réglage dont le contrôle est un choix ou un bouton (« Langsammodus » + sa liste) l'empile sous son étiquette sur un écran étroit :
    à côté, la liste prend la place et l'étiquette allemande se coupe en plein mot. Un interrupteur reste à côté de la sienne. */
 @media (max-width: 639px) {
