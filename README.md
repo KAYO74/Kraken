@@ -123,6 +123,7 @@ npx playwright test                       # serveur lancé avec KRAKEN_AUTH_PER_
 | `crates/kraken-db` | PostgreSQL : migrations, requêtes, file de tâches |
 | `crates/kraken-server` | REST `/api/v1`, gateway `/gateway`, client web |
 | `crates/kraken-voice` | salons vocaux : SFU WebRTC (str0m) sur un port UDP |
+| `crates/kraken-voice-native` | client vocal natif (Opus, str0m, cpal) pour l'appli de bureau Linux, dont la webview n'a pas WebRTC |
 | `crates/kraken-client` | client Leptos (WASM) |
 | `apps/desktop` | appli de bureau (Tauri) : rejoindre ou héberger, construite par `.github/workflows/desktop.yml` |
 | `install.sh`, `install.ps1` | installation en une commande (Linux et macOS, Windows) |

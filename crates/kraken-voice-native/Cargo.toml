@@ -1,0 +1,29 @@
+[package]
+name = "kraken-voice-native"
+description = "Client vocal natif pour le SFU de KRAKEN : un « navigateur » sans navigateur (Opus, WebRTC), pour l'appli de bureau Linux"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["device"]
+# Vrais micro et haut-parleurs, par cpal (ALSA sous Linux, donc aussi PulseAudio et PipeWire ;
+# demande `libasound2-dev` à la compilation). Sans elle : les sources et puits synthétiques seulement.
+device = ["dep:cpal"]
+
+[dependencies]
+kraken-proto.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Même version et même cryptographie que kraken-voice et l'appli de bureau.
+str0m = { version = "=0.24.1", default-features = false, features = ["rust-crypto"] }
+tracing = "0.1"
+# Adresses des interfaces réseau (une prise UDP par adresse, comme les candidats du SFU).
+if-addrs = "0.15"
+# libopus est compilée et liée statiquement (opusic-sys, par cmake) : rien à installer à l'exécution.
+opus = "0.4"
+cpal = { version = "0.18", optional = true }
+
+[dev-dependencies]
+kraken-voice.workspace = true
