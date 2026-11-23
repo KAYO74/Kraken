@@ -120,6 +120,12 @@ pub fn fold_key(text: &str) -> String {
     fold(text, usize::MAX).chars.into_iter().collect()
 }
 
+/// [`fold_key`] sans demi-espace, pour comparer un mot tapé avec ou sans (« علیرضا » et « علی‌رضا » se valent) : la
+/// complétion de `@` et de `#` coupe les noms aux seules espaces, le demi-espace fait partie du mot.
+pub fn fold_word(text: &str) -> String {
+    fold_key(&text.replace('\u{200c}', ""))
+}
+
 /// La requête repliée, espaces de bord retirés et suites d'espaces réduites à une.
 fn query_of(raw: &str) -> Vec<char> {
     // On replie d'abord : un demi-espace persan en bord de requête devient une espace, qu'il faut aussi retirer.
@@ -294,6 +300,15 @@ mod tests {
         assert!(fold_key("رضا‌ها").starts_with(&fold_key("رضا ")));
         assert_eq!(fold_key("Ève ۱"), "eve 1");
         assert_eq!(fold_key(""), "");
+    }
+
+    #[test]
+    fn fold_word_ignores_the_half_space() {
+        assert_eq!(fold_word("علی‌رضا"), fold_word("علیرضا"));
+        assert!(fold_word("نیم‌فاصله").starts_with(&fold_word("نیم‌فا")));
+        assert!(fold_word("نیم‌فاصله").starts_with(&fold_word("نیمفا")));
+        assert!(fold_word("علي‌رضا").starts_with(&fold_word("علیرض")));
+        assert_eq!(fold_word("Ève"), "eve");
     }
 
     #[test]

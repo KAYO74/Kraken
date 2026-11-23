@@ -484,15 +484,20 @@ test('I18N-F15 Ctrl+K en persan : demi-espace tapé comme une espace, chiffres p
 test('I18N-F16 complétion de @ et de # en persan : « علي » et « رضايي » arabes, ۱ et demi-espace trouvent la personne et le salon', async ({ signedIn, api }) => {
   const a = await signedIn('fa-IR');
   const b = await signedIn('fa-IR');
+  const c = await signedIn('fa-IR');
+  const d = await signedIn('fa-IR');
   const asA = await api(a.token);
   const asB = await api(b.token);
   expect((await asB.patch(`${API}/users/@me`, { data: { display_name: 'علی رضایی' } })).status()).toBe(200);
+  // Des noms composés avec demi-espace (U+200C), la frappe normale d'un nom persan.
+  expect((await (await api(c.token)).patch(`${API}/users/@me`, { data: { display_name: 'علی\u200cرضا' } })).status()).toBe(200);
+  expect((await (await api(d.token)).patch(`${API}/users/@me`, { data: { display_name: 'نیم\u200cفاصله خان' } })).status()).toBe(200);
   const res = await asA.post(`${API}/guilds`, { data: { name: 'Abyss', template: 'jeux', lang: 'fa' } });
   expect(res.status(), await res.text()).toBe(201);
   const g = await res.json();
   const general = g.channels.find((c: { kind: string; name: string }) => c.kind === 'text' && c.name === 'عمومی');
   const { code } = await (await asA.post(`${API}/channels/${general.id}/invites`, { data: {} })).json();
-  expect((await asB.post(`${API}/invites/${code}`)).status()).toBeLessThan(300);
+  for (const who of [b, c, d]) expect((await (await api(who.token)).post(`${API}/invites/${code}`)).status()).toBeLessThan(300);
   const { page } = a;
   await page.goto(`/channels/${g.guild.id}/${general.id}`);
   await expect(page.getByRole('heading', { name: 'عمومی', level: 1 })).toBeVisible();
@@ -503,6 +508,18 @@ test('I18N-F16 complétion de @ et de # en persan : « علي » et « رضاي�
     await box.fill('');
     await box.pressSequentially(typed);
     await expect(list.getByRole('option', { name: /علی رضایی/ }), typed).toBeVisible();
+  }
+  // Le demi-espace fait partie du mot : tapé ou non, il ne cache pas « علی‌رضا » ni « نیم‌فاصله خان ».
+  for (const [typed, found] of [
+    ['@علی\u200c', 'علی\u200cرضا'],
+    ['@علی\u200cرض', 'علی\u200cرضا'],
+    ['@علیرض', 'علی\u200cرضا'],
+    ['@نیم\u200cفا', 'نیم\u200cفاصله خان'],
+    ['@نیمفا', 'نیم\u200cفاصله خان'],
+  ]) {
+    await box.fill('');
+    await box.pressSequentially(typed);
+    await expect(list.getByRole('option', { name: new RegExp(found) }), typed).toBeVisible();
   }
   // « # » : le salon « نکته‌ها » (demi-espace) se trouve par ses premières lettres, avec « ك » arabe aussi.
   for (const typed of ['#نکته', '#نكته']) {
