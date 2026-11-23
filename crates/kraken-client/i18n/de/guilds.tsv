@@ -1,0 +1,475 @@
+# Catalogue allemand (de), groupe « guilds ».
+# Une ligne « français<TAB>allemand » par texte ; règles : ../README.md (« Ajouter une langue », « Conventions d'allemand »).
+# Mêmes {variables} que le français, tutoiement (« du »), guillemets „…“, pas d'espace avant « : ? ! ; », chiffres latins.
+# Un texte absent d'ici s'affiche en anglais (repli), puis en français.
+# Fichier complet : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui manquerait après un ajout du code.
+# Journal d'audit (audit.rs) : une phrase entière par action, jamais des morceaux recollés
+# Journal d'audit : précisions, champs et valeurs avant / après, filtres, états
+# Salons : mode lent, création, rangement, paramètres d'un salon, droits par salon (channels.rs)
+# Emojis du serveur (emoji_settings.rs)
+# Noms des couleurs de rôle et des droits, par catégorie (guild.rs)
+# Paramètres du serveur : sections, rôles, invitations, bannis, propriété, exclusion, fiche d'un membre (guild.rs)
+# Icône du serveur (icon_picker.rs)
+# Créer un serveur (new_guild.rs)
+# Vue d'ensemble (overview.rs)
+# Modèles de serveur (kraken-core/src/templates.rs) : noms et descriptions des cartes, traduits à l'affichage ;
+# les noms des catégories et des salons viennent du noyau (`Label`), dans la langue choisie
+
+# Journal d'audit (audit.rs) : une phrase entière par action, jamais des morceaux recollés
+Rôles	Rollen
+Invitations	Einladungen
+Serveur	Server
+Membre supprimé	Gelöschtes Mitglied
+(supprimé)	(gelöscht)
+{auteur} a créé le salon vocal {nom}	{auteur} hat den Sprachkanal {nom} erstellt
+{auteur} a créé la catégorie {nom}	{auteur} hat die Kategorie {nom} erstellt
+{auteur} a créé le salon d'annonces {nom}	{auteur} hat den Ankündigungskanal {nom} erstellt
+{auteur} a créé le forum {nom}	{auteur} hat das Forum {nom} erstellt
+{auteur} a créé la scène {nom}	{auteur} hat den Bühnenkanal {nom} erstellt
+{auteur} a créé le salon {nom}	{auteur} hat den Kanal {nom} erstellt
+{auteur} a supprimé le salon vocal {nom}	{auteur} hat den Sprachkanal {nom} gelöscht
+{auteur} a supprimé la catégorie {nom}	{auteur} hat die Kategorie {nom} gelöscht
+{auteur} a supprimé le salon d'annonces {nom}	{auteur} hat den Ankündigungskanal {nom} gelöscht
+{auteur} a supprimé le forum {nom}	{auteur} hat das Forum {nom} gelöscht
+{auteur} a supprimé la scène {nom}	{auteur} hat den Bühnenkanal {nom} gelöscht
+{auteur} a supprimé le salon {nom}	{auteur} hat den Kanal {nom} gelöscht
+(rôle)	(Rolle)
+{auteur} a ajouté le rôle {role} à {cible}	{auteur} hat {cible} die Rolle {role} gegeben
+{auteur} a retiré le rôle {role} à {cible}	{auteur} hat {cible} die Rolle {role} entzogen
+{auteur} a expulsé {cible}	{auteur} hat {cible} rausgeworfen
+{auteur} a banni {cible}	{auteur} hat {cible} gebannt
+{auteur} a levé le bannissement de {cible}	{auteur} hat den Bann von {cible} aufgehoben
+{auteur} a exclu {cible} pendant {duree}	{auteur} hat {cible} für {duree} in den Timeout geschickt
+{auteur} a exclu {cible} temporairement	{auteur} hat {cible} vorübergehend in den Timeout geschickt
+{auteur} a levé l'exclusion de {cible}	{auteur} hat den Timeout von {cible} aufgehoben
+{auteur} a transféré la propriété du serveur à {cible}	{auteur} hat den Besitz des Servers an {cible} übertragen
+{auteur} a créé le rôle {cible}	{auteur} hat die Rolle {cible} erstellt
+{auteur} a modifié le rôle {cible}	{auteur} hat die Rolle {cible} bearbeitet
+{auteur} a supprimé le rôle {cible}	{auteur} hat die Rolle {cible} gelöscht
+{auteur} a changé l'ordre des rôles	{auteur} hat die Reihenfolge der Rollen geändert
+{auteur} a modifié le salon {salon}	{auteur} hat den Kanal {salon} bearbeitet
+{auteur} a déplacé le salon {salon}	{auteur} hat den Kanal {salon} verschoben
+{auteur} a retiré les droits propres du rôle {sujet} dans le salon {salon}	{auteur} hat die Sonderberechtigungen der Rolle {sujet} im Kanal {salon} entfernt
+{auteur} a retiré les droits propres de {sujet} dans le salon {salon}	{auteur} hat die Sonderberechtigungen von {sujet} im Kanal {salon} entfernt
+{auteur} a modifié les droits du rôle {sujet} dans le salon {salon}	{auteur} hat die Berechtigungen der Rolle {sujet} im Kanal {salon} geändert
+{auteur} a modifié les droits de {sujet} dans le salon {salon}	{auteur} hat die Berechtigungen von {sujet} im Kanal {salon} geändert
+{auteur} a créé une invitation pour le salon {salon}	{auteur} hat eine Einladung für den Kanal {salon} erstellt
+{auteur} a créé une invitation	{auteur} hat eine Einladung erstellt
+{auteur} a révoqué une invitation de {nom}	{auteur} hat eine Einladung von {nom} widerrufen
+{auteur} a révoqué une invitation	{auteur} hat eine Einladung widerrufen
+{auteur} a ajouté l'emoji {emoji}	{auteur} hat das Emoji {emoji} hinzugefügt
+{auteur} a renommé l'emoji {avant} en {apres}	{auteur} hat das Emoji {avant} in {apres} umbenannt
+{auteur} a modifié l'emoji {emoji}	{auteur} hat das Emoji {emoji} bearbeitet
+{auteur} a supprimé l'emoji {emoji}	{auteur} hat das Emoji {emoji} gelöscht
+{auteur} a supprimé un message de {cible} dans le salon {salon}	{auteur} hat eine Nachricht von {cible} im Kanal {salon} gelöscht
+{auteur} a supprimé un message de {cible}	{auteur} hat eine Nachricht von {cible} gelöscht
+{auteur} a épinglé un message dans {salon}	{auteur} hat eine Nachricht in {salon} angeheftet
+{auteur} a épinglé un message	{auteur} hat eine Nachricht angeheftet
+{auteur} a désépinglé un message dans {salon}	{auteur} hat das Anheften einer Nachricht in {salon} aufgehoben
+{auteur} a désépinglé un message	{auteur} hat das Anheften einer Nachricht aufgehoben
+{auteur} a renommé le serveur « {avant} » en « {apres} »	{auteur} hat den Server „{avant}“ in „{apres}“ umbenannt
+{auteur} a retiré l'icône du serveur	{auteur} hat das Serversymbol entfernt
+{auteur} a changé l'icône du serveur	{auteur} hat das Serversymbol geändert
+{auteur} a modifié le serveur	{auteur} hat den Server bearbeitet
+{auteur} a effectué une action que cette version ne connaît pas ({action})	{auteur} hat eine Aktion ausgeführt, die diese Version nicht kennt ({action})
+
+# Journal d'audit : précisions, champs et valeurs avant / après, filtres, états
+Valable {duree}, {n} utilisation au plus	Gültig für {duree}, höchstens {n} Nutzung
+Valable {duree}, {n} utilisations au plus	Gültig für {duree}, höchstens {n} Nutzungen
+Valable {duree}, utilisations illimitées	Gültig für {duree}, unbegrenzte Nutzungen
+Sans date limite, {n} utilisation au plus	Ohne Ablaufdatum, höchstens {n} Nutzung
+Sans date limite, {n} utilisations au plus	Ohne Ablaufdatum, höchstens {n} Nutzungen
+Sans date limite, utilisations illimitées	Ohne Ablaufdatum, unbegrenzte Nutzungen
+Autorisé : {droits}	Erlaubt: {droits}
+Refusé : {droits}	Verweigert: {droits}
+Autorisé : {autorises}. Refusé : {refuses}	Erlaubt: {autorises}. Verweigert: {refuses}
+Nom	Name
+Sujet	Kanalthema
+Mode lent	Langsammodus
+Visibilité	Sichtbarkeit
+Couleur	Farbe
+Affiché à part	Separat angezeigt
+Droits	Berechtigungen
+Réglage	Einstellung
+(vide)	(leer)
+(aucun)	(keines)
+Privé	Privat
+Public	Öffentlich
+Oui	Ja
+Non	Nein
+Aucune	Keine
+Ajoutés	Hinzugefügt
+Retirés	Entfernt
+Avant	Vorher
+Après	Nachher
+Aucun événement	Keine Ereignisse
+{n} événement	{n} Ereignis
+{n} événements	{n} Ereignisse
+{n} événement affiché	{n} Ereignis angezeigt
+{n} événements affichés	{n} Ereignisse angezeigt
+{n} événement de plus	{n} weiteres Ereignis
+{n} événements de plus	{n} weitere Ereignisse
+Chargement du journal…	Audit-Log wird geladen…
+Les actions de gestion et de modération de ce serveur, de la plus récente à la plus ancienne. Le journal est en lecture seule : rien ne s'y efface.	Die Verwaltungs- und Moderationsaktionen dieses Servers, die neuesten zuerst. Das Audit-Log ist schreibgeschützt: Nichts darin lässt sich löschen.
+Filtrer le journal d'audit	Audit-Log filtern
+Action	Aktion
+Toutes	Alle
+Membre	Mitglied
+Tous	Alle
+Réinitialiser	Zurücksetzen
+Actualiser	Aktualisieren
+Aucun événement ne correspond	Keine passenden Ereignisse
+Essaie un autre type d'action ou un autre membre.	Versuch es mit einer anderen Aktion oder einem anderen Mitglied.
+Les actions de gestion et de modération du serveur apparaîtront ici.	Die Verwaltungs- und Moderationsaktionen des Servers erscheinen hier.
+Événements du journal	Audit-Log-Ereignisse
+Charger plus	Mehr laden
+Raison :	Grund:
+Masquer les changements	Änderungen ausblenden
+Voir les changements	Änderungen anzeigen
+
+# Salons : mode lent, création, rangement, paramètres d'un salon, droits par salon (channels.rs)
+Désactivé	Aus
+{n} seconde	{n} Sekunde
+{n} secondes	{n} Sekunden
+{n} heure	{n} Stunde
+{n} heures	{n} Stunden
+Salon textuel	Textkanal
+Pour écrire des messages, partager des images et des fichiers.	Zum Schreiben von Nachrichten und zum Teilen von Bildern und Dateien.
+Salon vocal	Sprachkanal
+Pour parler et se voir en direct.	Zum Reden und um sich live zu sehen.
+Catégorie	Kategorie
+Pour ranger plusieurs salons sous un même titre.	Fasst mehrere Kanäle unter einer Überschrift zusammen.
+Donne un nom à la catégorie.	Gib der Kategorie einen Namen.
+Donne un nom au salon.	Gib dem Kanal einen Namen.
+Nom de la catégorie	Kategoriename
+Nom du salon	Kanalname
+Elle range des salons sous un même titre, que l'on peut replier.	Sie fasst Kanäle unter einer Überschrift zusammen, die man einklappen kann.
+Le nom peut contenir des espaces et des majuscules.	Der Name darf Leerzeichen und Großbuchstaben enthalten.
+Les majuscules et les espaces sont remplacés : « Salon de test » donne #salon-de-test.	Großbuchstaben und Leerzeichen werden ersetzt: „Kanal zum Testen“ ergibt #kanal-zum-testen.
+Nouvelle catégorie	Neue Kategorie
+nouveau-salon	neuer-kanal
+Type	Typ
+Aucune catégorie	Keine Kategorie
+Créer la catégorie	Kategorie erstellen
+Créer le salon	Kanal erstellen
+« {nom} » déplacé.	„{nom}“ verschoben.
+Les salons s'affichent dans cet ordre. Monter le premier salon d'une catégorie le range dans la catégorie du dessus, descendre le dernier le range dans celle du dessous.	Die Kanäle erscheinen in dieser Reihenfolge. Schiebst du den ersten Kanal einer Kategorie nach oben, landet er in der Kategorie darüber; schiebst du den letzten nach unten, landet er in der Kategorie darunter.
+Salons et catégories, dans l'ordre d'affichage	Kanäle und Kategorien in der angezeigten Reihenfolge
+privé	privat
+Monter la catégorie {nom}	Kategorie {nom} nach oben verschieben
+Monter le salon {nom}	Kanal {nom} nach oben verschieben
+Monter	Nach oben
+Descendre la catégorie {nom}	Kategorie {nom} nach unten verschieben
+Descendre le salon {nom}	Kanal {nom} nach unten verschieben
+Descendre	Nach unten
+Paramètres de la catégorie {nom}	Einstellungen der Kategorie {nom}
+Paramètres du salon {nom}	Einstellungen des Kanals {nom}
+Aperçu{contexte}	Übersicht{contexte}
+Permissions	Berechtigungen
+Sections des paramètres du salon	Bereiche der Kanaleinstellungen
+Fermer les paramètres (Échap)	Einstellungen schließen (Esc)
+Salon introuvable	Kanal nicht gefunden
+Ce lien est peut-être ancien.	Dieser Link ist vielleicht veraltet.
+Il a été supprimé, ou tu n'y as plus accès.	Er wurde gelöscht, oder du hast keinen Zugriff mehr darauf.
+Rien à régler ici	Hier gibt es nichts einzustellen
+Il faut le droit « Gérer les salons » pour changer ce salon.	Um diesen Kanal zu ändern, brauchst du die Berechtigung „Kanäle verwalten“.
+Modifications enregistrées.	Änderungen gespeichert.
+Tout le monde voit le changement tout de suite.	Alle sehen die Änderung sofort.
+Sujet du salon	Kanalthema
+Une ligne sur ce qui se dit ici : elle s'affiche dans l'en-tête du salon.	Eine Zeile darüber, worum es hier geht: Sie erscheint in der Kopfzeile des Kanals.
+Chacun doit attendre ce délai entre deux messages. Les personnes qui gèrent les messages ou les salons n'attendent pas.	Alle müssen diese Zeit zwischen zwei Nachrichten abwarten. Personen, die Nachrichten oder Kanäle verwalten, müssen nicht warten.
+Catégorie privée	Private Kategorie
+Salon privé	Privater Kanal
+Sa catégorie est privée : ce salon l'est aussi. Change-le dans les paramètres de la catégorie.	Die Kategorie ist privat, und damit auch dieser Kanal. Ändere das in den Einstellungen der Kategorie.
+Seuls les rôles et les membres que tu ajoutes dans « Permissions » voient cette catégorie et ses salons.	Nur die Rollen und Mitglieder, die du unter „Berechtigungen“ hinzufügst, sehen diese Kategorie und ihre Kanäle.
+Seuls les rôles et les membres que tu ajoutes dans « Permissions » voient ce salon.	Nur die Rollen und Mitglieder, die du unter „Berechtigungen“ hinzufügst, sehen diesen Kanal.
+Modifications du salon	Kanaländerungen
+Modifications non enregistrées	Nicht gespeicherte Änderungen
+Non enregistré	Nicht gespeichert
+Supprimer la catégorie	Kategorie löschen
+Supprimer le salon	Kanal löschen
+Autoriser	Erlauben
+Hériter	Erben
+Refuser	Verweigern
+@tout le monde	@everyone
+Rôle supprimé	Gelöschte Rolle
+Ancien membre	Ehemaliges Mitglied
+Permissions enregistrées.	Berechtigungen gespeichert.
+Droit sensible	Sensible Berechtigung
+Droit sensible :	Sensible Berechtigung:
+Pour chaque droit : « Autoriser » ou « Refuser » s'ajoute aux droits du serveur dans ce salon, « Hériter » laisse les droits habituels. Un refus l'emporte sur un droit donné par un rôle, mais pas sur le propriétaire ni les administrateurs. On ne règle que des droits que l'on a soi-même.	Für jede Berechtigung gilt: „Erlauben“ oder „Verweigern“ kommt in diesem Kanal zu den Berechtigungen des Servers hinzu, „Erben“ lässt die üblichen Berechtigungen bestehen. Eine Verweigerung hat Vorrang vor einer Berechtigung durch eine Rolle, nicht aber vor dem Besitzer und den Administratoren. Du kannst nur Berechtigungen einstellen, die du selbst hast.
+Rôles et membres de ce salon	Rollen und Mitglieder dieses Kanals
+modifications non enregistrées	nicht gespeicherte Änderungen
+réglé	festgelegt
+Ajouter un rôle ou un membre	Rolle oder Mitglied hinzufügen
+Choisis dans la liste	Wähle aus der Liste
+Ajouter	Hinzufügen
+Son rang est égal ou supérieur au tien : tu ne peux pas changer ses réglages.	Der Rang ist mindestens so hoch wie deiner: Du kannst die Einstellungen nicht ändern.
+Tout remettre sur « Hériter »	Alles auf „Erben“ zurücksetzen
+Modifications des permissions	Änderungen der Berechtigungen
+
+# Emojis du serveur (emoji_settings.rs)
+Le nom compte de 2 à 32 caractères : lettres sans accent, chiffres et _.	Der Name hat 2 bis 32 Zeichen: Buchstaben ohne Akzent, Ziffern und _.
+Ce serveur a déjà ses {max} emojis : retires-en un pour en ajouter.	Dieser Server hat schon seine {max} Emojis: Entferne eines, um ein neues hinzuzufügen.
+Cette animation pèse trop lourd : {taille} Ko au plus.	Diese Animation ist zu groß: höchstens {taille} KB.
+Un emoji à la fois : seul le premier fichier a été pris.	Immer nur ein Emoji: Es wurde nur die erste Datei übernommen.
+Emoji {code} ajouté.	Emoji {code} hinzugefügt.
+Ajoute des images à ce serveur : ses membres les écrivent dans leurs messages avec {code} ou les choisissent dans le sélecteur d'emojis, et s'en servent aussi pour réagir dans leurs autres serveurs.	Füge diesem Server Bilder hinzu: Seine Mitglieder schreiben sie mit {code} in ihre Nachrichten oder wählen sie in der Emoji-Auswahl aus und können damit auch auf ihren anderen Servern reagieren.
+Ajouter un emoji	Emoji hinzufügen
+emplacements	Plätze
+PNG, JPEG, WebP ou GIF. Une image fixe est recadrée en carré et réduite à 128 px ; une animation reste telle quelle et pèse {taille} Ko au plus.	PNG, JPEG, WebP oder GIF. Ein Standbild wird quadratisch zugeschnitten und auf 128 px verkleinert; eine Animation bleibt unverändert und darf höchstens {taille} KB groß sein.
+Il faut le droit « Gérer les émojis » pour ajouter, renommer ou retirer un emoji.	Zum Hinzufügen, Umbenennen oder Entfernen eines Emojis brauchst du die Berechtigung „Emojis verwalten“.
+Tous les emplacements sont pris : retire un emoji pour en ajouter un autre.	Alle Plätze sind belegt: Entferne ein Emoji, um ein anderes hinzuzufügen.
+Aucun emoji pour l'instant	Noch keine Emojis
+Les emojis du serveur apparaîtront ici, et dans le sélecteur de ses membres.	Die Emojis des Servers erscheinen hier und in der Emoji-Auswahl seiner Mitglieder.
+Emojis du serveur	Server-Emojis
+Dépose l'image pour l'ajouter	Bild hier ablegen, um es hinzuzufügen
+ajouté par {nom}	hinzugefügt von {nom}
+ajouté par un ancien membre	hinzugefügt von einem ehemaligen Mitglied
+Actions pour {code}	Aktionen für {code}
+Nouveau nom de {code}	Neuer Name für {code}
+Entrée valide, Échap annule.	Eingabetaste speichert, Esc bricht ab.
+Aperçu de l'emoji	Emoji-Vorschau
+Dans un message :	In einer Nachricht:
+Ajouter l'emoji	Emoji hinzufügen
+Supprimer {code} ?	{code} löschen?
+Emoji {code} supprimé.	Emoji {code} gelöscht.
+L'emoji disparaît du serveur et du sélecteur. Les messages et les réactions qui l'utilisent restent, mais n'affichent plus que son nom. Cette action est définitive.	Das Emoji verschwindet vom Server und aus der Emoji-Auswahl. Nachrichten und Reaktionen, die es verwenden, bleiben bestehen, zeigen dann aber nur noch seinen Namen. Das lässt sich nicht rückgängig machen.
+Supprimer l'emoji	Emoji löschen
+
+# Noms des couleurs de rôle et des droits, par catégorie (guild.rs)
+Rouge	Rot
+Or	Gold
+Citron vert	Limettengrün
+Vert	Grün
+Turquoise	Türkis
+Bleu	Blau
+Violet	Violett
+Rose	Rosa
+Général	Allgemein
+Voir les salons	Kanäle ansehen
+Voir les salons et lire ce qui s'y dit.	Kanäle sehen und lesen, was dort besprochen wird.
+Gérer les salons	Kanäle verwalten
+Créer, renommer, déplacer et supprimer des salons.	Kanäle erstellen, umbenennen, verschieben und löschen.
+Gérer le serveur	Server verwalten
+Changer le nom, l'icône et les réglages du serveur.	Name, Symbol und Einstellungen des Servers ändern.
+Gérer les émojis	Emojis verwalten
+Ajouter et retirer les émojis et les autocollants du serveur.	Emojis und Sticker des Servers hinzufügen und entfernen.
+Gérer les événements	Events verwalten
+Créer, modifier et annuler les événements.	Events erstellen, bearbeiten und absagen.
+Voir le journal d'audit	Audit-Log anzeigen
+Consulter l'historique des actions de modération.	Den Verlauf der Moderationsaktionen einsehen.
+Créer des invitations	Einladungen erstellen
+Inviter de nouvelles personnes avec un lien.	Neue Leute per Link einladen.
+Changer son surnom	Spitznamen ändern
+Choisir son propre surnom sur ce serveur.	Den eigenen Spitznamen auf diesem Server wählen.
+Gérer les surnoms	Spitznamen verwalten
+Changer le surnom des autres membres.	Die Spitznamen anderer Mitglieder ändern.
+Expulser des membres	Mitglieder rauswerfen
+Faire sortir un membre, qui peut revenir avec une invitation.	Ein Mitglied vom Server entfernen. Es kann mit einer Einladung wieder beitreten.
+Bannir des membres	Mitglieder bannen
+Faire sortir un membre pour de bon : il ne peut plus revenir avec une invitation.	Ein Mitglied dauerhaft entfernen: Es kann nicht mehr mit einer Einladung beitreten.
+Exclure temporairement	Mitglieder in den Timeout schicken
+Empêcher un membre de parler pendant un moment.	Ein Mitglied für eine Weile am Reden hindern.
+Gérer les rôles	Rollen verwalten
+Créer, modifier et donner des rôles plus bas que le sien : de quoi distribuer des droits.	Rollen unterhalb der eigenen erstellen, bearbeiten und vergeben: Damit lassen sich Berechtigungen verteilen.
+Salons texte	Textkanäle
+Écrire des messages	Nachrichten senden
+Envoyer des messages dans les salons textuels.	Nachrichten in Textkanälen senden.
+Écrire dans les fils	In Threads schreiben
+Répondre dans les fils de discussion.	In Threads antworten.
+Créer des fils	Threads erstellen
+Ouvrir un nouveau fil à partir d'un message.	Aus einer Nachricht einen neuen Thread starten.
+Aperçu des liens	Linkvorschau
+Faire afficher un aperçu des liens postés.	Eine Vorschau der gesendeten Links anzeigen.
+Joindre des fichiers	Dateien anhängen
+Envoyer des images et des fichiers.	Bilder und Dateien senden.
+Ajouter des réactions	Reaktionen hinzufügen
+Réagir à un message avec un émoji.	Mit einem Emoji auf eine Nachricht reagieren.
+Mentionner tout le monde	Alle erwähnen
+Prévenir tous les membres d'un coup avec {mention}.	Alle Mitglieder mit {mention} auf einmal benachrichtigen.
+Gérer les messages	Nachrichten verwalten
+Supprimer les messages des autres.	Nachrichten anderer löschen.
+Lire l'historique	Nachrichtenverlauf lesen
+Relire les messages envoyés avant son arrivée.	Nachrichten lesen, die vor dem eigenen Beitritt gesendet wurden.
+Vocal	Sprachkanäle
+Se connecter{contexte}	Verbinden{contexte}
+Rejoindre les salons vocaux.	Sprachkanälen beitreten.
+Parler	Sprechen
+Prendre la parole dans un salon vocal.	In einem Sprachkanal sprechen.
+Caméra	Kamera
+Allumer sa caméra.	Die eigene Kamera einschalten.
+Partager son écran	Bildschirm teilen
+Diffuser son écran dans un salon vocal.	Den eigenen Bildschirm in einem Sprachkanal übertragen.
+Table de sons	Soundboard
+Jouer des sons de la table du serveur.	Sounds aus dem Soundboard des Servers abspielen.
+Voix prioritaire	Vorrangige Stimme
+Baisser le volume des autres quand on parle.	Die Lautstärke aller anderen senken, solange du sprichst.
+Couper le micro des autres	Mikrofone anderer stummschalten
+Rendre muet un membre dans un salon vocal.	Ein Mitglied in einem Sprachkanal stummschalten.
+Déplacer des membres	Mitglieder verschieben
+Faire passer un membre d'un salon vocal à un autre.	Ein Mitglied von einem Sprachkanal in einen anderen verschieben.
+Avancé	Erweitert
+Administrateur	Administrator
+Tous les droits, sans exception ni limite de rang : à réserver à des personnes de confiance.	Alle Berechtigungen, ohne Ausnahme und ohne Rangbeschränkung: nur für vertrauenswürdige Personen.
+
+# Paramètres du serveur : sections, rôles, invitations, bannis, propriété, exclusion, fiche d'un membre (guild.rs)
+Vue d'ensemble	Übersicht
+Bannis	Gebannte
+Journal d'audit	Audit-Log
+Propriété	Besitz
+Sections des paramètres du serveur	Bereiche der Servereinstellungen
+Serveur introuvable	Server nicht gefunden
+Tu n'en fais plus partie, ou il n'existe pas.	Du gehörst nicht mehr dazu, oder er existiert nicht.
+Tes rôles ne te donnent accès à aucun réglage de ce serveur.	Mit deinen Rollen hast du auf diesem Server keinen Zugriff auf Einstellungen.
+Ordre des rôles modifié.	Reihenfolge der Rollen geändert.
+Nouveau rôle	Neue Rolle
+Plus un rôle est haut dans la liste, plus il est puissant. On ne peut modifier, donner ni déplacer que les rôles plus bas que le sien.	Je weiter oben eine Rolle in der Liste steht, desto mächtiger ist sie. Du kannst nur Rollen bearbeiten, vergeben oder verschieben, die unter deiner eigenen liegen.
+Créer un rôle	Rolle erstellen
+Rôles, du plus haut au plus bas	Rollen, von der höchsten zur niedrigsten
+Membres qui ont ce rôle	Mitglieder mit dieser Rolle
+membre	Mitglied
+membres	Mitglieder
+Monter le rôle {nom}	Rolle {nom} nach oben verschieben
+Descendre le rôle {nom}	Rolle {nom} nach unten verschieben
+Affichage	Anzeige
+Tout le monde a ce rôle, automatiquement : il n'a ni nom à changer, ni couleur. Ses droits (onglet Permissions) s'ajoutent à ceux de tous les autres rôles.	Alle haben diese Rolle automatisch: Sie hat weder einen Namen zum Ändern noch eine Farbe. Ihre Berechtigungen (Tab Berechtigungen) kommen zu denen aller anderen Rollen hinzu.
+Nom du rôle	Rollenname
+Couleur du nom	Namensfarbe
+Par défaut	Standard
+Huit teintes qui restent lisibles sur tous les thèmes. Le nom des membres prend la couleur de leur rôle coloré le plus haut.	Acht Farbtöne, die in allen Themen lesbar bleiben. Der Name eines Mitglieds übernimmt die Farbe seiner höchsten farbigen Rolle.
+Afficher à part dans la liste des membres	In der Mitgliederliste separat anzeigen
+Les membres qui ont ce rôle forment leur propre rubrique, au-dessus des autres.	Mitglieder mit dieser Rolle bekommen einen eigenen Abschnitt oberhalb der anderen.
+Supprimer ce rôle	Diese Rolle löschen
+Aucun droit ne correspond à cette recherche.	Keine Berechtigung passt zu dieser Suche.
+Réglages du rôle	Rolleneinstellungen
+Chercher un droit	Berechtigung suchen
+Modifications du rôle	Rollenänderungen
+Tout le monde est dans ce rôle, automatiquement.	Alle haben diese Rolle automatisch.
+Ajouter un membre à ce rôle	Mitglied zu dieser Rolle hinzufügen
+Choisis un membre	Wähle ein Mitglied
+Personne n'a ce rôle pour l'instant.	Noch niemand hat diese Rolle.
+Retirer {nom} de ce rôle	{nom} aus dieser Rolle entfernen
+30 minutes	30 Minuten
+1 heure	1 Stunde
+6 heures	6 Stunden
+12 heures	12 Stunden
+1 jour	1 Tag
+7 jours	7 Tage
+Jamais	Nie
+Illimité	Unbegrenzt
+1 utilisation	1 Nutzung
+5 utilisations	5 Nutzungen
+10 utilisations	10 Nutzungen
+25 utilisations	25 Nutzungen
+50 utilisations	50 Nutzungen
+100 utilisations	100 Nutzungen
+Invitation {code} créée.	Einladung {code} erstellt.
+Invitation {code} révoquée.	Einladung {code} widerrufen.
+Les invitations expirées ou épuisées restent listées une semaine. Une invitation révoquée cesse de marcher aussitôt.	Abgelaufene oder aufgebrauchte Einladungen bleiben eine Woche in der Liste. Eine widerrufene Einladung funktioniert sofort nicht mehr.
+Tu ne vois que les invitations que tu as créées. Une invitation révoquée cesse de marcher aussitôt.	Du siehst nur die Einladungen, die du erstellt hast. Eine widerrufene Einladung funktioniert sofort nicht mehr.
+Nouvelle invitation	Neue Einladung
+Expire après	Läuft ab nach
+Nombre d'utilisations	Anzahl der Nutzungen
+Créer une invitation	Einladung erstellen
+Aucune invitation	Keine Einladungen
+Celles que tu crées apparaissent ici.	Die Einladungen, die du erstellst, erscheinen hier.
+Expirée	Abgelaufen
+Épuisée	Aufgebraucht
+un compte supprimé	ein gelöschtes Konto
+{n} utilisation, sans limite	{n} Nutzung, unbegrenzt
+{n} utilisations, sans limite	{n} Nutzungen, unbegrenzt
+{n} utilisation sur {max}	{n} Nutzung von {max}
+{n} utilisations sur {max}	{n} Nutzungen von {max}
+a expiré ({date})	ist abgelaufen ({date})
+a expiré	ist abgelaufen
+plus aucune utilisation	keine Nutzungen mehr übrig
+expire dans {duree}	läuft in {duree} ab
+n'expire jamais	läuft nie ab
+Créée par {nom}	Erstellt von {nom}
+Copie impossible	Kopieren nicht möglich
+Copier le lien de l'invitation {code}	Link der Einladung {code} kopieren
+Copier	Kopieren
+Plus d'actions pour l'invitation {code}	Weitere Aktionen für die Einladung {code}
+Révoquer	Widerrufen
+Une personne bannie ne peut plus rejoindre le serveur avec une invitation. Lever le bannissement lui rend cette possibilité.	Eine gebannte Person kann dem Server nicht mehr mit einer Einladung beitreten. Hebst du den Bann auf, kann sie es wieder.
+Personne n'est banni	Niemand ist gebannt
+Les bannissements apparaîtront ici.	Gebannte Personen erscheinen hier.
+Personnes bannies	Gebannte Personen
+Raison : {raison}	Grund: {raison}
+Aucune raison donnée	Kein Grund angegeben
+Lever le bannissement de {nom}	Bann von {nom} aufheben
+Lever le bannissement	Bann aufheben
+Le propriétaire a tous les droits et ne peut pas être sanctionné. Pour quitter le serveur, il faut d'abord le confier à un autre membre.	Der Besitzer hat alle Berechtigungen und kann nicht sanktioniert werden. Um den Server zu verlassen, musst du ihn zuerst an ein anderes Mitglied übergeben.
+Nouveau propriétaire	Neuer Besitzer
+Transférer…	Übertragen…
+Zone dangereuse	Gefahrenzone
+Supprimer le serveur efface ses salons, ses messages, ses rôles et ses invitations, pour tout le monde. Il n'y a aucun moyen de revenir en arrière.	Wenn du den Server löschst, verschwinden seine Kanäle, Nachrichten, Rollen und Einladungen für alle. Es gibt kein Zurück.
+Supprimer le serveur…	Server löschen…
+Supprimer « {nom} » ?	„{nom}“ löschen?
+Tout ça disparaît pour tout le monde, tout de suite :	All das verschwindet sofort für alle:
+les salons, leurs messages et leurs fichiers,	die Kanäle, ihre Nachrichten und ihre Dateien,
+les rôles et les droits,	die Rollen und Berechtigungen,
+les invitations.	die Einladungen.
+C'est irréversible.	Das lässt sich nicht rückgängig machen.
+Les personnes en vocal sont déconnectées.	Wer gerade in einem Sprachkanal ist, wird getrennt.
+Tape le nom du serveur	Gib den Namen des Servers ein
+Pour confirmer, retape : {nom}	Zum Bestätigen gib noch einmal ein: {nom}
+Supprimer le serveur	Server löschen
+60 secondes	60 Sekunden
+5 minutes	5 Minuten
+10 minutes	10 Minuten
+1 semaine	1 Woche
+Exclure {nom} temporairement	{nom} in den Timeout schicken
+Pendant ce temps, cette personne peut lire le serveur, mais ni écrire, ni réagir, ni envoyer de fichier, ni parler en vocal. L'exclusion se termine toute seule, et tu peux la lever avant.	In dieser Zeit kann die Person den Server lesen, aber weder schreiben noch reagieren, Dateien senden oder im Sprachkanal sprechen. Der Timeout endet von selbst, und du kannst ihn vorher aufheben.
+Durée	Dauer
+Raison (facultatif)	Grund (optional)
+Exclure	In den Timeout schicken
+@{pseudo} · membre depuis {date}	@{pseudo} · Mitglied seit {date}
+Aucun rôle.	Keine Rollen.
+Son rang est égal ou supérieur au tien : tu ne peux pas changer ses rôles.	Der Rang ist mindestens so hoch wie deiner: Du kannst die Rollen nicht ändern.
+
+# Icône du serveur (icon_picker.rs)
+Cette animation pèse trop lourd : {taille} Mo au plus.	Diese Animation ist zu groß: höchstens {taille} MB.
+Une seule image à la fois : seul le premier fichier a été pris.	Immer nur ein Bild: Es wurde nur die erste Datei übernommen.
+Choisir une image	Bild auswählen
+Retirer l'icône	Symbol entfernen
+PNG, JPEG, WebP ou GIF. Une image fixe est recadrée en carré ; une animation reste telle quelle et pèse {taille} Mo au plus.	PNG, JPEG, WebP oder GIF. Ein Standbild wird quadratisch zugeschnitten; eine Animation bleibt unverändert und darf höchstens {taille} MB groß sein.
+Dépose l'image pour l'utiliser	Bild hier ablegen, um es zu verwenden
+
+# Créer un serveur (new_guild.rs)
+Serveur de {nom}	Server von {nom}
+Le serveur est créé, mais son icône n'a pas pu être envoyée : {erreur} Tu peux la choisir dans les paramètres du serveur, rubrique « Vue d'ensemble ».	Der Server wurde erstellt, aber sein Symbol konnte nicht hochgeladen werden: {erreur} Du kannst es in den Servereinstellungen unter „Übersicht“ auswählen.
+Colle un lien ou un code d'invitation.	Füge einen Einladungslink oder Einladungscode ein.
+Crée ton serveur	Erstelle deinen Server
+Un espace pour ta bande, avec des salons textuels et vocaux. Choisis un point de départ : tu pourras tout changer ensuite.	Ein Ort für deine Crew, mit Text- und Sprachkanälen. Such dir einen Startpunkt aus: Danach kannst du alles ändern.
+Modèle	Vorlage
+Sera créé :	Wird erstellt:
+Nom du serveur	Servername
+Icône	Symbol
+(facultative)	(optional)
+Icône choisie	Gewähltes Symbol
+Pas d'icône : les initiales du serveur	Kein Symbol: die Initialen des Servers
+Créer le serveur	Server erstellen
+Création…	Wird erstellt…
+Tu as déjà une invitation ?	Du hast schon eine Einladung?
+Rejoindre	Beitreten
+
+# Vue d'ensemble (overview.rs)
+Icône mise à jour.	Symbol aktualisiert.
+Nom du serveur enregistré.	Servername gespeichert.
+Icône du serveur	Serversymbol
+Elle remplace les initiales du serveur dans la liste de gauche, chez tous ses membres.	Es ersetzt die Initialen des Servers in der Liste links, bei allen Mitgliedern.
+Icône actuelle du serveur	Aktuelles Serversymbol
+
+# Modèles de serveur (kraken-core/src/templates.rs) : noms et descriptions des cartes, traduits à l'affichage ;
+# les noms des catégories et des salons viennent du noyau (`Label`), dans la langue choisie
+Vide	Leer
+Communauté	Community
+Jeux	Spiele
+Études	Lernen
+Un salon textuel et un vocal, à compléter.	Ein Text- und ein Sprachkanal zum Ausbauen.
+Annonces, règles et entraide, pour un club ou un projet.	Ankündigungen, Regeln und Hilfe für einen Club oder ein Projekt.
+Trouver des partenaires, parler pendant la partie.	Leute zum Mitspielen finden, beim Spielen reden.
+Cours, devoirs et salles de travail vocales.	Kurse, Hausaufgaben und Lernräume im Sprachkanal.
+Discuter, partager ses photos, se retrouver en vocal.	Quatschen, Fotos teilen, sich im Sprachkanal treffen.

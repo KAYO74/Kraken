@@ -1,0 +1,238 @@
+# Catalogue allemand (de), groupe « app ».
+# Une ligne « français<TAB>allemand » par texte ; règles : ../README.md (« Ajouter une langue », « Conventions d'allemand »).
+# Mêmes {variables} que le français, tutoiement (« du »), guillemets „…“, pas d'espace avant « : ? ! ; », chiffres latins.
+# Un texte absent d'ici s'affiche en anglais (repli), puis en français.
+# Fichier complet : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui manquerait après un ajout du code.
+
+# Écrans pas encore construits (app.rs)
+Fils et forum	Threads und Forum
+Recherche de messages	Nachrichtensuche
+Explorer les serveurs	Server entdecken
+Profil	Profil
+
+# Amis : onglets, liste, demandes, ajout (home.rs)
+En attente	Ausstehend
+Bloqués	Blockiert
+Ajouter un ami	Freunde hinzufügen
+à accepter ou refuser	zum Annehmen oder Ablehnen
+Filtrer les amis	Freunde filtern
+Chercher	Suchen
+Chercher parmi tes amis	Unter deinen Freunden suchen
+Personne en ligne pour l'instant	Gerade ist niemand online
+Tes amis apparaîtront ici dès qu'ils se connectent.	Deine Freunde erscheinen hier, sobald sie online sind.
+Aucune demande en attente	Keine ausstehenden Anfragen
+Les demandes reçues et envoyées s'affichent ici.	Erhaltene und gesendete Anfragen erscheinen hier.
+Tu n'as bloqué personne	Du hast niemanden blockiert
+Un compte bloqué ne peut plus t'écrire en privé ni te demander en ami.	Ein blockiertes Konto kann dir keine Direktnachrichten mehr schreiben und keine Freundschaftsanfrage mehr senden.
+Pas encore d'amis	Noch keine Freunde
+Ajoute quelqu'un avec son pseudo pour commencer.	Füge jemanden über den Benutzernamen hinzu, um loszulegen.
+Activité	Aktivität
+Où sont tes amis	Wo deine Freunde sind
+Aucun salon vocal occupé	Keine Sprachkanäle in Benutzung
+Les salons vocaux où tes amis discutent s'afficheront ici, pour les rejoindre en un clic.	Sprachkanäle, in denen sich deine Freunde unterhalten, erscheinen hier, damit du mit einem Klick beitreten kannst.
+Demande reçue	Anfrage erhalten
+Demande envoyée	Anfrage gesendet
+Bloqué	Blockiert
+Message	Nachricht
+Appeler {nom}	{nom} anrufen
+Appeler	Anrufen
+Retirer de tes amis	Aus deinen Freunden entfernen
+Bloquer {nom}	{nom} blockieren
+Bloquer	Blockieren
+Accepter la demande de {nom}	Anfrage von {nom} annehmen
+Refuser la demande de {nom}	Anfrage von {nom} ablehnen
+Annuler la demande à {nom}	Anfrage an {nom} abbrechen
+Débloquer {nom}	Blockierung von {nom} aufheben
+{nom} t'avait déjà demandé : vous êtes maintenant amis.	{nom} hatte dir schon eine Anfrage geschickt. Jetzt seid ihr befreundet.
+Demande envoyée à {nom} (@{pseudo}). Elle apparaît dans « En attente ».	Anfrage an {nom} (@{pseudo}) gesendet. Sie erscheint unter „Ausstehend“.
+Tape son pseudo KRAKEN, celui qui commence par @ sous son nom.	Gib den KRAKEN-Benutzernamen der Person ein, den du unter ihrem Namen siehst und der mit @ beginnt.
+pseudo	Benutzername
+Pseudo de ton ami	Benutzername der Person
+Envoyer la demande	Anfrage senden
+
+# Carte de profil et Réglages › Mon profil (profile.rs)
+Lire l'animation	Animation abspielen
+À propos	Über mich
+Membre depuis	Mitglied seit
+Sur ce serveur depuis	Auf diesem Server seit
+Profil de {nom}	Profil von {nom}
+Vous êtes maintenant amis.	Jetzt seid ihr befreundet.
+Demande d'ami envoyée.	Freundschaftsanfrage gesendet.
+Compte débloqué.	Blockierung aufgehoben.
+Modifier mon profil	Mein Profil bearbeiten
+Ajouter en ami	Zu Freunden hinzufügen
+Accepter la demande	Anfrage annehmen
+Ami	Befreundet
+Envoyer un message	Nachricht senden
+Fermer le profil (Échap)	Profil schließen (Esc)
+Ce que les autres voient	Das sehen andere
+Nom affiché	Anzeigename
+Ton pseudo unique @{pseudo} ne change pas ici : il reste écrit en dessous.	Dein eindeutiger Benutzername @{pseudo} ändert sich hier nicht: Er steht weiterhin darunter.
+Pronoms	Pronomen
+elle/elles, il/lui, iel/iels…	sie/ihr, er/ihm, they/them…
+Facultatif. {n} / {max}	Optional. {n} / {max}
+À propos de toi	Über dich
+Quelques mots sur toi, tes jeux, ta façon de discuter…	Ein paar Worte über dich, deine Spiele, deine Art zu chatten…
+Profil enregistré.	Profil gespeichert.
+Photo et bannière	Foto und Banner
+Aperçu de ta carte	Vorschau deiner Profilkarte
+
+# Photo, bannière et fenêtre de recadrage (avatar.rs)
+Photo enregistrée.	Foto gespeichert.
+Bannière enregistrée.	Banner gespeichert.
+Emoji ajouté.	Emoji hinzugefügt.
+Photo retirée.	Foto entfernt.
+Bannière retirée.	Banner entfernt.
+Emoji retiré.	Emoji entfernt.
+Changer la photo	Foto ändern
+PNG, JPEG, WebP ou GIF, {n} Mo max. Un GIF ou un WebP animé reste animé (il n'est pas recadré).	PNG, JPEG, WebP oder GIF, höchstens {n} MB. Ein animiertes GIF oder WebP bleibt animiert (es wird nicht zugeschnitten).
+Ta bannière actuelle	Dein aktuelles Banner
+Pas de bannière	Kein Banner
+Changer la bannière	Banner ändern
+Retirer la bannière	Banner entfernen
+PNG, JPEG, WebP ou GIF, {n} Mo max, de forme large (3 pour 1). Un GIF ou un WebP animé reste animé (il n'est pas recadré).	PNG, JPEG, WebP oder GIF, höchstens {n} MB, im Breitformat (3 zu 1). Ein animiertes GIF oder WebP bleibt animiert (es wird nicht zugeschnitten).
+Impossible de préparer l'image. Essaie-en une autre.	Das Bild konnte nicht vorbereitet werden. Versuche ein anderes.
+Recadrer ta photo	Dein Foto zuschneiden
+Recadrer ta bannière	Dein Banner zuschneiden
+Recadrer ton emoji	Dein Emoji zuschneiden
+Recadrer l'icône	Das Symbol zuschneiden
+Moyen	Mittel
+Dans un message	In einer Nachricht
+Dans la liste	In der Liste
+Zone de recadrage : les flèches déplacent l'image, + et − zooment.	Zuschneidebereich: Mit den Pfeiltasten verschiebst du das Bild, mit + und − zoomst du.
+Zoom	Zoom
+Glisse l'image pour la placer, ou utilise les flèches du clavier. Le cadre montre ce qui sera gardé.	Ziehe das Bild an die richtige Stelle oder nutze die Pfeiltasten. Der Rahmen zeigt, was erhalten bleibt.
+Appliquer	Anwenden
+
+# Choisir des amis, groupes et confirmations (social.rs)
+Groupe vide	Leere Gruppe
+Ajouter au groupe	Zur Gruppe hinzufügen
+Ouvrir la conversation	Unterhaltung öffnen
+Créer le groupe	Gruppe erstellen
+Un groupe réunit {max} personnes au plus : encore {room} place(s).	Eine Gruppe kann höchstens {max} Personen haben: noch {room} Platz/Plätze frei.
+Un ami pour un message privé, plusieurs pour un groupe ({max} au plus).	Eine Person für eine Direktnachricht, mehrere für eine Gruppe (höchstens {max}).
+Chercher un ami	Nach Freunden suchen
+Tes amis	Deine Freunde
+Aucun ami ne correspond, ou ils sont déjà tous dans ce groupe.	Keine Freunde gefunden, oder alle sind schon in dieser Gruppe.
+Ajoute d'abord des amis, depuis l'onglet « Ajouter un ami ».	Füge zuerst Freunde hinzu, über den Tab „Freunde hinzufügen“.
+{n} sur {room} choisi(s)	{n} von {room} ausgewählt
+Nom du groupe (facultatif)	Gruppenname (optional)
+Les prénoms des membres, sinon	Die Vornamen der Mitglieder, falls leer
+Nom du groupe	Gruppenname
+Laisse vide pour afficher les prénoms des membres. Tout le groupe voit le changement.	Lass das Feld leer, um die Vornamen der Mitglieder anzuzeigen. Die ganze Gruppe sieht die Änderung.
+Retirer {nom} de tes amis ?	{nom} aus deinen Freunden entfernen?
+Vos messages privés restent. Pour redevenir amis, l'un de vous devra renvoyer une demande.	Eure Direktnachrichten bleiben erhalten. Um wieder befreundet zu sein, muss eine Person von euch erneut eine Anfrage senden.
+Bloquer {nom} ?	{nom} blockieren?
+Vous ne serez plus amis. Ce compte ne pourra plus t'écrire en privé ni te demander en ami, et ses messages seront repliés dans les salons que vous partagez. Il n'en est pas prévenu.	Dann seid ihr nicht mehr befreundet. Dieses Konto kann dir keine Direktnachrichten mehr schreiben und keine Freundschaftsanfrage mehr senden, und seine Nachrichten werden in euren gemeinsamen Kanälen eingeklappt. Es wird nicht benachrichtigt.
+Quitter « {nom} » ?	„{nom}“ verlassen?
+Tu ne verras plus ce groupe ni ses messages. Pour y revenir, il faudra qu'un membre t'y ajoute.	Du siehst diese Gruppe und ihre Nachrichten nicht mehr. Um zurückzukehren, muss dich ein Mitglied wieder hinzufügen.
+Retirer {nom} du groupe ?	{nom} aus der Gruppe entfernen?
+Cette personne ne verra plus « {groupe} » ni ses messages. Tu pourras l'y ajouter de nouveau plus tard.	Diese Person sieht „{groupe}“ und die Nachrichten darin nicht mehr. Du kannst sie später wieder hinzufügen.
+Tu es le propriétaire de ce serveur : tu ne peux pas le quitter tant qu'il t'appartient. Transfère-le d'abord à un autre membre, puis tu pourras partir.	Dir gehört dieser Server, daher kannst du ihn nicht verlassen. Übertrage ihn zuerst an ein anderes Mitglied, dann kannst du gehen.
+Tu ne verras plus ce serveur, ses salons ni ses membres. Pour y revenir, il te faudra une nouvelle invitation, et tes rôles ne te seront pas rendus.	Du siehst diesen Server, seine Kanäle und seine Mitglieder nicht mehr. Um zurückzukehren, brauchst du eine neue Einladung, und deine Rollen bekommst du nicht zurück.
+Expulser {nom} ?	{nom} rauswerfen?
+Cette personne sort du serveur et perd ses rôles, mais ses messages restent. Elle pourra revenir avec une invitation.	Diese Person verlässt den Server und verliert ihre Rollen, ihre Nachrichten bleiben aber erhalten. Sie kann mit einer Einladung zurückkehren.
+Bannir {nom} ?	{nom} bannen?
+Cette personne sort du serveur et ne pourra plus le rejoindre par invitation, tant que tu ne l'auras pas débannie dans les réglages du serveur.	Diese Person verlässt den Server und kann ihm nicht mehr per Einladung beitreten, bis du den Bann in den Servereinstellungen aufhebst.
+Supprimer le rôle « {nom} » ?	Die Rolle „{nom}“ löschen?
+Tous ceux qui l'ont le perdent, avec les droits qu'il leur donnait. Cette action est définitive.	Alle, die diese Rolle haben, verlieren sie samt den dazugehörigen Berechtigungen. Das lässt sich nicht rückgängig machen.
+Supprimer le rôle	Rolle löschen
+Supprimer la catégorie « {nom} » ?	Die Kategorie „{nom}“ löschen?
+Les salons qu'elle contient ne sont pas supprimés : ils sortent de la catégorie.{suite} Cette action est définitive.	Die enthaltenen Kanäle werden nicht gelöscht: Sie verlassen die Kategorie.{suite} Das lässt sich nicht rückgängig machen.
+Ses salons gardent les mêmes règles d'accès.	Die Kanäle behalten dieselben Zugriffsregeln.
+Supprimer le salon vocal « {nom} » ?	Den Sprachkanal „{nom}“ löschen?
+Le salon disparaît pour tout le monde, et les personnes qui s'y trouvent sont déconnectées. Cette action est définitive.	Der Kanal verschwindet für alle, und die Personen darin werden getrennt. Das lässt sich nicht rückgängig machen.
+Supprimer #{nom} ?	#{nom} löschen?
+Le salon et tous ses messages, avec leurs fichiers, sont supprimés pour tout le monde. Cette action est définitive.	Der Kanal und alle seine Nachrichten werden samt Dateien für alle gelöscht. Das lässt sich nicht rückgängig machen.
+Donner « {serveur} » à {nom} ?	„{serveur}“ an {nom} übergeben?
+Cette personne devient propriétaire : elle aura tous les droits, et tu seras un membre comme un autre. Tu ne pourras pas le reprendre sans son accord.	Diese Person übernimmt den Server: Sie erhält alle Berechtigungen, und du bist ein Mitglied wie alle anderen. Ohne ihre Zustimmung kannst du ihn nicht zurückholen.
+Supprimer ses messages	Nachrichten der Person löschen
+Rien{contexte}	Nichts{contexte}
+24 h{contexte}	24 Std.{contexte}
+
+# Réglages : compte, mot de passe, comptes bloqués, notifications (settings.rs)
+Déconnexion	Abmelden
+Ferme la session sur cet appareil.	Beendet die Sitzung auf diesem Gerät.
+Se déconnecter partout	Überall abmelden
+Tous les appareils	Alle Geräte
+Ferme toutes tes sessions, y compris celle-ci. Utile après la perte d'un appareil.	Beendet alle deine Sitzungen, auch diese. Praktisch, wenn du ein Gerät verloren hast.
+Supprimer le compte	Konto löschen
+Ton compte est fermé tout de suite et effacé au bout de 14 jours. Tes messages restent, signés « compte supprimé ».	Dein Konto wird sofort geschlossen und nach 14 Tagen gelöscht. Deine Nachrichten bleiben erhalten, signiert mit „Gelöschtes Konto“.
+Supprimer ton compte ?	Dein Konto löschen?
+Tu ne pourras plus te connecter. Confirme avec ton mot de passe.	Du kannst dich danach nicht mehr anmelden. Bestätige mit deinem Passwort.
+Supprimer définitivement	Endgültig löschen
+Ton pseudo est maintenant @{pseudo}.	Dein Benutzername ist jetzt @{pseudo}.
+Ton pseudo actuel est @{pseudo}. C'est celui que tes amis tapent pour t'ajouter : minuscules, chiffres, points et tirets bas. Tu peux le changer {n} fois par heure au plus.	Dein aktueller Benutzername ist @{pseudo}. Diesen Namen tippen deine Freunde ein, um dich hinzuzufügen: Kleinbuchstaben, Ziffern, Punkte und Unterstriche. Du kannst ihn höchstens {n} Mal pro Stunde ändern.
+Nouveau pseudo	Neuer Benutzername
+Mot de passe actuel	Aktuelles Passwort
+Changer le pseudo	Benutzernamen ändern
+Un message de confirmation est parti vers {adresse}. Ton adresse actuelle reste valable jusqu'à ce que tu ouvres le lien.	Eine Bestätigungs-E-Mail wurde an {adresse} geschickt. Deine aktuelle Adresse bleibt gültig, bis du den Link öffnest.
+Adresse enregistrée.	Adresse gespeichert.
+Chargement de ton adresse…	Deine Adresse wird geladen…
+Ton adresse actuelle est {adresse}.	Deine aktuelle Adresse ist {adresse}.
+Ton adresse actuelle est {adresse} (pas encore confirmée).	Deine aktuelle Adresse ist {adresse} (noch nicht bestätigt).
+Aucune adresse n'est enregistrée.	Es ist keine Adresse gespeichert.
+En attente de confirmation : {adresse}. Ouvre le lien reçu à cette adresse ; d'ici là, l'ancienne reste valable.	Warten auf Bestätigung: {adresse}. Öffne den Link, der an diese Adresse geschickt wurde. Bis dahin bleibt die alte gültig.
+Nouvelle adresse e-mail	Neue E-Mail-Adresse
+Changer l'adresse	Adresse ändern
+Mot de passe changé. Tes autres appareils ont été déconnectés.	Passwort geändert. Deine anderen Geräte wurden abgemeldet.
+8 caractères au moins. Tes autres appareils seront déconnectés ; celui-ci reste ouvert.	Mindestens 8 Zeichen. Deine anderen Geräte werden abgemeldet; dieses bleibt angemeldet.
+Changer le mot de passe	Passwort ändern
+Comptes bloqués	Blockierte Konten
+Un compte bloqué ne peut plus t'écrire en privé ni te demander en ami ; ses messages sont repliés dans les salons que vous partagez. Il n'est prévenu de rien.	Ein blockiertes Konto kann dir keine Direktnachrichten mehr schreiben und keine Freundschaftsanfrage mehr senden; seine Nachrichten werden in euren gemeinsamen Kanälen eingeklappt. Es erfährt nichts davon.
+Personne n'est bloqué	Niemand ist blockiert
+Bloque quelqu'un depuis ta liste d'amis ou ses demandes.	Blockiere jemanden über deine Freundesliste oder über deine Anfragen.
+Ton navigateur a refusé. Autorise les notifications pour ce site dans ses réglages, puis réessaie.	Dein Browser hat abgelehnt. Erlaube Benachrichtigungen für diese Website in den Einstellungen des Browsers und versuche es dann erneut.
+Notifications sur le bureau	Desktop-Benachrichtigungen
+Quand KRAKEN n'est pas au premier plan : tes mentions, tes messages privés, et tout salon réglé sur « Tous les messages ». Un clic ouvre la conversation. Réglage propre à cet appareil.	Wenn KRAKEN nicht im Vordergrund ist: deine Erwähnungen, deine Direktnachrichten und jeder Kanal, der auf „Alle Nachrichten“ steht. Ein Klick öffnet die Unterhaltung. Diese Einstellung gilt nur für dieses Gerät.
+Ce navigateur (ou cette appli) ne sait pas afficher de notifications système. Les badges et le compteur de l'onglet restent là.	Dieser Browser (oder diese App) kann keine Systembenachrichtigungen anzeigen. Die Badges und der Zähler im Tab funktionieren weiterhin.
+Les notifications sont bloquées pour ce site dans ton navigateur.	Benachrichtigungen sind für diese Website in deinem Browser blockiert.
+Par serveur et par salon	Pro Server und pro Kanal
+Clic droit sur un serveur, un salon ou une conversation (ou Maj+F10 au clavier) : « Marquer comme lu », sourdine de 15 minutes à sans fin, et ce qui te prévient : tous les messages, les mentions seulement, ou rien. La cloche en haut d'un salon ou de la liste des salons ouvre les mêmes réglages. Ils te suivent sur tous tes appareils.	Rechtsklick auf einen Server, einen Kanal oder eine Unterhaltung (oder Umschalt+F10 auf der Tastatur): „Als gelesen markieren“, Stummschaltung von 15 Minuten bis unbegrenzt und was dich benachrichtigt: alle Nachrichten, nur Erwähnungen oder nichts. Die Glocke oben in einem Kanal oder in der Kanalliste öffnet dieselben Einstellungen. Sie folgen dir auf all deinen Geräten.
+Le nombre de mentions en attente s'affiche aussi dans le titre de l'onglet. Alt+Maj+↑ et Alt+Maj+↓ mènent au salon non lu précédent ou suivant.	Die Anzahl ausstehender Erwähnungen steht auch im Titel des Tabs. Mit Alt+Umschalt+↑ und Alt+Umschalt+↓ springst du zum vorherigen oder nächsten ungelesenen Kanal.
+
+# Pages légales : Confidentialité et Conditions d'utilisation (legal.rs)
+Connexion	Anmeldung
+Qui s'occupe de tes données	Wer sich um deine Daten kümmert
+L'exploitant de cette instance KRAKEN, c'est-à-dire la personne ou l'organisation qui l'héberge. Contact :	Der Betreiber dieser KRAKEN-Instanz, also die Person oder Organisation, die sie hostet. Kontakt:
+non renseigné par l'exploitant	vom Betreiber nicht angegeben
+Ce qui est enregistré	Was gespeichert wird
+Ton adresse e-mail, ton pseudo, ton nom affiché, ton mot de passe sous forme hachée (argon2id, jamais en clair), tes serveurs et tes messages, et tes sessions (navigateur et date de connexion).	Deine E-Mail-Adresse, dein Benutzername, dein Anzeigename, dein Passwort als Hash (argon2id, nie im Klartext), deine Server und Nachrichten sowie deine Sitzungen (Browser und Anmeldedatum).
+Ce qui ne l'est pas	Was nicht gespeichert wird
+Ni publicité, ni traceur, ni mesure d'audience, ni numéro de téléphone, ni pièce d'identité. Ton adresse IP sert seulement à limiter les essais de connexion : elle reste en mémoire une minute et n'est pas enregistrée.	Keine Werbung, keine Tracker, keine Reichweitenmessung, keine Telefonnummer, kein Ausweisdokument. Deine IP-Adresse dient nur dazu, Anmeldeversuche zu begrenzen: Sie bleibt eine Minute im Arbeitsspeicher und wird nicht gespeichert.
+Cookies	Cookies
+Un seul, indispensable : celui qui garde ta session ouverte.	Nur eines, und es ist unverzichtbar: Es hält deine Sitzung offen.
+Sous-traitants	Dienstleister
+L'hébergeur du serveur et, si les e-mails sont activés, le service d'envoi choisis par l'exploitant.	Der Hosting-Anbieter des Servers und, falls E-Mails aktiviert sind, der Versanddienst, beide vom Betreiber ausgewählt.
+Durée et suppression	Speicherdauer und Löschung
+Tes données restent tant que ton compte existe. Depuis Réglages, Compte et sécurité, tu peux le supprimer : il est fermé tout de suite et effacé au bout de 14 jours. Tes messages restent dans les salons, signés « compte supprimé ».	Deine Daten bleiben, solange dein Konto existiert. Unter Einstellungen, Konto und Sicherheit kannst du es löschen: Es wird sofort geschlossen und nach 14 Tagen gelöscht. Deine Nachrichten bleiben in den Kanälen erhalten, signiert mit „Gelöschtes Konto“.
+Tes droits	Deine Rechte
+Accès, rectification, effacement, portabilité, opposition : écris au contact ci-dessus. Tu peux aussi saisir l'autorité de protection des données de ton pays (la CNIL en France).	Auskunft, Berichtigung, Löschung, Übertragbarkeit, Widerspruch: Schreibe an den oben genannten Kontakt. Du kannst dich auch an die Datenschutzbehörde deines Landes wenden (in Frankreich die CNIL).
+Conditions d'utilisation	Nutzungsbedingungen
+Le service	Der Dienst
+KRAKEN est gratuit, sans formule payante. Il est fourni tel quel, sans garantie de disponibilité.	KRAKEN ist kostenlos, ohne Bezahlmodell. Es wird wie besehen bereitgestellt, ohne Garantie für die Verfügbarkeit.
+Logiciel libre	Freie Software
+KRAKEN est publié sous licence AGPL-3.0.	KRAKEN wird unter der AGPL-3.0-Lizenz veröffentlicht.
+Code source de cette instance	Quellcode dieser Instanz
+Règles	Regeln
+Pas de contenu illégal, de harcèlement, de menaces, de spam ni de partage de données d'autrui sans son accord. Tu dois avoir l'âge que la loi de ton pays demande pour t'inscrire seul (15 ans en France).	Keine illegalen Inhalte, keine Belästigung, keine Drohungen, kein Spam und keine Weitergabe fremder Daten ohne Zustimmung. Du musst nach dem Gesetz deines Landes alt genug sein, um dich allein zu registrieren (in Frankreich 15 Jahre).
+Modération	Moderation
+Chaque serveur est modéré par ses propriétaires. L'exploitant de l'instance peut retirer un contenu ou fermer un compte qui enfreint ces règles ou la loi.	Jeder Server wird von seinen Besitzern moderiert. Der Betreiber der Instanz kann Inhalte entfernen oder ein Konto schließen, das gegen diese Regeln oder das Gesetz verstößt.
+Contact	Kontakt
+Non renseigné par l'exploitant.	Vom Betreiber nicht angegeben.
+
+# Mise à jour de l'appli de bureau (update.rs)
+Mise à jour v{v} disponible	Update v{v} verfügbar
+Téléchargement… {p} %	Wird heruntergeladen… {p} %
+Téléchargement…	Wird heruntergeladen…
+Installation…	Wird installiert…
+Redémarrage…	Wird neu gestartet…
+Couper l'appel et installer	Anruf beenden und installieren
+Installer et redémarrer	Installieren und neu starten
+Mise à jour	Update
+KRAKEN v{v} est disponible	KRAKEN v{v} ist verfügbar
+Nouveautés	Neuigkeiten
+Tu es en appel : le redémarrage va le couper.	Du bist in einem Anruf: Der Neustart beendet ihn.
+Avancement de la mise à jour	Update-Fortschritt
+Plus tard	Später
+Mettre à jour vers v{v}	Auf v{v} aktualisieren

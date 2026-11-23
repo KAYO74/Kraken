@@ -1138,3 +1138,46 @@ i.k-presence--invisible::before { border: calc(var(--dot) / 8) dotted var(--stat
 :root[dir="rtl"] :is(.app-ellipsis, .k-dm > div, .app-guild-head h2, .app-row b, .app-tile-name, .app-sw-name, .app-sw-detail) > bdi:first-child,
 :root[dir="rtl"] .app-ellipsis > b > bdi:first-child {
   display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+
+/* Allemand : de longs mots composés (« Benachrichtigungseinstellungen »). Le texte courant se coupe en fin de ligne avec un trait d'union
+   (césure automatique d'après <html lang="de">, donc seulement dans cette langue) ; jamais les champs de saisie, le code, les pseudos ni les
+   liens. Les libellés étroits (boutons, onglets, pastilles, navigation) passent à la ligne n'importe où plutôt que de déborder. Une première
+   passe : le designer regarde les débordements en rendu, rien d'autre n'est refait ici. */
+:lang(de) :is(p, li, dd, label, legend, summary, h1, h2, h3, h4, small, figcaption, .k-label, .k-hint, .app-hint, .app-card-label, .k-empty) {
+  hyphens: auto; }
+:lang(de) :is(code, kbd, samp, pre, input, textarea, select, option, a[href], time, bdi, .app-mention, .app-code, .app-emoji-code) { hyphens: manual; }
+/* Un onglet garde son mot entier (la rangée passe à la ligne plutôt que de l'écraser) ; les boutons, pastilles et entrées de navigation ne
+   se coupent qu'en dernier recours, quand le mot est plus large que sa boîte. Défiler ne convient pas : la flèche du clavier ne fait
+   pas avancer la rangée. La barre d'en-tête (DM, amis) garde sa ligne. */
+:lang(de) .k-tab { white-space: nowrap; overflow-wrap: normal; flex: none; }
+:lang(de) :is(.k-btn, .k-badge, .k-navitem, .app-chip) { overflow-wrap: break-word; }
+:lang(de) .k-tabs:not(.app-header .k-tabs) { flex-wrap: wrap; row-gap: var(--space-1); }
+/* Un champ de choix à côté de son bouton (« Wähle ein Mitglied » + « Hinzufügen ») passe au-dessus du bouton quand la place manque. */
+:lang(de) .app-add-row { flex-wrap: wrap; }
+:lang(de) .app-add-row .k-select { flex-basis: 16rem; }
+/* Un bouton à texte (ni icône, ni lien) peut passer sur plusieurs lignes ; seul, il garde ses 40 px d'avant. */
+:lang(de) .k-btn:not(.k-btn--icon, .k-btn--link) { white-space: normal; height: auto; min-height: 40px; padding-block: var(--space-2);
+  line-height: 1.25; text-align: center; }
+:lang(de) .k-btn--sm:not(.k-btn--icon, .k-btn--link) { min-height: 32px; padding-block: var(--space-1); }
+:lang(de) .k-btn--lg:not(.k-btn--icon, .k-btn--link) { min-height: 48px; }
+@media (max-width: 639px), (pointer: coarse) {
+  :lang(de) :is(.app-pins-close, .app-pin-actions .k-btn) { min-height: var(--size-option-row-mobile); }
+}
+/* Raccourcis clavier : l'action et ses touches passent sur deux lignes quand le mot allemand (« Stummschaltung ») ne tient pas à côté d'elles. */
+:lang(de) .app-keys .k-shortcut { flex-wrap: wrap; }
+:lang(de) .app-keys dt { overflow-wrap: break-word; }
+:lang(de) .app-keys dd { margin-inline-start: auto; }
+/* Un réglage dont le contrôle est un choix ou un bouton (« Langsammodus » + sa liste) l'empile sous son étiquette sur un écran étroit :
+   à côté, la liste prend la place et l'étiquette allemande se coupe en plein mot. Un interrupteur reste à côté de la sienne. */
+@media (max-width: 639px) {
+  :lang(de) .k-setting:has(> :is(.k-select, .k-btn)) { grid-template-columns: minmax(0, 1fr); }
+  :lang(de) .k-setting > .k-select { grid-row: auto; grid-column: 1; justify-self: stretch; }
+  :lang(de) .k-setting > .k-btn { grid-row: auto; grid-column: 1; justify-self: start; }
+}
+/* Le titre d'un écran de réglages (« Benachrichtigungen », 18 lettres) peut rétrécir à côté du bouton de fermeture, se coupe en dernier
+   recours plutôt que de déborder, et prend la taille au-dessous sur un écran étroit : à texte 20 sur 390 px, la marge était de 2 px. */
+:lang(de) .app-settings-top { gap: var(--space-3); }
+:lang(de) .app-settings-top h2 { min-inline-size: 0; overflow-wrap: anywhere; }
+@media (max-width: 639px) {
+  :lang(de) .app-settings-top h2 { font-size: var(--text-lg-size); }
+}

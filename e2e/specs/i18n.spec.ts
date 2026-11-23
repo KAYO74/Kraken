@@ -55,8 +55,8 @@ test('I18N-H1 français par défaut : connexion et inscription, <html lang="fr" 
   const language = page.getByRole('combobox', { name: 'Langue' });
   await expect(language).toHaveValue('auto');
   // « Langue de l'appareil », puis chaque langue dans son écriture, avec son attribut `lang`.
-  expect(await language.locator('option').allTextContents()).toEqual(["Langue de l'appareil", 'Français', 'English', 'فارسی']);
-  expect(await language.locator('option').evaluateAll((o) => o.map((x) => x.getAttribute('lang')))).toEqual([null, 'fr', 'en', 'fa']);
+  expect(await language.locator('option').allTextContents()).toEqual(["Langue de l'appareil", 'Français', 'English', 'فارسی', 'Deutsch']);
+  expect(await language.locator('option').evaluateAll((o) => o.map((x) => x.getAttribute('lang')))).toEqual([null, 'fr', 'en', 'fa', 'de']);
   await expect(language).toHaveAccessibleDescription('Le changement recharge la page.');
   await expect(page.getByText('Le changement recharge la page.')).toBeVisible();
   await a11y(page);
@@ -67,13 +67,14 @@ test('I18N-H1 français par défaut : connexion et inscription, <html lang="fr" 
 });
 
 test('I18N-H2 la langue du navigateur sans traduction retombe sur le français ; en-GB suit l’anglais et garde ses usages', async ({ browser, baseURL }) => {
-  const de = await browser.newContext({ baseURL, locale: 'de-DE' });
-  const german = await de.newPage();
-  await german.goto('/login');
-  await expect(html(german)).toHaveAttribute('lang', 'fr');
-  await expect(german.getByRole('heading', { name: 'Bon retour sous la surface' })).toBeVisible();
-  await de.close();
-  // Plusieurs langues : la première prise en charge (ici de, puis en).
+  // Le néerlandais n'est pas pris en charge (l'allemand l'est depuis la 0.25.0 : voir `i18n-de.spec.ts`).
+  const nl = await browser.newContext({ baseURL, locale: 'nl-NL' });
+  const dutch = await nl.newPage();
+  await dutch.goto('/login');
+  await expect(html(dutch)).toHaveAttribute('lang', 'fr');
+  await expect(dutch.getByRole('heading', { name: 'Bon retour sous la surface' })).toBeVisible();
+  await nl.close();
+  // Plusieurs langues : la première prise en charge (ici en-GB).
   const multi = await browser.newContext({ baseURL, locale: 'en-GB' });
   const gb = await multi.newPage();
   await gb.goto('/login');
@@ -109,7 +110,7 @@ test.describe('navigateur en anglais', () => {
     await expect(page.getByRole('link', { name: 'Terms' })).toBeVisible();
     const language = page.getByRole('combobox', { name: 'Language' });
     await expect(language).toHaveValue('auto');
-    expect(await language.locator('option').allTextContents()).toEqual(['Device language', 'Français', 'English', 'فارسی']);
+    expect(await language.locator('option').allTextContents()).toEqual(['Device language', 'Français', 'English', 'فارسی', 'Deutsch']);
     await expect(language).toHaveAccessibleDescription('Changing it reloads the page.');
     await a11y(page);
     // Un message du serveur (français, statique) s'affiche traduit.
@@ -180,7 +181,7 @@ test.describe('navigateur en anglais', () => {
     const language = dialog.getByRole('combobox', { name: 'Language' });
     await expect(language).toHaveValue('auto');
     await expect(language).toHaveAccessibleDescription('Changing it reloads the page.');
-    expect(await language.locator('option').allTextContents()).toEqual(['Device language', 'Français', 'English', 'فارسی']);
+    expect(await language.locator('option').allTextContents()).toEqual(['Device language', 'Français', 'English', 'فارسی', 'Deutsch']);
     await expect(dialog.getByRole('group', { name: 'Time format' })).toBeVisible();
     // Le navigateur est anglais, l'heure automatique est celle de l'anglais américain.
     await expect(said(page, 'Example').first()).toHaveText('Example: 2:30 PM');

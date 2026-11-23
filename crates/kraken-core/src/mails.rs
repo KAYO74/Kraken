@@ -5,7 +5,9 @@
 //! Le **français** est le texte d'origine (jamais modifié ici) ; l'anglais en suit le contenu. Le **persan** est neutre et
 //! poli (forme « شما » sous-entendue, impératifs polis), avec les conventions de `crate::i18n` : chiffres latins (0-9),
 //! lettres persanes « ی » et « ک », demi-espace (U+200C) entre deux lettres seulement, ponctuation « ، ؟ ؛ », aucune
-//! marque de sens d'écriture, « KRAKEN » en latin et le lien seul sur sa ligne.
+//! marque de sens d'écriture, « KRAKEN » en latin et le lien seul sur sa ligne. L'**allemand** tutoie (« du », « dein »,
+//! comme le français « tu »), met les noms en majuscule, compose « KRAKEN-Konto », « E-Mail-Adresse » avec traits d'union
+//! et n'a aucune ponctuation française (pas d'espace avant « ? » ni « : »).
 //!
 //! Ajouter une langue : une branche dans chacune des trois fonctions (le compilateur les montre une fois la variante
 //! ajoutée à `Lang`) et les tests de ce fichier la couvrent seuls (`Lang::ALL`).
@@ -43,6 +45,13 @@ pub fn verify_email(lang: Lang, username: &str, link: &str) -> Mail {
                  اگر حساب KRAKEN نساخته‌اید، می‌توانید این پیام را نادیده بگیرید.\n"
             ),
         ),
+        Lang::De => (
+            "Bestätige deine KRAKEN-E-Mail-Adresse",
+            format!(
+                "Hallo {username},\n\nUm diese Adresse zu bestätigen, öffne innerhalb von 24 Stunden diesen Link:\n{link}\n\n\
+                 Du hast kein KRAKEN-Konto erstellt? Dann ignoriere diese Nachricht einfach.\n"
+            ),
+        ),
     };
     Mail { subject: subject.into(), body }
 }
@@ -74,6 +83,14 @@ pub fn reset_password(lang: Lang, username: &str, link: &str) -> Mail {
                  اگر این درخواست از طرف شما نبوده است، کاری نکنید؛ رمز عبور شما تغییر نمی‌کند.\n"
             ),
         ),
+        Lang::De => (
+            "Neues KRAKEN-Passwort",
+            format!(
+                "Hallo {username},\n\nJemand, vermutlich du, hat ein neues Passwort für dieses Konto angefordert. \
+                 Dieser Link funktioniert nur einmal und 30 Minuten lang:\n{link}\n\n\
+                 Wenn du das nicht warst, mach nichts: Dein Passwort bleibt unverändert.\n"
+            ),
+        ),
     };
     Mail { subject: subject.into(), body }
 }
@@ -100,6 +117,13 @@ pub fn email_change(lang: Lang, username: &str, link: &str) -> Mail {
             format!(
                 "سلام {username}،\n\nبرای تأیید این نشانی ایمیل جدید برای حساب KRAKEN خود، این پیوند را ظرف 24 ساعت باز کنید:\n{link}\n\n\
                  درخواستی نداده‌اید؟ این پیام را نادیده بگیرید؛ حساب شما با نشانی فعلی خود باقی می‌ماند.\n"
+            ),
+        ),
+        Lang::De => (
+            "Bestätige deine neue KRAKEN-E-Mail-Adresse",
+            format!(
+                "Hallo {username},\n\nUm diese neue E-Mail-Adresse für dein KRAKEN-Konto zu bestätigen, öffne innerhalb von 24 Stunden diesen Link:\n{link}\n\n\
+                 Du hast nichts angefordert? Ignoriere diese Nachricht: Dein Konto behält seine aktuelle Adresse.\n"
             ),
         ),
     };
@@ -147,6 +171,7 @@ mod tests {
                     Lang::Fr => "Bonjour ",
                     Lang::En => "Hello ",
                     Lang::Fa => "سلام ",
+                    Lang::De => "Hallo ",
                 }));
             }
         }
@@ -165,15 +190,17 @@ mod tests {
     }
 
     #[test]
-    fn the_three_languages_say_different_things() {
+    fn every_language_says_something_different() {
         for (name, make) in MAILS {
-            let [fr, en, fa] = Lang::ALL.map(|l| make(l, USER, LINK));
-            assert_ne!(fr.subject, en.subject, "{name}");
-            assert_ne!(fr.subject, fa.subject, "{name}");
-            assert_ne!(en.subject, fa.subject, "{name}");
-            assert_ne!(fr.body, en.body, "{name}");
-            assert_ne!(fr.body, fa.body, "{name}");
-            assert_ne!(en.body, fa.body, "{name}");
+            for (i, a) in Lang::ALL.into_iter().enumerate() {
+                for b in Lang::ALL.into_iter().skip(i + 1) {
+                    let (ma, mb) = (make(a, USER, LINK), make(b, USER, LINK));
+                    assert_ne!(ma.subject, mb.subject, "{name} : {a:?} / {b:?}");
+                    assert_ne!(ma.body, mb.body, "{name} : {a:?} / {b:?}");
+                }
+            }
+            let [_, en, fa, de] = Lang::ALL.map(|l| make(l, USER, LINK));
+            assert!(!de.body.contains(['é', 'è', 'à', 'ç']), "{name} : {}", de.body);
             // Une langue ne reprend pas le texte d'une autre : pas d'accent français dans l'anglais, pas de latin
             // (hors KRAKEN, le pseudo et le lien) dans le persan.
             assert!(!en.body.contains(['é', 'è', 'à', 'ç']), "{name} : {}", en.body);
@@ -283,6 +310,39 @@ mod tests {
         let en = email_change(Lang::En, "lea", "L");
         assert_eq!(en.subject, "Confirm your new KRAKEN email address");
         assert!(en.body.contains("24 hours") && en.body.contains("current address"));
+    }
+
+    #[test]
+    fn german_keeps_the_content_of_the_french_with_du() {
+        let de = verify_email(Lang::De, "lea", "L");
+        assert_eq!(de.subject, "Bestätige deine KRAKEN-E-Mail-Adresse");
+        assert!(de.body.starts_with("Hallo lea,\n\n") && de.body.contains("24 Stunden"));
+        assert!(de.body.contains("kein KRAKEN-Konto erstellt") && de.body.contains("ignoriere diese Nachricht"));
+        let de = reset_password(Lang::De, "lea", "L");
+        assert_eq!(de.subject, "Neues KRAKEN-Passwort");
+        assert!(de.body.contains("30 Minuten") && de.body.contains("nur einmal"));
+        assert!(de.body.contains("Wenn du das nicht warst") && de.body.contains("Dein Passwort bleibt unverändert"));
+        let de = email_change(Lang::De, "lea", "L");
+        assert_eq!(de.subject, "Bestätige deine neue KRAKEN-E-Mail-Adresse");
+        assert!(de.body.contains("24 Stunden") && de.body.contains("dein KRAKEN-Konto"));
+        assert!(de.body.contains("Ignoriere diese Nachricht") && de.body.contains("aktuelle Adresse"));
+    }
+
+    #[test]
+    fn german_is_informal_and_has_no_french_punctuation() {
+        for (name, make) in MAILS {
+            let m = make(Lang::De, USER, LINK);
+            for text in [&m.subject, &m.body] {
+                // Tutoiement : jamais le « Sie » de politesse (« Sie » en tête de mot ou « Ihr/Ihre » en majuscule).
+                for word in text.split(|c: char| !c.is_alphabetic()) {
+                    assert!(!["Sie", "Ihr", "Ihre", "Ihren", "Ihrem", "Ihnen"].contains(&word), "{name} : « {word} »");
+                }
+                // Pas d'espace (insécable, fine ou non) avant « : ? ! ; », et pas de guillemets français.
+                for bad in [" :", " ?", " !", " ;", "\u{a0}", "\u{202f}", "«", "»"] {
+                    assert!(!text.contains(bad), "{name} : {bad:?} dans « {text} »");
+                }
+            }
+        }
     }
 
     #[test]

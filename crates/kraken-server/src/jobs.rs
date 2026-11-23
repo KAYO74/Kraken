@@ -126,7 +126,7 @@ async fn handle(state: &AppState, job: Job) {
     }
 }
 
-/// La langue d'un e-mail : le code `fr|en|fa` que l'inscription, la demande de nouveau mot de passe ou le changement
+/// La langue d'un e-mail : le code `fr|en|fa|de` que l'inscription, la demande de nouveau mot de passe ou le changement
 /// d'adresse a mis dans la tâche (`api::request_lang`). Absent ou inconnu, le français : les tâches déjà en file quand
 /// ce champ est arrivé n'en ont pas, et partent comme avant.
 fn payload_lang(payload: &serde_json::Value) -> Lang {
@@ -323,10 +323,10 @@ mod tests {
                     text.lines().any(|l| l == link),
                     "{what} : le lien tient sur une ligne, sans « =3D » ni coupure"
                 );
-                if lang == Lang::Fa {
+                if !mail.subject.is_ascii() {
                     assert!(
                         !head.contains(&mail.subject),
-                        "{what} : un sujet persan est codé, jamais en clair :\n{head}"
+                        "{what} : un sujet hors ASCII (persan, allemand « Bestätige… ») est codé, jamais en clair :\n{head}"
                     );
                     assert!(lower.contains("=?utf-8?"), "{what} : sujet codé RFC 2047 en UTF-8 :\n{head}");
                 }
@@ -341,6 +341,8 @@ mod tests {
         assert_eq!(payload_lang(&json!({"lang": "en"})), Lang::En);
         assert_eq!(payload_lang(&json!({"lang": "fr"})), Lang::Fr);
         assert_eq!(payload_lang(&json!({"lang": "fa-IR"})), Lang::Fa, "la même lecture que celle des demandes");
+        assert_eq!(payload_lang(&json!({"user_id": "x", "lang": "de"})), Lang::De);
+        assert_eq!(payload_lang(&json!({"lang": "de-AT"})), Lang::De, "la même lecture que celle des demandes");
         // Une tâche déjà en file à la mise à jour n'a pas de `lang` : elle part en français, comme avant.
         assert_eq!(payload_lang(&json!({"user_id": "x"})), Lang::Fr);
         assert_eq!(payload_lang(&json!({})), Lang::Fr);

@@ -1264,10 +1264,10 @@ fn suggestions(chat: Chat, sign: char, q: &str) -> Vec<Suggestion> {
         let folded = search::fold_word(q);
         for (u, nick) in people {
             let shown = nick.unwrap_or_else(|| u.name().to_string());
-            if u.username.starts_with(q)
-                || search::fold_word(&u.username).starts_with(&folded)
-                || shown.split_whitespace().any(|w| search::fold_word(w).starts_with(&folded))
-            {
+            // « @juergen » trouve « Jürgen » : le nom est lu aussi avec ae, oe, ue à la place de ä, ö, ü.
+            let starts =
+                |w: &str| search::fold_word(w).starts_with(&folded) || search::fold_word_de(w).starts_with(&folded);
+            if u.username.starts_with(q) || starts(&u.username) || shown.split_whitespace().any(starts) {
                 out.push(Suggestion {
                     insert: format!("@{} ", u.username),
                     label: shown,
@@ -1312,7 +1312,10 @@ fn suggestions(chat: Chat, sign: char, q: &str) -> Vec<Suggestion> {
     } else if let Some(g) = chat.guild.and_then(|g| s.guild(g)) {
         for c in g.channels.iter().filter(|c| c.kind.is_textual()) {
             let Some(name) = c.name.clone() else { continue };
-            if search::fold_word(&name).starts_with(&search::fold_word(q)) && !name.chars().any(char::is_whitespace) {
+            let typed = search::fold_word(q);
+            if (search::fold_word(&name).starts_with(&typed) || search::fold_word_de(&name).starts_with(&typed))
+                && !name.chars().any(char::is_whitespace)
+            {
                 out.push(Suggestion {
                     insert: format!("#{name} "),
                     label: format!("#{name}"),

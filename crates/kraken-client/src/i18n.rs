@@ -1,15 +1,15 @@
-//! Interface multilingue : français, anglais et persan (la première langue de droite à gauche), prête pour
+//! Interface multilingue : français, anglais, persan (la première langue de droite à gauche) et allemand, prête pour
 //! d'autres langues. Mode d'emploi complet et conventions de traduction : `crates/kraken-client/i18n/README.md`.
 //!
 //! **Le français est la clé.** `t("Ouvrir les réglages")` rend ce texte tel quel en français, et sa traduction
 //! (`crates/kraken-client/i18n/<langue>/<groupe>.tsv`) dans une autre langue ; un texte absent du catalogue
-//! reste en français, jamais de panne. Le persan a une chaîne de repli : son catalogue se construit sur celui de
-//! l'anglais (`kraken_core::i18n::Lang::fallback`), donc un texte pas encore traduit en persan s'affiche en
-//! anglais, puis en français. `tf` remplace des `{variables}` après la traduction, `tn` choisit le gabarit au
+//! reste en français, jamais de panne. Le persan et l'allemand ont une chaîne de repli : leur catalogue se construit sur
+//! celui de l'anglais (`kraken_core::i18n::Lang::fallback`), donc un texte pas encore traduit s'affiche en anglais,
+//! puis en français. `tf` remplace des `{variables}` après la traduction, `tn` choisit le gabarit au
 //! singulier ou au pluriel selon la règle de la langue.
 //!
 //! La langue est lue **une fois**, au démarrage ([`init`], avant le premier rendu), d'après le choix gardé
-//! (`kraken.lang` du `localStorage` : `auto`, `fr`, `en`, `fa`) et, en « Automatique », les langues du navigateur.
+//! (`kraken.lang` du `localStorage` : `auto`, `fr`, `en`, `fa`, `de`) et, en « Automatique », les langues du navigateur.
 //! Changer de langue enregistre le choix et recharge la page ([`choose`]) : rien n'est réactif.
 
 use std::cell::{Cell, RefCell};
@@ -46,18 +46,29 @@ const FA: &[&str] = &[
     include_str!("../i18n/fa/server.tsv"),
 ];
 
+/// Le catalogue allemand : les mêmes six groupes que l'anglais, chargés **après** lui (voir [`catalog`]).
+const DE: &[&str] = &[
+    include_str!("../i18n/de/core.tsv"),
+    include_str!("../i18n/de/chat.tsv"),
+    include_str!("../i18n/de/guilds.tsv"),
+    include_str!("../i18n/de/voice.tsv"),
+    include_str!("../i18n/de/app.tsv"),
+    include_str!("../i18n/de/server.tsv"),
+];
+
 /// Les fichiers de catalogue d'une langue, sans son repli. Le français n'en a pas : ses textes sont les clés.
 fn sources(lang: Lang) -> &'static [&'static str] {
     match lang {
         Lang::Fr => &[],
         Lang::En => EN,
         Lang::Fa => FA,
+        Lang::De => DE,
     }
 }
 
-/// Le catalogue de la langue : celui de son repli d'abord (`Lang::fallback` : l'anglais pour le persan), puis ses propres
-/// fichiers par-dessus, la dernière entrée gagnant. Ce que le persan ne traduit pas est donc en anglais, et ce que l'anglais
-/// ne traduit pas reste le texte français de la clé.
+/// Le catalogue de la langue : celui de son repli d'abord (`Lang::fallback` : l'anglais pour le persan et l'allemand),
+/// puis ses propres fichiers par-dessus, la dernière entrée gagnant. Ce que le persan ou l'allemand ne traduit pas est
+/// donc en anglais, et ce que l'anglais ne traduit pas reste le texte français de la clé.
 fn catalog(lang: Lang) -> Catalog {
     catalog_for(lang, &sources)
 }
@@ -118,7 +129,7 @@ impl State {
         let lang = pref.resolve(&browser.iter().map(String::as_str).collect::<Vec<_>>());
         let catalog = catalog(lang);
         // L'étiquette de la langue, avec la région du navigateur quand elle va avec (`en-GB` : 24 h, jour avant
-        // mois ; `fa-AF`), sinon la langue seule. Chiffres latins partout : l'extension `-u-nu-latn` (le calendrier, lui,
+        // mois ; `fa-AF` ; `de-AT`, `de-CH`), sinon la langue seule. Chiffres latins partout : l'extension `-u-nu-latn` (le calendrier, lui,
         // reste celui que `Intl` donne à la langue : le calendrier persan pour `fa`).
         let base = browser
             .iter()

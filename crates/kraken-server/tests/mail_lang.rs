@@ -1,5 +1,5 @@
 //! La langue des e-mails du serveur (confirmation d'adresse à l'inscription, nouveau mot de passe, nouvelle adresse) : le
-//! client envoie `lang` avec la demande, le serveur le normalise (`fr`, `en`, `fa`) dans la tâche mise en file. Les
+//! client envoie `lang` avec la demande, le serveur le normalise (`fr`, `en`, `fa`, `de`) dans la tâche mise en file. Les
 //! tâches ne sont pas exécutées ici (`app` ne lance pas les tâches de fond) : le test lit la file.
 
 use kraken_proto::*;
@@ -56,6 +56,10 @@ fn cases() -> Vec<(Option<&'static str>, &'static str)> {
         (Some("fr"), "fr"),
         (Some("EN-gb"), "en"),
         (Some("fa_AF"), "fa"),
+        (Some("de"), "de"),
+        (Some("de-AT"), "de"),
+        (Some("DE-ch"), "de"),
+        (Some("de_DE"), "de"),
         (Some(""), "fr"),
     ]
 }

@@ -64,10 +64,19 @@ struct Folded {
 const DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 fn fold(text: &str, max: usize) -> Folded {
+    fold_with(text, max, false)
+}
+
+/// Comme [`fold`] ; avec `umlauts`, « ä », « ö » et « ü » s'écrivent « ae », « oe » et « ue » (l'écriture de l'allemand sans clavier
+/// allemand), chaque paire restant rattachée à sa lettre d'origine.
+fn fold_with(text: &str, max: usize, umlauts: bool) -> Folded {
     let mut f = Folded { chars: Vec::new(), origin: Vec::new() };
     for (i, c) in text.chars().take(max).enumerate() {
         for lower in c.to_lowercase() {
             let plain = match lower {
+                'ä' if umlauts => "ae",
+                'ö' if umlauts => "oe",
+                'ü' if umlauts => "ue",
                 'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' => "a",
                 'ç' | 'ć' | 'č' => "c",
                 'ď' | 'đ' => "d",
@@ -126,6 +135,12 @@ pub fn fold_word(text: &str) -> String {
     fold_key(&text.replace('\u{200c}', ""))
 }
 
+/// [`fold_word`] avec « ä », « ö » et « ü » écrits « ae », « oe » et « ue » : un mot tapé « jürgen » ou « juergen » doit trouver « Jürgen »
+/// (complétion de `@` et de `#` : on compare la frappe aux deux formes).
+pub fn fold_word_de(text: &str) -> String {
+    fold_with(&text.replace('\u{200c}', ""), usize::MAX, true).chars.into_iter().collect()
+}
+
 /// La requête repliée, espaces de bord retirés et suites d'espaces réduites à une.
 fn query_of(raw: &str) -> Vec<char> {
     // On replie d'abord : un demi-espace persan en bord de requête devient une espace, qu'il faut aussi retirer.
@@ -161,31 +176,47 @@ fn scored(tier: Tier, pos: usize, extra: usize) -> u32 {
     tier as u32 * 1000 + 400 - pos.min(200) as u32 + 200 - extra.min(200) as u32
 }
 
-/// Compare `query` à `text`. `None` si elle n'y est même pas en lettres dispersées, ou si elle est vide.
+/// Compare `query` à `text`. `None` si elle n'y est même pas en lettres dispersées, ou si elle est vide. Un texte à tréma est aussi
+/// lu avec « ae », « oe » et « ue » à la place de « ä », « ö » et « ü » (l'allemand tapé sans clavier allemand) quand la première
+/// lecture ne donne rien ou des lettres dispersées : « ankuendigungen » trouve « ankündigungen ». Le meilleur des deux gagne, et
+/// ce qui se trouve tel quel ne change pas (« que », « coeur »).
 pub fn find(query: &str, text: &str) -> Option<Match> {
     let q = query_of(query);
     if q.is_empty() {
         return None;
     }
     let t = fold(text, MAX_TEXT);
+    let first = find_in(&q, &t);
+    if first.as_ref().is_some_and(|m| m.tier > Tier::Subsequence) {
+        return first;
+    }
+    let alt = fold_with(text, MAX_TEXT, true);
+    let second = (alt.chars != t.chars).then(|| find_in(&q, &alt)).flatten();
+    match (first, second) {
+        (Some(a), Some(b)) => Some(if b.score > a.score { b } else { a }),
+        (a, b) => a.or(b),
+    }
+}
+
+fn find_in(q: &[char], t: &Folded) -> Option<Match> {
     let extra = t.chars.len().saturating_sub(q.len());
     let hit = |tier: Tier, pos: usize| {
-        Some(Match { tier, score: scored(tier, pos, extra), ranges: ranges_of(&t, &[(pos, pos + q.len())]) })
+        Some(Match { tier, score: scored(tier, pos, extra), ranges: ranges_of(t, &[(pos, pos + q.len())]) })
     };
     if t.chars == q {
         return hit(Tier::Exact, 0);
     }
-    if t.chars.starts_with(&q) {
+    if t.chars.starts_with(q) {
         return hit(Tier::Prefix, 0);
     }
     let mut from = 1;
-    while let Some(i) = find_at(&t.chars, &q, from) {
+    while let Some(i) = find_at(&t.chars, q, from) {
         if !t.chars[i - 1].is_alphanumeric() {
             return hit(Tier::Word, i);
         }
         from = i + 1;
     }
-    if let Some(i) = find_at(&t.chars, &q, 0) {
+    if let Some(i) = find_at(&t.chars, q, 0) {
         return hit(Tier::Contains, i);
     }
     // Les lettres dispersées seulement à partir de trois : en dessous, elles surlignent n'importe quoi.
@@ -195,7 +226,7 @@ pub fn find(query: &str, text: &str) -> Option<Match> {
     // Les lettres dans l'ordre, au plus tôt : chacune est son propre passage, ceux qui se touchent fusionnent.
     let mut spans = Vec::with_capacity(q.len());
     let mut at = 0;
-    for &c in &q {
+    for &c in q {
         let i = at + t.chars[at..].iter().position(|&x| x == c)?;
         spans.push((i, i + 1));
         at = i + 1;
@@ -204,7 +235,7 @@ pub fn find(query: &str, text: &str) -> Option<Match> {
     Some(Match {
         tier: Tier::Subsequence,
         score: Tier::Subsequence as u32 * 1000 + 500 - spread.min(400) as u32,
-        ranges: ranges_of(&t, &spans),
+        ranges: ranges_of(t, &spans),
     })
 }
 
@@ -292,6 +323,31 @@ mod tests {
 
     fn tier(q: &str, t: &str) -> Option<Tier> {
         find(q, t).map(|m| m.tier)
+    }
+
+    #[test]
+    fn umlauts_typed_as_digraphs_still_find_the_name() {
+        // Un clavier sans trémas : « ae », « oe », « ue » pour ä, ö, ü.
+        assert_eq!(tier("ankuendigungen", "ankündigungen"), Some(Tier::Exact));
+        assert_eq!(tier("fuer", "für"), Some(Tier::Exact));
+        assert_eq!(tier("fuer", "tipps für alle"), Some(Tier::Word));
+        assert_eq!(tier("oeffentlich", "öffentlich"), Some(Tier::Exact));
+        assert_eq!(tier("aerzte", "Ärzte"), Some(Tier::Exact));
+        // Le texte replié garde ses lettres : la requête tapée avec tréma marche toujours.
+        assert_eq!(tier("ankündigungen", "ankündigungen"), Some(Tier::Exact));
+        assert_eq!(tier("ankundigungen", "ankündigungen"), Some(Tier::Exact));
+        // Ce qui se trouve tel quel garde son rang : « que » reste « que », « coeur » reste « cœur ».
+        assert_eq!(tier("que", "quelque chose"), Some(Tier::Prefix));
+        assert_eq!(tier("coeur", "cœur"), Some(Tier::Exact));
+        // Les surlignages restent dans le texte d'origine.
+        assert_eq!(find("ankuendigungen", "ankündigungen").unwrap().ranges, vec![(0, 13)]);
+        assert_eq!(find("zzue", "ankündigungen"), None);
+        // Complétion de @ et de # : la frappe est comparée aux deux écritures du nom.
+        assert!(fold_word_de("Jürgen").starts_with(&fold_word("juergen")));
+        assert!(fold_word_de("Özil").starts_with(&fold_word("oezil")));
+        assert!(fold_word_de("Müller").starts_with(&fold_word("muel")));
+        assert!(fold_word("Müller").starts_with(&fold_word("müll")));
+        assert!(!fold_word_de("Quinn").starts_with(&fold_word("que")));
     }
 
     #[test]

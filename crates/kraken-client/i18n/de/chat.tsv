@@ -1,0 +1,314 @@
+# Catalogue allemand (de), groupe « chat ».
+# Une ligne « français<TAB>allemand » par texte ; règles : ../README.md (« Ajouter une langue », « Conventions d'allemand »).
+# Mêmes {variables} que le français, tutoiement (« du »), guillemets „…“, pas d'espace avant « : ? ! ; », chiffres latins.
+# Un texte absent d'ici s'affiche en anglais (repli), puis en français.
+# Fichier complet : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui manquerait après un ajout du code.
+
+# Salon, en-tête et barre d'outils (chat.rs)
+Introuvable	Nicht gefunden
+Forum	Forum
+Fils	Threads
+Messages de {nom}	Nachrichten: {nom}
+Écrire à {nom}	Nachricht an {nom}
+Écrire dans #{nom}	Nachricht an #{nom}
+Messages épinglés	Angeheftete Nachrichten
+Liste des membres	Mitgliederliste
+Membres	Mitglieder
+Ajouter des amis au groupe	Freunde zur Gruppe hinzufügen
+Ajouter des amis	Freunde hinzufügen
+Renommer le groupe	Gruppe umbenennen
+Renommer	Umbenennen
+Quitter le groupe	Gruppe verlassen
+Créer un groupe avec {nom}	Gruppe mit {nom} erstellen
+Créer un groupe	Gruppe erstellen
+Notifications de la conversation	Benachrichtigungen der Unterhaltung
+Notifications du salon	Benachrichtigungen des Kanals
+Rechercher	Suchen
+Boîte de réception	Posteingang
+Tu as bloqué {nom} : vous ne pouvez plus vous écrire ici. L'historique reste lisible.	Du hast {nom} blockiert: Schreiben ist hier nicht mehr möglich. Der Verlauf bleibt lesbar.
+Débloquer	Blockierung aufheben
+Réagir avec un emoji	Mit einem Emoji reagieren
+Insérer un emoji	Emoji einfügen
+
+# Fil de messages (chat.rs)
+Ici commence ta conversation avec {nom}. Elle reste entre vous.	Hier beginnt deine Unterhaltung mit {nom}. Sie bleibt unter euch.
+Ici commence #{nom}. Tout l'historique du salon se lit à partir d'ici.	Hier beginnt #{nom}. Der gesamte Verlauf des Kanals ist ab hier lesbar.
+Messages	Nachrichten
+Impossible de charger les messages	Nachrichten konnten nicht geladen werden
+Réessayer	Erneut versuchen
+Nouveaux messages	Neue Nachrichten
+pas envoyé	nicht gesendet
+envoi…	wird gesendet…
+Supprimer	Löschen
+Compte supprimé	Gelöschtes Konto
+Message d'un compte que tu as bloqué.	Nachricht von einem Konto, das du blockiert hast.
+Masquer	Ausblenden
+Afficher	Anzeigen
+Épinglé	Angeheftet
+Modifié le {date}	Bearbeitet am {date}
+(édité)	(bearbeitet)
+Fichier joint	Angehängte Datei
+Aller au message d'origine, de {nom}	Zur ursprünglichen Nachricht von {nom} springen
+Le message d'origine a été supprimé.	Die ursprüngliche Nachricht wurde gelöscht.
+Ce message est trop ancien pour être chargé ici.	Diese Nachricht ist zu alt, um hier geladen zu werden.
+Ce message n'est plus disponible.	Diese Nachricht ist nicht mehr verfügbar.
+
+# Appels dans le fil (chat.rs)
+{h} h {min}	{h} Std. {min} Min.
+{n} minute	{n} Minute
+{n} minutes	{n} Minuten
+Tu as lancé un appel.	Du hast einen Anruf gestartet.
+{nom} a lancé un appel.	{nom} hat einen Anruf gestartet.
+Personne n'a répondu à ton appel.	Niemand hat deinen Anruf angenommen.
+Tu as lancé un appel qui a duré {duree}.	Du hast einen Anruf gestartet, der {duree} gedauert hat.
+Appel manqué de {nom}.	Verpasster Anruf von {nom}.
+{nom} a lancé un appel qui a duré {duree}.	{nom} hat einen Anruf gestartet, der {duree} gedauert hat.
+
+# Réactions (chat.rs, emoji.rs)
+Personne	Niemand
+{a} et {b}	{a} und {b}
+{a}, {b} et {c}	{a}, {b} und {c}
+{a}, {b}, {c} et {n} autre	{a}, {b}, {c} und {n} weitere Person
+{a}, {b}, {c} et {n} autres	{a}, {b}, {c} und {n} weitere Personen
+quelqu'un	jemand
+emoji supprimé	gelöschtes Emoji
+emoji personnalisé	benutzerdefiniertes Emoji
+{qui} a réagi avec {emoji}	{qui} hat mit {emoji} reagiert
+{qui} ont réagi avec {emoji}	{qui} haben mit {emoji} reagiert
+{emoji} : {n} réaction	{emoji}: {n} Reaktion
+{emoji} : {n} réactions	{emoji}: {n} Reaktionen
+{emoji} : {n} réaction, dont la tienne	{emoji}: {n} Reaktion, auch von dir
+{emoji} : {n} réactions, dont la tienne	{emoji}: {n} Reaktionen, auch von dir
+Réactions	Reaktionen
+Autre réaction	Weitere Reaktion
+
+# Actions sur un message, modification, suppression (chat.rs)
+Actions sur le message	Nachrichtenaktionen
+Ajouter une réaction	Reaktion hinzufügen
+Réagir	Reagieren
+Répondre	Antworten
+Épingler le message	Nachricht anheften
+Désépingler le message	Nachricht nicht mehr anheften
+Modifier le message	Nachricht bearbeiten
+Modifier	Bearbeiten
+Supprimer le message	Nachricht löschen
+Entrée enregistre, Échap annule.	Enter speichert, Esc bricht ab.
+Annuler	Abbrechen
+Supprimer ce message ?	Diese Nachricht löschen?
+Il disparaîtra pour tout le monde, sans retour possible. Son auteur n'en sera pas prévenu.	Sie verschwindet für alle und kann nicht wiederhergestellt werden. Wer sie geschrieben hat, wird nicht benachrichtigt.
+Il disparaîtra pour tout le monde, sans retour possible.	Sie verschwindet für alle und kann nicht wiederhergestellt werden.
+
+# Saisie, mode lent, exclusion (chat.rs)
+Tu peux de nouveau écrire.	Du kannst wieder schreiben.
+Tous ceux qui voient ce salon	Alle, die diesen Kanal sehen können
+Ceux qui sont là en ce moment	Alle, die gerade online sind
+Exclu jusqu'à {date}	Im Timeout bis {date}
+Patiente : l'envoi des fichiers n'est pas terminé.	Einen Moment: Die Dateien sind noch nicht fertig hochgeladen.
+Retire les fichiers dont l'envoi a échoué avant d'envoyer le message.	Entferne die Dateien, deren Upload fehlgeschlagen ist, bevor du die Nachricht sendest.
+Une fois les emojis écrits en entier, ton message dépasse {max} caractères : raccourcis-le.	Mit vollständig ausgeschriebenen Emojis ist deine Nachricht länger als {max} Zeichen. Kürze sie.
+Mode lent : attends encore {reste} s avant d'envoyer un autre message.	Langsammodus: Warte noch {reste} s, bevor du eine weitere Nachricht sendest.
+Mode lent : tu pourras écrire de nouveau dans {delai}.	Langsammodus: Du kannst in {delai} wieder schreiben.
+Mode lent : encore {reste} s avant ton prochain message	Langsammodus: noch {reste} s bis zu deiner nächsten Nachricht
+Mode lent : {delai} entre deux messages	Langsammodus: {delai} zwischen zwei Nachrichten
+Tu peux lire, pas écrire.	Du kannst lesen, aber nicht schreiben.
+{n} caractères sur {max} : raccourcis un peu.	{n} von {max} Zeichen: Kürze die Nachricht etwas.
+Suggestions	Vorschläge
+Tu réponds à	Du antwortest
+Annuler la réponse	Antwort abbrechen
+Annuler la réponse (Échap)	Antwort abbrechen (Esc)
+Joindre un fichier	Datei anhängen
+Joindre un fichier (non autorisé ici)	Datei anhängen (hier nicht erlaubt)
+Emoji	Emoji
+Envoyer	Senden
+
+# Liste des membres (chat.rs)
+Membres : {role}	Mitglieder: {role}
+Membres du groupe	Gruppenmitglieder
+Ouvrir le profil	Profil öffnen
+(propriétaire)	(Besitzer)
+Plus d'actions pour {nom}	Weitere Aktionen für {nom}
+Profil et rôles	Profil und Rollen
+Exclure temporairement…	In den Timeout schicken…
+Lever l'exclusion	Timeout aufheben
+Expulser	Rauswerfen
+Bannir	Bannen
+Retirer du groupe	Aus der Gruppe entfernen
+
+# Sélecteur d'emojis (emoji.rs)
+Chercher un emoji	Emoji suchen
+Emojis de {nom}	Emojis von {nom}
+Emojis standards	Standard-Emojis
+Emojis	Emojis
+Aucun emoji de la sélection ne correspond.	Kein Emoji in der Auswahl passt dazu.
+
+# Fichiers joints, visionneuse, aperçus de liens (files.rs)
+{n} o	{n} B
+{n} Ko	{n} KB
+{n} Mo	{n} MB
+{n} Go	{n} GB
+{max} fichiers au plus par message.	Höchstens {max} Dateien pro Nachricht.
+« {nom} » est vide.	„{nom}“ ist leer.
+« {nom} » pèse {taille} : {max} au plus.	„{nom}“ ist {taille} groß, erlaubt sind höchstens {max}.
+Fichiers à joindre	Anzuhängende Dateien
+Retirer {nom}	{nom} entfernen
+Retirer	Entfernen
+Envoi de {nom}	{nom} wird hochgeladen
+Description	Beschreibung
+Texte alternatif de {nom}	Alternativtext für {nom}
+Dépose pour joindre à {lieu}	Zum Anhängen an {lieu} hier ablegen
+Ouvrir l'image {nom}	Bild {nom} öffnen
+Télécharger {nom}	{nom} herunterladen
+Télécharger	Herunterladen
+Visionneuse d'images	Bildbetrachter
+{taille} · {n} sur {total}	{taille} · {n} von {total}
+Ouvrir l'original	Original öffnen
+Image précédente	Vorheriges Bild
+Précédente (←)	Zurück (←)
+Image suivante	Nächstes Bild
+Suivante (→)	Weiter (→)
+Aperçu de {nom}	Vorschau von {nom}
+Retirer l'aperçu	Vorschau entfernen
+
+# Markdown (markdown.rs)
+Afficher le contenu masqué	Verborgenen Inhalt anzeigen
+Contenu masqué	Verborgener Inhalt
+Bloc de code	Codeblock
+
+# Messages épinglés (pins.rs)
+Message épinglé.	Nachricht angeheftet.
+Message désépinglé.	Nachricht nicht mehr angeheftet.
+Fermer les messages épinglés	Angeheftete Nachrichten schließen
+Chargement des messages épinglés…	Angeheftete Nachrichten werden geladen…
+Du plus récemment épinglé au plus ancien.	Zuletzt angeheftete Nachrichten zuerst.
+Impossible de charger les messages épinglés	Angeheftete Nachrichten konnten nicht geladen werden
+Aucun message épinglé	Keine angehefteten Nachrichten
+Épingle un message depuis ses actions pour le retrouver ici.	Heft eine Nachricht über ihre Aktionen an, um sie hier wiederzufinden.
+Les modérateurs peuvent en épingler.	Mitglieder mit Moderationsrechten können Nachrichten anheften.
+Aller au message de {nom}	Zur Nachricht von {nom} springen
+Désépingler le message de {nom}	Nachricht von {nom} nicht mehr anheften
+Aller au message	Zur Nachricht springen
+Désépingler	Nicht mehr anheften
+
+# Non-lus, mentions, sourdine, notifications (unread.rs)
+{qui} dans {groupe}	{qui} in {groupe}
+Actions pour {nom}	Aktionen für {nom}
+Marquer comme lu	Als gelesen markieren
+Retirer la sourdine	Stummschaltung aufheben
+Mettre en sourdine…	Stummschalten…
+Notifications…	Benachrichtigungen…
+Notifications de {nom}	Benachrichtigungen für {nom}
+Sourdine	Stummschaltung
+Pas de sourdine	Nicht stummgeschaltet
+En sourdine, sans fin	Stummgeschaltet, unbefristet
+En sourdine jusqu'à {date}	Stummgeschaltet bis {date}
+Pendant 15 minutes	Für 15 Minuten
+Pendant 1 heure	Für 1 Stunde
+Pendant 8 heures	Für 8 Stunden
+Pendant 24 heures	Für 24 Stunden
+Jusqu'à ce que je la retire	Bis ich sie aufhebe
+En sourdine : ni gras, ni notification. Les mentions restent comptées.	Stummgeschaltet: Nichts wird fett hervorgehoben und du erhältst keine Benachrichtigungen. Erwähnungen werden weiterhin gezählt.
+Me prévenir pour	Benachrichtige mich bei
+Par défaut : tous les messages	Standard: alle Nachrichten
+Comme le serveur	Wie der Server
+Tous les messages	Alle Nachrichten
+Les mentions seulement (par défaut)	Nur Erwähnungen (Standard)
+Les mentions seulement	Nur Erwähnungen
+Rien	Nichts
+Aujourd'hui : {niveau}	Aktuell: {niveau}
+tous les messages	alle Nachrichten
+les mentions seulement	nur Erwähnungen
+rien	nichts
+Chaque nouveau message peut s'afficher sur le bureau.	Jede neue Nachricht kann auf dem Desktop erscheinen.
+Seulement quand on te nomme, répond à ton message ou appelle tout le monde.	Nur, wenn dich jemand erwähnt, auf deine Nachricht antwortet oder alle anpingt.
+Aucune notification, et plus de compteur de mentions.	Keine Benachrichtigungen und kein Zähler für Erwähnungen.
+Ignorer {everyone} et {here}	{everyone} und {here} ignorieren
+Ces appels à tout le serveur ne comptent plus comme des mentions.	Diese Pings an den ganzen Server zählen nicht mehr als Erwähnungen.
+en sourdine	stummgeschaltet
+
+# Noms des emojis du sélecteur (kraken-core/src/emoji.rs : recherche et nom accessible, traduits à l'affichage)
+pouce levé, d'accord	Daumen hoch, einverstanden
+pouce baissé, pas d'accord	Daumen runter, nicht einverstanden
+cœur rouge	rotes Herz
+pleurer de rire	vor Lachen weinen
+sourire timide	schüchtern lächeln
+grand sourire	breites Lächeln
+clin d'œil	Augenzwinkern
+yeux en cœur	Herzaugen
+visage aux cœurs	Gesicht mit Herzen
+lunettes de soleil, cool	Sonnenbrille, cool
+réfléchir, hmm	nachdenken, hmm
+bouche bée, surpris	offener Mund, überrascht
+larme, triste	Träne, traurig
+sanglots	schluchzen
+en colère	wütend
+dormir, sommeil	schlafen, Schlaf
+tête qui explose	explodierender Kopf
+fête, cotillons	Party, Partyhut
+sourire gêné, sueur	verlegenes Lächeln, Schweiß
+tête à l'envers	umgedrehtes Gesicht
+auréole, ange	Heiligenschein, Engel
+câlin	Umarmung
+poignée de main	Handschlag
+applaudir, bravo	klatschen, bravo
+mains levées, hourra	erhobene Hände, hurra
+mains jointes, merci	gefaltete Hände, danke
+coucou, salut	winken, hallo
+biceps, force	Bizeps, Kraft
+yeux, regarder	Augen, schauen
+salut militaire	salutieren
+coche, fait	Häkchen, erledigt
+croix, non	Kreuz, nein
+question	Frage
+exclamation	Ausrufezeichen
+cent, parfait	hundert, perfekt
+feu, génial	Feuer, großartig
+étincelles	Funken
+étoile	Stern
+confettis, bravo	Konfetti, Glückwunsch
+gâteau d'anniversaire	Geburtstagskuchen
+cadeau	Geschenk
+trophée	Pokal
+fusée, lancement	Rakete, Start
+ampoule, idée	Glühbirne, Idee
+punaise, épingle	Stecknadel, Pin
+trombone	Büroklammer
+cloche	Glocke
+réveil, heure	Wecker, Zeit
+bulle, discussion	Sprechblase, Chat
+zzz, sommeil	zzz, Schlaf
+cœur brisé	gebrochenes Herz
+cœur bleu	blaues Herz
+cœur vert	grünes Herz
+cœur jaune	gelbes Herz
+cœur violet	lila Herz
+cœur noir	schwarzes Herz
+pieuvre, kraken	Oktopus, Kraken
+calmar	Kalmar
+poisson tropical	Tropenfisch
+poisson	Fisch
+dauphin	Delfin
+baleine	Wal
+requin	Hai
+tortue	Schildkröte
+crabe	Krabbe
+coquillage	Muschel
+vague, mer	Welle, Meer
+ancre	Anker
+chat	Katze
+chien	Hund
+renard	Fuchs
+pousse, plante	Spross, Pflanze
+arc-en-ciel	Regenbogen
+soleil	Sonne
+lune, nuit	Mond, Nacht
+café	Kaffee
+pizza	Pizza
+part de gâteau	Kuchenstück
+pop-corn	Popcorn
+manette, jeu	Controller, Spiel
+note de musique	Musiknote
+casque audio	Kopfhörer
+appareil photo	Fotoapparat
+ordinateur	Computer, Laptop
+bogue, insecte	Bug, Insekt
+clé à molette, réparer	Schraubenschlüssel, reparieren

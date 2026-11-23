@@ -91,8 +91,8 @@ test('I18N-F1 connexion : « فارسی » est proposé avec lang="fa", le choix
   await page.goto('/login');
   const language = page.getByRole('combobox', { name: 'Langue' });
   await expect(language).toHaveValue('auto'); // le client est monté : les options sont là
-  expect(await language.locator('option').allTextContents()).toEqual(["Langue de l'appareil", 'Français', 'English', FA]);
-  expect(await language.locator('option').evaluateAll((o) => o.map((x) => x.getAttribute('lang')))).toEqual([null, 'fr', 'en', 'fa']);
+  expect(await language.locator('option').allTextContents()).toEqual(["Langue de l'appareil", 'Français', 'English', FA, 'Deutsch']);
+  expect(await language.locator('option').evaluateAll((o) => o.map((x) => x.getAttribute('lang')))).toEqual([null, 'fr', 'en', 'fa', 'de']);
   await expect(html(page)).toHaveAttribute('dir', 'ltr');
   await expectLabelAtStart(page, 'ltr');
 
@@ -108,8 +108,8 @@ test('I18N-F1 connexion : « فارسی » est proposé avec lang="fa", le choix
   const after = page.getByRole('combobox', { name: 'زبان' });
   await expect(after).toHaveValue('fa');
   await expect(after).toBeFocused();
-  expect(await after.locator('option').allTextContents()).toEqual(['زبان دستگاه', 'Français', 'English', FA]);
-  expect(await after.locator('option').evaluateAll((o) => o.map((x) => x.getAttribute('lang')))).toEqual([null, 'fr', 'en', 'fa']);
+  expect(await after.locator('option').allTextContents()).toEqual(['زبان دستگاه', 'Français', 'English', FA, 'Deutsch']);
+  expect(await after.locator('option').evaluateAll((o) => o.map((x) => x.getAttribute('lang')))).toEqual([null, 'fr', 'en', 'fa', 'de']);
   expect(await page.evaluate(() => Object.entries(sessionStorage))).toEqual([]);
   // Le sélecteur s'affiche dans le sens de la page : étiquette à droite, champ plein, rien ne déborde.
   await expectLabelAtStart(page, 'rtl');
@@ -149,7 +149,7 @@ test('I18N-F3 Réglages › Langue et heure : choisir « فارسی » recharge 
   const dialog = page.getByRole('dialog');
   const language = dialog.getByRole('combobox', { name: 'Langue' });
   await expect(language).toHaveValue('auto');
-  expect(await language.locator('option').allTextContents()).toEqual(["Langue de l'appareil", 'Français', 'English', FA]);
+  expect(await language.locator('option').allTextContents()).toEqual(["Langue de l'appareil", 'Français', 'English', FA, 'Deutsch']);
   await expectLabelAtStart(page, 'ltr');
 
   await language.selectOption({ label: FA });
@@ -244,23 +244,24 @@ test.describe('navigateur en persan', () => {
 });
 
 test('I18N-F6 navigator.languages : fa, fa-IR, fa-AF et fa_IR donnent le persan, la première langue prise en charge gagne, l’arabe et l’hébreu retombent sur le français', async ({ browser, baseURL }) => {
-  const cases: [string[], 'fa' | 'fr' | 'en'][] = [
+  const cases: [string[], 'fa' | 'fr' | 'en' | 'de'][] = [
     [['fa'], 'fa'],
     [['fa-IR'], 'fa'],
     [['fa-AF'], 'fa'],
     [['FA-ir'], 'fa'],
     [['fa_IR'], 'fa'],
-    [['de-DE', 'fa-IR', 'en'], 'fa'],
+    [['ja-JP', 'fa-IR', 'en'], 'fa'],
+    [['de-DE', 'fa-IR', 'en'], 'de'],
     [['en-US', 'fa-IR'], 'en'],
     [['ar-SA', 'he-IL'], 'fr'],
-    [['de-DE'], 'fr'],
+    [['nl-NL'], 'fr'],
   ];
   for (const [languages, want] of cases) {
     const { context, page } = await browserSpeaking(browser, baseURL, languages);
     await page.goto('/login');
     await expect(html(page), languages.join()).toHaveAttribute('lang', want);
     await expect(html(page), languages.join()).toHaveAttribute('dir', want === 'fa' ? 'rtl' : 'ltr');
-    await expect(page.getByRole('combobox', { name: /^(Langue|Language|زبان)$/ })).toHaveValue('auto');
+    await expect(page.getByRole('combobox', { name: /^(Langue|Language|زبان|Sprache)$/ })).toHaveValue('auto');
     await context.close();
   }
   // Un choix enregistré et valide passe avant le navigateur ; un choix inconnu est ignoré (« Automatique »).
@@ -437,7 +438,7 @@ test('I18N-F11 créer un serveur en persan : la demande porte lang="fa", les sal
     category: ['خوش\u200cآمدگویی', 'کانال\u200cهای صوتی', 'گفتگوها'],
   });
   expect((await channels('fr')).text).toEqual(['aide', 'annonces', 'général', 'règles']);
-  expect((await channels('de')).text).toEqual(['aide', 'annonces', 'général', 'règles']);
+  expect((await channels('nl')).text).toEqual(['aide', 'annonces', 'général', 'règles']);
 });
 
 test('I18N-F14 le nom de serveur proposé en persan est une donnée : sans marque d’isolation, et le serveur se crée', async ({ signedIn }) => {

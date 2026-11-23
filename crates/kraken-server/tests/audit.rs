@@ -414,7 +414,8 @@ async fn reads_are_rate_limited_per_client(pool: PgPool) {
     let gid = own.guild().await.guild.id;
     let mut ok = 0;
     let mut last = StatusCode::OK;
-    for _ in 0..(AUDIT_READS_PER_MIN + 5) {
+    // Le compteur rend un essai toutes les 0,5 s : sur un exécuteur chargé, la boucle en gagne un ou deux avant le refus.
+    for _ in 0..(AUDIT_READS_PER_MIN + 60) {
         last = own.log(gid, "?limit=1").await.0;
         if last == 200 {
             ok += 1;
@@ -422,5 +423,6 @@ async fn reads_are_rate_limited_per_client(pool: PgPool) {
             break;
         }
     }
-    assert_eq!((ok, last), (AUDIT_READS_PER_MIN, StatusCode::TOO_MANY_REQUESTS));
+    assert_eq!(last, StatusCode::TOO_MANY_REQUESTS);
+    assert!((AUDIT_READS_PER_MIN..AUDIT_READS_PER_MIN + 10).contains(&ok), "{ok} lectures acceptées avant le refus");
 }

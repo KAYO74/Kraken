@@ -1,0 +1,225 @@
+# Catalogue allemand (de), groupe « core » : socle (connexion, coquille, apparence, langue, dates, erreurs du réseau).
+# Une ligne « français<TAB>allemand » par texte ; règles : ../README.md (« Ajouter une langue », « Conventions d'allemand »).
+# Mêmes {variables} que le français, tutoiement (« du »), guillemets „…“, pas d'espace avant « : ? ! ; », chiffres latins.
+# Un texte absent d'ici s'affiche en anglais (repli), puis en français.
+# Fichier complet : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui manquerait après un ajout du code.
+# Erreurs du réseau et du serveur (api.rs)
+# Dates (audit.rs, ui.rs)
+# Connexion, inscription, invitation (auth.rs)
+# Langue (i18n.rs, Réglages › Langue et heure)
+# Apparence et accessibilité (display.rs)
+# Coquille : rail, barres latérales, compte (shell.rs)
+# Pastilles de statut, en-têtes, pages (ui.rs)
+# Fenêtre des Réglages (settings.rs)
+
+# Erreurs du réseau et du serveur (api.rs)
+Le serveur ne répond pas. Vérifie ta connexion.	Der Server antwortet nicht. Prüfe deine Verbindung.
+Cette image pèse trop lourd : {taille} au plus.	Dieses Bild ist zu groß: höchstens {taille}.
+
+# Dates (audit.rs, ui.rs)
+{date} à {heure}	{date} um {heure}
+Aujourd'hui	Heute
+Hier	Gestern
+moins d'une minute	weniger als eine Minute
+{n} min	{n} Min.
+{n} h	{n} Std.
+{n} j	{n} Tg.
+
+# Connexion, inscription, invitation (auth.rs)
+Confidentialité	Datenschutz
+Conditions	Nutzungsbedingungen
+Bon retour sous la surface	Willkommen zurück in der Tiefe
+Connecte-toi pour retrouver tes serveurs.	Melde dich an, um deine Server wiederzufinden.
+Pseudo ou e-mail	Benutzername oder E-Mail
+Mot de passe	Passwort
+Mot de passe oublié ?	Passwort vergessen?
+Pas encore de compte ? S'inscrire	Noch kein Konto? Registrieren
+Se connecter	Anmelden
+Créer un compte	Konto erstellen
+Gratuit, sans abonnement, tout compris.	Kostenlos, ohne Abo, alles inklusive.
+E-mail	E-Mail
+Pseudo	Benutzername
+Lettres, chiffres, _ et . ; 2 à 32 caractères.	Buchstaben, Ziffern, _ und . (2 bis 32 Zeichen)
+Déjà inscrit ? Se connecter	Schon registriert? Anmelden
+Créer mon compte	Mein Konto erstellen
+Ce lien n'existe pas ou n'est plus valable. Demande-en un nouveau.	Dieser Link existiert nicht oder ist nicht mehr gültig. Fordere einen neuen an.
+Invitation invalide	Ungültige Einladung
+Retour à l'accueil	Zurück zur Startseite
+Une place t'attend dans	Ein Platz wartet auf dich in
+{n} membre	{n} Mitglied
+{n} membres	{n} Mitglieder
+Rejoindre le serveur	Server beitreten
+Mot de passe oublié	Passwort vergessen
+Indique l'adresse de ton compte : on t'envoie un lien pour en choisir un nouveau.	Gib die E-Mail-Adresse deines Kontos ein: Wir schicken dir einen Link, um ein neues Passwort zu wählen.
+Si un compte utilise cette adresse, un e-mail arrive. Le lien reste valable 30 minutes.	Wenn ein Konto diese Adresse nutzt, ist eine E-Mail unterwegs. Der Link ist 30 Minuten lang gültig.
+Retour à la connexion	Zurück zur Anmeldung
+Envoyer le lien	Link senden
+Nouveau mot de passe	Neues Passwort
+Toutes tes sessions seront fermées, sur chaque appareil.	Alle deine Sitzungen werden beendet, auf jedem Gerät.
+C'est fait. Connecte-toi avec ton nouveau mot de passe.	Fertig. Melde dich mit deinem neuen Passwort an.
+Demander un autre lien	Neuen Link anfordern
+Enregistrer	Speichern
+Adresse e-mail	E-Mail-Adresse
+Adresse confirmée. Merci !	Adresse bestätigt. Danke!
+Ouvrir KRAKEN	KRAKEN öffnen
+
+# Langue (i18n.rs, Réglages › Langue et heure)
+Langue	Sprache
+Langue de l'appareil	Sprache des Geräts
+Le changement recharge la page.	Die Änderung lädt die Seite neu.
+Le brouillon non envoyé sera perdu.	Ein nicht gesendeter Entwurf geht verloren.
+Quitte l'appel pour changer de langue.	Verlasse den Anruf, um die Sprache zu ändern.
+Langue : {nom}.	Sprache: {nom}.
+Format de l'heure	Zeitformat
+Exemple :	Beispiel:
+Suit la langue de l'interface.	Folgt der Sprache der Benutzeroberfläche.
+12 h	12-Stunden-Format
+24 h	24-Stunden-Format
+AM	AM
+PM	PM
+2:30 PM	2:30 PM
+
+# Apparence et accessibilité (display.rs)
+Automatique (système)	Automatisch (System)
+Suit le réglage clair ou sombre de ton système.	Folgt der hellen oder dunklen Einstellung deines Systems.
+Sombre	Dunkel
+Le thème par défaut, doux pour les yeux le soir.	Das Standardthema, abends angenehm für die Augen.
+Clair	Hell
+Fond blanc, pour les pièces lumineuses.	Weißer Hintergrund, für helle Räume.
+Noir	Schwarz
+Noir profond, idéal sur les écrans OLED.	Tiefschwarz, ideal für OLED-Bildschirme.
+Petit	Klein
+Normal	Normal
+Grand	Groß
+Très grand	Sehr groß
+Confortable	Komfortabel
+Des messages aérés, avec des avatars de 40 px.	Luftige Nachrichten mit Avataren von 40 px.
+Compacte	Kompakt
+Des messages resserrés, avec des avatars de 24 px.	Engere Nachrichten mit Avataren von 24 px.
+Automatique	Automatisch
+Suit le réglage de ton système.	Folgt der Einstellung deines Systems.
+Réduit	Reduziert
+Coupe les animations de l'interface et fige les images animées partout.	Schaltet die Animationen der Benutzeroberfläche aus und friert animierte Bilder überall ein.
+Garde les animations, même si ton système en demande moins.	Behält die Animationen bei, auch wenn dein System weniger verlangt.
+Les couleurs d'origine du thème.	Die Originalfarben des Themas.
+Élevé	Hoch
+Texte plus net (7 pour 1), bordures bien visibles, anneau de focus plus épais.	Schärferer Text (7 zu 1), gut sichtbare Rahmen, dickerer Fokusring.
+Suit ton système, quand il demande un contraste plus élevé.	Folgt deinem System, wenn es einen höheren Kontrast verlangt.
+Aperçu	Vorschau
+Salut ! On se retrouve ce soir dans le vocal ?	Hallo! Treffen wir uns heute Abend im Sprachkanal?
+Avec plaisir, vers 21 h. Voici	Gern, gegen 21 Uhr. Hier ist
+le programme de la soirée	das Programm für den Abend
+Ces réglages s'appliquent tout de suite et restent sur cet appareil.	Diese Einstellungen gelten sofort und bleiben auf diesem Gerät.
+Thème	Thema
+Taille du texte	Textgröße
+Agrandit ou réduit tout le texte de l'appli.	Vergrößert oder verkleinert den gesamten Text der App.
+Zoom de l'interface	Zoom der Benutzeroberfläche
+Agrandit ou réduit toute l'interface, texte compris. Le zoom est limité par la largeur de la fenêtre.	Vergrößert oder verkleinert die gesamte Benutzeroberfläche, Text eingeschlossen. Der Zoom ist durch die Fensterbreite begrenzt.
+Densité	Dichte
+L'espace entre les messages et la taille des avatars.	Der Abstand zwischen den Nachrichten und die Größe der Avatare.
+Mouvement	Bewegung
+Les GIF et WebP animés restent fixes dans les listes ; ils bougent au survol, au focus et sur la carte de profil. En mouvement réduit, ils restent fixes partout : « Lire l'animation » les lance sur la carte de profil.	Animierte GIFs und WebP-Bilder stehen in Listen still; sie bewegen sich beim Darüberfahren, bei Fokus und auf der Profilkarte. Bei reduzierter Bewegung stehen sie überall still: „Animation abspielen“ startet sie auf der Profilkarte.
+Contraste	Kontrast
+Souligner les liens	Links unterstreichen
+Les liens du texte sont toujours soulignés, pas seulement colorés.	Links im Text sind immer unterstrichen, nicht nur farbig.
+
+# Coquille : rail, barres latérales, compte (shell.rs)
+Aller au contenu	Zum Inhalt springen
+Connexion au serveur…	Verbindung zum Server wird hergestellt…
+Connexion perdue, nouvelle tentative…	Verbindung verloren, neuer Versuch…
+Fermer l'information	Hinweis schließen
+Accueil et messages privés	Startseite und Direktnachrichten
+{n} mention	{n} Erwähnung
+{n} mentions	{n} Erwähnungen
+Serveurs	Server
+Serveur {nom}	Server {nom}
+non lu	ungelesen
+Créer ou rejoindre un serveur	Server erstellen oder beitreten
+Créer ou rejoindre	Erstellen oder beitreten
+Explorer les serveurs publics	Öffentliche Server entdecken
+Explorer	Entdecken
+Messages privés	Direktnachrichten
+Amis	Freunde
+(demande en attente)	(offene Anfrage)
+(demandes en attente)	(offene Anfragen)
+Nouvelle conversation ou groupe	Neue Unterhaltung oder Gruppe
+Nouvelle conversation	Neue Unterhaltung
+Aucune conversation pour l'instant.	Noch keine Unterhaltungen.
+Fermer la conversation avec {nom}	Unterhaltung mit {nom} schließen
+Fermer la conversation	Unterhaltung schließen
+Appel en cours	Anruf läuft
+Salons	Kanäle
+Inviter des amis	Freunde einladen
+Inviter	Einladen
+Notifications du serveur	Serverbenachrichtigungen
+Notifications	Benachrichtigungen
+Paramètres du serveur	Servereinstellungen
+Paramètres	Einstellungen
+Plus d'actions pour ce serveur	Weitere Aktionen für diesen Server
+Créer un salon	Kanal erstellen
+Créer une catégorie	Kategorie erstellen
+Transférer la propriété	Besitz übertragen
+Quitter le serveur	Server verlassen
+Événements	Events
+(privée)	(privat)
+Créer un salon dans cette catégorie	Kanal in dieser Kategorie erstellen
+Paramètres de la catégorie	Einstellungen der Kategorie
+salon vocal privé	privater Sprachkanal
+salon vocal	Sprachkanal
+annonces privées	privater Ankündigungskanal
+annonces	Ankündigungskanal
+forum privé	privates Forum
+forum	Forum
+salon privé	privater Kanal
+Paramètres du salon	Kanaleinstellungen
+Aucun salon où inviter.	Es gibt keinen Kanal, in den du einladen kannst.
+Inviter dans {nom}	In {nom} einladen
+Lien à partager	Link zum Teilen
+Ce lien n'expire pas. Toute personne qui l'a peut rejoindre.	Dieser Link läuft nicht ab. Jede Person, die ihn hat, kann beitreten.
+Fermer	Schließen
+Copié	Kopiert
+Copier le lien	Link kopieren
+En ligne	Online
+Inactif	Abwesend
+Ne pas déranger	Bitte nicht stören
+Ni notification du bureau, ni sonnerie d'appel.	Weder Desktop-Benachrichtigungen noch Anrufklingeln.
+Invisible	Unsichtbar
+Les autres te voient hors ligne.	Andere sehen dich als offline.
+Connecté	Verbunden
+Connexion…	Verbindung wird hergestellt…
+Hors ligne	Offline
+Mon compte, {statut}	Mein Konto, {statut}
+Mon compte	Mein Konto
+Mon statut	Mein Status
+Réglages utilisateur	Benutzereinstellungen
+Réglages	Einstellungen
+Apparence	Darstellung
+Se déconnecter	Abmelden
+
+# Pastilles de statut, en-têtes, pages (ui.rs)
+en ligne	online
+inactif	abwesend
+ne pas déranger	bitte nicht stören
+hors ligne	offline
+invisible	unsichtbar
+Plus	Mehr
+Ouvrir la navigation	Navigation öffnen
+Écran {id} prévu, pas encore construit.	Ansicht {id} ist geplant, aber noch nicht gebaut.
+Cette page n'existe pas	Diese Seite gibt es nicht
+Le lien est peut-être ancien ou mal copié.	Der Link ist vielleicht alt oder falsch kopiert.
+
+# Fenêtre des Réglages (settings.rs)
+Toi	Du
+Préférences	Präferenzen
+Mon profil	Mein Profil
+Tes données	Deine Daten
+Qui peut t'écrire	Wer dir schreiben darf
+Applications liées	Verknüpfte Apps
+Voix et vidéo	Audio und Video
+Accessibilité	Barrierefreiheit
+Raccourcis clavier	Tastenkürzel
+Langue et heure	Sprache und Zeit
+Sections des réglages	Abschnitte der Einstellungen
+Fermer les réglages (Échap)	Einstellungen schließen (Esc)
+Bientôt ici	Bald hier
+Section {id} prévue, pas encore construite.	Abschnitt {id} ist geplant, aber noch nicht gebaut.
