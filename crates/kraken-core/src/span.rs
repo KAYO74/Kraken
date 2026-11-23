@@ -53,8 +53,8 @@ pub fn duration(lang: Lang, secs: u64) -> String {
 }
 
 /// Le temps écoulé depuis un événement récent : « à l'instant » sous la minute, « il y a 5 min » sous
-/// l'heure (« just now », « 5 min ago » ; « الان », « 5 دقیقه پیش » ; « gerade eben », « vor 5 Min. »). `None` au-delà (ou pour une date dans le futur
-/// d'une horloge un peu en avance, qui compte comme « à l'instant ») : l'appelant affiche alors l'heure.
+/// l'heure (« just now », « 5 min ago » ; « الان », « 5 دقیقه پیش » ; « gerade eben », « vor 5 Min. »). `None` au-delà (ou pour
+/// une date dans le futur d'une horloge un peu en avance, qui compte comme « à l'instant ») : l'appelant affiche alors l'heure.
 pub fn ago(lang: Lang, elapsed_ms: i64) -> Option<String> {
     let secs = elapsed_ms.max(0) / 1000;
     match (secs, lang) {
