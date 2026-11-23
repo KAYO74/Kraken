@@ -278,7 +278,10 @@ test('F04-C8 appel entrant dans l’appli de bureau sans WebRTC : « Rejoindre �
     delete w.webkitRTCPeerConnection;
     const calls: string[] = [];
     w.__calls = calls;
-    w.__TAURI_INTERNALS__ = { invoke: (cmd: string) => (calls.push(cmd), Promise.resolve(null)) };
+    w.__fail = false;
+    w.__TAURI_INTERNALS__ = {
+      invoke: (cmd: string) => (calls.push(cmd), cmd === 'open_in_browser' && w.__fail ? Promise.reject('non') : Promise.resolve(null)),
+    };
   });
   await b.page.reload();
   await a.page.getByRole('tab', { name: 'Tous' }).click();
@@ -290,5 +293,19 @@ test('F04-C8 appel entrant dans l’appli de bureau sans WebRTC : « Rejoindre �
   await expect(ring).toContainText('Pas de vocal dans l\'appli de bureau : réponds depuis ton navigateur.');
   await ring.getByRole('button', { name: 'Ouvrir dans mon navigateur' }).click();
   await expect.poll(() => b.page.evaluate(() => (window as unknown as { __calls: string[] }).__calls)).toContain('open_in_browser');
+  // Un échec : la ligne d'erreur était réservée (la carte ne grandit pas, le bouton « Rejoindre » ne bouge pas) et elle est rouge.
+  const before = await ring.boundingBox();
+  const join = await ring.getByRole('button', { name: 'Rejoindre' }).boundingBox();
+  await b.page.evaluate(() => ((window as unknown as Record<string, unknown>).__fail = true));
+  await ring.getByRole('button', { name: 'Ouvrir dans mon navigateur' }).click();
+  const err = ring.getByRole('alert').filter({ hasText: /Impossible d.ouvrir le navigateur/ });
+  await expect(err).toBeVisible();
+  expect((await ring.boundingBox())!.height).toBe(before!.height);
+  expect((await ring.getByRole('button', { name: 'Rejoindre' }).boundingBox())!.y).toBe(join!.y);
+  const [red, grey] = await Promise.all([
+    err.evaluate((e) => getComputedStyle(e).color),
+    ring.locator('p').first().evaluate((e) => getComputedStyle(e).color),
+  ]);
+  expect(red).not.toBe(grey);
   await a11y(b.page);
 });
