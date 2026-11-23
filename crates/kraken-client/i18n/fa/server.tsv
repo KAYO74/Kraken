@@ -2,4 +2,150 @@
 # Une ligne « français<TAB>persan » par texte ; règles : ../README.md (« Ajouter une langue »).
 # Mêmes {variables} que le français, chiffres latins (0-9, jamais ۰-۹ ni ٠-٩), demi-espace (U+200C) seulement entre
 # deux lettres, jamais en tête ni en queue. Un texte absent d'ici s'affiche en anglais (repli), puis en français.
-# Fichier en construction : `python3 scripts/i18n-check.py --missing --lang fa` liste ce qui reste à traduire.
+# Catalogue complet (1 469 textes) : `python3 scripts/i18n-check.py --missing --lang fa` doit rester vide. Traduction par Claude, sans relecture humaine.
+
+# Connexion, session, accès (error.rs, auth.rs)
+Identifiant ou mot de passe incorrect.	نام کاربری یا رمز عبور نادرست است.
+Session absente ou expirée.	نشست وجود ندارد یا منقضی شده است.
+Tu n'as pas la permission de faire ça.	شما اجازه انجام این کار را ندارید.
+Introuvable.	یافت نشد.
+Cette invitation n'existe pas ou a été révoquée.	این دعوت‌نامه وجود ندارد یا لغو شده است.
+Mot de passe incorrect.	رمز عبور نادرست است.
+Ce pseudo est déjà pris.	این نام کاربری قبلاً گرفته شده است.
+Un compte existe déjà avec cette adresse.	حسابی با این نشانی از قبل وجود دارد.
+
+# Requêtes, saisie, limites
+nonce trop long	nonce بیش از حد طولانی است.
+Pas d'invitation pour un MP.	پیام خصوصی دعوت‌نامه ندارد.
+Trop d'essais. Attends une minute.	تلاش‌های بیش از حد. یک دقیقه صبر کنید.
+`limit` : un nombre attendu.	`limit`: یک عدد لازم است.
+`category` : membres, roles, salons, invitations, emojis ou serveur.	`category` باید یکی از این مقدارها باشد: membres، roles، salons، invitations، emojis یا serveur.
+Erreur du serveur, réessaie.	خطای سرور؛ دوباره تلاش کنید.
+
+# Comptes, profil, mot de passe
+Adresse e-mail invalide.	نشانی ایمیل نامعتبر است.
+Mot de passe : 8 caractères au minimum.	رمز عبور: حداقل 8 کاراکتر.
+Pseudo : 2 à 32 caractères parmi a-z, 0-9, _ et .	نام کاربری: از 2 تا 32 کاراکتر از a-z، 0-9، _ و نقطه.
+Ce pseudo est réservé : choisis-en un autre.	این نام کاربری رزرو شده است؛ نام دیگری انتخاب کنید.
+Mot de passe refusé.	رمز عبور پذیرفته نشد.
+C'est déjà ton pseudo.	این همین نام کاربری فعلی شماست.
+C'est déjà ton adresse e-mail.	این همین نشانی ایمیل فعلی شماست.
+Choisis un mot de passe différent de l'actuel.	رمز عبوری متفاوت از رمز فعلی انتخاب کنید.
+Lien invalide ou expiré.	پیوند نامعتبر است یا منقضی شده است.
+Cette instance n'envoie pas d'e-mails. Demande à son administrateur.	این سامانه ایمیل ارسال نمی‌کند. از مدیر آن بپرسید.
+Lien invalide ou expiré. Refais une demande.	پیوند نامعتبر است یا منقضی شده است. دوباره درخواست دهید.
+C'est ton propre pseudo.	این نام کاربری خودتان است.
+
+# Fichiers, images, emojis
+Trop de fichiers en attente : envoie un message ou retire-en avant d'en ajouter.	تعداد فایل‌های در انتظار ارسال زیاد است: پیش از افزودن فایل دیگر، پیامی ارسال کنید یا چند فایل را بردارید.
+Envoi interrompu.	بارگذاری قطع شد.
+Ce fichier est vide.	این فایل خالی است.
+Ce fichier n'est pas une image lisible : choisis un PNG, un JPEG, un WebP ou un GIF.	این فایل تصویر قابل خواندن نیست: یک تصویر PNG، JPEG، WebP یا GIF انتخاب کنید.
+20 emojis différents au plus sur un message.	حداکثر 20 ایموجی متفاوت روی یک پیام.
+Seuls les emojis de la sélection ou ceux de tes serveurs servent de réaction.	فقط ایموجی‌های استاندارد یا ایموجی‌های سرورهای شما برای واکنش قابل استفاده‌اند.
+Le nom d'un emoji compte de 2 à 32 caractères : lettres sans accent, chiffres et _.	نام ایموجی باید 2 تا 32 کاراکتر باشد: حروف لاتین بدون علامت، ارقام و _.
+
+# Épingles
+Seuls les messages écrits (texte ou réponse) peuvent être épinglés.	فقط پیام‌های نوشتاری (متن یا پاسخ) را می‌توان سنجاق کرد.
+Le message d'origine n'est plus dans ce salon.	پیام اصلی دیگر در این کانال نیست.
+Tu ne peux pas épingler ni désépingler ici : tu as bloqué cette personne.	اینجا نمی‌توانید پیامی را سنجاق کنید یا سنجاق آن را بردارید: این شخص را مسدود کرده‌اید.
+Tu ne peux pas épingler ni désépingler ici : la conversation est bloquée.	اینجا نمی‌توانید پیامی را سنجاق کنید یا سنجاق آن را بردارید: گفتگو مسدود است.
+
+# Serveurs, salons, rôles, droits
+C'est le dernier salon d'écriture du serveur : crée-en un autre avant de le supprimer.	این آخرین کانال متنی سرور است: پیش از حذف آن، کانال دیگری ایجاد کنید.
+Ce nom est déjà pris dans ce serveur.	این نام در این سرور قبلاً گرفته شده است.
+Le nom d'un serveur compte de 2 à 100 caractères.	نام سرور باید بین 2 تا 100 کاراکتر باشد.
+Le nom du serveur contient un caractère interdit (tabulation, saut de ligne ou autre caractère de contrôle).	نام سرور شامل کاراکتر ممنوع است (Tab، خط جدید یا کاراکتر کنترلی دیگر).
+Ce modèle de serveur n'existe pas.	این الگوی سرور وجود ندارد.
+Mode lent : aucun, 5 s, 10 s, 30 s, 1 min, 5 min, 15 min ou 1 h, et seulement dans un salon d'écriture.	حالت آهسته: غیرفعال، 5 ثانیه، 10 ثانیه، 30 ثانیه، 1 دقیقه، 5 دقیقه، 15 دقیقه یا 1 ساعت، و فقط در کانال متنی.
+Cette catégorie n'existe pas ou n'est pas visible.	این دسته‌بندی وجود ندارد یا قابل مشاهده نیست.
+Un droit ne peut pas être à la fois autorisé et refusé.	یک دسترسی نمی‌تواند هم مجاز باشد و هم ممنوع.
+Ce réglage existe déjà pour un autre genre de cible (rôle ou membre).	این تنظیم از قبل برای نوع دیگری از هدف (نقش یا عضو) وجود دارد.
+Un serveur ou un salon, l'un des deux.	دقیقاً یکی را مشخص کنید: سرور یا کانال.
+Les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés dans un nom ou un motif.	کاراکترهای نامرئی (فاصله با عرض صفر، تغییر جهت نوشتار، پرکننده) در نام یا الگو پذیرفته نمی‌شوند.
+Le nom d'un rôle compte de 1 à 100 caractères.	نام نقش باید بین 1 تا 100 کاراکتر باشد.
+Cette couleur n'existe pas dans la palette.	این رنگ در پالت وجود ندارد.
+Droit inconnu.	دسترسی ناشناخته.
+@everyone ne peut être ni renommé, ni supprimé, ni donné.	@everyone را نمی‌توان تغییر نام داد، حذف کرد یا به کسی داد.
+Ce changement te retirerait l'accès à ce salon, ou le droit de le gérer.	این تغییر دسترسی شما به این کانال یا اجازه مدیریت آن را از شما می‌گیرد.
+Le nom retapé ne correspond pas à celui du serveur.	نامی که دوباره وارد کردید با نام سرور مطابقت ندارد.
+
+# Invitations
+Cette invitation a expiré. Demande-en une nouvelle.	این دعوت‌نامه منقضی شده است. دعوت‌نامه جدیدی درخواست کنید.
+Cette invitation a déjà servi autant de fois que permis. Demande-en une nouvelle.	این دعوت‌نامه به حداکثر دفعات مجاز استفاده شده است. دعوت‌نامه جدیدی درخواست کنید.
+Une invitation dure 7 jours au plus, ou n'expire jamais.	مدت اعتبار دعوت‌نامه حداکثر 7 روز است، یا هرگز منقضی نمی‌شود.
+
+# Modération, rangs, propriétaire
+Une exclusion temporaire dure de 1 minute à 28 jours.	مدت محدودیت زمانی از 1 دقیقه تا 28 روز است.
+Une sourdine dure de 1 minute à 30 jours, ou sans fin.	مدت بی‌صدا کردن از 1 دقیقه تا 30 روز است، یا بدون پایان.
+Tu ne peux pas faire ça sur toi-même.	نمی‌توانید این کار را روی خودتان انجام دهید.
+Son rang est égal ou supérieur au tien (le propriétaire est intouchable).	رتبه او برابر یا بالاتر از رتبه شماست (به مالک نمی‌توان دست زد).
+Tu possèdes ce serveur : transfère-le à un autre membre avant de le quitter.	شما مالک این سرور هستید: پیش از ترک آن، مالکیت را به عضو دیگری منتقل کنید.
+Seul le propriétaire peut faire ça.	فقط مالک می‌تواند این کار را انجام دهد.
+Un administrateur ne peut pas être exclu temporairement.	برای مدیر نمی‌توان محدودیت زمانی تعیین کرد.
+Tu as été banni de ce serveur.	شما از این سرور بن شده‌اید.
+Tu es exclu temporairement : tu peux lire, mais pas écrire, réagir, envoyer de fichier ni parler.	شما محدودیت زمانی دارید: می‌توانید بخوانید، اما نمی‌توانید بنویسید، واکنش نشان دهید، فایل بفرستید یا صحبت کنید.
+
+# Amis, blocages, messages privés, groupes
+Vous êtes déjà amis.	شما از قبل دوست هستید.
+Ta demande est déjà partie : elle attend sa réponse dans « En attente ».	درخواست شما قبلاً ارسال شده است: در بخش «در انتظار» منتظر پاسخ است.
+Tu as bloqué ce compte. Débloque-le d'abord, dans l'onglet « Bloqués ».	این حساب را مسدود کرده‌اید. ابتدا مسدودیت آن را در زبانه «مسدود‌شده‌ها» بردارید.
+Cette personne n'accepte pas de demande d'ami de ta part.	این شخص درخواست دوستی از سوی شما را نمی‌پذیرد.
+Tu as bloqué cette personne : débloque-la pour lui écrire.	این شخص را مسدود کرده‌اید: برای پیام دادن به او، مسدودیتش را بردارید.
+Ton message n'a pas pu être remis : cette personne ne reçoit pas de message de ta part.	پیام شما تحویل داده نشد: این شخص از سوی شما پیامی دریافت نمی‌کند.
+Pour écrire à quelqu'un, soyez amis ou membres d'un même serveur.	برای پیام دادن به کسی، باید دوست باشید یا عضو یک سرور مشترک.
+Seuls tes amis peuvent entrer dans un groupe que tu crées ou complètes.	فقط دوستانتان را می‌توانید به گروهی که می‌سازید یا تکمیل می‌کنید اضافه کنید.
+Seul le propriétaire du groupe peut en retirer quelqu'un.	فقط مالک گروه می‌تواند کسی را از آن حذف کند.
+Tu as bloqué cette personne : débloque-la pour l'appeler.	این شخص را مسدود کرده‌اید: برای تماس با او، مسدودیتش را بردارید.
+Impossible d'appeler cette personne : elle ne reçoit pas d'appel de ta part.	تماس با این شخص ممکن نیست: او از سوی شما تماسی دریافت نمی‌کند.
+Écris le pseudo de la personne à ajouter.	نام کاربری فردی را که می‌خواهید اضافه کنید بنویسید.
+Aucun compte ne porte ce pseudo : il ne contient que des minuscules, chiffres, points et tirets bas.	حسابی با این نام کاربری وجود ندارد: نام کاربری فقط شامل حروف کوچک لاتین، ارقام، نقطه و خط زیر است.
+Seuls « friend » et « blocked » se choisissent.	فقط «friend» و «blocked» قابل انتخاب هستند.
+Choisis au moins une personne.	دست‌کم یک نفر را انتخاب کنید.
+
+# Vocal
+Le vocal n'est pas disponible sur cette instance.	قابلیت صوتی در این سامانه در دسترس نیست.
+Ce salon n'est pas un salon vocal.	این کانال، کانال صوتی نیست.
+Ton application est trop ancienne pour les appels : mets-la à jour.	نسخه برنامه شما برای تماس‌ها بیش از حد قدیمی است: آن را به‌روزرسانی کنید.
+Offre WebRTC trop longue.	پیشنهاد WebRTC بیش از حد طولانی است.
+Connexion vocale refusée : offre WebRTC inattendue.	اتصال صوتی رد شد: پیشنهاد WebRTC غیرمنتظره.
+
+# Messages à valeur glissée : limites, valeurs refusées, attentes
+Déjà utilisé : {f}.	قبلاً استفاده شده است: {f}.
+Valeur refusée : {f}.	مقدار پذیرفته نشد: {f}.
+Ce serveur a déjà ses {n} emojis : retires-en un pour en ajouter.	ظرفیت ایموجی‌های این سرور ({n}) پر است: برای افزودن ایموجی جدید، یکی را حذف کنید.
+Ce salon a déjà {n} messages épinglés : désépingles-en un d'abord.	این کانال هم‌اکنون {n} پیام سنجاق‌شده دارد: ابتدا سنجاق یکی را بردارید.
+Un groupe réunit de 3 à {n} personnes, toi compris.	یک گروه از 3 تا {n} نفر را شامل می‌شود، با احتساب شما.
+Ce groupe est complet : {n} personnes au plus.	ظرفیت این گروه تکمیل است: حداکثر {n} نفر.
+Le nom d'un salon compte de 1 à {n} caractères, sans caractère de contrôle.	نام کانال باید بین 1 تا {n} کاراکتر باشد و کاراکتر کنترلی نداشته باشد.
+Un serveur compte {n} salons et catégories au plus.	یک سرور حداکثر می‌تواند {n} کانال و دسته‌بندی داشته باشد.
+Le sujet tient en {n} caractères au plus, et seuls les salons d'écriture en ont un.	موضوع حداکثر {n} کاراکتر است و فقط کانال‌های متنی موضوع دارند.
+Tu as déjà {n} invitations actives. Révoque-en une.	هم‌اکنون {n} دعوت‌نامه فعال دارید. یکی را لغو کنید.
+Une invitation sert {n} fois au plus (0 : sans limite).	هر دعوت‌نامه حداکثر {n} بار قابل استفاده است (0: بدون محدودیت).
+{n} réglages de droits au plus par salon.	حداکثر {n} تنظیم دسترسی برای هر کانال.
+Le nom tient en {n} caractères au plus.	نام حداکثر {n} کاراکتر است.
+La raison tient en {n} caractères au plus.	دلیل حداکثر {n} کاراکتر است.
+On peut effacer les messages de {n} heures au plus.	می‌توان پیام‌های حداکثر {n} ساعت گذشته را پاک کرد.
+{n} rôles au plus, et l'ordre doit les citer tous.	حداکثر {n} نقش، و ترتیب باید همه آن‌ها را شامل شود.
+Mode lent : encore {n} s avant ton prochain message.	حالت آهسته: {n} ثانیه دیگر تا پیام بعدی شما.
+Tu as déjà changé ton pseudo {n} fois en une heure. Réessaie dans {d} s.	نام کاربری خود را در یک ساعت گذشته {n} بار تغییر داده‌اید. {d} ثانیه دیگر دوباره تلاش کنید.
+Tu as déjà changé ton pseudo {n} fois en une heure. Réessaie dans {d} min.	نام کاربری خود را در یک ساعت گذشته {n} بار تغییر داده‌اید. {d} دقیقه دیگر دوباره تلاش کنید.
+Ce salon vocal est complet ({n} personnes au plus).	این کانال صوتی پر است (حداکثر {n} نفر).
+Aucun compte ne porte le pseudo « {nom} ». Vérifie son orthographe.	حسابی با نام کاربری «{nom}» وجود ندارد. املای آن را بررسی کنید.
+`{f}` : un identifiant attendu.	`{f}`: یک شناسه لازم است.
+
+# Profil : le libellé du champ ({champ}) est traduit à part
+{champ} : {n} caractères au plus.	{champ}: حداکثر {n} کاراکتر.
+{champ} : {n} caractères au plus, sans retour à la ligne.	{champ}: حداکثر {n} کاراکتر، بدون خط جدید.
+{champ} : les caractères invisibles (espace de largeur nulle, changement de sens d'écriture, remplisseur) ne sont pas acceptés.	{champ}: کاراکترهای نامرئی (فاصله با عرض صفر، تغییر جهت نوشتار، پرکننده) پذیرفته نمی‌شوند.
+{champ} : écris au moins un caractère visible, ou laisse le champ vide.	{champ}: دست‌کم یک کاراکتر قابل مشاهده بنویسید یا فیلد را خالی بگذارید.
+
+# Images, animations et fichiers : limites de poids et de forme
+Ce fichier pèse trop lourd : {n} Mo au plus.	حجم این فایل بیش از حد است: حداکثر {n} مگابایت.
+Cette image pèse trop lourd : {n} Mo au plus.	حجم این تصویر بیش از حد است: حداکثر {n} مگابایت.
+Cette image pèse trop lourd : {n} Ko au plus.	حجم این تصویر بیش از حد است: حداکثر {n} کیلوبایت.
+Cette image est trop petite : {n} pixels de côté au moins.	این تصویر بیش از حد کوچک است: هر ضلع دست‌کم {n} پیکسل باید باشد.
+Cette image est trop grande : {n} pixels de côté et {m} millions de pixels au plus. Réduis-la avant de l'envoyer.	این تصویر بیش از حد بزرگ است: حداکثر {n} پیکسل در هر ضلع و {m} میلیون پیکسل. پیش از ارسال، آن را کوچک کنید.
+Cette image est trop allongée : son grand côté ne doit pas dépasser {n} fois son petit côté.	این تصویر بیش از حد کشیده است: ضلع بلند آن نباید بیش از {n} برابر ضلع کوتاهش باشد.
+Cette animation est trop lourde à afficher : {n} pixels de côté et {m} images au plus.	نمایش این انیمیشن بیش از حد سنگین است: حداکثر {n} پیکسل در هر ضلع و {m} فریم.
+Cette animation est trop allongée : elle doit rester presque carrée ({n} pour 1 au plus).	این انیمیشن بیش از حد کشیده است: باید تقریباً مربع بماند (حداکثر {n} به 1).

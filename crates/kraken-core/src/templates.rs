@@ -109,8 +109,10 @@ pub const ALL: [Template; 5] = [
         name: "Vide",
         description: "Un salon textuel et un vocal, à compléter.",
         groups: &[
-            group("Salons textuels", "Text channels", &[text("général", "general")]),
-            group("Salons vocaux", "Voice channels", &[voice("Général", "General")]),
+            group("Salons textuels", "Text channels", &[text("général", "general").fa("عمومی")])
+                .fa("کانال\u{200c}های متنی"),
+            group("Salons vocaux", "Voice channels", &[voice("Général", "General").fa("عمومی")])
+                .fa("کانال\u{200c}های صوتی"),
         ],
     },
     Template {
@@ -118,9 +120,20 @@ pub const ALL: [Template; 5] = [
         name: "Communauté",
         description: "Annonces, règles et entraide, pour un club ou un projet.",
         groups: &[
-            group("Accueil", "Welcome", &[text("annonces", "announcements"), text("règles", "rules")]),
-            group("Discussions", "Discussions", &[text("général", "general"), text("aide", "help")]),
-            group("Salons vocaux", "Voice channels", &[voice("Discussion libre", "Open chat")]),
+            group(
+                "Accueil",
+                "Welcome",
+                &[text("annonces", "announcements").fa("اطلاعیه\u{200c}ها"), text("règles", "rules").fa("قوانین")],
+            )
+            .fa("خوش\u{200c}آمدگویی"),
+            group(
+                "Discussions",
+                "Discussions",
+                &[text("général", "general").fa("عمومی"), text("aide", "help").fa("کمک")],
+            )
+            .fa("گفتگوها"),
+            group("Salons vocaux", "Voice channels", &[voice("Discussion libre", "Open chat").fa("گفتگوی آزاد")])
+                .fa("کانال\u{200c}های صوتی"),
         ],
     },
     Template {
@@ -132,16 +145,22 @@ pub const ALL: [Template; 5] = [
                 "Salons textuels",
                 "Text channels",
                 &[
-                    text("général", "general"),
-                    text("recherche-de-joueurs", "looking-for-players"),
-                    text("astuces", "tips"),
+                    text("général", "general").fa("عمومی"),
+                    text("recherche-de-joueurs", "looking-for-players").fa("یافتن-هم\u{200c}تیمی"),
+                    text("astuces", "tips").fa("نکته\u{200c}ها"),
                 ],
-            ),
+            )
+            .fa("کانال\u{200c}های متنی"),
             group(
                 "Salons vocaux",
                 "Voice channels",
-                &[voice("Partie 1", "Game 1"), voice("Partie 2", "Game 2"), voice("Pause", "Break")],
-            ),
+                &[
+                    voice("Partie 1", "Game 1").fa("بازی 1"),
+                    voice("Partie 2", "Game 2").fa("بازی 2"),
+                    voice("Pause", "Break").fa("استراحت"),
+                ],
+            )
+            .fa("کانال\u{200c}های صوتی"),
         ],
     },
     Template {
@@ -153,21 +172,23 @@ pub const ALL: [Template; 5] = [
                 "Travail",
                 "Study",
                 &[
-                    text("général", "general"),
-                    text("cours", "classes"),
-                    text("devoirs", "homework"),
-                    text("ressources", "resources"),
+                    text("général", "general").fa("عمومی"),
+                    text("cours", "classes").fa("درس\u{200c}ها"),
+                    text("devoirs", "homework").fa("تکلیف\u{200c}ها"),
+                    text("ressources", "resources").fa("منابع"),
                 ],
-            ),
+            )
+            .fa("مطالعه"),
             group(
                 "Salons vocaux",
                 "Voice channels",
                 &[
-                    voice("Salle de travail", "Study room"),
-                    voice("Révisions en groupe", "Group study"),
-                    voice("Pause", "Break"),
+                    voice("Salle de travail", "Study room").fa("اتاق مطالعه"),
+                    voice("Révisions en groupe", "Group study").fa("مرور گروهی"),
+                    voice("Pause", "Break").fa("استراحت"),
                 ],
-            ),
+            )
+            .fa("کانال\u{200c}های صوتی"),
         ],
     },
     Template {
@@ -178,13 +199,19 @@ pub const ALL: [Template; 5] = [
             group(
                 "Salons textuels",
                 "Text channels",
-                &[text("général", "general"), text("photos", "photos"), text("sorties", "outings")],
-            ),
+                &[
+                    text("général", "general").fa("عمومی"),
+                    text("photos", "photos").fa("عکس\u{200c}ها"),
+                    text("sorties", "outings").fa("دورهمی\u{200c}ها"),
+                ],
+            )
+            .fa("کانال\u{200c}های متنی"),
             group(
                 "Salons vocaux",
                 "Voice channels",
-                &[voice("Le canapé", "The couch"), voice("Soirée film", "Movie night")],
-            ),
+                &[voice("Le canapé", "The couch").fa("مبل"), voice("Soirée film", "Movie night").fa("شب فیلم")],
+            )
+            .fa("کانال\u{200c}های صوتی"),
         ],
     },
 ];

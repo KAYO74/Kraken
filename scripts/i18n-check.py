@@ -49,7 +49,7 @@ EMOJI_SRC = ROOT / "crates" / "kraken-core" / "src" / "emoji.rs"
 TEMPLATES_SRC = ROOT / "crates" / "kraken-core" / "src" / "templates.rs"
 # Langues dont le catalogue est encore en construction : leurs clés manquantes sont des avertissements (comptés, listés avec
 # -v ou --missing --lang), pas des erreurs. À RETIRER à la fin de la PR qui ajoute la langue (le persan : PR #33).
-PARTIAL = {"fa"}
+PARTIAL: set[str] = set()
 # La langue de référence : elle porte tous les messages du serveur (server.tsv), que chaque autre langue doit traduire aussi.
 REFERENCE = "en"
 # Le repli d'une langue (même table que `Lang::fallback` dans le noyau), pour le dire dans les messages.

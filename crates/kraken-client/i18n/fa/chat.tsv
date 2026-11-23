@@ -2,4 +2,313 @@
 # Une ligne « français<TAB>persan » par texte ; règles : ../README.md (« Ajouter une langue »).
 # Mêmes {variables} que le français, chiffres latins (0-9, jamais ۰-۹ ni ٠-٩), demi-espace (U+200C) seulement entre
 # deux lettres, jamais en tête ni en queue. Un texte absent d'ici s'affiche en anglais (repli), puis en français.
-# Fichier en construction : `python3 scripts/i18n-check.py --missing --lang fa` liste ce qui reste à traduire.
+# Catalogue complet (1 469 textes) : `python3 scripts/i18n-check.py --missing --lang fa` doit rester vide. Traduction par Claude, sans relecture humaine.
+
+# Salon, en-tête et barre d'outils (chat.rs)
+Introuvable	یافت نشد
+Forum	انجمن
+Fils	رشته‌ها
+Messages de {nom}	پیام‌های {nom}
+Écrire à {nom}	پیام به {nom}
+Écrire dans #{nom}	پیام در #{nom}
+Messages épinglés	پیام‌های سنجاق‌شده
+Liste des membres	فهرست اعضا
+Membres	اعضا
+Ajouter des amis au groupe	افزودن دوستان به گروه
+Ajouter des amis	افزودن دوستان
+Renommer le groupe	تغییر نام گروه
+Renommer	تغییر نام
+Quitter le groupe	ترک گروه
+Créer un groupe avec {nom}	ساخت گروه با {nom}
+Créer un groupe	ساخت گروه
+Notifications de la conversation	اعلان‌های گفتگو
+Notifications du salon	اعلان‌های کانال
+Rechercher	جستجو
+Boîte de réception	صندوق ورودی
+Tu as bloqué {nom} : vous ne pouvez plus vous écrire ici. L'historique reste lisible.	شما {nom} را مسدود کرده‌اید؛ دیگر نمی‌توانید اینجا برای یکدیگر پیام بنویسید. تاریخچه همچنان قابل مشاهده است.
+Débloquer	رفع مسدودی
+Réagir avec un emoji	واکنش با ایموجی
+Insérer un emoji	درج ایموجی
+
+# Fil de messages (chat.rs)
+Ici commence ta conversation avec {nom}. Elle reste entre vous.	اینجا آغاز گفتگوی شما با {nom} است. این گفتگو فقط میان شما دو نفر می‌ماند.
+Ici commence #{nom}. Tout l'historique du salon se lit à partir d'ici.	اینجا آغاز #{nom} است. تمام تاریخچه کانال از همین‌جا قابل خواندن است.
+Messages	پیام‌ها
+Impossible de charger les messages	بارگذاری پیام‌ها ممکن نشد
+Réessayer	تلاش دوباره
+Nouveaux messages	پیام‌های جدید
+pas envoyé	ارسال نشد
+envoi…	در حال ارسال…
+Supprimer	حذف
+Compte supprimé	حساب کاربری حذف‌شده
+Message d'un compte que tu as bloqué.	پیامی از حساب کاربری که مسدود کرده‌اید.
+Masquer	پنهان کردن
+Afficher	نمایش
+Épinglé	سنجاق‌شده
+Modifié le {date}	ویرایش‌شده در {date}
+(édité)	(ویرایش‌شده)
+Fichier joint	فایل پیوست
+Aller au message d'origine, de {nom}	رفتن به پیام اصلی از {nom}
+Le message d'origine a été supprimé.	پیام اصلی حذف شده است.
+Ce message est trop ancien pour être chargé ici.	این پیام برای بارگذاری در اینجا بیش از حد قدیمی است.
+Ce message n'est plus disponible.	این پیام دیگر در دسترس نیست.
+
+# Appels dans le fil (chat.rs)
+{h} h {min}	{h} ساعت و {min} دقیقه
+{n} minute	{n} دقیقه
+{n} minutes	{n} دقیقه
+Tu as lancé un appel.	شما تماسی را شروع کردید.
+{nom} a lancé un appel.	{nom} تماسی را شروع کرد.
+Personne n'a répondu à ton appel.	کسی به تماس شما پاسخ نداد.
+Tu as lancé un appel qui a duré {duree}.	شما تماسی را شروع کردید که {duree} طول کشید.
+Appel manqué de {nom}.	تماس بی‌پاسخ از {nom}.
+{nom} a lancé un appel qui a duré {duree}.	{nom} تماسی را شروع کرد که {duree} طول کشید.
+
+# Réactions (chat.rs, emoji.rs)
+Personne	هیچ‌کس
+{a} et {b}	{a} و {b}
+{a}, {b} et {c}	{a}، {b} و {c}
+{a}, {b}, {c} et {n} autre	{a}، {b}، {c} و {n} نفر دیگر
+{a}, {b}, {c} et {n} autres	{a}، {b}، {c} و {n} نفر دیگر
+quelqu'un	یک نفر
+emoji supprimé	ایموجی حذف‌شده
+emoji personnalisé	ایموجی سفارشی
+{qui} a réagi avec {emoji}	{qui} با {emoji} واکنش نشان داد
+{qui} ont réagi avec {emoji}	{qui} با {emoji} واکنش نشان دادند
+{emoji} : {n} réaction	{emoji}: {n} واکنش
+{emoji} : {n} réactions	{emoji}: {n} واکنش
+{emoji} : {n} réaction, dont la tienne	{emoji}: {n} واکنش، از جمله واکنش شما
+{emoji} : {n} réactions, dont la tienne	{emoji}: {n} واکنش، از جمله واکنش شما
+Réactions	واکنش‌ها
+Autre réaction	افزودن واکنش دیگر
+
+# Actions sur un message, modification, suppression (chat.rs)
+Actions sur le message	گزینه‌های پیام
+Ajouter une réaction	افزودن واکنش
+Réagir	واکنش
+Répondre	پاسخ
+Épingler le message	سنجاق کردن پیام
+Désépingler le message	برداشتن سنجاق پیام
+Modifier le message	ویرایش پیام
+Modifier	ویرایش
+Supprimer le message	حذف پیام
+Entrée enregistre, Échap annule.	Enter برای ذخیره، Esc برای انصراف.
+Annuler	انصراف
+Supprimer ce message ?	این پیام حذف شود؟
+Il disparaîtra pour tout le monde, sans retour possible. Son auteur n'en sera pas prévenu.	این پیام برای همه حذف می‌شود و قابل بازگشت نیست. به نویسنده پیام خبر داده نمی‌شود.
+Il disparaîtra pour tout le monde, sans retour possible.	این پیام برای همه حذف می‌شود و قابل بازگشت نیست.
+
+# Saisie, mode lent, exclusion (chat.rs)
+Tu peux de nouveau écrire.	دوباره می‌توانید پیام بنویسید.
+Tous ceux qui voient ce salon	همه کسانی که این کانال را می‌بینند
+Ceux qui sont là en ce moment	همه کسانی که همین الان آنلاین هستند
+Exclu jusqu'à {date}	در محدودیت زمانی تا {date}
+Patiente : l'envoi des fichiers n'est pas terminé.	کمی صبر کنید: بارگذاری فایل‌ها هنوز تمام نشده است.
+Retire les fichiers dont l'envoi a échoué avant d'envoyer le message.	پیش از ارسال پیام، فایل‌هایی را که بارگذاری‌شان ناموفق بوده است حذف کنید.
+Une fois les emojis écrits en entier, ton message dépasse {max} caractères : raccourcis-le.	با نوشتن کامل ایموجی‌ها، پیام شما از {max} کاراکتر بیشتر می‌شود؛ آن را کوتاه‌تر کنید.
+Mode lent : attends encore {reste} s avant d'envoyer un autre message.	حالت آهسته: {reste} ثانیه دیگر صبر کنید تا بتوانید پیام دیگری بفرستید.
+Mode lent : tu pourras écrire de nouveau dans {delai}.	حالت آهسته: {delai} دیگر می‌توانید دوباره پیام بنویسید.
+Mode lent : encore {reste} s avant ton prochain message	حالت آهسته: {reste} ثانیه تا پیام بعدی شما
+Mode lent : {delai} entre deux messages	حالت آهسته: {delai} بین هر دو پیام
+Tu peux lire, pas écrire.	فقط می‌توانید بخوانید، نه بنویسید.
+{n} caractères sur {max} : raccourcis un peu.	{n} کاراکتر از حداکثر {max}؛ کمی کوتاه‌تر کنید.
+Suggestions	پیشنهادها
+Tu réponds à	در حال پاسخ به
+Annuler la réponse	انصراف از پاسخ
+Annuler la réponse (Échap)	انصراف از پاسخ (Esc)
+Joindre un fichier	پیوست فایل
+Joindre un fichier (non autorisé ici)	پیوست فایل (در اینجا مجاز نیست)
+Emoji	ایموجی
+Envoyer	ارسال
+
+# Liste des membres (chat.rs)
+Membres : {role}	اعضا: {role}
+Membres du groupe	اعضای گروه
+Ouvrir le profil	باز کردن نمایه
+(propriétaire)	(مالک)
+Plus d'actions pour {nom}	گزینه‌های بیشتر برای {nom}
+Profil et rôles	نمایه و نقش‌ها
+Exclure temporairement…	اعمال محدودیت زمانی…
+Lever l'exclusion	رفع محدودیت زمانی
+Expulser	اخراج
+Bannir	بن کردن
+Retirer du groupe	حذف از گروه
+
+# Sélecteur d'emojis (emoji.rs)
+Chercher un emoji	جستجوی ایموجی
+Emojis de {nom}	ایموجی‌های {nom}
+Emojis standards	ایموجی‌های استاندارد
+Emojis	ایموجی‌ها
+Aucun emoji de la sélection ne correspond.	هیچ‌یک از ایموجی‌های این مجموعه مطابقت ندارد.
+
+# Fichiers joints, visionneuse, aperçus de liens (files.rs)
+{n} o	{n} بایت
+{n} Ko	{n} کیلوبایت
+{n} Mo	{n} مگابایت
+{n} Go	{n} گیگابایت
+{max} fichiers au plus par message.	حداکثر {max} فایل در هر پیام.
+« {nom} » est vide.	«{nom}» خالی است.
+« {nom} » pèse {taille} : {max} au plus.	حجم «{nom}» برابر {taille} است؛ حداکثر {max} مجاز است.
+Fichiers à joindre	فایل‌های پیوست
+Retirer {nom}	حذف {nom}
+Retirer	حذف
+Envoi de {nom}	در حال بارگذاری {nom}
+Description	توضیحات
+Texte alternatif de {nom}	متن جایگزین {nom}
+Dépose pour joindre à {lieu}	برای پیوست به {lieu} رها کنید
+Ouvrir l'image {nom}	باز کردن تصویر {nom}
+Télécharger {nom}	دانلود {nom}
+Télécharger	دانلود
+Visionneuse d'images	نمایشگر تصویر
+{taille} · {n} sur {total}	{taille} · {n} از {total}
+Ouvrir l'original	باز کردن فایل اصلی
+Image précédente	تصویر قبلی
+Précédente (←)	قبلی (←)
+Image suivante	تصویر بعدی
+Suivante (→)	بعدی (→)
+Aperçu de {nom}	پیش‌نمایش {nom}
+Retirer l'aperçu	حذف پیش‌نمایش
+
+# Markdown (markdown.rs)
+Afficher le contenu masqué	نمایش محتوای پنهان
+Contenu masqué	محتوای پنهان
+Bloc de code	بلوک کد
+
+# Messages épinglés (pins.rs)
+Message épinglé.	پیام سنجاق شد.
+Message désépinglé.	سنجاق پیام برداشته شد.
+Fermer les messages épinglés	بستن پیام‌های سنجاق‌شده
+Chargement des messages épinglés…	در حال بارگذاری پیام‌های سنجاق‌شده…
+Du plus récemment épinglé au plus ancien.	از جدیدترین پیام سنجاق‌شده تا قدیمی‌ترین.
+Impossible de charger les messages épinglés	بارگذاری پیام‌های سنجاق‌شده ممکن نشد
+Aucun message épinglé	پیام سنجاق‌شده‌ای وجود ندارد
+Épingle un message depuis ses actions pour le retrouver ici.	با سنجاق کردن یک پیام از طریق گزینه‌های آن، می‌توانید دوباره آن را اینجا پیدا کنید.
+Les modérateurs peuvent en épingler.	ناظران می‌توانند پیام سنجاق کنند.
+Aller au message de {nom}	رفتن به پیام {nom}
+Désépingler le message de {nom}	برداشتن سنجاق پیام {nom}
+Aller au message	رفتن به پیام
+Désépingler	برداشتن سنجاق
+
+# Non-lus, mentions, sourdine, notifications (unread.rs)
+{qui} dans {groupe}	{qui} در {groupe}
+Actions pour {nom}	گزینه‌های {nom}
+Marquer comme lu	علامت‌گذاری به‌عنوان خوانده‌شده
+Retirer la sourdine	لغو بی‌صدا کردن
+Mettre en sourdine…	بی‌صدا کردن…
+Notifications…	اعلان‌ها…
+Notifications de {nom}	اعلان‌های {nom}
+Sourdine	بی‌صدا
+Pas de sourdine	بی‌صدا نشده
+En sourdine, sans fin	بی‌صدا، بدون پایان
+En sourdine jusqu'à {date}	بی‌صدا تا {date}
+Pendant 15 minutes	به مدت 15 دقیقه
+Pendant 1 heure	به مدت 1 ساعت
+Pendant 8 heures	به مدت 8 ساعت
+Pendant 24 heures	به مدت 24 ساعت
+Jusqu'à ce que je la retire	تا زمانی که لغو کنم
+En sourdine : ni gras, ni notification. Les mentions restent comptées.	در حالت بی‌صدا، هیچ چیز پررنگ نمی‌شود و اعلانی دریافت نمی‌کنید. منشن‌ها همچنان شمرده می‌شوند.
+Me prévenir pour	اعلان برای
+Par défaut : tous les messages	پیش‌فرض: همه پیام‌ها
+Comme le serveur	مانند سرور
+Tous les messages	همه پیام‌ها
+Les mentions seulement (par défaut)	فقط منشن‌ها (پیش‌فرض)
+Les mentions seulement	فقط منشن‌ها
+Rien	هیچ‌چیز
+Aujourd'hui : {niveau}	در حال حاضر: {niveau}
+tous les messages	همه پیام‌ها
+les mentions seulement	فقط منشن‌ها
+rien	هیچ‌چیز
+Chaque nouveau message peut s'afficher sur le bureau.	هر پیام جدید می‌تواند روی دسکتاپ نمایش داده شود.
+Seulement quand on te nomme, répond à ton message ou appelle tout le monde.	فقط وقتی کسی شما را منشن کند، به پیام شما پاسخ دهد یا همه را فراخواند.
+Aucune notification, et plus de compteur de mentions.	بدون اعلان و بدون شمارنده منشن.
+Ignorer {everyone} et {here}	نادیده گرفتن {everyone} و {here}
+Ces appels à tout le serveur ne comptent plus comme des mentions.	این فراخوان‌های سراسری سرور دیگر منشن به حساب نمی‌آیند.
+en sourdine	بی‌صدا
+
+# Noms des emojis du sélecteur (kraken-core/src/emoji.rs : recherche et nom accessible, traduits à l'affichage)
+pouce levé, d'accord	شست بالا، موافق
+pouce baissé, pas d'accord	شست پایین، مخالف
+cœur rouge	قلب قرمز
+pleurer de rire	گریه از خنده
+sourire timide	لبخند خجالتی
+grand sourire	لبخند بزرگ
+clin d'œil	چشمک
+yeux en cœur	چشم‌های قلبی
+visage aux cœurs	چهره با قلب‌ها
+lunettes de soleil, cool	عینک آفتابی، باحال
+réfléchir, hmm	فکر کردن، هوم
+bouche bée, surpris	دهان باز، متعجب
+larme, triste	اشک، غمگین
+sanglots	هق‌هق
+en colère	عصبانی
+dormir, sommeil	خوابیدن، خواب
+tête qui explose	سر در حال انفجار
+fête, cotillons	جشن، کلاه مهمانی
+sourire gêné, sueur	لبخند معذب، عرق
+tête à l'envers	صورت وارونه
+auréole, ange	هاله، فرشته
+câlin	آغوش
+poignée de main	دست دادن
+applaudir, bravo	تشویق، آفرین
+mains levées, hourra	دست‌های بالا، هورا
+mains jointes, merci	دست‌های جمع‌شده، ممنون
+coucou, salut	سلام، دست تکان دادن
+biceps, force	بازو، قدرت
+yeux, regarder	چشم‌ها، نگاه کردن
+salut militaire	ادای احترام نظامی
+coche, fait	تیک، انجام شد
+croix, non	ضربدر، نه
+question	پرسش
+exclamation	تعجب
+cent, parfait	صد، عالی
+feu, génial	آتش، فوق‌العاده
+étincelles	جرقه‌ها
+étoile	ستاره
+confettis, bravo	کاغذ رنگی، تبریک
+gâteau d'anniversaire	کیک تولد
+cadeau	هدیه
+trophée	جام
+fusée, lancement	موشک، پرتاب
+ampoule, idée	لامپ، ایده
+punaise, épingle	پونز، سنجاق
+trombone	گیره کاغذ
+cloche	زنگ
+réveil, heure	ساعت زنگ‌دار، زمان
+bulle, discussion	حباب پیام، گفتگو
+zzz, sommeil	zzz، خواب
+cœur brisé	قلب شکسته
+cœur bleu	قلب آبی
+cœur vert	قلب سبز
+cœur jaune	قلب زرد
+cœur violet	قلب بنفش
+cœur noir	قلب سیاه
+pieuvre, kraken	هشت‌پا، کراکن
+calmar	مرکب
+poisson tropical	ماهی گرمسیری
+poisson	ماهی
+dauphin	دلفین
+baleine	نهنگ
+requin	کوسه
+tortue	لاک‌پشت
+crabe	خرچنگ
+coquillage	صدف
+vague, mer	موج، دریا
+ancre	لنگر
+chat	گربه
+chien	سگ
+renard	روباه
+pousse, plante	جوانه، گیاه
+arc-en-ciel	رنگین‌کمان
+soleil	خورشید
+lune, nuit	ماه، شب
+café	قهوه
+pizza	پیتزا
+part de gâteau	تکه کیک
+pop-corn	پاپ‌کورن
+manette, jeu	دسته بازی، بازی
+note de musique	نت موسیقی
+casque audio	هدفون
+appareil photo	دوربین عکاسی
+ordinateur	لپ‌تاپ، رایانه
+bogue, insecte	باگ، حشره
+clé à molette, réparer	آچار، تعمیر

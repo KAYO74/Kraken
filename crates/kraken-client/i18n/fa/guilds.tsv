@@ -2,4 +2,474 @@
 # Une ligne « français<TAB>persan » par texte ; règles : ../README.md (« Ajouter une langue »).
 # Mêmes {variables} que le français, chiffres latins (0-9, jamais ۰-۹ ni ٠-٩), demi-espace (U+200C) seulement entre
 # deux lettres, jamais en tête ni en queue. Un texte absent d'ici s'affiche en anglais (repli), puis en français.
-# Fichier en construction : `python3 scripts/i18n-check.py --missing --lang fa` liste ce qui reste à traduire.
+# Catalogue complet (1 469 textes) : `python3 scripts/i18n-check.py --missing --lang fa` doit rester vide. Traduction par Claude, sans relecture humaine.
+# Journal d'audit (audit.rs) : une phrase entière par action, jamais des morceaux recollés
+# Journal d'audit : précisions, champs et valeurs avant / après, filtres, états
+# Salons : mode lent, création, rangement, paramètres d'un salon, droits par salon (channels.rs)
+# Emojis du serveur (emoji_settings.rs)
+# Noms des couleurs de rôle et des droits, par catégorie (guild.rs)
+# Paramètres du serveur : sections, rôles, invitations, bannis, propriété, exclusion, fiche d'un membre (guild.rs)
+# Icône du serveur (icon_picker.rs)
+# Créer un serveur (new_guild.rs)
+# Vue d'ensemble (overview.rs)
+# Modèles de serveur (kraken-core/src/templates.rs) : noms et descriptions des cartes, traduits à l'affichage ;
+# les noms des catégories et des salons viennent du noyau (`Label`), dans la langue choisie
+
+# Journal d'audit (audit.rs) : une phrase entière par action, jamais des morceaux recollés
+Rôles	نقش‌ها
+Invitations	دعوت‌نامه‌ها
+Serveur	سرور
+Membre supprimé	عضو حذف‌شده
+(supprimé)	(حذف‌شده)
+{auteur} a créé le salon vocal {nom}	{auteur} کانال صوتی {nom} را ایجاد کرد
+{auteur} a créé la catégorie {nom}	{auteur} دسته‌بندی {nom} را ایجاد کرد
+{auteur} a créé le salon d'annonces {nom}	{auteur} کانال اطلاعیه‌ها {nom} را ایجاد کرد
+{auteur} a créé le forum {nom}	{auteur} انجمن {nom} را ایجاد کرد
+{auteur} a créé la scène {nom}	{auteur} کانال استیج {nom} را ایجاد کرد
+{auteur} a créé le salon {nom}	{auteur} کانال {nom} را ایجاد کرد
+{auteur} a supprimé le salon vocal {nom}	{auteur} کانال صوتی {nom} را حذف کرد
+{auteur} a supprimé la catégorie {nom}	{auteur} دسته‌بندی {nom} را حذف کرد
+{auteur} a supprimé le salon d'annonces {nom}	{auteur} کانال اطلاعیه‌ها {nom} را حذف کرد
+{auteur} a supprimé le forum {nom}	{auteur} انجمن {nom} را حذف کرد
+{auteur} a supprimé la scène {nom}	{auteur} کانال استیج {nom} را حذف کرد
+{auteur} a supprimé le salon {nom}	{auteur} کانال {nom} را حذف کرد
+(rôle)	(نقش)
+{auteur} a ajouté le rôle {role} à {cible}	{auteur} نقش {role} را به {cible} افزود
+{auteur} a retiré le rôle {role} à {cible}	{auteur} نقش {role} را از {cible} حذف کرد
+{auteur} a expulsé {cible}	{auteur} {cible} را اخراج کرد
+{auteur} a banni {cible}	{auteur} {cible} را بن کرد
+{auteur} a levé le bannissement de {cible}	{auteur} بن {cible} را برداشت
+{auteur} a exclu {cible} pendant {duree}	{auteur} برای {cible} به مدت {duree} محدودیت زمانی اعمال کرد
+{auteur} a exclu {cible} temporairement	{auteur} برای {cible} محدودیت زمانی اعمال کرد
+{auteur} a levé l'exclusion de {cible}	{auteur} محدودیت زمانی {cible} را برداشت
+{auteur} a transféré la propriété du serveur à {cible}	{auteur} مالکیت سرور را به {cible} منتقل کرد
+{auteur} a créé le rôle {cible}	{auteur} نقش {cible} را ایجاد کرد
+{auteur} a modifié le rôle {cible}	{auteur} نقش {cible} را ویرایش کرد
+{auteur} a supprimé le rôle {cible}	{auteur} نقش {cible} را حذف کرد
+{auteur} a changé l'ordre des rôles	{auteur} ترتیب نقش‌ها را تغییر داد
+{auteur} a modifié le salon {salon}	{auteur} کانال {salon} را ویرایش کرد
+{auteur} a déplacé le salon {salon}	{auteur} کانال {salon} را جابه‌جا کرد
+{auteur} a retiré les droits propres du rôle {sujet} dans le salon {salon}	{auteur} دسترسی‌های اختصاصی نقش {sujet} را در کانال {salon} حذف کرد
+{auteur} a retiré les droits propres de {sujet} dans le salon {salon}	{auteur} دسترسی‌های اختصاصی {sujet} را در کانال {salon} حذف کرد
+{auteur} a modifié les droits du rôle {sujet} dans le salon {salon}	{auteur} دسترسی‌های نقش {sujet} را در کانال {salon} تغییر داد
+{auteur} a modifié les droits de {sujet} dans le salon {salon}	{auteur} دسترسی‌های {sujet} را در کانال {salon} تغییر داد
+{auteur} a créé une invitation pour le salon {salon}	{auteur} برای کانال {salon} دعوت‌نامه ایجاد کرد
+{auteur} a créé une invitation	{auteur} دعوت‌نامه ایجاد کرد
+{auteur} a révoqué une invitation de {nom}	{auteur} دعوت‌نامه‌ای را که {nom} ساخته بود لغو کرد
+{auteur} a révoqué une invitation	{auteur} دعوت‌نامه‌ای را لغو کرد
+{auteur} a ajouté l'emoji {emoji}	{auteur} ایموجی {emoji} را افزود
+{auteur} a renommé l'emoji {avant} en {apres}	{auteur} نام ایموجی {avant} را به {apres} تغییر داد
+{auteur} a modifié l'emoji {emoji}	{auteur} ایموجی {emoji} را ویرایش کرد
+{auteur} a supprimé l'emoji {emoji}	{auteur} ایموجی {emoji} را حذف کرد
+{auteur} a supprimé un message de {cible} dans le salon {salon}	{auteur} پیامی از {cible} را در کانال {salon} حذف کرد
+{auteur} a supprimé un message de {cible}	{auteur} پیامی از {cible} را حذف کرد
+{auteur} a épinglé un message dans {salon}	{auteur} پیامی را در {salon} سنجاق کرد
+{auteur} a épinglé un message	{auteur} پیامی را سنجاق کرد
+{auteur} a désépinglé un message dans {salon}	{auteur} سنجاق پیامی را در {salon} برداشت
+{auteur} a désépinglé un message	{auteur} سنجاق پیامی را برداشت
+{auteur} a renommé le serveur « {avant} » en « {apres} »	{auteur} نام سرور را از «{avant}» به «{apres}» تغییر داد
+{auteur} a retiré l'icône du serveur	{auteur} آیکون سرور را حذف کرد
+{auteur} a changé l'icône du serveur	{auteur} آیکون سرور را تغییر داد
+{auteur} a modifié le serveur	{auteur} سرور را ویرایش کرد
+{auteur} a effectué une action que cette version ne connaît pas ({action})	{auteur} کاری انجام داد که این نسخه آن را نمی‌شناسد ({action})
+
+# Journal d'audit : précisions, champs et valeurs avant / après, filtres, états
+Valable {duree}, {n} utilisation au plus	معتبر برای {duree}، حداکثر {n} بار استفاده
+Valable {duree}, {n} utilisations au plus	معتبر برای {duree}، حداکثر {n} بار استفاده
+Valable {duree}, utilisations illimitées	معتبر برای {duree}، استفاده نامحدود
+Sans date limite, {n} utilisation au plus	بدون تاریخ انقضا، حداکثر {n} بار استفاده
+Sans date limite, {n} utilisations au plus	بدون تاریخ انقضا، حداکثر {n} بار استفاده
+Sans date limite, utilisations illimitées	بدون تاریخ انقضا، استفاده نامحدود
+Autorisé : {droits}	مجاز: {droits}
+Refusé : {droits}	ممنوع: {droits}
+Autorisé : {autorises}. Refusé : {refuses}	مجاز: {autorises}. ممنوع: {refuses}
+Nom	نام
+Sujet	موضوع
+Mode lent	حالت آهسته
+Visibilité	قابلیت مشاهده
+Couleur	رنگ
+Affiché à part	نمایش جداگانه
+Droits	دسترسی‌ها
+Réglage	تنظیم
+(vide)	(خالی)
+(aucun)	(هیچ)
+Privé	خصوصی
+Public	عمومی
+Oui	بله
+Non	خیر
+Aucune	هیچ‌کدام
+Ajoutés	افزوده‌شده
+Retirés	حذف‌شده
+Avant	قبل
+Après	بعد
+Aucun événement	رویدادی وجود ندارد
+{n} événement	{n} رویداد
+{n} événements	{n} رویداد
+{n} événement affiché	{n} رویداد نمایش داده شده
+{n} événements affichés	{n} رویداد نمایش داده شده
+{n} événement de plus	{n} رویداد دیگر
+{n} événements de plus	{n} رویداد دیگر
+Chargement du journal…	در حال بارگذاری گزارش…
+Les actions de gestion et de modération de ce serveur, de la plus récente à la plus ancienne. Le journal est en lecture seule : rien ne s'y efface.	اقدامات مدیریتی و نظارتی این سرور، از جدیدترین به قدیمی‌ترین. گزارش فقط‌خواندنی است: هیچ چیزی از آن پاک نمی‌شود.
+Filtrer le journal d'audit	فیلتر گزارش ممیزی
+Action	اقدام
+Toutes	همه
+Membre	عضو
+Tous	همه
+Réinitialiser	بازنشانی
+Actualiser	تازه‌سازی
+Aucun événement ne correspond	هیچ رویدادی مطابقت ندارد
+Essaie un autre type d'action ou un autre membre.	نوع دیگری از اقدام یا عضو دیگری را امتحان کنید.
+Les actions de gestion et de modération du serveur apparaîtront ici.	اقدامات مدیریتی و نظارتی سرور اینجا نمایش داده می‌شوند.
+Événements du journal	رویدادهای گزارش ممیزی
+Charger plus	بارگذاری بیشتر
+Raison :	دلیل:
+Masquer les changements	پنهان کردن تغییرات
+Voir les changements	مشاهده تغییرات
+
+# Salons : mode lent, création, rangement, paramètres d'un salon, droits par salon (channels.rs)
+Désactivé	غیرفعال
+{n} seconde	{n} ثانیه
+{n} secondes	{n} ثانیه
+{n} heure	{n} ساعت
+{n} heures	{n} ساعت
+Salon textuel	کانال متنی
+Pour écrire des messages, partager des images et des fichiers.	برای نوشتن پیام و ارسال تصویر و فایل.
+Salon vocal	کانال صوتی
+Pour parler et se voir en direct.	برای صحبت کردن و دیدن یکدیگر به‌صورت زنده.
+Catégorie	دسته‌بندی
+Pour ranger plusieurs salons sous un même titre.	برای گروه‌بندی چند کانال زیر یک عنوان.
+Donne un nom à la catégorie.	برای دسته‌بندی نامی انتخاب کنید.
+Donne un nom au salon.	برای کانال نامی انتخاب کنید.
+Nom de la catégorie	نام دسته‌بندی
+Nom du salon	نام کانال
+Elle range des salons sous un même titre, que l'on peut replier.	چند کانال را زیر یک عنوان قرار می‌دهد که می‌توان آن را جمع کرد.
+Le nom peut contenir des espaces et des majuscules.	نام می‌تواند شامل فاصله و حروف بزرگ باشد.
+Les majuscules et les espaces sont remplacés : « Salon de test » donne #salon-de-test.	حروف بزرگ و فاصله‌ها جایگزین می‌شوند: «کانال آزمایشی» می‌شود #کانال-آزمایشی.
+Nouvelle catégorie	دسته‌بندی جدید
+nouveau-salon	کانال-جدید
+Type	نوع
+Aucune catégorie	بدون دسته‌بندی
+Créer la catégorie	ایجاد دسته‌بندی
+Créer le salon	ایجاد کانال
+« {nom} » déplacé.	«{nom}» جابه‌جا شد.
+Les salons s'affichent dans cet ordre. Monter le premier salon d'une catégorie le range dans la catégorie du dessus, descendre le dernier le range dans celle du dessous.	کانال‌ها به همین ترتیب نمایش داده می‌شوند. بالا بردن اولین کانال یک دسته‌بندی آن را به دسته‌بندی بالاتر می‌برد و پایین بردن آخرین کانال، آن را به دسته‌بندی پایین‌تر می‌برد.
+Salons et catégories, dans l'ordre d'affichage	کانال‌ها و دسته‌بندی‌ها، به ترتیب نمایش
+privé	خصوصی
+Monter la catégorie {nom}	بالا بردن دسته‌بندی {nom}
+Monter le salon {nom}	بالا بردن کانال {nom}
+Monter	بالا بردن
+Descendre la catégorie {nom}	پایین بردن دسته‌بندی {nom}
+Descendre le salon {nom}	پایین بردن کانال {nom}
+Descendre	پایین بردن
+Paramètres de la catégorie {nom}	تنظیمات دسته‌بندی {nom}
+Paramètres du salon {nom}	تنظیمات کانال {nom}
+Aperçu{contexte}	نمای کلی{contexte}
+Permissions	دسترسی‌ها
+Sections des paramètres du salon	بخش‌های تنظیمات کانال
+Fermer les paramètres (Échap)	بستن تنظیمات (Esc)
+Salon introuvable	کانال پیدا نشد
+Ce lien est peut-être ancien.	ممکن است این پیوند قدیمی باشد.
+Il a été supprimé, ou tu n'y as plus accès.	حذف شده است یا دیگر به آن دسترسی ندارید.
+Rien à régler ici	اینجا چیزی برای تنظیم نیست
+Il faut le droit « Gérer les salons » pour changer ce salon.	برای تغییر این کانال به دسترسی «مدیریت کانال‌ها» نیاز دارید.
+Modifications enregistrées.	تغییرات ذخیره شد.
+Tout le monde voit le changement tout de suite.	همه تغییر را بلافاصله می‌بینند.
+Sujet du salon	موضوع کانال
+Une ligne sur ce qui se dit ici : elle s'affiche dans l'en-tête du salon.	یک خط درباره آنچه اینجا گفته می‌شود: در بالای کانال نمایش داده می‌شود.
+Chacun doit attendre ce délai entre deux messages. Les personnes qui gèrent les messages ou les salons n'attendent pas.	همه باید بین دو پیام این مدت را صبر کنند. کسانی که پیام‌ها یا کانال‌ها را مدیریت می‌کنند نیازی به صبر ندارند.
+Catégorie privée	دسته‌بندی خصوصی
+Salon privé	کانال خصوصی
+Sa catégorie est privée : ce salon l'est aussi. Change-le dans les paramètres de la catégorie.	دسته‌بندی این کانال خصوصی است، پس این کانال هم خصوصی است. آن را در تنظیمات دسته‌بندی تغییر دهید.
+Seuls les rôles et les membres que tu ajoutes dans « Permissions » voient cette catégorie et ses salons.	فقط نقش‌ها و اعضایی که در «دسترسی‌ها» اضافه می‌کنید این دسته‌بندی و کانال‌های آن را می‌بینند.
+Seuls les rôles et les membres que tu ajoutes dans « Permissions » voient ce salon.	فقط نقش‌ها و اعضایی که در «دسترسی‌ها» اضافه می‌کنید این کانال را می‌بینند.
+Modifications du salon	تغییرات کانال
+Modifications non enregistrées	تغییرات ذخیره‌نشده
+Non enregistré	ذخیره‌نشده
+Supprimer la catégorie	حذف دسته‌بندی
+Supprimer le salon	حذف کانال
+Autoriser	مجاز
+Hériter	ارث‌بری
+Refuser	ممنوع
+@tout le monde	@everyone
+Rôle supprimé	نقش حذف‌شده
+Ancien membre	عضو سابق
+Permissions enregistrées.	دسترسی‌ها ذخیره شد.
+Droit sensible	دسترسی حساس
+Droit sensible :	دسترسی حساس:
+Pour chaque droit : « Autoriser » ou « Refuser » s'ajoute aux droits du serveur dans ce salon, « Hériter » laisse les droits habituels. Un refus l'emporte sur un droit donné par un rôle, mais pas sur le propriétaire ni les administrateurs. On ne règle que des droits que l'on a soi-même.	برای هر دسترسی: «مجاز» یا «ممنوع» به دسترسی‌های سرور در این کانال افزوده می‌شود و «ارث‌بری» دسترسی‌های معمول را حفظ می‌کند. ممنوع کردن بر دسترسی داده‌شده توسط یک نقش برتری دارد، اما بر مالک و مدیران کل برتری ندارد. فقط می‌توانید دسترسی‌هایی را تنظیم کنید که خودتان دارید.
+Rôles et membres de ce salon	نقش‌ها و اعضای این کانال
+modifications non enregistrées	تغییرات ذخیره‌نشده
+réglé	تنظیم‌شده
+Ajouter un rôle ou un membre	افزودن نقش یا عضو
+Choisis dans la liste	از فهرست انتخاب کنید
+Ajouter	افزودن
+Son rang est égal ou supérieur au tien : tu ne peux pas changer ses réglages.	رتبه او برابر یا بالاتر از رتبه شماست: نمی‌توانید تنظیمات او را تغییر دهید.
+Tout remettre sur « Hériter »	بازنشانی همه به «ارث‌بری»
+Modifications des permissions	تغییرات دسترسی‌ها
+
+# Emojis du serveur (emoji_settings.rs)
+Le nom compte de 2 à 32 caractères : lettres sans accent, chiffres et _.	نام باید از 2 تا 32 نویسه باشد: حروف لاتین بدون نشانه‌های تلفظ، ارقام و _.
+Ce serveur a déjà ses {max} emojis : retires-en un pour en ajouter.	این سرور از قبل {max} ایموجی دارد: برای افزودن ایموجی جدید، یکی را حذف کنید.
+Cette animation pèse trop lourd : {taille} Ko au plus.	این تصویر متحرک بیش از حد حجیم است: حداکثر {taille} کیلوبایت.
+Un emoji à la fois : seul le premier fichier a été pris.	هر بار فقط یک ایموجی: فقط فایل اول انتخاب شد.
+Emoji {code} ajouté.	ایموجی {code} افزوده شد.
+Ajoute des images à ce serveur : ses membres les écrivent dans leurs messages avec {code} ou les choisissent dans le sélecteur d'emojis, et s'en servent aussi pour réagir dans leurs autres serveurs.	به این سرور تصویر اضافه کنید: اعضا می‌توانند آن‌ها را با {code} در پیام‌هایشان بنویسند یا از انتخابگر ایموجی انتخاب کنند، و در سرورهای دیگرشان هم برای واکنش از آن‌ها استفاده کنند.
+Ajouter un emoji	افزودن ایموجی
+emplacements	جایگاه
+PNG, JPEG, WebP ou GIF. Une image fixe est recadrée en carré et réduite à 128 px ; une animation reste telle quelle et pèse {taille} Ko au plus.	PNG، JPEG، WebP یا GIF. تصویر ثابت به‌صورت مربع برش داده و به 128 پیکسل کاهش داده می‌شود؛ تصویر متحرک بدون تغییر می‌ماند و حداکثر {taille} کیلوبایت حجم دارد.
+Il faut le droit « Gérer les émojis » pour ajouter, renommer ou retirer un emoji.	برای افزودن، تغییر نام یا حذف ایموجی به دسترسی «مدیریت ایموجی‌ها» نیاز دارید.
+Tous les emplacements sont pris : retire un emoji pour en ajouter un autre.	همه جایگاه‌ها پر شده‌اند: برای افزودن ایموجی دیگر، یکی را حذف کنید.
+Aucun emoji pour l'instant	فعلاً ایموجی وجود ندارد
+Les emojis du serveur apparaîtront ici, et dans le sélecteur de ses membres.	ایموجی‌های سرور اینجا و در انتخابگر ایموجی اعضای آن نمایش داده می‌شوند.
+Emojis du serveur	ایموجی‌های سرور
+Dépose l'image pour l'ajouter	برای افزودن، تصویر را رها کنید
+ajouté par {nom}	افزوده‌شده توسط {nom}
+ajouté par un ancien membre	افزوده‌شده توسط یک عضو سابق
+Actions pour {code}	اقدام‌های {code}
+Nouveau nom de {code}	نام جدید {code}
+Entrée valide, Échap annule.	Enter برای ذخیره، Esc برای انصراف.
+Aperçu de l'emoji	پیش‌نمایش ایموجی
+Dans un message :	در یک پیام:
+Ajouter l'emoji	افزودن ایموجی
+Supprimer {code} ?	{code} حذف شود؟
+Emoji {code} supprimé.	ایموجی {code} حذف شد.
+L'emoji disparaît du serveur et du sélecteur. Les messages et les réactions qui l'utilisent restent, mais n'affichent plus que son nom. Cette action est définitive.	ایموجی از سرور و انتخابگر ناپدید می‌شود. پیام‌ها و واکنش‌هایی که از آن استفاده کرده‌اند باقی می‌مانند، اما فقط نام آن را نشان می‌دهند. این کار قابل بازگشت نیست.
+Supprimer l'emoji	حذف ایموجی
+
+# Noms des couleurs de rôle et des droits, par catégorie (guild.rs)
+Rouge	قرمز
+Or	طلایی
+Citron vert	سبز لیمویی
+Vert	سبز
+Turquoise	فیروزه‌ای
+Bleu	آبی
+Violet	بنفش
+Rose	صورتی
+Général	عمومی
+Voir les salons	مشاهده کانال‌ها
+Voir les salons et lire ce qui s'y dit.	مشاهده کانال‌ها و خواندن مطالبی که در آن‌ها گفته می‌شود.
+Gérer les salons	مدیریت کانال‌ها
+Créer, renommer, déplacer et supprimer des salons.	ایجاد، تغییر نام، جابه‌جایی و حذف کانال‌ها.
+Gérer le serveur	مدیریت سرور
+Changer le nom, l'icône et les réglages du serveur.	تغییر نام، آیکون و تنظیمات سرور.
+Gérer les émojis	مدیریت ایموجی‌ها
+Ajouter et retirer les émojis et les autocollants du serveur.	افزودن و حذف ایموجی‌ها و استیکرهای سرور.
+Gérer les événements	مدیریت رویدادها
+Créer, modifier et annuler les événements.	ایجاد، ویرایش و لغو رویدادها.
+Voir le journal d'audit	مشاهده گزارش ممیزی
+Consulter l'historique des actions de modération.	مشاهده تاریخچه اقدامات نظارتی.
+Créer des invitations	ایجاد دعوت‌نامه
+Inviter de nouvelles personnes avec un lien.	دعوت از افراد جدید با یک پیوند.
+Changer son surnom	تغییر نام مستعار خود
+Choisir son propre surnom sur ce serveur.	انتخاب نام مستعار خود در این سرور.
+Gérer les surnoms	مدیریت نام‌های مستعار
+Changer le surnom des autres membres.	تغییر نام مستعار اعضای دیگر.
+Expulser des membres	اخراج اعضا
+Faire sortir un membre, qui peut revenir avec une invitation.	اخراج یک عضو؛ او می‌تواند با دعوت‌نامه دوباره برگردد.
+Bannir des membres	بن کردن اعضا
+Faire sortir un membre pour de bon : il ne peut plus revenir avec une invitation.	اخراج دائمی یک عضو: او دیگر نمی‌تواند با دعوت‌نامه برگردد.
+Exclure temporairement	اعمال محدودیت زمانی
+Empêcher un membre de parler pendant un moment.	جلوگیری از صحبت کردن یک عضو برای مدتی.
+Gérer les rôles	مدیریت نقش‌ها
+Créer, modifier et donner des rôles plus bas que le sien : de quoi distribuer des droits.	ایجاد، ویرایش و اعطای نقش‌هایی که پایین‌تر از نقش خودتان هستند: کافی برای توزیع دسترسی‌ها.
+Salons texte	کانال‌های متنی
+Écrire des messages	نوشتن پیام
+Envoyer des messages dans les salons textuels.	ارسال پیام در کانال‌های متنی.
+Écrire dans les fils	نوشتن در رشته‌ها
+Répondre dans les fils de discussion.	پاسخ دادن در رشته‌های گفتگو.
+Créer des fils	ایجاد رشته
+Ouvrir un nouveau fil à partir d'un message.	شروع یک رشته جدید از یک پیام.
+Aperçu des liens	پیش‌نمایش پیوندها
+Faire afficher un aperçu des liens postés.	نمایش پیش‌نمایش پیوندهایی که ارسال می‌کنید.
+Joindre des fichiers	پیوست فایل
+Envoyer des images et des fichiers.	ارسال تصویر و فایل.
+Ajouter des réactions	افزودن واکنش
+Réagir à un message avec un émoji.	واکنش نشان دادن به یک پیام با ایموجی.
+Mentionner tout le monde	منشن کردن همه
+Prévenir tous les membres d'un coup avec {mention}.	اطلاع دادن به همه اعضا یکجا با {mention}.
+Gérer les messages	مدیریت پیام‌ها
+Supprimer les messages des autres.	حذف پیام‌های دیگران.
+Lire l'historique	خواندن تاریخچه
+Relire les messages envoyés avant son arrivée.	خواندن پیام‌هایی که پیش از پیوستن شما ارسال شده‌اند.
+Vocal	صوتی
+Se connecter{contexte}	اتصال{contexte}
+Rejoindre les salons vocaux.	پیوستن به کانال‌های صوتی.
+Parler	صحبت کردن
+Prendre la parole dans un salon vocal.	صحبت کردن در یک کانال صوتی.
+Caméra	دوربین
+Allumer sa caméra.	روشن کردن دوربین خود.
+Partager son écran	اشتراک‌گذاری صفحه نمایش
+Diffuser son écran dans un salon vocal.	اشتراک‌گذاری صفحه نمایش در یک کانال صوتی.
+Table de sons	ساندبورد
+Jouer des sons de la table du serveur.	پخش صداهای ساندبورد سرور.
+Voix prioritaire	صدای اولویت‌دار
+Baisser le volume des autres quand on parle.	کم کردن صدای دیگران هنگام صحبت شما.
+Couper le micro des autres	بی‌صدا کردن میکروفون دیگران
+Rendre muet un membre dans un salon vocal.	بی‌صدا کردن یک عضو در یک کانال صوتی.
+Déplacer des membres	جابه‌جا کردن اعضا
+Faire passer un membre d'un salon vocal à un autre.	انتقال یک عضو از یک کانال صوتی به کانال صوتی دیگر.
+Avancé	پیشرفته
+Administrateur	مدیر کل
+Tous les droits, sans exception ni limite de rang : à réserver à des personnes de confiance.	همه دسترسی‌ها، بدون استثنا و بدون محدودیت رتبه: فقط برای افراد مورد اعتماد.
+
+# Paramètres du serveur : sections, rôles, invitations, bannis, propriété, exclusion, fiche d'un membre (guild.rs)
+Vue d'ensemble	نمای کلی
+Bannis	بن‌شده‌ها
+Journal d'audit	گزارش ممیزی
+Propriété	مالکیت
+Sections des paramètres du serveur	بخش‌های تنظیمات سرور
+Serveur introuvable	سرور پیدا نشد
+Tu n'en fais plus partie, ou il n'existe pas.	دیگر عضو آن نیستید یا وجود ندارد.
+Tes rôles ne te donnent accès à aucun réglage de ce serveur.	نقش‌های شما به هیچ تنظیمی از این سرور دسترسی نمی‌دهند.
+Ordre des rôles modifié.	ترتیب نقش‌ها تغییر کرد.
+Nouveau rôle	نقش جدید
+Plus un rôle est haut dans la liste, plus il est puissant. On ne peut modifier, donner ni déplacer que les rôles plus bas que le sien.	هر چه نقشی در فهرست بالاتر باشد، قدرتمندتر است. فقط نقش‌هایی را می‌توانید ویرایش کنید، بدهید یا جابه‌جا کنید که پایین‌تر از نقش خودتان باشند.
+Créer un rôle	ایجاد نقش
+Rôles, du plus haut au plus bas	نقش‌ها، از بالاترین به پایین‌ترین
+Membres qui ont ce rôle	اعضایی که این نقش را دارند
+membre	عضو
+membres	عضو
+Monter le rôle {nom}	بالا بردن نقش {nom}
+Descendre le rôle {nom}	پایین بردن نقش {nom}
+Affichage	نمایش
+Tout le monde a ce rôle, automatiquement : il n'a ni nom à changer, ni couleur. Ses droits (onglet Permissions) s'ajoutent à ceux de tous les autres rôles.	همه به‌طور خودکار این نقش را دارند، پس نه نامی برای تغییر دارد و نه رنگی. دسترسی‌های آن (زبانه دسترسی‌ها) به دسترسی‌های همه نقش‌های دیگر افزوده می‌شود.
+Nom du rôle	نام نقش
+Couleur du nom	رنگ نام
+Par défaut	پیش‌فرض
+Huit teintes qui restent lisibles sur tous les thèmes. Le nom des membres prend la couleur de leur rôle coloré le plus haut.	هشت رنگ که در همه تم‌ها خوانا می‌مانند. نام اعضا رنگ بالاترین نقش رنگی آن‌ها را می‌گیرد.
+Afficher à part dans la liste des membres	نمایش جداگانه در فهرست اعضا
+Les membres qui ont ce rôle forment leur propre rubrique, au-dessus des autres.	اعضایی که این نقش را دارند بخش جداگانه‌ای بالاتر از بقیه تشکیل می‌دهند.
+Supprimer ce rôle	حذف این نقش
+Aucun droit ne correspond à cette recherche.	هیچ دسترسی با این جستجو مطابقت ندارد.
+Réglages du rôle	تنظیمات نقش
+Chercher un droit	جستجوی دسترسی
+Modifications du rôle	تغییرات نقش
+Tout le monde est dans ce rôle, automatiquement.	همه به‌طور خودکار در این نقش هستند.
+Ajouter un membre à ce rôle	افزودن عضو به این نقش
+Choisis un membre	یک عضو انتخاب کنید
+Personne n'a ce rôle pour l'instant.	فعلاً هیچ‌کس این نقش را ندارد.
+Retirer {nom} de ce rôle	حذف {nom} از این نقش
+30 minutes	30 دقیقه
+1 heure	1 ساعت
+6 heures	6 ساعت
+12 heures	12 ساعت
+1 jour	1 روز
+7 jours	7 روز
+Jamais	هرگز
+Illimité	نامحدود
+1 utilisation	1 بار استفاده
+5 utilisations	5 بار استفاده
+10 utilisations	10 بار استفاده
+25 utilisations	25 بار استفاده
+50 utilisations	50 بار استفاده
+100 utilisations	100 بار استفاده
+Invitation {code} créée.	دعوت‌نامه {code} ایجاد شد.
+Invitation {code} révoquée.	دعوت‌نامه {code} لغو شد.
+Les invitations expirées ou épuisées restent listées une semaine. Une invitation révoquée cesse de marcher aussitôt.	دعوت‌نامه‌های منقضی‌شده یا تمام‌شده یک هفته در فهرست می‌مانند. دعوت‌نامه لغو شده بلافاصله از کار می‌افتد.
+Tu ne vois que les invitations que tu as créées. Une invitation révoquée cesse de marcher aussitôt.	فقط دعوت‌نامه‌هایی را می‌بینید که خودتان ساخته‌اید. دعوت‌نامه لغو شده بلافاصله از کار می‌افتد.
+Nouvelle invitation	دعوت‌نامه جدید
+Expire après	انقضا پس از
+Nombre d'utilisations	تعداد دفعات استفاده
+Créer une invitation	ایجاد دعوت‌نامه
+Aucune invitation	دعوت‌نامه‌ای وجود ندارد
+Celles que tu crées apparaissent ici.	دعوت‌نامه‌هایی که می‌سازید اینجا نمایش داده می‌شوند.
+Expirée	منقضی‌شده
+Épuisée	تمام‌شده
+un compte supprimé	یک حساب کاربری حذف‌شده
+{n} utilisation, sans limite	{n} بار استفاده، بدون محدودیت
+{n} utilisations, sans limite	{n} بار استفاده، بدون محدودیت
+{n} utilisation sur {max}	{n} بار استفاده از {max}
+{n} utilisations sur {max}	{n} بار استفاده از {max}
+a expiré ({date})	منقضی شد ({date})
+a expiré	منقضی شد
+plus aucune utilisation	دیگر استفاده‌ای باقی نمانده است
+expire dans {duree}	{duree} دیگر منقضی می‌شود
+n'expire jamais	هرگز منقضی نمی‌شود
+Créée par {nom}	ساخته‌شده توسط {nom}
+Copie impossible	کپی ممکن نیست
+Copier le lien de l'invitation {code}	کپی پیوند دعوت‌نامه {code}
+Copier	کپی
+Plus d'actions pour l'invitation {code}	اقدام‌های بیشتر برای دعوت‌نامه {code}
+Révoquer	لغو
+Une personne bannie ne peut plus rejoindre le serveur avec une invitation. Lever le bannissement lui rend cette possibilité.	فرد بن‌شده دیگر نمی‌تواند با دعوت‌نامه به سرور بپیوندد. برداشتن بن این امکان را به او برمی‌گرداند.
+Personne n'est banni	هیچ‌کس بن نشده است
+Les bannissements apparaîtront ici.	بن‌ها اینجا نمایش داده می‌شوند.
+Personnes bannies	افراد بن‌شده
+Raison : {raison}	دلیل: {raison}
+Aucune raison donnée	دلیلی ذکر نشده است
+Lever le bannissement de {nom}	برداشتن بن {nom}
+Lever le bannissement	برداشتن بن
+Le propriétaire a tous les droits et ne peut pas être sanctionné. Pour quitter le serveur, il faut d'abord le confier à un autre membre.	مالک همه دسترسی‌ها را دارد و نمی‌توان او را مجازات کرد. برای ترک سرور، ابتدا باید آن را به عضو دیگری واگذار کنید.
+Nouveau propriétaire	مالک جدید
+Transférer…	انتقال…
+Zone dangereuse	منطقه خطر
+Supprimer le serveur efface ses salons, ses messages, ses rôles et ses invitations, pour tout le monde. Il n'y a aucun moyen de revenir en arrière.	حذف سرور، کانال‌ها، پیام‌ها، نقش‌ها و دعوت‌نامه‌های آن را برای همه پاک می‌کند. راه بازگشتی وجود ندارد.
+Supprimer le serveur…	حذف سرور…
+Supprimer « {nom} » ?	«{nom}» حذف شود؟
+Tout ça disparaît pour tout le monde, tout de suite :	همه این موارد بلافاصله برای همه ناپدید می‌شوند:
+les salons, leurs messages et leurs fichiers,	کانال‌ها، پیام‌ها و فایل‌های آن‌ها،
+les rôles et les droits,	نقش‌ها و دسترسی‌ها،
+les invitations.	دعوت‌نامه‌ها.
+C'est irréversible.	این کار بازگشت‌ناپذیر است.
+Les personnes en vocal sont déconnectées.	افرادی که در کانال صوتی هستند قطع اتصال می‌شوند.
+Tape le nom du serveur	نام سرور را بنویسید
+Pour confirmer, retape : {nom}	برای تأیید، دوباره بنویسید: {nom}
+Supprimer le serveur	حذف سرور
+60 secondes	60 ثانیه
+5 minutes	5 دقیقه
+10 minutes	10 دقیقه
+1 semaine	1 هفته
+Exclure {nom} temporairement	اعمال محدودیت زمانی برای {nom}
+Pendant ce temps, cette personne peut lire le serveur, mais ni écrire, ni réagir, ni envoyer de fichier, ni parler en vocal. L'exclusion se termine toute seule, et tu peux la lever avant.	در این مدت، این فرد می‌تواند سرور را بخواند، اما نمی‌تواند بنویسد، واکنش نشان دهد، فایل بفرستد یا در کانال صوتی صحبت کند. محدودیت زمانی خودش پایان می‌یابد و می‌توانید پیش از آن آن را بردارید.
+Durée	مدت
+Raison (facultatif)	دلیل (اختیاری)
+Exclure	اعمال محدودیت
+@{pseudo} · membre depuis {date}	@{pseudo} · عضو از {date}
+Aucun rôle.	بدون نقش.
+Son rang est égal ou supérieur au tien : tu ne peux pas changer ses rôles.	رتبه او برابر یا بالاتر از رتبه شماست: نمی‌توانید نقش‌های او را تغییر دهید.
+
+# Icône du serveur (icon_picker.rs)
+Cette animation pèse trop lourd : {taille} Mo au plus.	این تصویر متحرک بیش از حد حجیم است: حداکثر {taille} مگابایت.
+Une seule image à la fois : seul le premier fichier a été pris.	هر بار فقط یک تصویر: فقط فایل اول انتخاب شد.
+Choisir une image	انتخاب تصویر
+Retirer l'icône	حذف آیکون
+PNG, JPEG, WebP ou GIF. Une image fixe est recadrée en carré ; une animation reste telle quelle et pèse {taille} Mo au plus.	PNG، JPEG، WebP یا GIF. تصویر ثابت به‌صورت مربع برش داده می‌شود؛ تصویر متحرک بدون تغییر می‌ماند و حداکثر {taille} مگابایت حجم دارد.
+Dépose l'image pour l'utiliser	برای استفاده، تصویر را رها کنید
+
+# Créer un serveur (new_guild.rs)
+Serveur de {nom}	سرور {nom}
+Le serveur est créé, mais son icône n'a pas pu être envoyée : {erreur} Tu peux la choisir dans les paramètres du serveur, rubrique « Vue d'ensemble ».	سرور ساخته شد، اما آیکون آن ارسال نشد: {erreur} می‌توانید آن را در تنظیمات سرور، بخش «نمای کلی» انتخاب کنید.
+Colle un lien ou un code d'invitation.	یک پیوند یا کد دعوت‌نامه را بچسبانید.
+Crée ton serveur	سرور خود را بسازید
+Un espace pour ta bande, avec des salons textuels et vocaux. Choisis un point de départ : tu pourras tout changer ensuite.	فضایی برای جمع شما، با کانال‌های متنی و صوتی. یک نقطه شروع انتخاب کنید: بعداً می‌توانید همه چیز را تغییر دهید.
+Modèle	الگو
+Sera créé :	ساخته خواهد شد:
+Nom du serveur	نام سرور
+Icône	آیکون
+(facultative)	(اختیاری)
+Icône choisie	آیکون انتخاب‌شده
+Pas d'icône : les initiales du serveur	بدون آیکون: حروف اول نام سرور
+Créer le serveur	ایجاد سرور
+Création…	در حال ایجاد…
+Tu as déjà une invitation ?	از قبل دعوت‌نامه دارید؟
+Rejoindre	پیوستن
+
+# Vue d'ensemble (overview.rs)
+Icône mise à jour.	آیکون به‌روزرسانی شد.
+Nom du serveur enregistré.	نام سرور ذخیره شد.
+Icône du serveur	آیکون سرور
+Elle remplace les initiales du serveur dans la liste de gauche, chez tous ses membres.	جایگزین حروف اول سرور در فهرست کناری می‌شود، برای همه اعضای آن.
+Icône actuelle du serveur	آیکون فعلی سرور
+
+# Modèles de serveur (kraken-core/src/templates.rs) : noms et descriptions des cartes, traduits à l'affichage ;
+# les noms des catégories et des salons viennent du noyau (`Label`), dans la langue choisie
+Vide	خالی
+Communauté	جامعه
+Jeux	بازی‌ها
+Études	تحصیل
+Un salon textuel et un vocal, à compléter.	یک کانال متنی و یک کانال صوتی، آماده برای تکمیل.
+Annonces, règles et entraide, pour un club ou un projet.	اطلاعیه‌ها، قوانین و کمک به یکدیگر، برای یک باشگاه یا پروژه.
+Trouver des partenaires, parler pendant la partie.	یافتن هم‌تیمی و صحبت کردن در حین بازی.
+Cours, devoirs et salles de travail vocales.	درس‌ها، تکالیف و اتاق‌های مطالعه صوتی.
+Discuter, partager ses photos, se retrouver en vocal.	گپ زدن، اشتراک‌گذاری عکس‌ها و دور هم جمع شدن در کانال صوتی.

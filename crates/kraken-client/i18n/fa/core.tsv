@@ -2,4 +2,214 @@
 # Une ligne « français<TAB>persan » par texte ; règles : ../README.md (« Ajouter une langue »).
 # Mêmes {variables} que le français, chiffres latins (0-9, jamais ۰-۹ ni ٠-٩), demi-espace (U+200C) seulement entre
 # deux lettres, jamais en tête ni en queue. Un texte absent d'ici s'affiche en anglais (repli), puis en français.
-# Fichier en construction : `python3 scripts/i18n-check.py --missing --lang fa` liste ce qui reste à traduire.
+# Catalogue complet (1 469 textes) : `python3 scripts/i18n-check.py --missing --lang fa` doit rester vide. Traduction par Claude, sans relecture humaine.
+# Registre : persan neutre et poli (forme « شما » sous-entendue, impératif poli : « وارد شوید », « دوباره تلاش کنید » ; jamais « تو »). Boutons et libellés en forme nominale courte (ذخیره، انصراف، حذف، ویرایش، بستن، ارسال، جستجو).
+
+# Erreurs du réseau et du serveur (api.rs)
+Le serveur ne répond pas. Vérifie ta connexion.	سرور پاسخ نمی‌دهد. اتصال خود را بررسی کنید.
+Cette image pèse trop lourd : {taille} au plus.	حجم این تصویر بیش از حد است: حداکثر {taille}.
+
+# Dates (audit.rs, ui.rs)
+{date} à {heure}	{date}، ساعت {heure}
+Aujourd'hui	امروز
+Hier	دیروز
+moins d'une minute	کمتر از یک دقیقه
+{n} min	{n} دقیقه
+{n} h	{n} ساعت
+{n} j	{n} روز
+
+# Connexion, inscription, invitation (auth.rs)
+Confidentialité	حریم خصوصی
+Conditions	شرایط
+Bon retour sous la surface	خوش برگشتید
+Connecte-toi pour retrouver tes serveurs.	برای بازگشت به سرورهای خود وارد شوید.
+Pseudo ou e-mail	نام کاربری یا ایمیل
+Mot de passe	رمز عبور
+Mot de passe oublié ?	رمز عبور را فراموش کرده‌اید؟
+Pas encore de compte ? S'inscrire	حساب کاربری ندارید؟ ثبت‌نام
+Se connecter	ورود
+Créer un compte	ایجاد حساب کاربری
+Gratuit, sans abonnement, tout compris.	رایگان، بدون اشتراک، با همه امکانات.
+E-mail	ایمیل
+Pseudo	نام کاربری
+Lettres, chiffres, _ et . ; 2 à 32 caractères.	حروف، ارقام، _ و نقطه؛ از 2 تا 32 کاراکتر.
+Déjà inscrit ? Se connecter	قبلاً ثبت‌نام کرده‌اید؟ ورود
+Créer mon compte	ایجاد حساب کاربری من
+Ce lien n'existe pas ou n'est plus valable. Demande-en un nouveau.	این پیوند وجود ندارد یا دیگر معتبر نیست. پیوند جدیدی درخواست کنید.
+Invitation invalide	دعوت‌نامه نامعتبر
+Retour à l'accueil	بازگشت به صفحه اصلی
+Une place t'attend dans	جایی در این سرور منتظر شماست
+{n} membre	{n} عضو
+{n} membres	{n} عضو
+Rejoindre le serveur	پیوستن به سرور
+Mot de passe oublié	فراموشی رمز عبور
+Indique l'adresse de ton compte : on t'envoie un lien pour en choisir un nouveau.	نشانی ایمیل حساب کاربری خود را وارد کنید تا پیوندی برای انتخاب رمز عبور جدید برایتان ارسال کنیم.
+Si un compte utilise cette adresse, un e-mail arrive. Le lien reste valable 30 minutes.	اگر حسابی با این نشانی وجود داشته باشد، ایمیلی ارسال می‌شود. پیوند 30 دقیقه معتبر می‌ماند.
+Retour à la connexion	بازگشت به ورود
+Envoyer le lien	ارسال پیوند
+Nouveau mot de passe	رمز عبور جدید
+Toutes tes sessions seront fermées, sur chaque appareil.	همه نشست‌های شما در تمام دستگاه‌ها بسته می‌شوند.
+C'est fait. Connecte-toi avec ton nouveau mot de passe.	انجام شد. با رمز عبور جدید خود وارد شوید.
+Demander un autre lien	درخواست پیوند جدید
+Enregistrer	ذخیره
+Adresse e-mail	نشانی ایمیل
+Adresse confirmée. Merci !	نشانی ایمیل تأیید شد. متشکریم!
+Ouvrir KRAKEN	باز کردن KRAKEN
+
+# Langue (i18n.rs, Réglages › Langue et heure)
+Langue	زبان
+Langue de l'appareil	زبان دستگاه
+Le changement recharge la page.	با تغییر زبان، صفحه دوباره بارگذاری می‌شود.
+Le brouillon non envoyé sera perdu.	پیش‌نویس ارسال‌نشده از بین می‌رود.
+Quitte l'appel pour changer de langue.	برای تغییر زبان، از تماس خارج شوید.
+Langue : {nom}.	زبان: {nom}.
+Format de l'heure	قالب ساعت
+Exemple :	نمونه:
+Suit la langue de l'interface.	از زبان رابط پیروی می‌کند.
+12 h	12 ساعته
+24 h	24 ساعته
+
+# Apparence et accessibilité (display.rs)
+Automatique (système)	خودکار (سیستم)
+Suit le réglage clair ou sombre de ton système.	از تنظیم روشن یا تیره سیستم شما پیروی می‌کند.
+Sombre	تیره
+Le thème par défaut, doux pour les yeux le soir.	تم پیش‌فرض، ملایم برای چشم در شب.
+Clair	روشن
+Fond blanc, pour les pièces lumineuses.	پس‌زمینه سفید، مناسب اتاق‌های پرنور.
+Noir	سیاه
+Noir profond, idéal sur les écrans OLED.	سیاه عمیق، مناسب صفحه‌نمایش‌های OLED.
+Petit	کوچک
+Normal	عادی
+Grand	بزرگ
+Très grand	خیلی بزرگ
+Confortable	راحت
+Des messages aérés, avec des avatars de 40 px.	پیام‌هایی با فاصله بیشتر و آواتارهای 40 پیکسلی.
+Compacte	فشرده
+Des messages resserrés, avec des avatars de 24 px.	پیام‌هایی فشرده‌تر با آواتارهای 24 پیکسلی.
+Automatique	خودکار
+Suit le réglage de ton système.	از تنظیم سیستم شما پیروی می‌کند.
+Réduit	کاهش‌یافته
+Coupe les animations de l'interface et fige les images animées partout.	انیمیشن‌های رابط را خاموش می‌کند و تصاویر متحرک را همه‌جا ثابت نگه می‌دارد.
+Garde les animations, même si ton système en demande moins.	انیمیشن‌ها را نگه می‌دارد، حتی اگر سیستم شما انیمیشن کمتری بخواهد.
+Les couleurs d'origine du thème.	رنگ‌های اصلی تم.
+Élevé	بالا
+Texte plus net (7 pour 1), bordures bien visibles, anneau de focus plus épais.	متن واضح‌تر (7 به 1)، کادرهای کاملاً مشخص، حلقه فوکوس ضخیم‌تر.
+Suit ton système, quand il demande un contraste plus élevé.	وقتی سیستم شما کنتراست بیشتری بخواهد، از آن پیروی می‌کند.
+Aperçu	پیش‌نمایش
+Salut ! On se retrouve ce soir dans le vocal ?	سلام! امشب در کانال صوتی همدیگر را ببینیم؟
+Avec plaisir, vers 21 h. Voici	با کمال میل، حدود ساعت 21. این هم
+le programme de la soirée	برنامه امشب
+Ces réglages s'appliquent tout de suite et restent sur cet appareil.	این تنظیمات بلافاصله اعمال می‌شوند و روی همین دستگاه می‌مانند.
+Thème	تم
+Taille du texte	اندازه متن
+Agrandit ou réduit tout le texte de l'appli.	اندازه همه متن‌های برنامه را بزرگ یا کوچک می‌کند.
+Zoom de l'interface	بزرگ‌نمایی رابط
+Agrandit ou réduit toute l'interface, texte compris. Le zoom est limité par la largeur de la fenêtre.	کل رابط، از جمله متن، را بزرگ یا کوچک می‌کند. بزرگ‌نمایی به عرض پنجره محدود است.
+Densité	تراکم
+L'espace entre les messages et la taille des avatars.	فاصله بین پیام‌ها و اندازه آواتارها.
+Mouvement	حرکت
+Les GIF et WebP animés restent fixes dans les listes ; ils bougent au survol, au focus et sur la carte de profil. En mouvement réduit, ils restent fixes partout : « Lire l'animation » les lance sur la carte de profil.	GIF و WebP متحرک در فهرست‌ها ثابت می‌مانند؛ با قرار گرفتن نشانگر روی آن‌ها، با فوکوس و در کارت نمایه حرکت می‌کنند. در حالت حرکت کاهش‌یافته، همه‌جا ثابت می‌مانند: «پخش انیمیشن» آن‌ها را در کارت نمایه شروع می‌کند.
+Contraste	کنتراست
+Souligner les liens	زیرخط‌دار کردن پیوندها
+Les liens du texte sont toujours soulignés, pas seulement colorés.	پیوندهای متن همیشه زیرخط‌دار هستند، نه فقط رنگی.
+
+# Coquille : rail, barres latérales, compte (shell.rs)
+Aller au contenu	رفتن به محتوا
+Connexion au serveur…	در حال اتصال به سرور…
+Connexion perdue, nouvelle tentative…	اتصال قطع شد، در حال تلاش دوباره…
+Fermer l'information	بستن اطلاعیه
+Accueil et messages privés	خانه و پیام‌های خصوصی
+{n} mention	{n} منشن
+{n} mentions	{n} منشن
+Serveurs	سرورها
+Serveur {nom}	سرور {nom}
+non lu	خوانده‌نشده
+Créer ou rejoindre un serveur	ایجاد یا پیوستن به سرور
+Créer ou rejoindre	ایجاد یا پیوستن
+Explorer les serveurs publics	کاوش سرورهای عمومی
+Explorer	کاوش
+Messages privés	پیام‌های خصوصی
+Amis	دوستان
+(demande en attente)	(درخواست در انتظار)
+(demandes en attente)	(درخواست در انتظار)
+Nouvelle conversation ou groupe	گفتگو یا گروه جدید
+Nouvelle conversation	گفتگوی جدید
+Aucune conversation pour l'instant.	هنوز گفتگویی وجود ندارد.
+Fermer la conversation avec {nom}	بستن گفتگو با {nom}
+Fermer la conversation	بستن گفتگو
+Appel en cours	تماس در جریان
+Salons	کانال‌ها
+Inviter des amis	دعوت از دوستان
+Inviter	دعوت
+Notifications du serveur	اعلان‌های سرور
+Notifications	اعلان‌ها
+Paramètres du serveur	تنظیمات سرور
+Paramètres	تنظیمات
+Plus d'actions pour ce serveur	گزینه‌های بیشتر برای این سرور
+Créer un salon	ایجاد کانال
+Créer une catégorie	ایجاد دسته‌بندی
+Transférer la propriété	انتقال مالکیت
+Quitter le serveur	ترک سرور
+Événements	رویدادها
+(privée)	(خصوصی)
+Créer un salon dans cette catégorie	ایجاد کانال در این دسته‌بندی
+Paramètres de la catégorie	تنظیمات دسته‌بندی
+salon vocal privé	کانال صوتی خصوصی
+salon vocal	کانال صوتی
+annonces privées	کانال اطلاعیه‌های خصوصی
+annonces	کانال اطلاعیه‌ها
+forum privé	انجمن خصوصی
+forum	انجمن
+salon privé	کانال خصوصی
+Paramètres du salon	تنظیمات کانال
+Aucun salon où inviter.	کانالی برای دعوت وجود ندارد.
+Inviter dans {nom}	دعوت به {nom}
+Lien à partager	پیوند برای اشتراک‌گذاری
+Ce lien n'expire pas. Toute personne qui l'a peut rejoindre.	این پیوند منقضی نمی‌شود. هر کسی که آن را داشته باشد می‌تواند بپیوندد.
+Fermer	بستن
+Copié	کپی شد
+Copier le lien	کپی پیوند
+En ligne	آنلاین
+Inactif	بیکار
+Ne pas déranger	مزاحم نشوید
+Ni notification du bureau, ni sonnerie d'appel.	بدون اعلان دسکتاپ و بدون زنگ تماس.
+Invisible	نامرئی
+Les autres te voient hors ligne.	دیگران شما را آفلاین می‌بینند.
+Connecté	متصل
+Connexion…	در حال اتصال…
+Hors ligne	آفلاین
+Mon compte, {statut}	حساب کاربری من، {statut}
+Mon compte	حساب کاربری من
+Mon statut	وضعیت من
+Réglages utilisateur	تنظیمات کاربر
+Réglages	تنظیمات
+Apparence	ظاهر
+Se déconnecter	خروج
+
+# Pastilles de statut, en-têtes, pages (ui.rs)
+en ligne	آنلاین
+inactif	بیکار
+ne pas déranger	مزاحم نشوید
+hors ligne	آفلاین
+invisible	نامرئی
+Plus	بیشتر
+Ouvrir la navigation	باز کردن ناوبری
+Écran {id} prévu, pas encore construit.	صفحه {id} برنامه‌ریزی شده است، اما هنوز ساخته نشده است.
+Cette page n'existe pas	این صفحه وجود ندارد
+Le lien est peut-être ancien ou mal copié.	ممکن است پیوند قدیمی باشد یا درست کپی نشده باشد.
+
+# Fenêtre des Réglages (settings.rs)
+Toi	شما
+Préférences	ترجیحات
+Mon profil	نمایه من
+Tes données	داده‌های شما
+Qui peut t'écrire	چه کسی می‌تواند به شما پیام بدهد
+Applications liées	برنامه‌های متصل
+Voix et vidéo	صدا و تصویر
+Accessibilité	دسترس‌پذیری
+Raccourcis clavier	میان‌برهای صفحه‌کلید
+Langue et heure	زبان و زمان
+Sections des réglages	بخش‌های تنظیمات
+Fermer les réglages (Échap)	بستن تنظیمات (Esc)
+Bientôt ici	به‌زودی اینجا
+Section {id} prévue, pas encore construite.	بخش {id} برنامه‌ریزی شده است، اما هنوز ساخته نشده است.
