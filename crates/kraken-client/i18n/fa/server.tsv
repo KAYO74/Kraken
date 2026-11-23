@@ -1,0 +1,5 @@
+# Catalogue persan (fa), groupe « server » : les messages d'erreur du serveur (français), traduits à l'affichage par api.rs (`from_server`) ; le français doit être le texte exact du serveur, avec ses gabarits à {variables} (voir en/server.tsv).
+# Une ligne « français<TAB>persan » par texte ; règles : ../README.md (« Ajouter une langue »).
+# Mêmes {variables} que le français, chiffres latins (0-9, jamais ۰-۹ ni ٠-٩), demi-espace (U+200C) seulement entre
+# deux lettres, jamais en tête ni en queue. Un texte absent d'ici s'affiche en anglais (repli), puis en français.
+# Fichier en construction : `python3 scripts/i18n-check.py --missing --lang fa` liste ce qui reste à traduire.

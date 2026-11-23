@@ -11,14 +11,26 @@ Mode d'emploi et conventions : crates/kraken-client/i18n/README.md.
                                                   (`// i18n-ok` en fin de ligne : français à ne pas traduire, ignoré)
     python3 scripts/i18n-check.py --grep Fermer   les entrées de catalogue qui contiennent ce texte
     python3 scripts/i18n-check.py --missing       les lignes « français<TAB> » à compléter (clés sans entrée anglaise)
+    python3 scripts/i18n-check.py --missing --lang fa     idem pour une autre langue (le persan : tout ce qui reste à traduire)
+    python3 scripts/i18n-check.py --stats         clés à traduire, entrées et part traduite, par langue et par fichier
+    python3 scripts/i18n-check.py -v              le contrôle complet, avec la liste des clés manquantes d'une langue partielle
     python3 scripts/i18n-check.py --server        les messages français du serveur (format! compris) que server.tsv ne couvre pas
 
-Contrôle complet. ERREURS (code de sortie 1) : un littéral passé à t(, tf(, tn(, tnf( ou tk!( sans entrée
-dans une langue ; une entrée en double (dans un fichier ou entre fichiers) ; une ligne de catalogue mal
-formée ; des {variables} différentes entre la clé et la traduction ; un fichier .tsv absent de la liste
-`EN` de src/i18n.rs. AVERTISSEMENTS : entrée de catalogue inutilisée (sauf server.tsv, vérifié contre les
-sources du serveur) ; ponctuation française dans une traduction (espace avant : ? ! ;, guillemets « »).
-`--todo` et `--server` informent seulement (code de sortie 0).
+Contrôle complet, pour **chaque** langue qui a un dossier sous `i18n/` (`en`, `fa`). ERREURS (code de sortie 1) : un
+littéral passé à t(, tf(, tn(, tnf( ou tk!( sans entrée dans la langue ; un nom d'emoji, un texte de modèle ou un message
+du serveur sans entrée ; une entrée en double (dans un fichier ou entre fichiers) ; une ligne de catalogue mal formée ;
+des {variables} différentes entre la clé et la traduction ; une marque de sens d'écriture (U+200E, U+200F, U+061C,
+U+202A à U+202E, U+2066 à U+2069) dans une traduction ; un fichier .tsv absent de la liste du client (`EN`, `FA` de
+src/i18n.rs) ; un dossier de langue que `kraken_core::i18n::Lang` ne connaît pas. Pour le persan, en plus : un chiffre
+persan ou arabo-indien (۰-۹, ٠-٩ : les chiffres sont latins), un demi-espace (U+200C) en tête ou en queue d'une ligne,
+un « ي » ou un « ك » arabes (le persan écrit « ی » et « ک »).
+
+AVERTISSEMENTS : entrée de catalogue inutilisée (clé absente du code, sauf server.tsv, vérifié contre les sources du
+serveur) ; ponctuation française dans une traduction anglaise (espace avant : ? ! ;, guillemets « ») ; demi-espace collé à
+une espace ou doublé (persan) ; et, **tant que la langue est dans `PARTIAL`**, ses clés sans traduction (comptées, et
+listées avec -v ou --missing --lang) : une langue partielle retombe sur son repli (`Lang::fallback`), la page marche déjà.
+`PARTIAL` se vide à la fin du travail de traduction : les clés manquantes deviennent alors des erreurs, comme en anglais.
+`--todo`, `--server`, `--missing` et `--stats` informent seulement (code de sortie 0).
 """
 import argparse
 import re
@@ -35,6 +47,21 @@ EMOJI_SRC = ROOT / "crates" / "kraken-core" / "src" / "emoji.rs"
 # Les modèles de serveur (donnée du noyau) : le nom et la description d'une carte sont traduits à l'affichage ; les noms
 # des catégories et des salons, eux, existent déjà dans les deux langues dans le noyau (`Label`, jamais au catalogue).
 TEMPLATES_SRC = ROOT / "crates" / "kraken-core" / "src" / "templates.rs"
+# Langues dont le catalogue est encore en construction : leurs clés manquantes sont des avertissements (comptés, listés avec
+# -v ou --missing --lang), pas des erreurs. À RETIRER à la fin de la PR qui ajoute la langue (le persan : PR #33).
+PARTIAL = {"fa"}
+# La langue de référence : elle porte tous les messages du serveur (server.tsv), que chaque autre langue doit traduire aussi.
+REFERENCE = "en"
+# Le repli d'une langue (même table que `Lang::fallback` dans le noyau), pour le dire dans les messages.
+LANG_FALLBACK = {"fa": "en"}
+# Le noyau, où `Lang::code` dit quelles langues existent (chaque dossier de i18n/ doit y avoir son code).
+CORE_I18N = ROOT / "crates" / "kraken-core" / "src" / "i18n.rs"
+# Persan : chiffres persans (۰-۹) et arabo-indiens (٠-٩), lettres arabes ي et ك (le persan écrit ی et ک), demi-espace.
+INDIC_DIGITS = re.compile("[\u06f0-\u06f9\u0660-\u0669]")
+ARABIC_LETTERS = {"\u064a": "ی (U+06CC)", "\u0643": "ک (U+06A9)"}
+ZWNJ = "\u200c"
+# Marques de sens d'écriture : jamais dans un catalogue (le client isole les valeurs lui-même, voir README « Droit-à-gauche »).
+BIDI_MARKS = re.compile("[\u200e\u200f\u061c\u202a-\u202e\u2066-\u2069]")
 # Fonctions dont les arguments littéraux sont des clés de traduction : nom -> numéros d'arguments (depuis 0).
 KEY_ARGS = {"t": (0,), "tf": (0,), "tn": (0, 1), "tnf": (0, 1), "tk!": (0,)}
 
@@ -456,18 +483,80 @@ def cmd_server():
           "texte qui n'est pas pour l'interface)")
 
 
-def cmd_missing():
-    """Les clés du code sans entrée dans la première langue, en lignes « français<TAB> » prêtes à compléter."""
+def lang_dirs():
+    """Les dossiers de langue sous i18n/ (`en`, `fa`), triés."""
+    return sorted(p for p in CATALOGS.iterdir() if p.is_dir()) if CATALOGS.is_dir() else []
+
+
+def known_langs():
+    """Les codes de `Lang::code` dans le noyau (`fr`, `en`, `fa`) : chaque dossier de i18n/ doit y avoir le sien."""
+    if not CORE_I18N.is_file():
+        return None
+    m = re.search(r"pub fn code\(self\) -> &'static str \{(.*?)\n    \}", CORE_I18N.read_text(encoding="utf-8"), re.S)
+    return set(re.findall(r'"([a-z]+)"', m.group(1))) if m else None
+
+
+class Needs:
+    """Ce que le catalogue d'une langue doit couvrir : les textes du code, les noms d'emojis, les textes de modèles et
+    les messages du serveur (ceux de `server.tsv` de la langue de référence)."""
+
+    def __init__(self, catalogs):
+        self.keys = {}
+        for f, tok, names, key, attr, after, in_test, head in client_literals():
+            if key:
+                self.keys.setdefault(tok.val, []).append((f, tok.line))
+        self.emojis = emoji_names()
+        self.templates = template_names()
+        ref = catalogs.get(REFERENCE, {})
+        self.server = {k: (f, no) for k, (v, f, no) in ref.items() if f.name == "server.tsv"}
+
+    def all(self):
+        return set(self.keys) | self.emojis | self.templates | set(self.server)
+
+    def missing(self, cat):
+        """[(où, clé, ce que c'est, texte affiché)] pour ce que `cat` ne couvre pas, une fois par clé, dans l'ordre : le
+        code, les emojis, les modèles, le serveur."""
+        out, seen = [], set()
+
+        def add(place, key, shown, what):
+            if key not in cat and key not in seen:
+                seen.add(key)
+                out.append((place, key, shown, what))
+
+        for key, places in sorted(self.keys.items(), key=lambda kv: (rel(kv[1][0][0]), kv[1][0][1])):
+            f, line = places[0]
+            more = f" (+{len(places) - 1})" if len(places) > 1 else ""
+            add(f"{rel(f)}:{line}", key, f"{key!r}{more}", "le texte")
+        for n in sorted(self.emojis):
+            add(rel(EMOJI_SRC), n, repr(n), "le nom d'emoji")
+        for n in sorted(self.templates):
+            add(rel(TEMPLATES_SRC), n, repr(n), "le texte de modèle")
+        for k, (f, no) in sorted(self.server.items(), key=lambda kv: kv[1][1]):
+            add(f"{rel(f)}:{no}", k, repr(k), "le message du serveur")
+        return out
+
+
+def load_all(errors):
+    return {d.name: load_catalog(d, errors) for d in lang_dirs()}
+
+
+def cmd_missing(lang):
+    """Les clés sans entrée dans une langue (la première par défaut), en lignes « français<TAB> » prêtes à compléter."""
     errors = []
-    lang_dirs = sorted(p for p in CATALOGS.iterdir() if p.is_dir())
-    cat = load_catalog(lang_dirs[0], errors) if lang_dirs else {}
+    dirs = lang_dirs()
+    if lang is None:
+        lang = dirs[0].name if dirs else None
+    if lang is None or not (CATALOGS / lang).is_dir():
+        print(f"pas de catalogue pour la langue {lang!r} (dossiers : {', '.join(d.name for d in dirs)})", file=sys.stderr)
+        return 1
+    catalogs = load_all(errors)
+    needs = Needs(catalogs)
     seen = {}
-    for f, tok, names, key, attr, after, in_test, head in client_literals():
-        if key and tok.val not in cat:
-            seen.setdefault(tok.val, (rel(f), tok.line))
-    for text, (path, line) in sorted(seen.items(), key=lambda kv: kv[1]):
-        print(f"{escape(text)}\t")
-    print(f"-- {len(seen)} clé(s) sans traduction", file=sys.stderr)
+    for place, key, shown, what in needs.missing(catalogs[lang]):
+        seen.setdefault(key, place)
+    for key in seen:
+        print(f"{escape(key)}\t")
+    print(f"-- {len(seen)} clé(s) sans traduction en {lang}", file=sys.stderr)
     return 0
 
 
@@ -497,55 +586,110 @@ def template_names():
     return {decode(x) for x in found}
 
 
-def cmd_check():
+def persian_problems(key, value):
+    """Ce qui ne va pas dans une traduction persane (les chiffres sont latins, le demi-espace joint deux lettres)."""
+    found = []
+    if INDIC_DIGITS.search(value):
+        found.append(("erreur", "chiffre persan ou arabo-indien (۰-۹, ٠-٩) : les chiffres sont latins (0-9)"))
+    for bad, good in ARABIC_LETTERS.items():
+        if bad in value:
+            found.append(("erreur", f"lettre arabe {bad} (U+{ord(bad):04X}) : le persan écrit {good}"))
+    for line in value.split("\n"):
+        if line.startswith(ZWNJ) or line.endswith(ZWNJ):
+            found.append(("erreur", "demi-espace (U+200C) en tête ou en queue d'une ligne"))
+            break
+    if ZWNJ * 2 in value or re.search(ZWNJ + r"\s|\s" + ZWNJ, value):
+        found.append(("avertissement", "demi-espace doublé ou collé à une espace"))
+    return found
+
+
+def cmd_check(verbose=False):
     errors, warnings = [], []
-    lang_dirs = sorted(p for p in CATALOGS.iterdir() if p.is_dir()) if CATALOGS.is_dir() else []
-    if not lang_dirs:
+    dirs = lang_dirs()
+    if not dirs:
         print("aucun catalogue dans crates/kraken-client/i18n/")
         return 1
-    literals = client_literals()
-    keys = {}
-    for f, tok, names, key, attr, after, in_test, head in literals:
-        if key:
-            keys.setdefault(tok.val, []).append((f, tok.line))
+    catalogs = load_all(errors)
+    needs = Needs(catalogs)
     i18n_rs = (SRC / "i18n.rs").read_text(encoding="utf-8")
     server_texts = {shape(tok.val) for _, tok, _, in_test in server_literals() if not in_test}
-    emojis = emoji_names()
-    templates = template_names()
-    for lang_dir in lang_dirs:
+    codes = known_langs()
+    coverage = []
+    for lang_dir in dirs:
         lang = lang_dir.name
-        # Chaque fichier du dossier doit être lu par le client (liste de src/i18n.rs).
-        if lang == "en":
-            for f in sorted(lang_dir.glob("*.tsv")):
-                if f"i18n/en/{f.name}" not in i18n_rs:
-                    errors.append(f"{rel(f)}: fichier absent de la liste `EN` de crates/kraken-client/src/i18n.rs")
-        cat = load_catalog(lang_dir, errors)
-        for key, places in sorted(keys.items(), key=lambda kv: (rel(kv[1][0][0]), kv[1][0][1])):
-            if key not in cat:
-                f, line = places[0]
-                more = f" (+{len(places) - 1})" if len(places) > 1 else ""
-                errors.append(f"{rel(f)}:{line}: [{lang}] pas de traduction pour {key!r}{more}")
-        for name in sorted(emojis - set(cat)):
-            errors.append(f"{rel(EMOJI_SRC)}: [{lang}] pas de traduction pour le nom d'emoji {name!r}")
-        for name in sorted(templates - set(cat)):
-            errors.append(f"{rel(TEMPLATES_SRC)}: [{lang}] pas de traduction pour le texte de modèle {name!r}")
+        cat = catalogs[lang]
+        if codes is not None and lang not in codes:
+            errors.append(f"{rel(lang_dir)}: dossier de langue inconnu de `Lang::code` ({rel(CORE_I18N)}) : {sorted(codes)}")
+        # Chaque fichier du dossier doit être lu par le client (liste `EN`, `FA`… de src/i18n.rs).
+        for f in sorted(lang_dir.glob("*.tsv")):
+            if f"i18n/{lang}/{f.name}" not in i18n_rs:
+                errors.append(f"{rel(f)}: fichier absent de la liste de la langue dans crates/kraken-client/src/i18n.rs")
+        missing = needs.missing(cat)
+        required = needs.all()
+        coverage.append((lang, len(required) - len(missing), len(required)))
+        if lang in PARTIAL:
+            # Langue en construction : ses clés manquantes sont comptées, pas fatales (le repli les couvre).
+            if missing:
+                examples = ", ".join(shown if len(shown) <= 40 else shown[:37] + "..." for _, _, shown, _ in missing[:3])
+                warnings.append(
+                    f"[{lang}] catalogue partiel (`PARTIAL` dans scripts/i18n-check.py) : {len(missing)} clé(s) sur {len(required)} sans "
+                    f"traduction, repli {LANG_FALLBACK.get(lang, 'français')} ; `--missing --lang {lang}` les liste (premières : {examples})")
+            if verbose:
+                for place, _, shown, what in missing:
+                    warnings.append(f"{place}: [{lang}] pas de traduction pour {what} {shown}")
+        else:
+            for place, _, shown, what in missing:
+                errors.append(f"{place}: [{lang}] pas de traduction pour {what} {shown}")
         for key, (value, f, no) in cat.items():
             if placeholders(key) != placeholders(value):
                 errors.append(f"{rel(f)}:{no}: [{lang}] variables différentes : {key[:50]!r} {placeholders(key)} / {placeholders(value)}")
+            if BIDI_MARKS.search(value):
+                errors.append(f"{rel(f)}:{no}: [{lang}] marque de sens d'écriture dans la traduction (le client isole les valeurs lui-même) : {value[:60]!r}")
             if lang == "en" and (re.search(r"\s[:?!;]", value) or "«" in value or "»" in value):
                 warnings.append(f"{rel(f)}:{no}: [{lang}] ponctuation française dans la traduction : {value[:60]!r}")
+            if lang == "fa":
+                for level, what in persian_problems(key, value):
+                    (errors if level == "erreur" else warnings).append(f"{rel(f)}:{no}: [{lang}] {what} : {value[:60]!r}")
             if f.name == "server.tsv":
                 if shape(key) not in server_texts:
                     warnings.append(f"{rel(f)}:{no}: [{lang}] message absent des sources du serveur : {key[:60]!r}")
-            elif key not in keys and key not in emojis and key not in templates:
+            elif key not in needs.keys and key not in needs.emojis and key not in needs.templates:
                 warnings.append(f"{rel(f)}:{no}: [{lang}] entrée inutilisée : {key[:60]!r}")
     for e in errors:
         print("ERREUR " + e)
     for w in warnings:
         print("avertissement " + w)
-    total = sum(len(load_catalog(d, [])) for d in lang_dirs)
-    print(f"-- {len(keys)} clé(s) dans le code, {total} entrée(s) de catalogue, {len(errors)} erreur(s), {len(warnings)} avertissement(s)")
+    total = sum(len(c) for c in catalogs.values())
+    print(f"-- {len(needs.keys)} clé(s) dans le code, {total} entrée(s) de catalogue, {len(errors)} erreur(s), {len(warnings)} avertissement(s)")
+    print("-- couverture : " + ", ".join(
+        f"{lang} {done}/{need}" + (" (partiel)" if lang in PARTIAL else "") for lang, done, need in coverage))
     return 1 if errors else 0
+
+
+def percent(done, total):
+    return f"{100 * done / total:5.1f} %".replace(".", ",") if total else "  n/a"
+
+
+def cmd_stats():
+    """Les clés à traduire et, par langue, les entrées par fichier et la part traduite."""
+    errors = []
+    catalogs = load_all(errors)
+    needs = Needs(catalogs)
+    required = needs.all()
+    print(f"À traduire : {len(required)} clé(s) = {len(needs.keys)} texte(s) du code, {len(needs.emojis)} nom(s) d'emoji, "
+          f"{len(needs.templates)} texte(s) de modèle, {len(needs.server)} message(s) du serveur (certains se recoupent)")
+    files = sorted({f.name for d in lang_dirs() for f in d.glob("*.tsv")})
+    head = f"{'langue':<8}" + "".join(f"{f[:-4]:>8}" for f in files) + f"{'entrées':>9}{'traduites':>11}{'manquantes':>12}{'part':>10}"
+    print(head)
+    for lang, cat in catalogs.items():
+        by_file = {f: sum(1 for _, ff, _ in cat.values() if ff.name == f) for f in files}
+        done = len(required & set(cat))
+        label = lang + ("*" if lang in PARTIAL else "")
+        print(f"{label:<8}" + "".join(f"{by_file[f]:>8}" for f in files)
+              + f"{len(cat):>9}{done:>11}{len(required) - done:>12}{percent(done, len(required)):>10}")
+    if PARTIAL & set(catalogs):
+        print("* langue partielle (`PARTIAL`) : ses clés manquantes sont des avertissements, le repli les affiche")
+    return 0
 
 
 def main():
@@ -554,7 +698,12 @@ def main():
     ap.add_argument("--grep", metavar="TEXTE", help="cherche dans les catalogues")
     ap.add_argument("--server", action="store_true", help="messages du serveur absents de server.tsv")
     ap.add_argument("--missing", action="store_true", help="lignes de catalogue à compléter")
+    ap.add_argument("--lang", metavar="CODE", help="avec --missing : la langue (la première par défaut)")
+    ap.add_argument("--stats", action="store_true", help="clés à traduire, entrées et part traduite par langue")
+    ap.add_argument("-v", "--verbose", action="store_true", help="liste aussi les clés manquantes d'une langue partielle")
     args = ap.parse_args()
+    if args.lang and not args.missing:
+        ap.error("--lang va avec --missing")
     if args.todo is not None:
         cmd_todo(args.todo)
         return 0
@@ -565,9 +714,15 @@ def main():
         cmd_server()
         return 0
     if args.missing:
-        return cmd_missing()
-    return cmd_check()
+        return cmd_missing(args.lang)
+    if args.stats:
+        return cmd_stats()
+    return cmd_check(args.verbose)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except BrokenPipeError:  # `| head` : le lecteur a fermé le tube, ce n'est pas une erreur
+        sys.stderr.close()
+        sys.exit(0)

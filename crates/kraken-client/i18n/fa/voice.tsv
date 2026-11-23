@@ -1,0 +1,5 @@
+# Catalogue persan (fa), groupe « voice ».
+# Une ligne « français<TAB>persan » par texte ; règles : ../README.md (« Ajouter une langue »).
+# Mêmes {variables} que le français, chiffres latins (0-9, jamais ۰-۹ ni ٠-٩), demi-espace (U+200C) seulement entre
+# deux lettres, jamais en tête ni en queue. Un texte absent d'ici s'affiche en anglais (repli), puis en français.
+# Fichier en construction : `python3 scripts/i18n-check.py --missing --lang fa` liste ce qui reste à traduire.

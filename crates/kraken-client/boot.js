@@ -25,21 +25,31 @@
   // Vieux WebKit : WebRTC sous son nom préfixé seulement. Sans cet alias le client croit les appels vocaux absents.
   if (!window.RTCPeerConnection && window.webkitRTCPeerConnection) window.RTCPeerConnection = window.webkitRTCPeerConnection;
 
-  // Langue de l'interface (même choix et même règle que src/i18n.rs) : `<html lang dir>` avant le client WASM.
-  var chosen = read("kraken.lang", ["auto", "fr", "en"], "auto");
-  try { if (chosen === "auto") chosen = window.sessionStorage.getItem("kraken.lang") || "auto"; } catch (e) { /* stockage refusé */ }
-  var lang = chosen === "fr" || chosen === "en" ? chosen : "fr";
-  if (chosen === "auto") {
+  // Langue de l'interface (même choix et même règle que src/i18n.rs et `kraken_core::i18n`) : `<html lang dir>` avant le
+  // client WASM. `langs` : la table de `Lang::ALL` (français d'abord : le repli) ; `rtl` : celle de `Lang::dir` (le persan est
+  // la première langue de droite à gauche livrée ; l'arabe et l'hébreu y sont déjà, que la feuille de style suit en direct).
+  var langs = ["fr", "en", "fa"];
+  var rtl = ["ar", "fa", "he"];
+  var chosen = read("kraken.lang", ["auto"].concat(langs), "auto");
+  try {
+    if (chosen === "auto") {
+      var tab = window.sessionStorage.getItem("kraken.lang");
+      if (langs.indexOf(tab) >= 0) chosen = tab;
+    }
+  } catch (e) { /* stockage refusé */ }
+  var lang = "fr";
+  if (chosen !== "auto") {
+    lang = chosen;
+  } else {
+    // « Langue de l'appareil » : la première langue du navigateur que l'interface prend en charge (`fa`, `fa-IR`, `fa-AF`,
+    // `fa_IR` : seule la langue compte, pas la région), à défaut le français.
     var wanted = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
     for (var i = 0; i < wanted.length; i++) {
-      var code = String(wanted[i] || "").split(/[-_]/)[0].toLowerCase();
-      if (code === "fr" || code === "en") { lang = code; break; }
+      var code = String(wanted[i] || "").replace(/^\s+|\s+$/g, "").split(/[-_]/)[0].toLowerCase();
+      if (langs.indexOf(code) >= 0) { lang = code; break; }
     }
   }
   root.setAttribute("lang", lang);
-  // Sens d'écriture : la même table que `Lang::dir` (kraken-core). Aucune langue de droite à gauche n'est livrée encore (`lang` vaut
-  // fr ou en) : la table est prête pour l'arabe, le persan et l'hébreu, que la feuille de style et le client suivent en direct.
-  var rtl = ["ar", "fa", "he"];
   root.setAttribute("dir", rtl.indexOf(lang) >= 0 ? "rtl" : "ltr");
 
   set("data-theme", read("kraken.theme", ["auto", "dark", "light", "black"], "dark"));

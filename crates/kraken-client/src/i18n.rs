@@ -1,19 +1,21 @@
-//! Interface multilingue : français et anglais, prête pour d'autres langues. Mode d'emploi complet et
-//! conventions de traduction : `crates/kraken-client/i18n/README.md`.
+//! Interface multilingue : français, anglais et persan (la première langue de droite à gauche), prête pour
+//! d'autres langues. Mode d'emploi complet et conventions de traduction : `crates/kraken-client/i18n/README.md`.
 //!
 //! **Le français est la clé.** `t("Ouvrir les réglages")` rend ce texte tel quel en français, et sa traduction
 //! (`crates/kraken-client/i18n/<langue>/<groupe>.tsv`) dans une autre langue ; un texte absent du catalogue
-//! reste en français, jamais de panne. `tf` remplace des `{variables}` après la traduction, `tn` choisit le
-//! gabarit au singulier ou au pluriel selon la règle de la langue.
+//! reste en français, jamais de panne. Le persan a une chaîne de repli : son catalogue se construit sur celui de
+//! l'anglais (`kraken_core::i18n::Lang::fallback`), donc un texte pas encore traduit en persan s'affiche en
+//! anglais, puis en français. `tf` remplace des `{variables}` après la traduction, `tn` choisit le gabarit au
+//! singulier ou au pluriel selon la règle de la langue.
 //!
 //! La langue est lue **une fois**, au démarrage ([`init`], avant le premier rendu), d'après le choix gardé
-//! (`kraken.lang` du `localStorage` : `auto`, `fr`, `en`) et, en « Automatique », les langues du navigateur.
+//! (`kraken.lang` du `localStorage` : `auto`, `fr`, `en`, `fa`) et, en « Automatique », les langues du navigateur.
 //! Changer de langue enregistre le choix et recharge la page ([`choose`]) : rien n'est réactif.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
-use kraken_core::i18n::{Catalog, Lang, LangPref, Plural, fill, fill_isolated};
+use kraken_core::i18n::{Catalog, Lang, LangPref, Plural, catalog_for, fill, fill_isolated};
 use leptos::prelude::*;
 
 /// Le choix de langue, dans le `localStorage` de l'appareil (jamais envoyé au serveur).
@@ -34,12 +36,30 @@ const EN: &[&str] = &[
     include_str!("../i18n/en/server.tsv"),
 ];
 
-/// Les fichiers de catalogue d'une langue. Le français n'en a pas : ses textes sont les clés.
+/// Le catalogue persan : les mêmes six groupes que l'anglais, chargés **après** lui (voir [`catalog`]).
+const FA: &[&str] = &[
+    include_str!("../i18n/fa/core.tsv"),
+    include_str!("../i18n/fa/chat.tsv"),
+    include_str!("../i18n/fa/guilds.tsv"),
+    include_str!("../i18n/fa/voice.tsv"),
+    include_str!("../i18n/fa/app.tsv"),
+    include_str!("../i18n/fa/server.tsv"),
+];
+
+/// Les fichiers de catalogue d'une langue, sans son repli. Le français n'en a pas : ses textes sont les clés.
 fn sources(lang: Lang) -> &'static [&'static str] {
     match lang {
         Lang::Fr => &[],
         Lang::En => EN,
+        Lang::Fa => FA,
     }
+}
+
+/// Le catalogue de la langue : celui de son repli d'abord (`Lang::fallback` : l'anglais pour le persan), puis ses propres
+/// fichiers par-dessus, la dernière entrée gagnant. Ce que le persan ne traduit pas est donc en anglais, et ce que l'anglais
+/// ne traduit pas reste le texte français de la clé.
+fn catalog(lang: Lang) -> Catalog {
+    catalog_for(lang, &sources)
 }
 
 struct State {
@@ -96,12 +116,10 @@ impl State {
         let pref = stored_pref();
         let browser = browser_languages();
         let lang = pref.resolve(&browser.iter().map(String::as_str).collect::<Vec<_>>());
-        let mut catalog = Catalog::default();
-        for src in sources(lang) {
-            catalog.add(src);
-        }
+        let catalog = catalog(lang);
         // L'étiquette de la langue, avec la région du navigateur quand elle va avec (`en-GB` : 24 h, jour avant
-        // mois), sinon la langue seule. Chiffres latins partout : l'extension `-u-nu-latn`.
+        // mois ; `fa-AF`), sinon la langue seule. Chiffres latins partout : l'extension `-u-nu-latn` (le calendrier, lui,
+        // reste celui que `Intl` donne à la langue : le calendrier persan pour `fa`).
         let base = browser
             .iter()
             .find(|t| plausible_tag(t) && Lang::from_tag(t) == Some(lang))
@@ -135,7 +153,8 @@ impl State {
     }
 }
 
-/// Au démarrage, avant le premier rendu : lit la langue et pose `lang` et `dir` sur `<html>`.
+/// Au démarrage, avant le premier rendu : lit la langue et pose `lang` et `dir` sur `<html>` (`dir="rtl"` en persan ;
+/// `boot.js` l'a déjà posé avant le client, avec la même règle).
 pub fn init() {
     let lang = lang();
     if let Some(root) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.document_element()) {
