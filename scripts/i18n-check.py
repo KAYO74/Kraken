@@ -17,7 +17,7 @@ Mode d'emploi et conventions : crates/kraken-client/i18n/README.md.
     python3 scripts/i18n-check.py --server        les messages français du serveur (format! compris) que server.tsv ne couvre pas
 
 Contrôle complet, pour **chaque** langue qui a un dossier sous `i18n/` (`en`, `fa`). ERREURS (code de sortie 1) : un
-littéral passé à t(, tf(, tn(, tnf( ou tk!( sans entrée dans la langue ; un nom d'emoji, un texte de modèle ou un message
+littéral passé à t(, tf(, tf_data(, tn(, tnf( ou tk!( sans entrée dans la langue ; un nom d'emoji, un texte de modèle ou un message
 du serveur sans entrée ; une entrée en double (dans un fichier ou entre fichiers) ; une ligne de catalogue mal formée ;
 des {variables} différentes entre la clé et la traduction ; une marque de sens d'écriture (U+200E, U+200F, U+061C,
 U+202A à U+202E, U+2066 à U+2069) dans une traduction ; un fichier .tsv absent de la liste du client (`EN`, `FA` de
@@ -63,7 +63,7 @@ ZWNJ = "\u200c"
 # Marques de sens d'écriture : jamais dans un catalogue (le client isole les valeurs lui-même, voir README « Droit-à-gauche »).
 BIDI_MARKS = re.compile("[\u200e\u200f\u061c\u202a-\u202e\u2066-\u2069]")
 # Fonctions dont les arguments littéraux sont des clés de traduction : nom -> numéros d'arguments (depuis 0).
-KEY_ARGS = {"t": (0,), "tf": (0,), "tn": (0, 1), "tnf": (0, 1), "tk!": (0,)}
+KEY_ARGS = {"t": (0,), "tf": (0,), "tf_data": (0,), "tn": (0, 1), "tnf": (0, 1), "tk!": (0,)}
 
 
 # ───────────── lecture du code Rust ─────────────
@@ -223,7 +223,7 @@ def test_ranges(toks):
 def scan(toks):
     """Pour chaque littéral : (jeton, noms des appels qui l'enferment, est-ce une clé, attribut, suite, test, tête).
 
-    Une clé : argument littéral direct de t(, tf(, tn(, tnf( ou tk!(. `tête` : le premier mot de l'élément de
+    Une clé : argument littéral direct de t(, tf(, tf_data(, tn(, tnf( ou tk!(. `tête` : le premier mot de l'élément de
     premier niveau (`const`, `static`, `fn`, `struct`…).
     """
     out, stack = [], []

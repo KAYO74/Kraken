@@ -195,6 +195,8 @@ début ».
   à gauche : un nom en latin au milieu d'une phrase arabe ne retourne pas la ponctuation voisine. Un `@` ou un `#` collé
   devant une `{variable}` est repris dans l'isolat. Les nombres de `{n}` restent nus. Côté traduction : mets la ponctuation
   de la phrase **hors** de la variable (`« {name} : … »`), jamais une marque de sens d'écriture dans le catalogue.
+  Un texte qui devient une **donnée** (valeur d'un champ qui part au serveur, nom enregistré) se remplit avec `tf_data(` : même
+  gabarit, jamais d'isolat (le serveur refuse ces marques dans un nom).
 
 **Polices et interligne.** Un bloc `:lang(ar), :lang(fa), :lang(he)` (fin de `components.css`) prend une pile de polices du
 **système** (la langue persane y entre par `<html lang="fa">`, et chaque `<option lang="fa">` du sélecteur) : jetons `font.arabic` et `font.hebrew`, avec Inter d'abord pour le latin, puis la première police du système qui
