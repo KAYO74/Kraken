@@ -228,6 +228,14 @@ pub fn fill_isolated(template: &str, vars: &[(&str, &str)]) -> String {
     fill_with(template, vars, true)
 }
 
+/// Un texte saisi par une personne (nom de rôle, de salon, de serveur, nom affiché) dans un endroit qui ne prend que du
+/// texte (un `<option>`, un `title`) : entre FSI et PDI, il garde son propre sens d'écriture et n'entraîne pas la ponctuation
+/// voisine (`(Équipe) Alpha!` ne devient pas `!Alpha (Équipe)` dans une page de droite à gauche). Un texte sans lettre (un
+/// nombre, un emoji seul) reste tel quel.
+pub fn isolate(text: &str) -> String {
+    if text.chars().any(char::is_alphabetic) { format!("{FSI}{text}{PDI}") } else { text.to_string() }
+}
+
 fn fill_with(template: &str, vars: &[(&str, &str)], isolate: bool) -> String {
     if !template.contains('{') {
         return template.to_string();
@@ -281,6 +289,14 @@ mod tests {
         assert_eq!(fill_isolated("#{nom}", &vars), "\u{2068}#Marie\u{2069}");
         // Pas d'accolade : le gabarit tel quel.
         assert_eq!(fill_isolated("Bonjour", &vars), "Bonjour");
+    }
+
+    #[test]
+    fn isolate_wraps_only_text_with_letters() {
+        assert_eq!(isolate("(Équipe) Alpha!"), "\u{2068}(Équipe) Alpha!\u{2069}");
+        assert_eq!(isolate("@tout le monde"), "\u{2068}@tout le monde\u{2069}");
+        assert_eq!(isolate("12"), "12");
+        assert_eq!(isolate(""), "");
     }
 
     #[test]

@@ -435,7 +435,7 @@ fn Messaging() -> impl IntoView {
                                 view! {
                                     <li class="k-dm app-blocked-row">
                                         <Avatar user=u.clone() size="md"/>
-                                        <div class="app-ellipsis">{name.clone()}<small><bdi dir="ltr">{format!("@{}", u.username)}</bdi></small></div>
+                                        <div class="app-ellipsis"><bdi>{name.clone()}</bdi><small><bdi dir="ltr">{format!("@{}", u.username)}</bdi></small></div>
                                         <button class="k-btn k-btn--sm" aria-label=tf("Débloquer {nom}", &[("nom", &name)]) on:click=move |_| unblock(id)>{t("Débloquer")}</button>
                                     </li>
                                 }

@@ -218,10 +218,12 @@ fn FriendRow(r: Relationship, error: RwSignal<Option<String>>, confirm: RwSignal
                 <button class="k-btn k-btn--icon" aria-label=tf("Écrire à {nom}", &[("nom", &name)]) title=t("Message") on:click=move |_| write()>
                     <Icon icon=lu::LuMessageCircle/>
                 </button>
-                <button class="k-btn k-btn--icon" aria-label=tf("Appeler {nom}", &[("nom", &name)]) title=t("Appeler")
+                <button class="k-btn k-btn--icon" aria-label=tf("Appeler {nom}", &[("nom", &name)]) title=crate::call::call_title(t("Appeler"))
+                    aria-describedby=(!crate::voice::supported()).then(|| format!("call-no-{uid}"))
                     disabled=!crate::voice::supported() on:click=move |_| ring()>
                     <Icon icon=lu::LuPhone/>
                 </button>
+                {crate::call::call_note(&format!("call-no-{uid}"))}
                 // Retirer et bloquer : rangés sous ⋯, pas au rang d'écrire et d'appeler.
                 <MoreMenu label=tf("Plus d'actions pour {nom}", &[("nom", &name)])>
                     <button class="k-menuitem" on:click=move |_| confirm.set(Some(Confirm::RemoveFriend(u1.clone())))>
@@ -272,7 +274,7 @@ fn FriendRow(r: Relationship, error: RwSignal<Option<String>>, confirm: RwSignal
                 view! { <Avatar user=r.user.clone() size=""/> }.into_any()
             }}
             <div class="app-ellipsis">
-                <b>{r.user.name().to_string()}</b>
+                <b><bdi>{r.user.name().to_string()}</bdi></b>
                 <small>{move || {
                     let state = if friend { dot.get().label() } else { sub.clone() };
                     view! { <bdi dir="ltr">{format!("@{} · {state}", r.user.username)}</bdi> }

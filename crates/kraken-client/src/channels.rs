@@ -192,7 +192,7 @@ pub fn CreateChannelDialog(
                                         {
                                             let id = c.id.to_string();
                                             let selected = id.clone();
-                                            view! { <option value=id prop:selected=move || parent.get() == selected>{c.name.clone().unwrap_or_default()}</option> }
+                                            view! { <option value=id prop:selected=move || parent.get() == selected>{crate::i18n::isolated(&c.name.clone().unwrap_or_default())}</option> }
                                         }
                                     </For>
                                 </select>
@@ -332,7 +332,7 @@ pub fn ChannelsAdmin(guild: Id) -> impl IntoView {
                         <li class="app-chan-item" data-category=category.then_some("") data-nested=move || nested().then_some("")>
                             <span class="app-chan-icon" aria-hidden="true"><Icon icon=icon small=true/></span>
                             <span class="app-ellipsis app-chan-name">
-                                {name}
+                                <bdi>{name}</bdi>
                                 <Show when=private>
                                     <Icon icon=lu::LuLock small=true/><span class="k-sr">" ("{t("privé")}")"</span>
                                 </Show>
@@ -419,7 +419,7 @@ pub fn ChannelSettings() -> impl IntoView {
         <div class="k-scrim app-settings" node_ref=root>
             <div class="k-settings" role="dialog" aria-modal="true" aria-label=dialog_label>
                 <nav aria-label=t("Sections des paramètres du salon")>
-                    <h3>{move || title.get()}</h3>
+                    <h3><bdi>{move || title.get()}</bdi></h3>
                     {move || gid.get().zip(cid.get()).map(|(g, c)| {
                         SECTIONS.iter().map(|(slug, lbl)| view! {
                             <a class="k-navitem" href=format!("/channels/{g}/{c}/settings/{slug}")
@@ -910,7 +910,7 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
                                     <span class="app-role-icon" aria-hidden="true">
                                         {if tg.kind == OverwriteKind::Role { view! { <i class="app-role-dot"></i> }.into_any() } else { view! { <Icon icon=lu::LuUser small=true/> }.into_any() }}
                                     </span>
-                                    <span class="app-ellipsis">{move || name_of(tg)}</span>
+                                    <span class="app-ellipsis"><bdi>{move || name_of(tg)}</bdi></span>
                                     <Show when=move || drafts.with(|d| d.contains_key(&tg.id))><span class="k-sr">" ("{t("modifications non enregistrées")}")"</span></Show>
                                     <Show when=move || { effective(tg.id) != (0, 0) }><span class="k-sr">" ("{t("réglé")}")"</span></Show>
                                 </button>
@@ -923,11 +923,11 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
                             <select id="ow-add" class="k-select" on:change=move |e| pick.set(event_target_value(&e))>
                                 <option value="" prop:selected=move || pick.get().is_empty()>{t("Choisis dans la liste")}</option>
                                 <optgroup label=t("Rôles")>
-                                    {move || candidates.get().0.into_iter().map(|r| view! { <option value=format!("r:{}", r.id)>{r.name}</option> }).collect_view()}
+                                    {move || candidates.get().0.into_iter().map(|r| view! { <option value=format!("r:{}", r.id)>{crate::i18n::isolated(&r.name)}</option> }).collect_view()}
                                 </optgroup>
                                 <optgroup label=t("Membres")>
                                     {move || candidates.get().1.into_iter().map(|m| {
-                                        let label = format!("{} (@{})", m.nick.clone().unwrap_or_else(|| m.user.name().to_string()), m.user.username);
+                                        let label = crate::ui::member_label(&m.nick.clone().unwrap_or_else(|| m.user.name().to_string()), &m.user.username);
                                         view! { <option value=format!("m:{}", m.user.id)>{label}</option> }
                                     }).collect_view()}
                                 </optgroup>
@@ -940,7 +940,7 @@ fn ChannelPermissions(guild: Id, channel: Id) -> impl IntoView {
                     {move || {
                         let id = selected.get();
                         targets.with(|tg| tg.iter().find(|x| x.id == id).copied()).map(|tg| view! {
-                            <h3 class="app-roles-title">{move || name_of(tg)}</h3>
+                            <h3 class="app-roles-title"><bdi>{move || name_of(tg)}</bdi></h3>
                             <Show when=move || !editable(tg)>
                                 <p class="app-hint">{t("Son rang est égal ou supérieur au tien : tu ne peux pas changer ses réglages.")}</p>
                             </Show>

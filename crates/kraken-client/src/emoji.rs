@@ -222,7 +222,7 @@ pub fn EmojiPicker(
                         <section class="app-picker-sec" aria-labelledby=labelled>
                             <h3 class="app-picker-title" id=own>
                                 <GuildIcon guild=g.clone() size="sm" cap=64/>
-                                <span class="app-ellipsis">{g.name.clone()}</span>
+                                <span class="app-ellipsis"><bdi>{g.name.clone()}</bdi></span>
                             </h3>
                             <div class="app-picker-grid" role="group" aria-label=tf("Emojis de {nom}", &[("nom", &g.name)])>
                                 {es.into_iter().enumerate().map(|(n, e)| {

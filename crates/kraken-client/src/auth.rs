@@ -223,7 +223,7 @@ pub fn InvitePage() -> impl IntoView {
                         <header class="app-invite-head">
                             <crate::ui::GuildIcon guild=i.guild.clone() size="lg" cap=128/>
                             <p class="app-hint">{t("Une place t'attend dans")}</p>
-                            <h1>{i.guild.name.clone()}</h1>
+                            <h1><bdi>{i.guild.name.clone()}</bdi></h1>
                             <p class="app-hint">{tn("{n} membre", "{n} membres", i.member_count)}</p>
                         </header>
                         <Show when=move || error.get().is_some()><div><p class="k-error" role="alert">{move || error.get()}</p></div></Show>

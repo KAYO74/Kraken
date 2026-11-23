@@ -209,7 +209,7 @@ pub fn PeoplePicker(purpose: PickFor, close: Callback<()>) -> impl IntoView {
                                                         disabled=move || { !on() && count() >= room }
                                                         on:change=move |_| picked.update(|p| if p.contains(&id) { p.retain(|x| *x != id) } else { p.push(id) })/>
                                                     <Avatar user=u.clone() size="md"/>
-                                                    <span class="app-ellipsis"><b>{u.name().to_string()}</b><small><bdi dir="ltr">{format!("@{}", u.username)}</bdi></small></span>
+                                                    <span class="app-ellipsis"><b><bdi>{u.name().to_string()}</bdi></b><small><bdi dir="ltr">{format!("@{}", u.username)}</bdi></small></span>
                                                 </label>
                                             }
                                         }

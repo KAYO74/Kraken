@@ -452,7 +452,7 @@ fn option_view(
             on:click=move |_| pick.run(index)>
             <span class="app-sw-lead">{lead}</span>
             <span class="k-sr">{e.kind}" "</span>
-            <span class="app-sw-name" dir="auto">{name}</span>
+            <span class="app-sw-name"><bdi>{name}</bdi></span>
             <UnreadText on=unread/>
             <span class="app-sw-dot" aria-hidden="true" hidden=move || !unread.get()></span>
             <MentionBadge count=mentions/>

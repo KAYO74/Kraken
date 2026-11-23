@@ -44,7 +44,12 @@ pub fn Body(content: String, mentions: Vec<User>, everyone: bool, guild: Option<
                 view! { <blockquote class="app-quote" dir="auto">{inline(v, &lk)}</blockquote> }.into_any()
             }
             Block::Code { lang, text } => {
-                view! { <pre class="app-code" data-lang=lang><code>{text}</code></pre> }.into_any()
+                // Une ligne longue défile dans la boîte du bloc : il est atteignable au clavier (`tabindex`, règle axe
+                // `scrollable-region-focusable`) et se nomme pour les lecteurs d'écran.
+                view! {
+                    <pre class="app-code" data-lang=lang tabindex="0" role="region" aria-label=t("Bloc de code")><code>{text}</code></pre>
+                }
+                .into_any()
             }
         })
         .collect_view();

@@ -857,3 +857,338 @@ test('RTL-L2 le serveur de démo et la création d’un serveur en gauche à dro
   expect(await p.locator('html').getAttribute('dir')).toBe('ltr');
   expect(await p.locator('html').getAttribute('lang')).toBe('fr');
 });
+
+// ───────── suite : bloc de code long, noms saisis, sélecteur rapide, appels sans WebRTC, menu contextuel ─────────
+
+/** Position horizontale (centre) du premier et du dernier caractère de `needle`, dans le premier nœud de texte de `l` qui le contient. */
+const ends = (l: Locator, needle: string) =>
+  l.evaluate((root, n) => {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let t = w.nextNode() as Text | null; t; t = w.nextNode() as Text | null) {
+      const i = t.data.indexOf(n);
+      if (i < 0) continue;
+      const at = (k: number) => {
+        const r = document.createRange();
+        r.setStart(t, k);
+        r.setEnd(t, k + 1);
+        const b = r.getBoundingClientRect();
+        return b.x + b.width / 2;
+      };
+      return { first: at(i), last: at(i + n.length - 1) };
+    }
+    throw new Error(`texte introuvable : ${n}`);
+  }, needle);
+/** Le texte saisi se lit de gauche à droite (nom latin) : son dernier caractère est à droite du premier, ponctuation comprise. */
+const latin = async (l: Locator, needle: string) => {
+  const e = await ends(l.first(), needle);
+  expect(e.last, `« ${needle} » : le dernier caractère à droite du premier`).toBeGreaterThan(e.first);
+};
+/** Le texte saisi se lit de droite à gauche (nom arabe ou persan) : son dernier caractère est à gauche du premier. */
+const arabic = async (l: Locator, needle: string) => {
+  const e = await ends(l.first(), needle);
+  expect(e.last, `« ${needle} » : le dernier caractère à gauche du premier`).toBeLessThan(e.first);
+};
+/** Le premier et le dernier caractère du code d'un bloc, en pixels de la fenêtre. */
+const codeEnds = (pre: Locator) =>
+  pre.locator('code').evaluate((code) => {
+    const t = code.firstChild as Text;
+    const at = (k: number) => {
+      const r = document.createRange();
+      r.setStart(t, k);
+      r.setEnd(t, k + 1);
+      const b = r.getBoundingClientRect();
+      return { x: b.x, r: b.right };
+    };
+    const n = t.data.replace(/\n$/, '').length;
+    return { first: at(0), last: at(n - 1) };
+  });
+
+const LONG_CODE =
+  'const resultatDeLaRequete = await chargerLesDonneesDuServeur(identifiantDuSalon, identifiantDuMessage, optionsDeLaRequete);';
+
+// RTL-21 : à texte 20 (et zoom 150), un bloc de code long ne pousse ni le message ni la page : il défile dans sa boîte.
+for (const [where, width, zoom] of [
+  ['390 px', 390, 1],
+  ['1536 px, zoom 150', 1536, 1.5],
+] as const) {
+  test.describe(`RTL-21 texte 20, ${where}`, () => {
+    test.use({ viewport: { width, height: 844 } });
+    for (const lang of ['fa', 'fr'] as const) {
+      test(`RTL-21 [${lang}] bloc de code long à ${where} : il défile dans sa boîte, la page et le message restent dans la fenêtre, axe propre`, async ({ user, api }) => {
+        const a = await user('rtl21');
+        await openGuild(a, api);
+        const p = a.page;
+        await p.evaluate(() => {
+          localStorage.setItem('kraken.text', '20');
+          localStorage.setItem('kraken.zoom', '150');
+        });
+        await p.reload();
+        await expect(p.getByRole('heading', { name: 'général', level: 1 })).toBeVisible();
+        await expect(p.locator('html')).toHaveAttribute('data-text', '20');
+        await expect(p.locator('html')).toHaveAttribute('data-zoom', '150');
+        near(parseFloat(await css(p.locator('html'), '--zoom')), zoom, 0.01); // sous 640 px le zoom est gelé à 1
+        await post(p, `\`\`\`\n${LONG_CODE}\n\`\`\``, 'const resultatDeLaRequete');
+        await post(p, 'Un message court après le code');
+        if (lang === 'fa') await rtl(p, 'fa');
+        const msg = messages(p).filter({ hasText: 'const resultatDeLaRequete' });
+        const pre = msg.locator('pre.app-code');
+        await expect(pre).toBeVisible();
+        await noOverflow(p);
+        // Le message tient dans la fenêtre : l'article, son corps (la colonne du texte) et le bloc.
+        const v = p.viewportSize()!;
+        const within = async (l: Locator, what: string) => {
+          const r = await rect(l);
+          expect(r.x, `${what} : bord gauche`).toBeGreaterThanOrEqual(-0.5);
+          expect(r.r, `${what} : bord droit`).toBeLessThanOrEqual(v.width + 0.5);
+        };
+        await within(msg, 'article');
+        await within(msg.locator('.app-md'), 'corps du message');
+        await within(pre, 'bloc de code');
+        const body = await rect(msg.locator('.app-md'));
+        const box = await rect(pre);
+        expect(box.x, 'le bloc commence dans le corps').toBeGreaterThanOrEqual(body.x - 0.5);
+        expect(box.r, 'le bloc finit dans le corps').toBeLessThanOrEqual(body.r + 0.5);
+        // Le bloc défile dans sa boîte, de gauche à droite même en droite à gauche.
+        expect(await css(pre, 'direction')).toBe('ltr');
+        const m = await pre.evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth, sl: e.scrollLeft }));
+        expect(m.sw, 'la ligne est plus large que la boîte').toBeGreaterThan(m.cw);
+        expect(m.sl).toBe(0);
+        const start = await codeEnds(pre);
+        expect(start.first.x, 'le début du code est visible').toBeGreaterThanOrEqual(box.x - 0.5);
+        expect(start.first.x).toBeLessThanOrEqual(box.r);
+        // Au clavier : le bloc prend le focus (région nommée) et les flèches le font défiler.
+        expect(await attr(pre, 'tabindex')).toBe('0');
+        expect(await attr(pre, 'role')).toBe('region');
+        expect(await attr(pre, 'aria-label')).toBe('Bloc de code');
+        await pre.focus();
+        await expect(pre).toBeFocused();
+        await p.keyboard.press('ArrowRight');
+        await expect.poll(() => pre.evaluate((e) => e.scrollLeft)).toBeGreaterThan(0);
+        // La fin du ligne est atteignable.
+        await pre.evaluate((e) => (e.scrollLeft = e.scrollWidth));
+        const end = await codeEnds(pre);
+        expect(end.last.r, 'la fin du code, une fois défilé, est dans la boîte').toBeLessThanOrEqual(box.r + 0.5);
+        expect(end.last.x).toBeGreaterThanOrEqual(box.x - 0.5);
+        await noOverflow(p);
+        await a11y(p);
+      });
+    }
+  });
+}
+
+// RTL-22 : un texte saisi garde son propre sens d'écriture : la ponctuation aux extrémités reste à sa place.
+for (const lang of LANGS) {
+  test(`RTL-22 [${lang}] noms saisis (rôle, serveur, catégorie, salon, nom affiché, sujet, @tout le monde) : l'ordre visuel est celui du texte saisi`, async ({ user, api }) => {
+    test.setTimeout(90_000);
+    const a = await user('rtl22');
+    const b = await user('rtl22b');
+    const asA = await api(a.token);
+    const asB = await api(b.token);
+    const ALICE = '(Capitaine) Alice!';
+    const BABAK = 'بابک (دوست)!';
+    const [GUILD, CAT, CHAN, TOPIC] = ['(Récif) corallien!', '(Zone) nord!', '(salon)-test!', '(sujet) du salon!'];
+    const [ROLE, ROLE_FA] = ['(Équipe) Alpha!', 'نقش (آلفا)!'];
+    expect((await asA.patch(`${API}/users/@me`, { data: { display_name: ALICE } })).status()).toBe(200);
+    expect((await asB.patch(`${API}/users/@me`, { data: { display_name: BABAK } })).status()).toBe(200);
+    expect((await asA.post(`${API}/users/@me/relationships`, { data: { username: b.name } })).status()).toBe(201);
+    expect((await asB.put(`${API}/users/@me/relationships/${a.id}`, { data: { kind: 'friend' } })).status()).toBe(200);
+    expect((await asA.post(`${API}/users/@me/channels`, { data: { recipients: [b.id] } })).status()).toBeLessThan(300);
+    const { gid, text } = await openGuild(a, api, GUILD);
+    const ok = async (r: import('@playwright/test').APIResponse) => {
+      expect(r.status(), await r.text()).toBeLessThan(300);
+      return r.json();
+    };
+    const cat = await ok(await asA.post(`${API}/guilds/${gid}/channels`, { data: { name: CAT, kind: 'category' } }));
+    const chan = await ok(await asA.post(`${API}/guilds/${gid}/channels`, { data: { name: CHAN, kind: 'text', parent_id: cat.id } }));
+    await ok(await asA.patch(`${API}/channels/${chan.id}`, { data: { topic: TOPIC } }));
+    const role = await ok(await asA.post(`${API}/guilds/${gid}/roles`, { data: { name: ROLE, permissions: 0, hoist: true, color: 3 } }));
+    const roleFa = await ok(await asA.post(`${API}/guilds/${gid}/roles`, { data: { name: ROLE_FA, permissions: 0, hoist: true, color: 5 } }));
+    const { code } = await ok(await asA.post(`${API}/channels/${text}/invites`, { data: {} }));
+    await ok(await asB.post(`${API}/invites/${code}`));
+    await ok(await asA.put(`${API}/guilds/${gid}/members/${a.id}/roles/${role.id}`));
+    await ok(await asA.put(`${API}/guilds/${gid}/members/${b.id}/roles/${roleFa.id}`));
+    await ok(await asA.post(`${API}/channels/${chan.id}/messages`, { data: { content: 'Bonjour le récif' } }));
+    const p = a.page;
+    const visit = async (path: string) => {
+      await p.goto(path);
+      await expect(p.locator('#main, .k-settings').first()).toBeVisible();
+      await rtl(p, lang);
+    };
+
+    // Barre latérale, en-tête du salon, sujet, liste des membres par rôle, auteur du message.
+    await visit(`/channels/${gid}/${chan.id}`);
+    const nav = p.locator('.app-nav');
+    await expect(nav.locator('.app-guild-head h2')).toContainText(GUILD);
+    await latin(nav.locator('.app-guild-head h2'), GUILD);
+    await latin(nav.locator('.k-category', { hasText: CAT }), CAT);
+    await latin(nav.locator('.k-channel', { hasText: CHAN }).locator('.app-ellipsis'), CHAN);
+    await latin(p.getByRole('heading', { level: 1 }), CHAN);
+    await latin(p.locator('.app-topic'), TOPIC);
+    const aside = p.getByRole('complementary', { name: 'Membres' });
+    await latin(aside.locator('.app-group', { hasText: ROLE }), ROLE);
+    await arabic(aside.locator('.app-group', { hasText: ROLE_FA }), ROLE_FA);
+    await latin(aside.locator('.app-who', { hasText: ALICE }).locator('bdi').first(), ALICE);
+    await arabic(aside.locator('.app-who', { hasText: BABAK }).locator('bdi').first(), BABAK);
+    const msg = messages(p).filter({ hasText: 'Bonjour le récif' });
+    await latin(msg.locator('header bdi'), ALICE);
+    // La carte de profil : le nom, et les pastilles de rôle.
+    await msg.locator('.app-who-name').click();
+    const card = p.getByRole('dialog', { name: /^Profil de / }); // le nom y est isolé (FSI/PDI) dans une page de droite à gauche
+    await expect(card).toBeVisible();
+    await latin(card.locator('.app-card-name'), ALICE);
+    await latin(card.locator('.app-chip', { hasText: ROLE }), ROLE);
+    await p.keyboard.press('Escape');
+    await expect(card).toBeHidden();
+    // Amis et messages privés : le nom affiché persan reste persan.
+    await visit('/channels/@me');
+    await p.getByRole('tab', { name: 'Tous' }).click();
+    await arabic(p.locator('.app-row b bdi', { hasText: BABAK }), BABAK);
+    await arabic(p.locator('.app-sidebar .k-dm > div bdi', { hasText: BABAK }), BABAK);
+
+    // Réglages › Rôles : la liste et le titre, « @tout le monde », et « @everyone » d'une description.
+    await visit(`/guilds/${gid}/settings/roles`);
+    const list = p.getByRole('list', { name: 'Rôles, du plus haut au plus bas' });
+    const title = p.locator('.app-roles-title');
+    await list.locator('.app-role-pick', { hasText: ROLE }).click();
+    await latin(list.locator('.app-role-pick', { hasText: ROLE }).locator('.app-ellipsis'), ROLE);
+    await latin(title, ROLE);
+    await list.locator('.app-role-pick', { hasText: ROLE_FA }).click();
+    await arabic(list.locator('.app-role-pick', { hasText: ROLE_FA }).locator('.app-ellipsis'), ROLE_FA);
+    await arabic(title, ROLE_FA);
+    await list.locator('.app-role--base .app-role-pick').click();
+    await latin(list.locator('.app-role--base .app-ellipsis'), '@tout le monde');
+    await latin(title, '@tout le monde');
+    await p.getByRole('tab', { name: 'Permissions' }).click();
+    await latin(p.locator('.k-setting p', { hasText: '@everyone' }), '@everyone');
+    await a11y(p);
+  });
+}
+
+// RTL-23 : sélecteur rapide : l'alignement du nom suit le sens de l'interface, pas celui du nom saisi.
+test('RTL-23 sélecteur rapide (Ctrl+K) : un nom persan reste calé au début de la ligne en gauche à droite, un nom latin au début en droite à gauche', async ({ user, api }) => {
+  const a = await user('rtl23');
+  const b = await user('rtl23b');
+  const asA = await api(a.token);
+  const asB = await api(b.token);
+  expect((await asB.patch(`${API}/users/@me`, { data: { display_name: 'بابک' } })).status()).toBe(200);
+  expect((await asA.post(`${API}/users/@me/relationships`, { data: { username: b.name } })).status()).toBe(201);
+  expect((await asB.put(`${API}/users/@me/relationships/${a.id}`, { data: { kind: 'friend' } })).status()).toBe(200);
+  await openGuild(a, api);
+  const p = a.page;
+  await p.keyboard.press('Control+k');
+  const field = p.locator('.app-sw-field .k-input');
+  await expect(field).toBeVisible();
+  // Un nom persan (un ami) et un nom latin (le salon « général »), cherchés l'un après l'autre : où est le nom dans sa ligne ?
+  const place = async (query: string, needle: string) => {
+    await field.fill(query);
+    const row = p.locator('.app-sw-opt').filter({ hasText: needle }).first();
+    await expect(row).toBeVisible();
+    const span = await rect(row.locator('.app-sw-name'));
+    const name = await rect(row.locator('.app-sw-name bdi'));
+    return { start: name.x - span.x, end: span.r - name.r, x: name.x, dir: await attr(row.locator('.app-sw-name'), 'dir') };
+  };
+  // Gauche à droite (le français, comme main) : les deux noms au début de la ligne (à gauche), sans `dir="auto"` sur la ligne.
+  const fa = await place('بابک', 'بابک');
+  const la = await place('général', 'général');
+  expect(fa.dir).toBeNull();
+  near(fa.start, 0, 1);
+  near(la.start, 0, 1);
+  near(fa.x, la.x, 1);
+  // Droite à gauche : les deux noms au début de la ligne (à droite).
+  await rtl(p, 'fa');
+  const fa2 = await place('بابک', 'بابک');
+  const la2 = await place('général', 'général');
+  near(fa2.end, 0, 1);
+  near(la2.end, 0, 1);
+  await a11y(p);
+  await ltr(p, 'fr');
+  near((await place('بابک', 'بابک')).start, 0, 1);
+});
+
+// RTL-24 : sans WebRTC, les boutons d'appel grisés disent pourquoi (infobulle et texte relié), au lieu d'un grisé muet.
+test('RTL-24 WebRTC absent : « Appeler », « Démarrer un appel », « Rejoindre l’appel » et « Rejoindre » grisés expliquent pourquoi', async ({ user, api }) => {
+  test.setTimeout(90_000);
+  const a = await user('rtl24');
+  const b = await user('rtl24b');
+  const asA = await api(a.token);
+  const asB = await api(b.token);
+  expect((await asA.post(`${API}/users/@me/relationships`, { data: { username: b.name } })).status()).toBe(201);
+  expect((await asB.put(`${API}/users/@me/relationships/${a.id}`, { data: { kind: 'friend' } })).status()).toBe(200);
+  const dm = (await (await asA.post(`${API}/users/@me/channels`, { data: { recipients: [b.id] } })).json()).id as string;
+  // B n'a pas WebRTC.
+  await b.context.addInitScript(() => {
+    delete (window as unknown as Record<string, unknown>).RTCPeerConnection;
+    delete (window as unknown as Record<string, unknown>).webkitRTCPeerConnection;
+  });
+  const p = b.page;
+  await p.goto('/channels/@me');
+  const WHY = /WebRTC y est absent ou désactivé/;
+  /** Le bouton est grisé, son infobulle dit pourquoi, et un texte relié par aria-describedby le dit aussi. */
+  const explained = async (btn: Locator) => {
+    await expect(btn).toBeDisabled();
+    await expect(btn).toHaveAttribute('title', WHY);
+    const id = await btn.getAttribute('aria-describedby');
+    expect(id, 'aria-describedby').toBeTruthy();
+    await expect(p.locator(`[id="${id}"]`)).toContainText(WHY);
+  };
+  // Amis : « Appeler ».
+  await p.getByRole('tab', { name: 'Tous' }).click();
+  await explained(p.getByRole('button', { name: `Appeler ${a.name}` }));
+  await a11y(p);
+  // Le MP, sans appel : « Démarrer un appel » dans l'en-tête.
+  await p.goto(`/channels/@me/${dm}`);
+  await expect(p.getByRole('heading', { level: 1 })).toBeVisible();
+  await explained(p.getByRole('button', { name: 'Démarrer un appel' }));
+  // A appelle : B voit la carte d'appel entrant (« Rejoindre » grisé), puis, dans le MP, « Rejoindre l'appel » grisé avec la phrase en ligne.
+  await a.page.goto(`/channels/@me/${dm}`);
+  await a.page.getByRole('button', { name: 'Démarrer un appel' }).click();
+  await expect(a.page.getByRole('region', { name: 'Connexion vocale' }).getByRole('status')).toHaveText('En appel', { timeout: 20_000 });
+  await p.goto('/channels/@me');
+  const ring = p.getByRole('region', { name: 'Appels entrants' }).getByRole('alertdialog', { name: `Appel de ${a.name}` });
+  await expect(ring).toBeVisible();
+  await explained(ring.getByRole('button', { name: 'Rejoindre' }));
+  await a11y(p);
+  await p.goto(`/channels/@me/${dm}`);
+  const lobby = p.getByRole('region', { name: 'Appel', exact: true });
+  await explained(lobby.getByRole('button', { name: "Rejoindre l'appel" }));
+  await expect(lobby.getByRole('paragraph').filter({ hasText: WHY })).toBeVisible();
+  await a11y(p);
+  // Avec WebRTC (le compte A), rien n'est grisé ni expliqué.
+  await expect(a.page.getByRole('button', { name: 'Démarrer un appel' })).toHaveCount(0);
+});
+
+// RTL-25 : le menu contextuel se pose d'après sa taille mesurée : jamais hors d'une fenêtre basse, quelle que soit la langue.
+for (const lang of LANGS) {
+  test.describe(`RTL-25 fenêtre basse [${lang}]`, () => {
+    test.use({ viewport: { width: 1000, height: 300 } });
+    test(`RTL-25 [${lang}] menu contextuel dans une fenêtre de 300 px de haut : entier dans la fenêtre, près du curseur`, async ({ user, api }) => {
+      const a = await user('rtl25');
+      await openGuild(a, api);
+      const p = a.page;
+      await rtl(p, lang);
+      const channel = p.locator('.app-sidebar').getByRole('link', { name: 'général', exact: true });
+      const menu = p.getByRole('menu');
+      const v = p.viewportSize()!;
+      for (const [x, y] of [
+        [500, 295],
+        [500, 299],
+        [6, 290],
+        [v.width - 6, 296],
+      ]) {
+        await channel.evaluate(
+          (e, at) => e.dispatchEvent(new MouseEvent('contextmenu', { clientX: at[0], clientY: at[1], bubbles: true, cancelable: true })),
+          [x, y],
+        );
+        await expect(menu).toBeVisible();
+        const m = await rect(menu);
+        expect(m.b, `bas du menu (${x}, ${y})`).toBeLessThanOrEqual(v.height + 0.5);
+        expect(m.y, `haut du menu (${x}, ${y})`).toBeGreaterThanOrEqual(-0.5);
+        await inView(p, m, `menu contextuel (${x}, ${y})`);
+        // Sa hauteur est mesurée, pas supposée : le menu entier tient, à n'importe quelle hauteur.
+        expect(m.h).toBeGreaterThan(100);
+        await p.keyboard.press('Escape');
+        await expect(menu).toBeHidden();
+      }
+    });
+  });
+}

@@ -229,7 +229,7 @@ fn Rail() -> impl IntoView {
                             l
                         };
                         view! {
-                            <a class="k-server" href=href title=name aria-label=label
+                            <a class="k-server" href=href title=move || crate::i18n::isolated(&name()) aria-label=label
                                 data-unread=move || badge.get().0.then_some("")
                                 aria-current=move || (ids.get().0 == Some(id)).then_some("page")
                                 on:contextmenu=u.on_context(Target::Guild(id)) on:keydown=u.on_key(Target::Guild(id))>
@@ -332,7 +332,7 @@ fn HomeSidebar() -> impl IntoView {
                                 }
                                 _ => view! { <span class="k-avatar k-avatar--md" aria-hidden="true">{initials(&title)}</span> }.into_any(),
                             }}
-                            <div>{title.clone()}<UnreadText on=unread/>{group.then(|| view! { <small>{tn("{n} membre", "{n} membres", count)}</small> })}</div>
+                            <div><bdi>{title.clone()}</bdi><UnreadText on=unread/>{group.then(|| view! { <small>{tn("{n} membre", "{n} membres", count)}</small> })}</div>
                             <Show when=move || calling.get()>
                                 <span class="app-dm-call" role="img" aria-label=t("Appel en cours") title=t("Appel en cours")><Icon icon=lu::LuPhoneCall small=true/></span>
                             </Show>
@@ -388,13 +388,13 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                 }.into_any(),
                 Some(g) => {
                     let name = g.guild.name.clone();
-                    let tip = name.clone();
+                    let tip = crate::i18n::isolated(&name);
                     let gid = g.guild.id;
                     let rows = ordered(&g.channels);
                     let manage = can_manage.get();
                     view! {
                         <div class="app-guild-head">
-                            <h2 title=tip>{name}</h2>
+                            <h2 title=tip><bdi>{name}</bdi></h2>
                             <button class="k-btn k-btn--icon" aria-label=t("Inviter des amis") title=t("Inviter") on:click=move |_| invite_open.set(true)>
                                 <Icon icon=lu::LuUserPlus/>
                             </button>
@@ -448,7 +448,7 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                     <div class="app-cat">
                                         <button class="k-category" id=title_id.clone() aria-expanded=move || open().to_string()
                                             on:click=move |_| collapsed.update(|v| if v.contains(&cid) { v.retain(|x| *x != cid) } else { v.push(cid) })>
-                                            <Icon icon=lu::LuChevronDown small=true/>{name}
+                                            <Icon icon=lu::LuChevronDown small=true/><bdi>{name}</bdi>
                                             {c.private.then(|| view! { <Icon icon=lu::LuLock small=true/><span class="k-sr">" "{t("(privée)")}</span> })}
                                         </button>
                                         {manage.then(|| view! {
@@ -490,7 +490,7 @@ fn GuildSidebar(guild: Id) -> impl IntoView {
                                             on:contextmenu=move |e| if textual { u.on_context(Target::Channel(cid))(e) }
                                             on:keydown=move |e| if textual { u.on_key(Target::Channel(cid))(e) }
                                             aria-current=move || (ids.get().1 == Some(cid)).then_some("page")>
-                                            <Icon icon=icon/><span class="k-sr">{kind}</span><span class="app-ellipsis" id=name_id.clone()>{name.clone()}</span>
+                                            <Icon icon=icon/><span class="k-sr">{kind}</span><span class="app-ellipsis" id=name_id.clone()><bdi>{name.clone()}</bdi></span>
                                             <UnreadText on=unread/><MutedMark on=muted/><MentionBadge count=mentions/>
                                         </a>
                                         {manage.then(|| view! {
@@ -704,7 +704,7 @@ fn Me() -> impl IntoView {
                     <header>
                         {move || s.me.get().map(|u| view! { <Avatar user=u size="md" status=dot/> })}
                         <div>
-                            <b class="app-ellipsis">{move || s.me.get().map(|u| u.name().to_string()).unwrap_or_default()}</b>
+                            <b class="app-ellipsis"><bdi>{move || s.me.get().map(|u| u.name().to_string()).unwrap_or_default()}</bdi></b>
                             <small class="app-ellipsis"><bdi dir="ltr">{move || s.me.get().map(|u| format!("@{}", u.username)).unwrap_or_default()}</bdi></small>
                         </div>
                     </header>

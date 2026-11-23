@@ -170,6 +170,13 @@ pub fn mirror_arrows(text: String) -> String {
     }
 }
 
+/// Un texte saisi par une personne (nom de rôle, de salon, de serveur, nom affiché) pour un endroit qui ne prend que du texte
+/// (`<option>`, `title`) : isolé (U+2068 … U+2069) quand la page est de droite à gauche, tel quel sinon. Dans un nœud du DOM,
+/// préfère `<bdi>` autour du texte.
+pub fn isolated(text: &str) -> String {
+    if is_rtl() { kraken_core::i18n::isolate(text) } else { text.to_string() }
+}
+
 /// [`fill`] ; en RTL, [`fill_isolated`] (les noms et pseudos insérés gardent leur propre sens d'écriture).
 fn fill_here(template: &str, vars: &[(&str, &str)]) -> String {
     if is_rtl() { fill_isolated(template, vars) } else { fill(template, vars) }

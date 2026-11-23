@@ -128,10 +128,10 @@ fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: 
             <div class="app-card-avatar">
                 {move || view! { <Avatar user=face.get() size=size status=dot/> }}
             </div>
-            <p class="app-card-name" id=name_id>{name}</p>
+            <p class="app-card-name" id=name_id><bdi>{name}</bdi></p>
             <p class="app-card-handle">
                 <bdi dir="ltr">{move || format!("@{}", user.get().username)}</bdi>
-                {move || user.get().pronouns.filter(|p| !p.is_empty()).map(|p| view! { <span class="app-card-pronouns">{p}</span> })}
+                {move || user.get().pronouns.filter(|p| !p.is_empty()).map(|p| view! { <span class="app-card-pronouns"><bdi>{p}</bdi></span> })}
             </p>
             <p class="app-card-status">
                 <span class="app-dot-inline"><StatusDot status=dot/></span>
@@ -141,7 +141,7 @@ fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: 
             {move || user.get().bio.filter(|b| !b.is_empty()).map(|b| view! {
                 <section class="app-card-section" aria-label=t("À propos")>
                     <h3 class="app-card-label">{t("À propos")}</h3>
-                    <p class="app-card-bio">{b}</p>
+                    <p class="app-card-bio" dir="auto">{b}</p>
                 </section>
             })}
             <dl class="app-card-dates">
@@ -158,7 +158,7 @@ fn CardBody(user: Signal<User>, guild: Option<Id>, name_id: &'static str, size: 
                     <ul class="app-chips">
                         {roles.into_iter().map(|r| view! {
                             <li class="app-chip" data-role-color=r.color.map(|c| c.to_string())>
-                                <span class="app-role-dot" aria-hidden="true"></span>{r.name}
+                                <span class="app-role-dot" aria-hidden="true"></span><bdi>{r.name}</bdi>
                             </li>
                         }).collect_view()}
                     </ul>

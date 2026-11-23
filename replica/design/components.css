@@ -198,8 +198,9 @@ a:hover { text-decoration: underline; }
 .k-dm[data-muted] { color: var(--text-faint); font-weight: var(--weight-regular); }
 .k-dm .k-badge--count { margin-inline-start: auto; flex: none; }
 
-/* Message */
-.k-msg { position: relative; display: grid; grid-template-columns: var(--size-msg-avatar) 1fr; column-gap: var(--space-5); padding: 2px var(--space-5) 2px var(--space-5);
+/* Message. La colonne du texte est `minmax(0, 1fr)` : avec `1fr` seul, la largeur minimale d'un bloc de code (une ligne longue) pousserait le texte
+   hors de la colonne ; ainsi le bloc défile dans sa boîte. */
+.k-msg { position: relative; display: grid; grid-template-columns: var(--size-msg-avatar) minmax(0, 1fr); column-gap: var(--space-5); padding: 2px var(--space-5) 2px var(--space-5);
   margin-top: var(--size-message-gap); }
 /* L'avatar d'un message suit la densité (40 px, 24 px en compact). */
 .k-msg > .k-avatar, .k-msg > .app-who--avatar .k-avatar { width: var(--size-msg-avatar); height: var(--size-msg-avatar); }
@@ -213,7 +214,7 @@ a:hover { text-decoration: underline; }
 .k-msg p { margin: 0; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
 .k-msg--mention { background: var(--accent-soft); border-radius: var(--radius-md); }
 .k-msg--mention:hover { background: var(--accent-soft); }
-.k-msg--compact { grid-template-columns: auto 1fr; margin-top: 2px; }
+.k-msg--compact { grid-template-columns: auto minmax(0, 1fr); margin-top: 2px; }
 .k-msg--system p { color: var(--text-muted); font-style: italic; }
 .k-reply { grid-column: 2; display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm-size); color: var(--text-muted); }
 .k-reply b { color: var(--accent-text); font-weight: var(--weight-medium); }

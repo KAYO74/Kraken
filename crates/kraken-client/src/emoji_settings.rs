@@ -343,7 +343,7 @@ fn Row(
             <span class="app-emoji-thumb" aria-hidden="true"><EmojiImg id=id name=first/></span>
             <div>
                 <Show when=move || !editing() fallback=move || view! { <RenameField guild=guild id=id name=name() renaming=renaming/> }>
-                    <b class="app-emoji-code">{move || shortcode(&name())}</b>
+                    <b class="app-emoji-code"><bdi dir="ltr">{move || shortcode(&name())}</bdi></b>
                     <small>{by}</small>
                 </Show>
             </div>

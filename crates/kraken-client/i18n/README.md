@@ -131,6 +131,11 @@ début ».
 - Un fragment technique au milieu d'une phrase (pseudo `@nom`, e-mail, adresse, code, nombre ou date) : `<bdi dir="ltr">…</bdi>`
   (les `<bdi>` de la liste des noms de la PR #31 sont gardés), ou la classe `k-ltr` sur un élément en ligne. Les liens et les
   mentions d'un message, `pre`, `code`, `samp` et `.k-kbd` sont déjà `direction: ltr; unicode-bidi: isolate`, calés au début.
+- Un texte saisi par une personne (nom de rôle, de serveur, de catégorie ou de salon, nom affiché, sujet, nom de groupe) : `<bdi>…</bdi>` autour du
+  texte dans le DOM (`bdi` oriente d'après les lettres du nom et l'isole : « (Équipe) Alpha! » ne devient pas « !Alpha (Équipe) »), jamais `dir="auto"`
+  sur un bloc qui s'aligne (le nom suivrait le sens du nom, pas celui de l'interface). Dans une ligne qui se coupe par `…` (`.app-ellipsis`…), un `bdi`
+  premier enfant porte la coupure en RTL (règle de fin de `app.css`). Dans un `<option>` ou un `title` (du texte seul) : `crate::i18n::isolated(&nom)`,
+  et `crate::ui::member_label(nom, pseudo)` pour « Nom (@pseudo) ». Un jeton technique d'une phrase (`@everyone`) passe par une `{variable}` de `tf`.
 - `tf` et `tnf` isolent chaque valeur insérée (U+2068 … U+2069, `kraken_core::i18n::fill_isolated`) quand la page est de droite
   à gauche : un nom en latin au milieu d'une phrase arabe ne retourne pas la ponctuation voisine. Un `@` ou un `#` collé
   devant une `{variable}` est repris dans l'isolat. Les nombres de `{n}` restent nus. Côté traduction : mets la ponctuation

@@ -413,8 +413,8 @@ fn ChannelView(channel: Channel) -> impl IntoView {
     view! {
         <Header>
             <Icon icon=header_icon/>
-            <h1 class="app-title app-ellipsis">{move || title.get()}</h1>
-            {move || s.channel(cid).and_then(|c| c.topic).map(|t| { let tip = t.clone(); view! { <span class="app-topic app-ellipsis" title=tip>{t}</span> } })}
+            <h1 class="app-title app-ellipsis"><bdi>{move || title.get()}</bdi></h1>
+            {move || s.channel(cid).and_then(|c| c.topic).map(|t| { let tip = crate::i18n::isolated(&t); view! { <span class="app-topic app-ellipsis" title=tip><bdi>{t}</bdi></span> } })}
             <div class="app-header-tools app-header-tools--chat">
                 {(!is_dm).then(|| view! {
                     <a class="k-btn k-btn--icon" href=format!("/channels/{}/{cid}/threads", channel.guild_id.unwrap()) aria-label=t("Fils") title=t("Fils")><Icon icon=lu::LuMessageSquareText/></a>
@@ -1627,7 +1627,7 @@ fn Members(guild: Id) -> impl IntoView {
                     let head = role.as_ref().map(|r| (r.name.clone(), r.color)).or_else(|| groups.with_untracked(|g| (g.len() > 1).then(|| (t("Membres"), None))));
                     view! {
                         {head.map(|(name, color)| view! {
-                            <h3 class="app-group" data-role-color=color.map(|c| c.to_string())>{format!("{name} — {count}")}</h3>
+                            <h3 class="app-group" data-role-color=color.map(|c| c.to_string())><bdi>{name}</bdi>{format!(" — {count}")}</h3>
                         })}
                         <ul class="app-members" aria-label=role.as_ref().map(|r| tf("Membres : {role}", &[("role", &r.name)]))>
                             <For each=move || members.clone() key=|m| (m.user.id, m.user.display_name.clone(), m.user.avatar.clone(), m.nick.clone()) let:m>
