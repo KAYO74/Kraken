@@ -242,7 +242,8 @@ fn main() {
             remote::remote_input,
             remote::remote_end,
             update::update_status,
-            update::update_install
+            update::update_install,
+            media::open_in_browser
         ])
         .setup(|app| {
             let saved = saved(app.handle());

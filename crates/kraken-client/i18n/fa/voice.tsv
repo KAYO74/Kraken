@@ -90,7 +90,7 @@ Appel de {nom}	تماس از {nom}
 # Session vocale : avertissements et erreurs (voice.rs)
 Connexion non sécurisée : tu peux écouter et regarder, mais parler et partager ton écran demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).	اتصال ناامن است: می‌توانید گوش دهید و تماشا کنید، اما صحبت کردن و اشتراک‌گذاری صفحه نمایش نیاز دارد که سامانه با HTTPS ارائه شود (یا روی همین رایانه، از طریق localhost باز شود).
 Micro refusé ou introuvable : tu es en sourdine. Autorise le micro dans ton navigateur, puis réactive-le.	دسترسی به میکروفون رد شد یا میکروفونی پیدا نشد: بی‌صدا هستید. در مرورگر خود به میکروفون اجازه دسترسی بدهید، سپس آن را دوباره فعال کنید.
-Ton navigateur ne permet pas les appels vocaux : WebRTC y est absent ou désactivé. Essaie avec un navigateur récent (Chrome, Firefox, Edge ou Safari) ou avec l'appli de bureau.	مرورگر شما از تماس صوتی پشتیبانی نمی‌کند: WebRTC در آن وجود ندارد یا غیرفعال است. با یک مرورگر جدید (Chrome، Firefox، Edge یا Safari) یا با برنامه دسکتاپ امتحان کنید.
+Ton navigateur ne permet pas les appels vocaux : WebRTC y est absent ou désactivé. Essaie avec un navigateur récent (Chrome, Firefox, Edge ou Safari) ou, sous Windows et macOS, avec l'appli de bureau.	مرورگر شما از تماس صوتی پشتیبانی نمی‌کند: WebRTC در آن وجود ندارد یا غیرفعال است. با یک مرورگر جدید (Chrome، Firefox، Edge یا Safari) یا، در ویندوز و macOS، با برنامه دسکتاپ امتحان کنید.
 Ton navigateur ne permet pas les appels vocaux sur cette page : elle est en HTTP, et WebRTC n'y est pas disponible. Ouvre l'instance en HTTPS (ou sur cet ordinateur, via localhost), ou essaie un autre navigateur.	مرورگر شما در این صفحه از تماس صوتی پشتیبانی نمی‌کند: صفحه با HTTP ارائه شده و WebRTC در آن در دسترس نیست. سامانه را با HTTPS باز کنید (یا روی همین رایانه، از طریق localhost)، یا مرورگر دیگری را امتحان کنید.
 Le navigateur a refusé de démarrer l'appel vocal ({détail}).	مرورگر از شروع تماس صوتی خودداری کرد ({détail}).
 HTTPS ou localhost	HTTPS یا localhost
@@ -233,3 +233,6 @@ Résultats	نتایج
 choisir	انتخاب
 ouvrir	باز کردن
 fermer	بستن
+L'appli de bureau n'a pas les appels vocaux ici : son navigateur intégré (WebKitGTK sous Linux) est livré sans WebRTC. Ouvre cette page dans Chrome, Firefox ou un autre navigateur pour parler.	برنامه دسکتاپ در اینجا از تماس صوتی پشتیبانی نمی‌کند: مرورگر داخلی آن (WebKitGTK در لینوکس) بدون WebRTC عرضه می‌شود. برای صحبت کردن، این صفحه را در Chrome، Firefox یا مرورگر دیگری باز کنید.
+Ouvrir dans mon navigateur	باز کردن در مرورگر من
+Impossible d'ouvrir le navigateur.	باز کردن مرورگر ممکن نشد.

@@ -154,7 +154,7 @@ fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
             </button>
             {move || elsewhere.get().map(|c| view! { <p class="app-hint">{tf("Tu quitteras {salon}.", &[("salon", &c)])}</p> })}
             {move || error().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
-            {(!supported).then(|| view! { <p class="k-error">{voice::unsupported_message()}</p><p class="app-hint">{voice::unsupported_details()}</p> })}
+            {(!supported).then(|| view! { <p class="k-error">{voice::unsupported_message()}</p><p class="app-hint">{voice::unsupported_details()}</p>{voice::desktop().then(|| view! { <OpenInBrowser/> })} })}
             {insecure.then(|| view! { <p class="app-hint">{t(voice::INSECURE)}</p> })}
         </div>
     }
@@ -946,7 +946,7 @@ pub fn DmCall(channel: Id) -> impl IntoView {
                                 aria-describedby=(!voice::supported()).then_some("dmcall-nosupport") on:click=move |_| v.join(None, channel)>
                                 <Icon icon=lu::LuPhone/>{t("Rejoindre l'appel")}
                             </button>
-                            {(!voice::supported()).then(|| view! { <p class="k-error app-dmcall-error" id="dmcall-nosupport">{voice::unsupported_message()}</p> })}
+                            {(!voice::supported()).then(|| view! { <p class="k-error app-dmcall-error" id="dmcall-nosupport">{voice::unsupported_message()}</p>{voice::desktop().then(|| view! { <OpenInBrowser/> })} })}
                         </div>
                     }.into_any()
                 } else {
@@ -960,6 +960,18 @@ pub fn DmCall(channel: Id) -> impl IntoView {
                 {move || error().map(|e| view! { <p class="k-error app-dmcall-error" role="alert">{e}</p> })}
             </section>
         </Show>
+    }
+}
+
+/// Appli de bureau sans WebRTC (WebKitGTK de Linux) : continuer dans le navigateur du système.
+#[component]
+fn OpenInBrowser() -> impl IntoView {
+    let failed = RwSignal::new(None::<String>);
+    view! {
+        <button class="k-btn" on:click=move |_| spawn_local(async move { failed.set(voice::open_in_browser().await.err()) })>
+            <Icon icon=lu::LuExternalLink/>{t("Ouvrir dans mon navigateur")}
+        </button>
+        {move || failed.get().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
     }
 }
 

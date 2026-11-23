@@ -48,11 +48,17 @@ pub const INSECURE: &str =
 const MIC_DENIED: &str =
     tk!("Micro refusé ou introuvable : tu es en sourdine. Autorise le micro dans ton navigateur, puis réactive-le.");
 const NO_WEBRTC_OFF: &str = tk!(
-    "Ton navigateur ne permet pas les appels vocaux : WebRTC y est absent ou désactivé. Essaie avec un navigateur récent (Chrome, Firefox, Edge ou Safari) ou avec l'appli de bureau."
+    "Ton navigateur ne permet pas les appels vocaux : WebRTC y est absent ou désactivé. Essaie avec un navigateur récent (Chrome, Firefox, Edge ou Safari) ou, sous Windows et macOS, avec l'appli de bureau."
 );
 const NO_WEBRTC_HTTP: &str = tk!(
     "Ton navigateur ne permet pas les appels vocaux sur cette page : elle est en HTTP, et WebRTC n'y est pas disponible. Ouvre l'instance en HTTPS (ou sur cet ordinateur, via localhost), ou essaie un autre navigateur."
 );
+/// L'appli de bureau sous Linux : son navigateur intégré (WebKitGTK de la distribution, Debian et Ubuntu en tête) est
+/// compilé sans WebRTC, aucun réglage ne le remet.
+const NO_WEBRTC_DESKTOP: &str = tk!(
+    "L'appli de bureau n'a pas les appels vocaux ici : son navigateur intégré (WebKitGTK sous Linux) est livré sans WebRTC. Ouvre cette page dans Chrome, Firefox ou un autre navigateur pour parler."
+);
+const OPEN_FAILED: &str = tk!("Impossible d'ouvrir le navigateur.");
 const WEBRTC_REFUSED: &str = tk!("Le navigateur a refusé de démarrer l'appel vocal ({détail}).");
 const LOST: &str = tk!("Connexion vocale perdue.");
 const CAM_DENIED: &str = tk!("Le navigateur a refusé l'accès à la caméra");
@@ -259,10 +265,21 @@ pub fn supported() -> bool {
     js_sys::Reflect::has(&window(), &"RTCPeerConnection".into()).unwrap_or(false)
 }
 
-/// Pourquoi les appels vocaux manquent : une page en HTTP hors de cet ordinateur d'abord (le plus courant), sinon
-/// un navigateur sans WebRTC ou qui l'a désactivé.
+/// Pourquoi les appels vocaux manquent : l'appli de bureau sans WebRTC d'abord (le navigateur du système en a), puis une
+/// page en HTTP hors de cet ordinateur (le plus courant), sinon un navigateur sans WebRTC ou qui l'a désactivé.
 pub fn unsupported_message() -> String {
-    t(if window().is_secure_context() { NO_WEBRTC_OFF } else { NO_WEBRTC_HTTP })
+    t(if desktop() {
+        NO_WEBRTC_DESKTOP
+    } else if window().is_secure_context() {
+        NO_WEBRTC_OFF
+    } else {
+        NO_WEBRTC_HTTP
+    })
+}
+
+/// Dans l'appli de bureau : ouvre cette page dans le navigateur du système (celui qui a WebRTC).
+pub async fn open_in_browser() -> Result<(), String> {
+    invoke("open_in_browser", serde_json::json!({})).await.map(|_| ()).map_err(|_| t(OPEN_FAILED))
 }
 
 /// De quoi savoir sur quel navigateur et quelle page le WebRTC manque, pour le dire en une ligne (et dans la console).

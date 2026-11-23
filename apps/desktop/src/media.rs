@@ -8,13 +8,34 @@
 //!   se relance) et sous Linux (réglage de WebKitGTK 2.42 et plus). macOS n'a pas de réglage
 //!   public : on y écoute et regarde seulement, sans parler ni partager.
 //! - Linux : WebRTC est désactivé par défaut dans WebKitGTK, et il faut une version compilée
-//!   avec (sinon le client web dit que le vocal n'est pas disponible).
+//!   avec. Debian et Ubuntu (WebKitGTK 2.52 vérifié) la compilent sans : `RTCPeerConnection` n'existe pas, même
+//!   réglage activé. Le client web le dit, et propose d'ouvrir la page dans le navigateur du système
+//!   ([`open_in_browser`]).
 //! - macOS : textes des demandes d'accès dans `Info.plist`, droits du runtime renforcé dans
 //!   `Entitlements.plist`.
 
 use tauri::webview::{PermissionKind, PermissionResponse};
 use tauri::{Manager, Url, Webview};
 use url::Host;
+
+/// Commandes de ce module (build.rs, capacité de l'instance).
+pub const COMMANDS: [&str; 1] = ["open_in_browser"];
+
+/// Le navigateur intégré de Linux (WebKitGTK, tel que Debian, Ubuntu ou Fedora le livrent) est compilé sans
+/// WebRTC : aucun réglage n'y change rien, la page n'a pas de salon vocal. Elle propose alors d'ouvrir la page
+/// de l'instance (et rien d'autre : l'adresse est lue ici, jamais donnée par la page) dans le navigateur du
+/// système.
+#[tauri::command]
+pub fn open_in_browser(webview: Webview) -> Result<(), String> {
+    let page = webview.url().map_err(|e| e.to_string())?;
+    let ok = webview.label() == "main"
+        && matches!(page.scheme(), "http" | "https")
+        && crate::is_instance(webview.app_handle(), &page);
+    if !ok {
+        return Err("Commande réservée à la page de ton instance.".into());
+    }
+    crate::update::open_external(page.as_str())
+}
 
 /// L'origine d'une instance en http hors de cet ordinateur : sans réglage, le navigateur
 /// intégré n'y donne ni micro ni partage d'écran.
