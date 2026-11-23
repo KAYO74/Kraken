@@ -1,11 +1,9 @@
-// Persan (PR #33), phase 1 : l'infrastructure de la troisième langue de l'interface et la première qui s'écrit de droite à
-// gauche. Le catalogue persan (`i18n/fa/*.tsv`) est vide à ce stade : tout texte à l'écran se lit en anglais (le repli de
-// `Lang::Fa`), puis en français pour ce que l'anglais ne connaît pas. Ce qui est déjà persan : le nom de la langue dans le
-// sélecteur, `<html lang="fa" dir="rtl">`, les durées et « il y a 5 min » (`kraken_core::span`), les dates (`Intl` en
-// `fa-u-nu-latn` : calendrier persan, chiffres latins), l'heure sur 24 h.
-//
-// PHASE 2 (traductions) : les lignes marquées `// PHASE 2` lisent un texte de repli en anglais ; quand le catalogue persan
-// existe, elles pointent sur la phrase persane (le titre de la connexion, les noms accessibles, la phrase d'état).
+// Persan (PR #33) : la troisième langue de l'interface et la première qui s'écrit de droite à gauche. Le catalogue persan
+// (`i18n/fa/*.tsv`) est complet : chaque texte de l'interface, chaque nom accessible et chaque message du serveur est persan,
+// et les noms de salons et de catégories des modèles aussi (`.fa("…")` dans `templates.rs`). Ce que ces tests tiennent :
+// `<html lang="fa" dir="rtl">`, le nom de la langue dans le sélecteur, les durées et « 5 دقیقه پیش » (`kraken_core::span`),
+// les dates (`Intl` en `fa-u-nu-latn` : calendrier persan, chiffres latins), l'heure sur 24 h, la géométrie de droite à
+// gauche, et (I18N-F13) qu'aucun texte français ne reste visible. Les noms accessibles se lisent en persan (« زبان »).
 import { test as base, expect, a11y, watch, API, PASSWORD, unique } from '../fixtures';
 import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
 
@@ -92,6 +90,7 @@ async function browserSpeaking(browser: Browser, baseURL: string | undefined, la
 test('I18N-F1 connexion : « فارسی » est proposé avec lang="fa", le choix recharge en lang=fa dir=rtl, l’identifiant reste, le mot de passe non', async ({ page }) => {
   await page.goto('/login');
   const language = page.getByRole('combobox', { name: 'Langue' });
+  await expect(language).toHaveValue('auto'); // le client est monté : les options sont là
   expect(await language.locator('option').allTextContents()).toEqual(["Langue de l'appareil", 'Français', 'English', FA]);
   expect(await language.locator('option').evaluateAll((o) => o.map((x) => x.getAttribute('lang')))).toEqual([null, 'fr', 'en', 'fa']);
   await expect(html(page)).toHaveAttribute('dir', 'ltr');
@@ -103,14 +102,13 @@ test('I18N-F1 connexion : « فارسی » est proposé avec lang="fa", le choix
   await expect(html(page)).toHaveAttribute('lang', 'fa');
   await expect(html(page)).toHaveAttribute('dir', 'rtl');
   expect(await stored(page, 'kraken.lang')).toBe('fa');
-  // PHASE 2 : « Bon retour sous la surface » en persan ; le repli anglais s'affiche tant que le catalogue est vide.
-  await expect(page.getByRole('heading', { name: 'Welcome back', level: 1 })).toBeVisible();
-  await expect(page.getByLabel('Username or email')).toHaveValue('perle@example.org');
-  await expect(page.getByLabel('Password')).toHaveValue('');
-  const after = page.getByRole('combobox', { name: 'Language' }); // PHASE 2 : le nom accessible persan de « Langue »
+  await expect(page.getByRole('heading', { name: 'خوش برگشتید', level: 1 })).toBeVisible();
+  await expect(page.getByLabel('نام کاربری یا ایمیل')).toHaveValue('perle@example.org');
+  await expect(page.getByLabel('رمز عبور', { exact: true })).toHaveValue('');
+  const after = page.getByRole('combobox', { name: 'زبان' });
   await expect(after).toHaveValue('fa');
   await expect(after).toBeFocused();
-  expect(await after.locator('option').allTextContents()).toEqual(['Device language', 'Français', 'English', FA]); // PHASE 2 : 1re option
+  expect(await after.locator('option').allTextContents()).toEqual(['زبان دستگاه', 'Français', 'English', FA]);
   expect(await after.locator('option').evaluateAll((o) => o.map((x) => x.getAttribute('lang')))).toEqual([null, 'fr', 'en', 'fa']);
   expect(await page.evaluate(() => Object.entries(sessionStorage))).toEqual([]);
   // Le sélecteur s'affiche dans le sens de la page : étiquette à droite, champ plein, rien ne déborde.
@@ -142,7 +140,7 @@ test('I18N-F2 inscription et mot de passe oublié en persan : lang=fa dir=rtl, s
   }
   // Le champ technique reste de gauche à droite dans une page de droite à gauche (pseudo, e-mail).
   await page.goto('/register');
-  await expect(page.getByLabel('Email')).toHaveAttribute('dir', 'ltr'); // PHASE 2 : le nom accessible persan
+  await expect(page.getByLabel('ایمیل', { exact: true })).toHaveAttribute('dir', 'ltr');
 });
 
 test('I18N-F3 Réglages › Langue et heure : choisir « فارسی » recharge la page, rend le focus et dit la langue ; l’heure suit la langue (24 h) ; retour au français', async ({ signedIn }) => {
@@ -159,17 +157,15 @@ test('I18N-F3 Réglages › Langue et heure : choisir « فارسی » recharge 
   await expect(html(page)).toHaveAttribute('dir', 'rtl');
   expect(await stored(page, 'kraken.lang')).toBe('fa');
   expect(page.url()).toContain('/settings/language');
-  const after = page.getByRole('dialog').getByRole('combobox', { name: 'Language' }); // PHASE 2 : le nom persan de « Langue »
+  const after = page.getByRole('dialog').getByRole('combobox', { name: 'زبان' });
   await expect(after).toHaveValue('fa');
   await expect(after).toBeFocused();
   // La phrase d'état dit la langue, nom de la langue dans son écriture (isolé entre U+2068 et U+2069 en droite à gauche).
-  // PHASE 2 : la phrase persane « زبان: فارسی » à la place de « Language: فارسی. ».
-  await expect(said(page, FA)).toHaveText(new RegExp(`Language: \\u2068?${FA}\\u2069?\\.`));
+  await expect(said(page, FA)).toHaveText(new RegExp(`زبان: \\u2068?${FA}\\u2069?\\.`));
   // Le fond de la page de réglages suit le sens : la fenêtre, ses onglets et le sélecteur.
   await expectLabelAtStart(page, 'rtl');
   // L'heure automatique suit la langue de l'interface, pas celle du navigateur (français ici) : 24 h, chiffres latins.
-  // PHASE 2 : « نمونه: 14:30 ».
-  await expect(said(page, 'Example').first()).toHaveText('Example: 14:30');
+  await expect(said(page, 'نمونه').first()).toHaveText('نمونه: 14:30');
   expect(await page.locator('body').innerText()).not.toMatch(INDIC);
   await noScroll(page);
   await a11y(page);
@@ -181,10 +177,10 @@ test('I18N-F3 Réglages › Langue et heure : choisir « فارسی » recharge 
   await expect(said(page, FA)).toHaveCount(0);
 
   // 12 h choisi à la main : la langue ne change pas ce choix.
-  // PHASE 2 : « 12 ساعته » ; le repli anglais dit « 12-hour ».
-  const twelve = page.getByRole('dialog').getByRole('group', { name: 'Time format' }).getByRole('radio').nth(1);
+  const twelve = page.getByRole('dialog').getByRole('group', { name: 'قالب ساعت' }).getByRole('radio').nth(1);
+  await expect(page.getByRole('dialog').getByRole('radio', { name: '12 ساعته' })).toBeVisible();
   await twelve.check();
-  await expect(said(page, 'Example').first()).toHaveText(/^Example: 2:30 PM$/);
+  await expect(said(page, 'نمونه').first()).toHaveText(/^نمونه: 2:30 PM$/);
 
   // Dans l'autre sens : français, puis anglais (jamais de droite à gauche pour eux).
   await after.selectOption({ label: 'Français' });
@@ -197,7 +193,7 @@ test('I18N-F3 Réglages › Langue et heure : choisir « فارسی » recharge 
   await expectLabelAtStart(page, 'ltr');
   await fr.selectOption({ label: FA });
   await expect(html(page)).toHaveAttribute('dir', 'rtl');
-  await page.getByRole('dialog').getByRole('combobox', { name: 'Language' }).selectOption({ label: 'English' });
+  await page.getByRole('dialog').getByRole('combobox', { name: 'زبان' }).selectOption({ label: 'English' });
   await expect(html(page)).toHaveAttribute('lang', 'en');
   await expect(html(page)).toHaveAttribute('dir', 'ltr');
   await expectLabelAtStart(page, 'ltr');
@@ -207,29 +203,31 @@ test('I18N-F3 Réglages › Langue et heure : choisir « فارسی » recharge 
   expect(await stored(page, 'kraken.lang')).toBe('auto');
 });
 
-// ───────── le repli : persan, puis anglais, puis français ─────────
+// ───────── le navigateur choisit la langue ─────────
 
 test.describe('navigateur en persan', () => {
   test.use({ locale: 'fa-IR' });
 
-  test('I18N-F4 « Langue de l’appareil » : navigator.languages = fa-IR donne le persan ; le repli est l’anglais, jamais le français', async ({ signedIn }) => {
+  test('I18N-F4 « Langue de l’appareil » : navigator.languages = fa-IR donne le persan, noms accessibles compris, sans un mot de français ni d’anglais', async ({ signedIn }) => {
     const { page } = await signedIn();
     await expect(html(page)).toHaveAttribute('lang', 'fa');
     await expect(html(page)).toHaveAttribute('dir', 'rtl');
     expect(await stored(page, 'kraken.lang')).toBeNull();
-    // PHASE 2 : ces noms accessibles sont en persan ; aujourd'hui l'anglais, le repli de `Lang::Fa`.
-    await expect(page.getByRole('navigation', { name: 'Servers' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Home and direct messages' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Create or join a server' })).toBeVisible();
-    const sidebar = page.getByRole('navigation', { name: 'Direct messages' });
-    await expect(sidebar.getByRole('link', { name: 'Friends' })).toBeVisible();
-    await expect(sidebar.getByText('No conversations yet.')).toBeVisible();
-    // Aucune phrase de la coquille ne reste en français (le français est la dernière marche, pas la première).
-    expect(await page.locator('body').innerText()).not.toMatch(/Amis|Messages privés|Serveurs|Créer ou rejoindre|Aucune conversation/);
+    // Les noms accessibles de la coquille sont persans (`\u200c` est le demi-espace persan, dans « پیام\u200cهای »).
+    await expect(page.getByRole('navigation', { name: 'سرورها' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'خانه و پیام\u200cهای خصوصی' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'ایجاد یا پیوستن به سرور' })).toBeVisible();
+    const sidebar = page.getByRole('navigation', { name: 'پیام\u200cهای خصوصی' });
+    await expect(sidebar.getByRole('link', { name: 'دوستان' })).toBeVisible();
+    await expect(sidebar.getByText('هنوز گفتگویی وجود ندارد.')).toBeVisible();
+    // Aucune phrase de la coquille ne reste en français, ni en anglais (l'ancien repli du catalogue vide).
+    const body = await page.locator('body').innerText();
+    expect(body).not.toMatch(/Amis|Messages privés|Serveurs|Créer ou rejoindre|Aucune conversation/);
+    expect(body).not.toMatch(/Friends|Direct messages|Servers|Create or join|No conversations/);
     await a11y(page);
     // « Langue de l'appareil » est le choix affiché, et le persan est dans la liste.
     await page.goto('/settings/language');
-    const language = page.getByRole('dialog').getByRole('combobox', { name: 'Language' });
+    const language = page.getByRole('dialog').getByRole('combobox', { name: 'زبان' });
     await expect(language).toHaveValue('auto');
     await expect(language.locator('option[value="fa"]')).toHaveText(FA);
     await expect(language.locator('option[value="fa"]')).toHaveAttribute('lang', 'fa');
@@ -262,7 +260,7 @@ test('I18N-F6 navigator.languages : fa, fa-IR, fa-AF et fa_IR donnent le persan,
     await page.goto('/login');
     await expect(html(page), languages.join()).toHaveAttribute('lang', want);
     await expect(html(page), languages.join()).toHaveAttribute('dir', want === 'fa' ? 'rtl' : 'ltr');
-    await expect(page.getByRole('combobox', { name: /^(Langue|Language)$/ })).toHaveValue('auto');
+    await expect(page.getByRole('combobox', { name: /^(Langue|Language|زبان)$/ })).toHaveValue('auto');
     await context.close();
   }
   // Un choix enregistré et valide passe avant le navigateur ; un choix inconnu est ignoré (« Automatique »).
@@ -313,7 +311,7 @@ test('I18N-F8 dates et durées en persan : « 5 دقیقه پیش », « الا�
 
   const open = async () => {
     await page.goto(`/guilds/${g.guild.id}/settings/audit`);
-    const rows = page.getByRole('list', { name: 'Audit log events' }).getByRole('listitem'); // PHASE 2 : « Événements du journal » en persan
+    const rows = page.getByRole('list', { name: 'رویدادهای گزارش ممیزی' }).getByRole('listitem');
     await expect(rows.first()).toBeVisible();
     return rows;
   };
@@ -323,13 +321,14 @@ test('I18N-F8 dates et durées en persan : « 5 دقیقه پیش », « الا�
   let rows = await open();
   const when = rows.first().locator('time');
   await expect(when.locator('[aria-hidden="true"]')).toHaveText('الان');
-  // Durée dans la phrase (l'anglais autour, le persan dedans, la valeur isolée) ; chiffres latins.
-  await expect(rows.first()).toContainText(/1 ساعت و 30 دقیقه/); // PHASE 2 : la phrase persane entière
+  // Durée dans la phrase (« معتبر برای … »), la valeur isolée entre U+2068 et U+2069 ; chiffres latins.
+  await expect(rows.first()).toContainText(/معتبر برای \u2068?1 ساعت و 30 دقیقه\u2069?/);
   // La date complète (infobulle et lecteur d'écran) : calendrier persan (l'année est 14xx, pas 20xx), mois en persan, chiffres
   // latins. L'ordre « année mois jour, jour de la semaine » est celui que le calendrier persan donne à `Intl` (CLDR).
   const full = (await when.locator('.k-sr').textContent()) ?? '';
   expect(full).toMatch(/\b14\d{2} [\u0600-\u06FF]+ \d{1,2}\b/);
-  expect(full).toMatch(/[\u0600-\u06FF]+\u2069? at \d/); // PHASE 2 : « at » (repli anglais de « à ») devient le mot persan
+  expect(full).toMatch(/[\u0600-\u06FF]+\u2069?، ساعت \d{1,2}:\d{2}$/); // « {date}، ساعت {heure} », et plus « at »
+  expect(full).not.toMatch(/\b(at|à)\b/);
   expect(full).not.toMatch(INDIC);
   expect(full).toMatch(/\d{1,2}:\d{2}/);
   expect(await when.getAttribute('title')).toBe(full);
@@ -377,7 +376,7 @@ test.describe('390 px, texte 20, persan', () => {
     await app.evaluate(() => localStorage.setItem('kraken.text', '20'));
     await app.goto('/settings/language');
     await expect(html(app)).toHaveAttribute('lang', 'fa');
-    await expect(app.getByRole('combobox', { name: 'Language' })).toBeVisible(); // PHASE 2 : « زبان »
+    await expect(app.getByRole('combobox', { name: 'زبان' })).toBeVisible();
     await noScroll(app);
     await a11y(app);
     // La barre d'onglets défile dans le sens de la page : l'onglet ouvert (le dernier) est dans la vue.
@@ -399,7 +398,7 @@ test('I18N-F10 coquille en persan à 1440 px : rail à droite, axe sans violatio
   await noScroll(page);
   await a11y(page);
   // Le rail des serveurs est au bord de début de la page, donc à droite.
-  const rail = await page.getByRole('navigation', { name: 'Servers' }).boundingBox(); // PHASE 2 : « سرورها »
+  const rail = await page.getByRole('navigation', { name: 'سرورها' }).boundingBox();
   expect(rail).not.toBeNull();
   expect(rail!.x + rail!.width).toBeGreaterThan(1440 - 80);
   // `:lang(fa)` : la pile de polices persane s'applique (Inter d'abord pour le latin, puis une police du système).
@@ -410,29 +409,48 @@ test('I18N-F10 coquille en persan à 1440 px : rail à droite, axe sans violatio
 
 // ───────── créer un serveur : la langue part avec la demande ─────────
 
-test('I18N-F11 créer un serveur en persan : la demande porte lang="fa", les noms du modèle sont les anglais tant que les noms persans manquent', async ({ signedIn, api }) => {
+test('I18N-F11 créer un serveur en persan : la demande porte lang="fa", les salons et catégories du modèle portent leurs noms persans, une langue inconnue donne le français', async ({ signedIn, api }) => {
   const a = await signedIn('fa-IR');
   const { page } = a;
   // Par l'interface : la langue de l'interface part avec la demande.
-  await page.getByRole('link', { name: 'Create or join a server' }).click();
-  await page.getByLabel('Server name').fill('Abyss');
+  await page.getByRole('link', { name: 'ایجاد یا پیوستن به سرور' }).click();
+  await page.getByLabel('نام سرور', { exact: true }).fill('Abyss');
   const request = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`${API}/guilds`));
-  await page.getByRole('button', { name: 'Create server' }).click();
+  await page.getByRole('button', { name: 'ایجاد سرور', exact: true }).click();
   expect((await request).postDataJSON().lang).toBe('fa');
   await page.waitForURL(/\/channels\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
-  // PHASE 2 (noms persans du modèle « Vide ») : l'anglais « general » devient le nom persan prévu dans `templates.rs`.
-  await expect(page.getByRole('heading', { name: 'general', level: 1 })).toBeVisible();
+  // Le modèle « Vide » : le salon textuel porte son nom persan (`.fa("عمومی")` dans `templates.rs`).
+  await expect(page.getByRole('heading', { name: 'عمومی', level: 1 })).toBeVisible();
   // Par l'API : une étiquette régionale (fa-IR) est comprise, une langue inconnue donne le français.
   const as = await api(a.token);
-  const names = async (lang: string) => {
+  const channels = async (lang: string) => {
     const res = await as.post(`${API}/guilds`, { data: { name: 'Abyss', template: 'communaute', lang } });
     expect(res.status(), await res.text()).toBe(201);
     const g = await res.json();
-    return g.channels.filter((c: { kind: string }) => c.kind === 'text').map((c: { name: string }) => c.name).sort();
+    const of = (kind: string) => g.channels.filter((c: { kind: string }) => c.kind === kind).map((c: { name: string }) => c.name).sort();
+    return { text: of('text'), voice: of('voice'), category: of('category') };
   };
-  expect(await names('fa-IR')).toEqual(['announcements', 'general', 'help', 'rules']); // PHASE 2 : les noms persans
-  expect(await names('fr')).toEqual(['aide', 'annonces', 'général', 'règles']);
-  expect(await names('de')).toEqual(['aide', 'annonces', 'général', 'règles']);
+  // Le modèle « Communauté » en persan : salons textuels, vocal et catégories (`\u200c` est le demi-espace persan).
+  expect(await channels('fa-IR')).toEqual({
+    text: ['اطلاعیه\u200cها', 'عمومی', 'قوانین', 'کمک'],
+    voice: ['گفتگوی آزاد'],
+    category: ['خوش\u200cآمدگویی', 'کانال\u200cهای صوتی', 'گفتگوها'],
+  });
+  expect((await channels('fr')).text).toEqual(['aide', 'annonces', 'général', 'règles']);
+  expect((await channels('de')).text).toEqual(['aide', 'annonces', 'général', 'règles']);
+});
+
+test('I18N-F14 le nom de serveur proposé en persan est une donnée : sans marque d’isolation, et le serveur se crée', async ({ signedIn }) => {
+  const { page } = await signedIn('fa-IR');
+  await page.getByRole('link', { name: 'ایجاد یا پیوستن به سرور' }).click();
+  const field = page.getByLabel('نام سرور', { exact: true });
+  await expect(field).toHaveValue(/^سرور \S+/);
+  // Le nom proposé part tel quel au serveur, qui refuse les marques de sens d'écriture (U+2066 à U+2069).
+  expect(await field.inputValue()).not.toMatch(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/);
+  const request = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`${API}/guilds`));
+  await page.getByRole('button', { name: 'ایجاد سرور', exact: true }).click();
+  expect((await request).postDataJSON().name).not.toMatch(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/);
+  await page.waitForURL(/\/channels\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
 });
 
 // ───────── le français et l'anglais ne changent pas ─────────
@@ -454,4 +472,76 @@ test('I18N-F12 le français et l’anglais restent de gauche à droite, sans une
     await expectLabelAtStart(page, 'ltr');
     await context.close();
   }
+});
+
+// ───────── couverture : aucun français visible ─────────
+
+/** Une lettre qu'aucun mot persan ni anglais ne contient, mais que presque chaque phrase française porte (accents, ç, œ). */
+const FRENCH_LETTER = /[éèêëàâçùûîïôœ]/i;
+/** Les noms d'exemple de l'aperçu des Réglages › Apparence (`display.rs`, marqués `i18n-ok : nom d'exemple`) : des prénoms, pas des phrases. */
+const SAMPLE_NAMES = ['Récif', 'RÉ'];
+/**
+ * Ce qu'une page laisse voir en français : le texte affiché (ligne par ligne) et les noms accessibles (`aria-label`, `title`,
+ * `placeholder`, `alt`). « Français », le nom de la langue dans le sélecteur, s'écrit dans son écriture : il est permis.
+ */
+const frenchLeft = (p: Page) =>
+  p.evaluate(
+    ([source, samples]) => {
+      const letter = new RegExp(source, 'i');
+      const found = new Set<string>();
+      const look = (text: string | null) => {
+        for (const line of (text ?? '').split('\n'))
+          if (letter.test(line.replace('Français', '')) && !samples.includes(line.trim())) found.add(line.trim());
+      };
+      look(document.body.innerText);
+      for (const el of document.querySelectorAll('[aria-label],[title],[placeholder],[alt]'))
+        for (const a of ['aria-label', 'title', 'placeholder', 'alt']) look(el.getAttribute(a));
+      return [...found];
+    },
+    [FRENCH_LETTER.source, SAMPLE_NAMES] as [string, string[]],
+  );
+
+test('I18N-F13 couverture : aucun texte français ne reste visible en persan (connexion, coquille, Réglages, serveur et ses paramètres), ni dans les noms accessibles', async ({ page, signedIn, api }) => {
+  const left: Record<string, string[]> = {};
+  const check = async (p: Page, where: string) => {
+    await p.waitForLoadState('networkidle');
+    const found = await frenchLeft(p);
+    if (found.length) left[where] = found;
+  };
+
+  // Hors connexion : les trois écrans de la carte, la langue choisie dans le navigateur de l'appareil (enregistrée).
+  await page.goto('/login');
+  await page.evaluate(() => localStorage.setItem('kraken.lang', 'fa'));
+  for (const path of ['/login', '/register', '/forgot-password']) {
+    await page.goto(path);
+    await expect(html(page)).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await check(page, path);
+  }
+
+  // Connecté : l'accueil, chaque onglet des Réglages, un serveur (créé en persan, comme le fait l'interface) et ses paramètres.
+  const a = await signedIn('fa-IR');
+  const { page: app } = a;
+  await expect(html(app)).toHaveAttribute('dir', 'rtl');
+  await check(app, '/channels/@me');
+  const settings = ['account', 'profiles', 'privacy', 'messaging', 'apps', 'notifications', 'voice', 'appearance', 'accessibility', 'keybinds', 'language'];
+  for (const slug of settings) {
+    await app.goto(`/settings/${slug}`);
+    await expect(app.getByRole('dialog').getByRole('heading', { level: 2 }).first()).toBeVisible();
+    await check(app, `/settings/${slug}`);
+  }
+  const as = await api(a.token);
+  const created = await as.post(`${API}/guilds`, { data: { name: 'Corail', template: 'communaute', lang: 'fa' } });
+  expect(created.status(), await created.text()).toBe(201);
+  const g = await created.json();
+  const text = g.channels.find((c: { kind: string }) => c.kind === 'text').id;
+  await app.goto(`/channels/${g.guild.id}/${text}`);
+  await expect(app.getByRole('heading', { level: 1 })).toBeVisible();
+  await check(app, 'serveur : salon');
+  for (const slug of ['overview', 'roles', 'channels', 'emojis', 'invites', 'bans', 'audit', 'owner']) {
+    await app.goto(`/guilds/${g.guild.id}/settings/${slug}`);
+    await expect(app.getByRole('dialog').getByRole('heading', { level: 2 }).first()).toBeVisible();
+    await check(app, `/guilds/…/settings/${slug}`);
+  }
+  expect(left, 'texte encore en français : écran → lignes').toEqual({});
 });

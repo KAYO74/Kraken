@@ -228,6 +228,12 @@ pub fn tf(key: &str, vars: &[(&str, &str)]) -> String {
     fill_here(&t(key), vars)
 }
 
+/// [`tf`] pour un texte qui devient une donnée (valeur d'un champ à envoyer, nom enregistré) : jamais isolé, même en
+/// droite à gauche, car les marques d'isolation (U+2066 à U+2069) n'ont rien à faire dans une donnée.
+pub fn tf_data(key: &str, vars: &[(&str, &str)]) -> String {
+    fill(&t(key), vars)
+}
+
 /// Le gabarit au singulier ou au pluriel selon la règle de la langue, traduit, avec `{n}` remplacé :
 /// `tn("{n} membre", "{n} membres", n)`. Les deux gabarits français sont deux clés du catalogue.
 pub fn tn(one: &str, other: &str, n: impl TryInto<u64>) -> String {
