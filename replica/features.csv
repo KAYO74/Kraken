@@ -1,5 +1,5 @@
 feature,area,priority,original,clone,notes
-Inscription et connexion par e-mail ou pseudo,comptes,must,yes,yes,S28 ; vérif e-mail et mot de passe oublié si l'instance a un SMTP (e-mails dans la langue de l'interface : fr/en/fa depuis v0.24.0) ; QR plus tard
+Inscription et connexion par e-mail ou pseudo,comptes,must,yes,yes,S28 ; vérif e-mail et mot de passe oublié si l'instance a un SMTP (e-mails dans la langue de l'interface : fr/en/fa depuis v0.24.0 ; de depuis v0.25.0) ; QR plus tard
 Authentification multi-facteurs (TOTP),comptes,should,yes,no,S06
 Liste et révocation des appareils connectés,comptes,should,yes,partial,"S06 ; « se déconnecter partout » fait, liste des appareils pas encore"
 Modifier pseudo e-mail téléphone mot de passe,comptes,must,yes,partial,"S06 ; pseudo (mot de passe demandé, 2 par heure), e-mail (mot de passe demandé, confirmé par un lien si l'instance a un SMTP, l'ancienne adresse reste valide jusque-là) et mot de passe (les autres appareils sont déconnectés) faits ; téléphone facultatif, pas fait"
@@ -91,7 +91,7 @@ Contraste élevé saturation mouvement réduit,accessibilite,should,yes,partial,
 Synthèse vocale des messages,accessibilite,could,yes,no,S12
 Raccourcis clavier par défaut,systeme,must,yes,yes,S13 ; un tableau unique (liaison et aide) : Ctrl+K, Alt+↑↓ salons, Ctrl+Alt+↑↓ serveurs, Alt+Maj+↑↓ non lus, Ctrl+Maj+M/D micro et son, Ctrl+/ ou ? aide ; liste dans Réglages
 Raccourcis clavier perso,systeme,should,yes,no,S13 ; pas encore : l'aide le dit (lecture seule, ni raccourci global hors de la fenêtre)
-Langues multiples et format 12 24 h,systeme,must,yes,yes,S14 ; format de l'heure fait (une seule fonction pour toutes les heures) ; fr, en, fa : fr/en sur toute l'interface (v0.21.0), mise en page RTL prête (v0.22.0), persan en construction (v0.23.0, première langue de droite à gauche, repli sur l'anglais) ; e-mails du serveur (inscription ; mot de passe oublié ; nouvelle adresse) en fr/en/fa selon la langue de l'interface (v0.24.0 ; autre langue : français) ; restent les traductions persanes, l'arabe, l'hébreu
+Langues multiples et format 12 24 h,systeme,must,yes,yes,S14 ; format de l'heure fait (une seule fonction pour toutes les heures) ; fr, en, fa, de : fr/en sur toute l'interface (v0.21.0), mise en page RTL prête (v0.22.0), persan en construction (v0.23.0, première langue de droite à gauche, repli sur l'anglais) ; e-mails du serveur (inscription ; mot de passe oublié ; nouvelle adresse) en fr/en/fa selon la langue de l'interface (v0.24.0 ; autre langue : français) ; allemand : infrastructure posée (v0.25.0, de gauche à droite, repli sur l'anglais, durées, dates, e-mails, césure ; catalogue en construction) ; restent la traduction allemande (en cours), l'arabe, l'hébreu
 Événements de serveur,serveurs,could,yes,no,S27
 Applications OAuth autorisées (bots),integrations,should,yes,no,S15 ; API publique KRAKEN pour bots
 Client desktop web et mobile,plateformes,must,yes,partial,web responsive (390 à 1728 px) ; coque Tauri pas encore
