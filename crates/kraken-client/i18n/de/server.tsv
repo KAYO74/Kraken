@@ -2,7 +2,7 @@
 # Une ligne « français<TAB>allemand » par texte ; règles : ../README.md (« Ajouter une langue », « Conventions d'allemand »).
 # Mêmes {variables} que le français, tutoiement (« du »), guillemets „…“, pas d'espace avant « : ? ! ; », chiffres latins.
 # Un texte absent d'ici s'affiche en anglais (repli), puis en français.
-# Fichier en construction : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui reste à traduire.
+# Fichier complet : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui manquerait après un ajout du code.
 # Connexion, session, accès (error.rs, auth.rs)
 # Requêtes, saisie, limites
 # Comptes, profil, mot de passe

@@ -1,12 +1,8 @@
-// Allemand (PR #35) : la quatrième langue de l'interface, de gauche à droite. Cette première phase pose l'infrastructure : la
-// langue, son sélecteur, `boot.js`, le repli, les durées et dates, les e-mails du serveur, la mise en page ; le catalogue
-// (`i18n/de/*.tsv`, six fichiers) est écrit en phase 2. Tant qu'il est vide, l'interface allemande s'affiche en ANGLAIS
-// (la chaîne de repli `de → en → fr`) : ce qui est du code (`<html lang dir>`, durées « vor 5 Min. », dates en `de-u-nu-latn`)
-// est déjà allemand, ce qui est du catalogue ne l'est pas encore.
-//
-// PHASE 2 : les noms accessibles et les phrases lus en allemand sont rassemblés dans `UI` ci-dessous (anglais pour le moment) ;
-// chaque ligne marquée `// PHASE 2` change quand le catalogue est livré (et `I18N-D9`, la couverture, s'ajoute alors, sur le
-// modèle de `I18N-F13` de `i18n-fa.spec.ts` : aucun texte français visible).
+// Allemand (PR #35) : la quatrième langue de l'interface, de gauche à droite. Le code (`<html lang dir>`, sélecteur, `boot.js`,
+// repli, durées « vor 5 Min. », dates en `de-u-nu-latn`, e-mails du serveur, noms des salons d'un modèle, mise en page) et le
+// catalogue (`i18n/de/*.tsv`, six fichiers, complet) sont allemands : ces tests lisent les vrais textes allemands, rassemblés dans
+// `UI` ci-dessous (noms accessibles et phrases du catalogue), et `I18N-D9` vérifie qu'aucun texte français ne reste visible
+// (modèle : `I18N-F13` de `i18n-fa.spec.ts`).
 import { test as base, expect, a11y, watch, API, PASSWORD, unique } from '../fixtures';
 import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
 
@@ -40,33 +36,94 @@ const test = base.extend<{ signedIn: (locale?: string, viewport?: Viewport) => P
 });
 
 const DE = 'Deutsch';
-/**
- * PHASE 2 : ce que l'interface allemande écrit (noms accessibles et phrases du catalogue). Anglais tant que `de/*.tsv` est vide
- * (repli) ; à remplacer par l'allemand, une valeur à la fois.
- */
+/** Ce que l'interface allemande écrit (noms accessibles et phrases de `i18n/de/*.tsv`) ; la clé française est en commentaire. */
 const UI = {
-  language: 'Language', // PHASE 2 : « Sprache »
-  languageIs: /^Language: Deutsch\.$/, // PHASE 2 : « Sprache: Deutsch. »
-  deviceLanguage: 'Device language', // PHASE 2 : le premier choix du sélecteur
-  welcome: 'Welcome back', // PHASE 2 : le titre de la connexion
-  login: 'Username or email', // PHASE 2 : le champ identifiant de la connexion
-  password: 'Password', // PHASE 2 : « Passwort »
-  settings: 'Settings', // PHASE 2 : « Einstellungen »
-  example: /^Example: 14:30$/, // PHASE 2 : « Beispiel: 14:30 »
-  createLink: 'Create or join a server', // PHASE 2 : le lien du rail
-  serverName: 'Server name', // PHASE 2 : le champ de la page de création
-  createServer: 'Create server', // PHASE 2 : le bouton de la page de création
-  validFor: /Valid for 1 Std\. 30 Min\./, // PHASE 2 : « Gültig für 1 Std. 30 Min. » (la durée est déjà allemande : `span::duration`)
-  email: 'Email', // PHASE 2 : « E-Mail »
-  sendLink: 'Send link', // PHASE 2 : le bouton de « Mot de passe oublié »
-  username: 'Username', // PHASE 2 : « Benutzername »
-  createAccount: 'Create my account', // PHASE 2 : le bouton d'inscription
+  language: 'Sprache', // « Langue »
+  languageIs: /^\s*Sprache: Deutsch\.\s*$/, // « Langue : {nom}. »
+  deviceLanguage: 'Sprache des Geräts', // « Langue de l'appareil » : le premier choix du sélecteur
+  welcome: 'Willkommen zurück in der Tiefe', // « Bon retour sous la surface » : le titre de la connexion
+  registerTitle: 'Konto erstellen', // « Créer un compte »
+  forgotTitle: 'Passwort vergessen', // « Mot de passe oublié »
+  login: 'Benutzername oder E-Mail', // « Pseudo ou e-mail » : le champ identifiant de la connexion
+  password: 'Passwort', // « Mot de passe »
+  settings: 'Einstellungen', // « Réglages »
+  languageTime: 'Sprache und Zeit', // « Langue et heure » : le titre de l'onglet
+  example: /^Beispiel: 14:30$/, // « Exemple : » + l'heure d'exemple
+  createLink: 'Server erstellen oder beitreten', // « Créer ou rejoindre un serveur » : le lien du rail
+  serverName: 'Servername', // « Nom du serveur » : le champ de la page de création
+  createServer: 'Server erstellen', // « Créer le serveur » : le bouton de la page de création
+  validFor: /Gültig für 1 Std\. 30 Min\./, // « Valable {duree}, … » (la durée est écrite par `span::duration`)
+  fullDate: / um \d{1,2}:\d{2}$/, // « {date} à {heure} »
+  email: 'E-Mail', // « E-mail »
+  sendLink: 'Link senden', // « Envoyer le lien » : le bouton de « Mot de passe oublié »
+  username: 'Benutzername', // « Pseudo »
+  createAccount: 'Mein Konto erstellen', // « Créer mon compte » : le bouton d'inscription
 };
 
 const html = (p: Page) => p.locator('html');
 const stored = (p: Page, key: string) => p.evaluate((k) => localStorage.getItem(k), key);
 const noScroll = async (p: Page) =>
   expect(await p.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(p.viewportSize()!.width);
+/**
+ * Les éléments dont le texte dépasse leur boîte : un mot composé trop long pour la ligne, un bouton trop étroit (« balise.classe : texte »).
+ * Ne comptent pas : une zone qui défile exprès (`overflow` auto ou scroll, comme la barre d'onglets), le texte réservé aux lecteurs
+ * d'écran (`.k-sr`) et la coupure voulue par « … » (`text-overflow: ellipsis`).
+ */
+const overflowing = (p: Page) =>
+  p.evaluate(() => {
+    const found = new Set<string>();
+    for (const el of document.body.querySelectorAll('*')) {
+      const style = getComputedStyle(el);
+      if (style.display === 'none' || style.display === 'inline' || style.visibility === 'hidden' || el.clientWidth <= 1) continue; // 1 px : texte pour lecteurs d'écran
+      if (style.overflowX === 'auto' || style.overflowX === 'scroll' || style.textOverflow === 'ellipsis' || el.closest('.k-sr')) continue;
+      const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+      if (text && el.scrollWidth > el.clientWidth + 1) {
+        const cls = typeof el.className === 'string' && el.className.trim() ? `.${el.className.trim().split(/\s+/).join('.')}` : '';
+        found.add(`${el.tagName.toLowerCase()}${cls} (${el.scrollWidth} > ${el.clientWidth} px) : ${text.slice(0, 70)}`);
+      }
+    }
+    return [...found];
+  });
+/**
+ * Les mots plus larges que la boîte qui les porte, que `overflow-wrap: anywhere` (boutons, onglets, pastilles) coupe alors au
+ * milieu du mot au lieu de les laisser dépasser : « Berechtigu / ngen ». Ils ne débordent pas, mais ils se lisent mal.
+ */
+const splitWords = (p: Page) =>
+  p.evaluate(() => {
+    const found = new Set<string>();
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;left:-9999px';
+    document.body.appendChild(probe);
+    for (const el of document.body.querySelectorAll('*')) {
+      const style = getComputedStyle(el);
+      if (style.display === 'none' || style.display === 'inline' || style.visibility === 'hidden' || el.clientWidth <= 1 || el.closest('.k-sr')) continue;
+      const own = [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent).join(' ');
+      probe.style.font = style.font;
+      probe.style.letterSpacing = style.letterSpacing;
+      probe.style.textTransform = style.textTransform;
+      const room = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      for (const word of own.split(/\s+/)) {
+        if (word.length < 9) continue;
+        probe.textContent = word;
+        if (probe.getBoundingClientRect().width > room + 1) found.add(word);
+      }
+    }
+    probe.remove();
+    return [...found];
+  });
+/**
+ * Les mots allemands qui se coupent encore au milieu du mot à 390 px et texte 20 : ils ne se coupent pas à la main ici, ils se
+ * raccourcissent dans `i18n/de/*.tsv` (puis on les retire de cette liste). Ce sont les onglets d'un rôle (Serveur › Rollen).
+ */
+const SPLIT_WORDS = ['Berechtigungen', 'Mitglieder'];
+/**
+ * Rien ne dépasse de sa boîte sur cet écran, et aucun mot ne s'y coupe au milieu (hors `SPLIT_WORDS`). Un texte allemand trop long
+ * pour 390 px à texte 20 ne se coupe pas à la main : la ligne d'erreur dit l'élément et son texte.
+ */
+const fits = async (p: Page, where: string) => {
+  expect(await overflowing(p), `${where} : du texte dépasse de sa boîte`).toEqual([]);
+  expect((await splitWords(p)).filter((w) => !SPLIT_WORDS.includes(w)), `${where} : un mot se coupe au milieu`).toEqual([]);
+};
 /** La zone d'état qui dit ce texte (la coquille et la page de langue en ont chacune une : on filtre toujours). */
 const said = (p: Page, text: string | RegExp) => p.getByRole('status').filter({ hasText: text });
 /** Les options du sélecteur, sans « Langue de l'appareil » (son texte suit la langue de l'interface). */
@@ -101,7 +158,7 @@ test('I18N-D1 connexion : « Deutsch » est proposé avec lang="de", le choix re
   await expect(html(page)).toHaveAttribute('lang', 'de');
   await expect(html(page)).toHaveAttribute('dir', 'ltr');
   expect(await stored(page, 'kraken.lang')).toBe('de');
-  // PHASE 2 : le titre, les champs et le sélecteur sont en allemand ; jusque-là, l'anglais du repli.
+  // Le titre, les champs et le sélecteur sont en allemand.
   await expect(page.getByRole('heading', { name: UI.welcome, level: 1 })).toBeVisible();
   await expect(page.getByLabel(UI.login)).toHaveValue('perle@example.org');
   await expect(page.getByLabel(UI.password, { exact: true })).toHaveValue('');
@@ -109,6 +166,7 @@ test('I18N-D1 connexion : « Deutsch » est proposé avec lang="de", le choix re
   await expect(after).toHaveValue('de');
   await expect(after).toBeFocused();
   // Le nom de chaque langue s'écrit dans son écriture, quelle que soit la langue de la page.
+  expect(await after.locator('option').allTextContents()).toEqual([UI.deviceLanguage, 'Français', 'English', 'فارسی', DE]);
   expect(await choices(after)).toEqual(['Français', 'English', 'فارسی', DE]);
   expect(await codes(after)).toEqual([null, 'fr', 'en', 'fa', 'de']);
   expect(await page.evaluate(() => Object.entries(sessionStorage))).toEqual([]);
@@ -127,11 +185,17 @@ test('I18N-D1 connexion : « Deutsch » est proposé avec lang="de", le choix re
 test('I18N-D1b inscription et mot de passe oublié en allemand : lang=de dir=ltr, sélecteur en place, axe sans violation', async ({ page }) => {
   await page.goto('/login');
   await page.evaluate(() => localStorage.setItem('kraken.lang', 'de'));
-  for (const path of ['/register', '/forgot-password', '/login']) {
+  for (const [path, title] of [
+    ['/register', UI.registerTitle],
+    ['/forgot-password', UI.forgotTitle],
+    ['/login', UI.welcome],
+  ] as const) {
     await page.goto(path);
     await expect(html(page)).toHaveAttribute('lang', 'de');
     await expect(html(page)).toHaveAttribute('dir', 'ltr');
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(title);
+    // Le sélecteur de langue est en pied de carte sur /login et /register (pas sur « Mot de passe oublié »).
+    if (path !== '/forgot-password') await expect(page.getByRole('combobox', { name: UI.language })).toHaveValue('de');
     await noScroll(page);
     await a11y(page);
   }
@@ -153,11 +217,13 @@ test('I18N-D1c Réglages › Langue et heure : choisir « Deutsch » recharge la
   const after = page.getByRole('dialog').getByRole('combobox', { name: UI.language });
   await expect(after).toHaveValue('de');
   await expect(after).toBeFocused();
-  // La phrase d'état dit la langue, nom de la langue dans son écriture. PHASE 2 : « Sprache: Deutsch. »
+  // La phrase d'état dit la langue, nom de la langue dans son écriture : « Sprache: Deutsch. »
   await expect(said(page, DE)).toHaveText(UI.languageIs);
-  // L'heure automatique suit la langue de l'interface, pas celle du navigateur (français ici) : 24 h.
-  // PHASE 2 : « Beispiel: 14:30 »
+  // L'heure automatique suit la langue de l'interface, pas celle du navigateur (français ici) : 24 h, « Beispiel: 14:30 ».
   await expect(said(page, '14:30').first()).toHaveText(UI.example);
+  // La fenêtre des Réglages et son titre de section sont allemands.
+  await expect(page.getByRole('dialog', { name: UI.settings, exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('heading', { level: 2 })).toHaveText(UI.languageTime);
   await noScroll(page);
   await a11y(page);
   // Le choix reste après un rechargement, sans nouvelle phrase ni focus volé.
@@ -301,12 +367,12 @@ test('I18N-D4 dates et durées en allemand : « gerade eben », « vor 5 Min. »
   let rows = await open();
   const when = rows.first().locator('time');
   await expect(when.locator('[aria-hidden="true"]')).toHaveText('gerade eben');
-  // Durée dans la phrase, écrite par `span::duration` (code, pas catalogue) : déjà allemande. PHASE 2 : « Gültig für … ».
+  // La phrase du catalogue (« Gültig für … ») et la durée, écrite par `span::duration` (code, pas catalogue).
   await expect(rows.first()).toContainText(UI.validFor);
   // La date complète (infobulle et lecteur d'écran) : `Intl` en de-u-nu-latn, « Montag, 23. November 2026 », chiffres latins, 24 h.
   const full = (await when.locator('.k-sr').textContent()) ?? '';
   expect(full).toMatch(/^(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag), \d{1,2}\. (Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember) \d{4}/);
-  expect(full).toMatch(/\b\d{1,2}:\d{2}$/); // PHASE 2 : « … um 14:30 » (jusque-là « … at 14:30 »)
+  expect(full).toMatch(UI.fullDate); // « … um 14:30 »
   expect(full).not.toMatch(/\b(AM|PM)\b/); // 24 h
   expect(full).not.toMatch(/[٠-٩۰-۹]/);
   expect(await when.getAttribute('title')).toBe(full);
@@ -339,17 +405,22 @@ test('I18N-D4b l’heure en « Automatique » suit l’allemand, pas le navigate
   await expect(said(page, 'Example').first()).toHaveText('Example: 2:30 PM');
   await page.getByRole('dialog').getByRole('combobox', { name: 'Language' }).selectOption({ label: DE });
   await expect(html(page)).toHaveAttribute('lang', 'de');
-  // PHASE 2 : « Beispiel: 14:30 »
-  await expect(said(page, '14:30').first()).toHaveText(UI.example);
-  expect(await page.locator('body').innerText()).not.toMatch(/\b(AM|PM)\b/);
+  await expect(said(page, '14:30').first()).toHaveText(UI.example); // « Beispiel: 14:30 »
+  // Plus d'AM/PM, sauf l'exemple du choix « 12-Stunden-Format » (« 2:30 PM »), qui montre justement ce format.
+  expect((await page.locator('body').innerText()).replace('2:30 PM', '')).not.toMatch(/\b(AM|PM)\b/);
 });
 
 // ───────── petits écrans, grands textes ─────────
 
+/** Les onglets des Réglages (`settings.rs`) et les rubriques des paramètres d'un serveur (`guild.rs`) : l'adresse de chacun. */
+const SETTINGS = ['account', 'profiles', 'privacy', 'messaging', 'apps', 'notifications', 'voice', 'appearance', 'accessibility', 'keybinds', 'language'];
+const GUILD_SETTINGS = ['overview', 'roles', 'channels', 'emojis', 'invites', 'bans', 'audit', 'owner'];
+
 test.describe('390 px, texte 20, allemand', () => {
   test.use({ locale: 'de-DE', viewport: { width: 390, height: 844 } });
 
-  test('I18N-D5 rien ne déborde en allemand : connexion, inscription, coquille et Réglages ; axe sans violation', async ({ page, signedIn }) => {
+  test('I18N-D5 rien ne déborde en allemand (mots composés compris) : connexion, inscription, coquille, Réglages, serveur et ses paramètres ; axe sans violation', async ({ page, signedIn, api }) => {
+    test.setTimeout(120_000); // une trentaine d'écrans, chacun avec l'analyse axe
     await page.goto('/login');
     await page.evaluate(() => localStorage.setItem('kraken.text', '20'));
     for (const path of ['/login', '/register', '/forgot-password']) {
@@ -357,29 +428,41 @@ test.describe('390 px, texte 20, allemand', () => {
       await expect(html(page)).toHaveAttribute('lang', 'de');
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       await noScroll(page);
+      await fits(page, path);
+      await a11y(page);
     }
-    await page.goto('/login');
-    await a11y(page);
-    const { page: app } = await signedIn('de-DE', { width: 390, height: 844 });
+    const a = await signedIn('de-DE', { width: 390, height: 844 });
+    const { page: app } = a;
     await app.evaluate(() => localStorage.setItem('kraken.text', '20'));
     await app.goto('/settings/language');
     await expect(html(app)).toHaveAttribute('lang', 'de');
     await expect(app.getByRole('combobox', { name: UI.language })).toBeVisible();
-    await noScroll(app);
-    await a11y(app);
     // La barre d'onglets défile : l'onglet ouvert (le dernier) est dans la vue.
     await expect(app.locator('.k-settings nav a[aria-current="page"]')).toBeInViewport({ ratio: 1 });
-    for (const path of ['/settings/appearance', '/settings/accessibility', '/settings/account']) {
+
+    // Un serveur créé en allemand (modèle « Communauté » : noms de salons allemands) : ses salons et ses paramètres.
+    const as = await api(a.token);
+    const created = await as.post(`${API}/guilds`, { data: { name: 'Korallenriff', template: 'communaute', lang: 'de' } });
+    expect(created.status(), await created.text()).toBe(201);
+    const g = await created.json();
+    const text = g.channels.find((c: { kind: string }) => c.kind === 'text').id;
+    const screens = [
+      '/channels/@me',
+      '/guilds/new',
+      ...SETTINGS.map((slug) => `/settings/${slug}`),
+      `/channels/${g.guild.id}/${text}`,
+      `/channels/${g.guild.id}/${text}/settings`,
+      `/channels/${g.guild.id}/${text}/settings/permissions`,
+      ...GUILD_SETTINGS.map((slug) => `/guilds/${g.guild.id}/settings/${slug}`),
+    ];
+    for (const path of screens) {
       await app.goto(path);
-      await expect(app.getByRole('dialog')).toBeVisible();
+      await expect(app.locator('#main, [role="dialog"]').first()).toBeVisible();
+      await app.waitForLoadState('networkidle');
       await noScroll(app);
+      await fits(app, path);
+      await a11y(app);
     }
-    await app.goto('/channels/@me');
-    await expect(app.locator('#main')).toBeVisible();
-    await noScroll(app);
-    await a11y(app);
-    // PHASE 2 : refaire ce parcours avec les vrais textes allemands (mots composés longs) et regarder chaque bouton, onglet et
-    // pastille : rien ne doit dépasser de sa carte, à 390 px comme à texte 20.
   });
 });
 
@@ -430,21 +513,40 @@ test('I18N-D8 mise en page allemande : césure automatique du texte courant, jam
     expect(other.button?.whiteSpace, lang).toBe('nowrap');
     expect(other.button?.height, lang).toBe('40px');
   }
+
+  // Les vrais textes allemands, à 390 px et texte 20 : la phrase d'accroche (césure automatique) et les boutons (« Anmelden »,
+  // « Mein Konto erstellen ») tiennent dans leur boîte, la page ne défile pas de côté.
+  const context = await browser.newContext({ baseURL, locale: 'de-DE', viewport: { width: 390, height: 844 } });
+  const page = await context.newPage();
+  await page.goto('/login');
+  await page.evaluate(() => localStorage.setItem('kraken.text', '20'));
+  for (const path of ['/login', '/register']) {
+    await page.goto(path);
+    await expect(html(page)).toHaveAttribute('lang', 'de');
+    const hint = page.locator('p.app-hint').first();
+    await expect(hint).toHaveText(path === '/login' ? 'Melde dich an, um deine Server wiederzufinden.' : 'Kostenlos, ohne Abo, alles inklusive.');
+    expect(await hint.evaluate((el) => getComputedStyle(el).hyphens)).toBe('auto');
+    await noScroll(page);
+    await fits(page, path);
+  }
+  await context.close();
 });
 
 // ───────── créer un serveur : la langue part avec la demande ─────────
 
-test('I18N-D6 créer un serveur en allemand : la demande porte lang="de", une étiquette régionale est comprise, une langue inconnue donne le français', async ({ signedIn, api }) => {
+test('I18N-D6 créer un serveur en allemand : la demande porte lang="de", les salons et catégories du modèle portent leurs noms allemands, une étiquette régionale est comprise, une langue inconnue donne le français', async ({ signedIn, api }) => {
   const a = await signedIn('de-DE');
   const { page } = a;
   await expect(html(page)).toHaveAttribute('lang', 'de');
-  // Par l'interface : la langue de l'interface part avec la demande. PHASE 2 : les libellés allemands de la page de création.
+  // Par l'interface : la langue de l'interface part avec la demande.
   await page.getByRole('link', { name: UI.createLink }).click();
   await page.getByLabel(UI.serverName, { exact: true }).fill('Abyss');
   const request = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`${API}/guilds`));
   await page.getByRole('button', { name: UI.createServer, exact: true }).click();
   expect((await request).postDataJSON().lang).toBe('de');
   await page.waitForURL(/\/channels\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+  // Le modèle « Vide » : le salon textuel porte son nom allemand (`.de("allgemein")` dans `templates.rs`).
+  await expect(page.getByRole('heading', { name: 'allgemein', level: 1 })).toBeVisible();
 
   // Par l'API : `de`, `de-AT`, `DE_ch` sont l'allemand, une langue inconnue donne le français.
   const as = await api(a.token);
@@ -455,11 +557,13 @@ test('I18N-D6 créer un serveur en allemand : la demande porte lang="de", une é
     const of = (kind: string) => g.channels.filter((c: { kind: string }) => c.kind === kind).map((c: { name: string }) => c.name).sort();
     return { text: of('text'), voice: of('voice'), category: of('category') };
   };
-  // Les noms de salons et de catégories du modèle « Communauté » n'ont pas encore de nom allemand : l'anglais (le repli).
-  // PHASE 2 : les noms allemands de `templates.rs` (`.de("…")`), à écrire ici en toutes lettres.
+  // Le modèle « Communauté » en allemand : salons textuels, vocal et catégories (`.de("…")` dans `templates.rs`).
+  const german = { text: ['allgemein', 'ankündigungen', 'hilfe', 'regeln'], voice: ['Offene Runde'], category: ['Gespräche', 'Sprachkanäle', 'Willkommen'] };
+  for (const lang of ['de', 'de-AT', 'DE_ch']) expect(await channels(lang), lang).toEqual(german);
+  // L'anglais garde ses noms (le repli n'est plus en jeu : l'allemand ne les emprunte pas).
   const english = await channels('en');
   expect(english.text).toEqual(['announcements', 'general', 'help', 'rules']);
-  for (const lang of ['de', 'de-AT', 'DE_ch']) expect(await channels(lang), lang).toEqual(english);
+  expect(english).not.toEqual(german);
   expect(await channels('nl')).toEqual(await channels('fr'));
   expect((await channels('fr')).text).toEqual(['aide', 'annonces', 'général', 'règles']);
 });
@@ -472,7 +576,7 @@ test('I18N-D7 e-mails du serveur : l’inscription et le mot de passe oublié en
   await page.goto('/login');
   await page.evaluate(() => localStorage.setItem('kraken.lang', 'de'));
 
-  // « Mot de passe oublié » : la demande porte lang="de". PHASE 2 : libellés allemands.
+  // « Mot de passe oublié » : la demande porte lang="de".
   await page.goto('/forgot-password');
   await expect(html(page)).toHaveAttribute('lang', 'de');
   await page.getByLabel(UI.email, { exact: true }).fill('personne@example.org');
@@ -507,6 +611,95 @@ test('I18N-D7 e-mails du serveur : l’inscription et le mot de passe oublié en
   const as = await api(token);
   const changed = await as.put(`${API}/users/@me/email`, { data: { email: `${user}.2@example.org`, password: PASSWORD, lang: 'de-CH' } });
   expect(changed.status(), await changed.text()).toBe(200);
+});
+
+// ───────── couverture : aucun français visible ─────────
+
+/** Une lettre qu'aucun mot allemand ni anglais ne porte, mais que presque chaque phrase française contient (accents, ç, œ). L'allemand a ä ö ü ß : aucune n'est dans la liste. */
+const FRENCH_LETTER = /[éèêëàâçùûîïôœ]/i;
+/** Des mots français que ni l'allemand ni l'anglais n'écrivent : ils trahissent un texte français sans accent (« Aucun salon », « Fermer »). `\b` ne voit pas « ä » comme une lettre (« Kanäle » contiendrait « le ») : lettres Unicode. */
+const FRENCH_WORD = /(?<!\p{L})(le|la|les|une|pour|avec|dans|vous|votre|aux|aucun|aucune|salon|salons|serveur|serveurs|fermer|annuler|supprimer|enregistrer|ajouter|rejoindre)(?!\p{L})/iu;
+/** Les noms d'exemple de l'aperçu des Réglages › Apparence (`display.rs`, marqués `i18n-ok : nom d'exemple`) : des prénoms, pas des phrases. */
+const SAMPLE_NAMES = ['Récif', 'RÉ'];
+/**
+ * Ce qu'une page laisse voir en français : le texte affiché (ligne par ligne) et les noms accessibles (`aria-label`, `title`,
+ * `placeholder`, `alt`). « Français », le nom de la langue dans le sélecteur, s'écrit dans son écriture : il est permis.
+ */
+const frenchLeft = (p: Page) =>
+  p.evaluate(
+    ([letterSource, wordSource, samples]) => {
+      const letter = new RegExp(letterSource, 'i');
+      const word = new RegExp(wordSource, 'iu');
+      const found = new Set<string>();
+      const look = (text: string | null) => {
+        for (const line of (text ?? '').split('\n')) {
+          const shown = line.replace('Français', '');
+          if ((letter.test(shown) || word.test(shown)) && !samples.includes(line.trim())) found.add(line.trim());
+        }
+      };
+      look(document.body.innerText);
+      for (const el of document.querySelectorAll('[aria-label],[title],[placeholder],[alt]'))
+        for (const a of ['aria-label', 'title', 'placeholder', 'alt']) look(el.getAttribute(a));
+      return [...found];
+    },
+    [FRENCH_LETTER.source, FRENCH_WORD.source, SAMPLE_NAMES] as [string, string, string[]],
+  );
+
+test('I18N-D9 couverture : aucun texte français ne reste visible en allemand (connexion, coquille, Réglages, serveur et ses paramètres), ni dans les noms accessibles', async ({ page, signedIn, api, allow }) => {
+  // Une invitation inconnue (« Invitation invalide ») : le serveur répond 404, c'est attendu.
+  allow.push(/status of 404/, /invites\//);
+  test.setTimeout(90_000); // une trentaine d'écrans
+  const left: Record<string, string[]> = {};
+  const check = async (p: Page, where: string) => {
+    await p.waitForLoadState('networkidle');
+    const found = await frenchLeft(p);
+    if (found.length) left[where] = found;
+  };
+
+  // Hors connexion : les écrans de la carte, la langue choisie dans le sélecteur (enregistrée).
+  await page.goto('/login');
+  await page.evaluate(() => localStorage.setItem('kraken.lang', 'de'));
+  for (const path of ['/login', '/register', '/forgot-password', '/reset-password', '/invite/inconnue', '/privacy', '/terms']) {
+    await page.goto(path);
+    await expect(html(page)).toHaveAttribute('lang', 'de');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await check(page, path);
+  }
+
+  // Connecté : l'accueil, chaque onglet des Réglages, un serveur (créé en allemand, comme le fait l'interface) et ses paramètres.
+  const a = await signedIn('de-DE');
+  const { page: app } = a;
+  await expect(html(app)).toHaveAttribute('lang', 'de');
+  await check(app, '/channels/@me');
+  for (const path of ['/guilds/new', '/inbox', '/search', '/discover']) {
+    await app.goto(path);
+    await expect(app.locator('#main')).toBeVisible();
+    await check(app, path);
+  }
+  for (const slug of SETTINGS) {
+    await app.goto(`/settings/${slug}`);
+    await expect(app.getByRole('dialog').getByRole('heading', { level: 2 }).first()).toBeVisible();
+    await check(app, `/settings/${slug}`);
+  }
+  const as = await api(a.token);
+  const created = await as.post(`${API}/guilds`, { data: { name: 'Korallenriff', template: 'communaute', lang: 'de' } });
+  expect(created.status(), await created.text()).toBe(201);
+  const g = await created.json();
+  const text = g.channels.find((c: { kind: string }) => c.kind === 'text').id;
+  await app.goto(`/channels/${g.guild.id}/${text}`);
+  await expect(app.getByRole('heading', { level: 1 })).toBeVisible();
+  await check(app, 'serveur : salon');
+  for (const path of [`/channels/${g.guild.id}/${text}/settings`, `/channels/${g.guild.id}/${text}/settings/permissions`]) {
+    await app.goto(path);
+    await expect(app.getByRole('dialog').getByRole('heading', { level: 2 }).first()).toBeVisible();
+    await check(app, path.replace(g.guild.id, '…').replace(text, '…'));
+  }
+  for (const slug of GUILD_SETTINGS) {
+    await app.goto(`/guilds/${g.guild.id}/settings/${slug}`);
+    await expect(app.getByRole('dialog').getByRole('heading', { level: 2 }).first()).toBeVisible();
+    await check(app, `/guilds/…/settings/${slug}`);
+  }
+  expect(left, 'texte encore en français : écran → lignes').toEqual({});
 });
 
 // ───────── le français, l'anglais et le persan ne changent pas ─────────

@@ -2,7 +2,7 @@
 # Une ligne « français<TAB>allemand » par texte ; règles : ../README.md (« Ajouter une langue », « Conventions d'allemand »).
 # Mêmes {variables} que le français, tutoiement (« du »), guillemets „…“, pas d'espace avant « : ? ! ; », chiffres latins.
 # Un texte absent d'ici s'affiche en anglais (repli), puis en français.
-# Fichier en construction : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui reste à traduire.
+# Fichier complet : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui manquerait après un ajout du code.
 # Erreurs du réseau et du serveur (api.rs)
 # Dates (audit.rs, ui.rs)
 # Connexion, inscription, invitation (auth.rs)
@@ -28,7 +28,7 @@ moins d'une minute	weniger als eine Minute
 # Connexion, inscription, invitation (auth.rs)
 Confidentialité	Datenschutz
 Conditions	Nutzungsbedingungen
-Bon retour sous la surface	Willkommen zurück unter der Oberfläche
+Bon retour sous la surface	Willkommen zurück in der Tiefe
 Connecte-toi pour retrouver tes serveurs.	Melde dich an, um deine Server wiederzufinden.
 Pseudo ou e-mail	Benutzername oder E-Mail
 Mot de passe	Passwort
@@ -215,7 +215,7 @@ Mon profil	Mein Profil
 Tes données	Deine Daten
 Qui peut t'écrire	Wer dir schreiben darf
 Applications liées	Verknüpfte Apps
-Voix et vidéo	Sprache und Video
+Voix et vidéo	Audio und Video
 Accessibilité	Barrierefreiheit
 Raccourcis clavier	Tastenkürzel
 Langue et heure	Sprache und Zeit

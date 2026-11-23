@@ -11,7 +11,7 @@ Mode d'emploi et conventions : crates/kraken-client/i18n/README.md.
                                                   (`// i18n-ok` en fin de ligne : français à ne pas traduire, ignoré)
     python3 scripts/i18n-check.py --grep Fermer   les entrées de catalogue qui contiennent ce texte
     python3 scripts/i18n-check.py --missing       les lignes « français<TAB> » à compléter (clés sans entrée anglaise)
-    python3 scripts/i18n-check.py --missing --lang fa     idem pour une autre langue (le persan, l'allemand : tout ce qui reste à traduire)
+    python3 scripts/i18n-check.py --missing --lang fa     idem pour une autre langue (ce qui manquerait après un ajout du code : vide tant que le catalogue est complet)
     python3 scripts/i18n-check.py --stats         clés à traduire, entrées et part traduite, par langue et par fichier
     python3 scripts/i18n-check.py -v              le contrôle complet, avec la liste des clés manquantes d'une langue partielle
     python3 scripts/i18n-check.py --server        les messages français du serveur (format! compris) que server.tsv ne couvre pas
@@ -29,10 +29,10 @@ insécable (U+202F) ou fine (U+2009) avant « : ? ! ; » (l'allemand n'a pas la 
 AVERTISSEMENTS : entrée de catalogue inutilisée (clé absente du code, sauf server.tsv, vérifié contre les sources du
 serveur) ; ponctuation française dans une traduction anglaise ou allemande (espace avant : ? ! ;, guillemets « » : l'allemand
 écrit „…“) ; demi-espace collé à
-une espace ou doublé (persan) ; et, **tant que la langue est dans `PARTIAL`**, ses clés sans traduction (comptées, et
-listées avec -v ou --missing --lang) : une langue partielle retombe sur son repli (`Lang::fallback`), la page marche déjà.
-`PARTIAL` se vide à la fin du travail de traduction : les clés manquantes deviennent alors des erreurs, comme en anglais.
-`--todo`, `--server`, `--missing` et `--stats` informent seulement (code de sortie 0).
+une espace ou doublé (persan). Les trois catalogues (`en`, `fa`, `de`) sont complets : `PARTIAL` est vide, une clé sans
+traduction est une erreur dans toutes les langues. (Pour ajouter une langue, ou un texte dans le code avant sa traduction :
+la mettre dans `PARTIAL` le temps du travail transforme ses clés manquantes en avertissements comptés, listés avec -v ou
+--missing --lang ; une langue partielle retombe sur son repli, `Lang::fallback`, la page marche déjà.) `--todo`, `--server`, `--missing` et `--stats` informent seulement (code de sortie 0).
 """
 import argparse
 import re
@@ -50,9 +50,9 @@ EMOJI_SRC = ROOT / "crates" / "kraken-core" / "src" / "emoji.rs"
 # des catégories et des salons, eux, existent déjà dans les deux langues dans le noyau (`Label`, jamais au catalogue).
 TEMPLATES_SRC = ROOT / "crates" / "kraken-core" / "src" / "templates.rs"
 # Langues dont le catalogue est encore en construction : leurs clés manquantes sont des avertissements (comptés, listés avec
-# -v ou --missing --lang), pas des erreurs. À RETIRER à la fin de la PR qui ajoute la langue (le persan : PR #33 ; l'allemand :
-# PR #35, en construction tant que les six fichiers de i18n/de/ ne sont pas traduits).
-PARTIAL: set[str] = {"de"}
+# -v ou --missing --lang), pas des erreurs. Vide : le persan (PR #33) et l'allemand (PR #35) sont complets. Une langue qu'on
+# ajoute y entre le temps de la traduction, et en sort à la fin de la PR qui l'ajoute.
+PARTIAL: set[str] = set()
 # La langue de référence : elle porte tous les messages du serveur (server.tsv), que chaque autre langue doit traduire aussi.
 REFERENCE = "en"
 # Le repli d'une langue (même table que `Lang::fallback` dans le noyau), pour le dire dans les messages.

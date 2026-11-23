@@ -311,6 +311,11 @@ async fn the_template_is_built_in_the_language_of_the_request(pool: PgPool) {
         ("Discussions".into(), vec![text("general"), text("help")]),
         ("Voice channels".into(), vec![voice("Open chat")]),
     ];
+    let community_de: Shape = vec![
+        ("Willkommen".into(), vec![text("ankündigungen"), text("regeln")]),
+        ("Gespräche".into(), vec![text("allgemein"), text("hilfe")]),
+        ("Sprachkanäle".into(), vec![voice("Offene Runde")]),
+    ];
     let community_fr: Shape = vec![
         ("Accueil".into(), vec![text("annonces"), text("règles")]),
         ("Discussions".into(), vec![text("général"), text("aide")]),
@@ -326,11 +331,14 @@ async fn the_template_is_built_in_the_language_of_the_request(pool: PgPool) {
         [("Text channels".to_string(), vec![text("general")]), ("Voice channels".to_string(), vec![voice("General")]),]
     );
 
-    // `lang: "de"` (et une étiquette régionale) : l'allemand est une langue connue, ses salons n'ont pas encore de nom allemand
-    // dans `templates.rs` (`.de("…")`) : l'anglais, comme l'aperçu du client. PHASE 2 : les noms allemands.
+    // `lang: "de"` (et une étiquette régionale) : les noms allemands de `templates.rs` (`.de("…")`), comme l'aperçu du client.
     for tag in ["de", "de-AT", "DE_ch"] {
-        assert_eq!(make("communaute", Some(json!(tag))).await, community_en, "{tag}");
+        assert_eq!(make("communaute", Some(json!(tag))).await, community_de, "{tag}");
     }
+    assert_eq!(
+        make("vide", Some(json!("de"))).await,
+        [("Textkanäle".to_string(), vec![text("allgemein")]), ("Sprachkanäle".to_string(), vec![voice("Allgemein")]),]
+    );
 
     // Sans `lang`, avec `fr`, une langue inconnue ou vide : le français, comme avant.
     for lang in [None, Some(json!("fr")), Some(json!("nl")), Some(json!("")), Some(json!("english")), Some(json!(null))]

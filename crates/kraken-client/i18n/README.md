@@ -31,8 +31,9 @@ le texte français de la clé. Le français n'a pas de catalogue ; l'anglais ret
 retombent sur l'anglais**, puis sur le français (`de` → `en` → `fr`). Le catalogue persan (ou allemand) se construit donc en
 chargeant d'abord les six fichiers `en/`, puis les six fichiers `fa/` (ou `de/`) par-dessus (`kraken_core::i18n::catalog_for`,
 `Catalog::add_over` : la dernière entrée gagne) ; un texte pas encore traduit s'affiche en anglais, jamais en panne, et
-`fa/*.tsv` ou `de/*.tsv` n'ont besoin que de ce qui est traduit (**tant que `de/*.tsv` est vide, l'interface allemande
-s'affiche en anglais**, avec `<html lang="de">`). `sources(lang)` de `src/i18n.rs` donne les fichiers propres à une langue, la
+`fa/*.tsv` ou `de/*.tsv` n'ont besoin que de ce qui est traduit (les catalogues persan et allemand sont complets : le repli
+ne sert plus qu'à un texte ajouté au code et pas encore traduit, ou, pendant la construction d'une nouvelle langue, à tout ce
+qui lui manque ; l'interface s'affiche alors en anglais, avec le bon `<html lang>`). `sources(lang)` de `src/i18n.rs` donne les fichiers propres à une langue, la
 chaîne de repli est celle de `Lang::fallback`. Les noms des salons d'un modèle de serveur suivent la même chaîne : `.fa("…")`
 ou `.de("…")` sur un `text(…)`, `voice(…)` ou `group(…)` de `kraken-core/src/templates.rs` donne le nom persan ou allemand,
 sinon l'anglais. Pendant la construction d'un catalogue, un pluriel (`tn`) en repli suit la règle de la langue, pas celle de
@@ -41,9 +42,10 @@ persanes sont identiques, le défaut disparaît avec la traduction) ; l'allemand
 
 `scripts/i18n-check.py` traite chaque dossier de langue : clés sans traduction, doublons, lignes mal formées et
 `{variables}` différentes sont des **erreurs** pour toutes, **sauf** les clés manquantes d'une langue de `PARTIAL` (constante
-en tête du script : `{"de"}` tant que l'allemand est en construction), qui sont comptées et signalées en avertissement
-(`-v` ou `--missing --lang de` les listent). `PARTIAL` se vide à la fin du travail : les clés manquantes deviennent alors des
-erreurs, comme en anglais. Les entrées en trop (clé absente du code) restent des avertissements.
+en tête du script, **vide** : les catalogues anglais, persan et allemand sont complets), qui seraient comptées et signalées en
+avertissement (`-v` ou `--missing --lang <code>` les listent). Une langue qu'on ajoute y entre le temps de la traduction et en
+sort à la fin du travail : ses clés manquantes deviennent alors des erreurs, comme en anglais. Après un ajout du code,
+`python3 scripts/i18n-check.py --missing --lang de` (ou `fa`) liste ce qui manque. Les entrées en trop (clé absente du code) restent des avertissements.
 
 ## Ajouter une langue
 
@@ -61,7 +63,7 @@ erreurs, comme en anglais. Les entrées en trop (clé absente du code) restent d
 4. **`boot.js`** : la table `langs` (celle de `Lang::ALL`) et, si la langue s'écrit de droite à gauche, `rtl` (celle de
    `Lang::dir`) : `<html lang dir>` est posé avant le client WASM, avec la même règle de résolution que `LangPref::resolve`.
 5. **Le sélecteur** (`LangSelect`) lit `Lang::ALL` : la langue y apparaît seule, avec son `lang` et son nom dans son écriture.
-6. **Le vérificateur** : mets la langue dans `PARTIAL` tant que le catalogue est incomplet (`LANG_FALLBACK` dit son repli),
+6. **Le vérificateur** : mets la langue dans `PARTIAL` (vide aujourd'hui) tant que le catalogue est incomplet (`LANG_FALLBACK` dit son repli),
    et retire-la à la fin. Contrôles propres à une langue : `persian_problems`, `german_problems` dans `scripts/i18n-check.py`.
 7. **Tests** : `e2e/specs/i18n-fa.spec.ts` (ou `i18n-de.spec.ts`, plus court, pour une langue de gauche à droite) est le modèle (sélecteur, rechargement, repli, `navigator.languages`, dates et
    durées, 390 px, axe), et les options attendues du sélecteur dans `i18n.spec.ts` et `display-accessibility.spec.ts`.
@@ -274,7 +276,7 @@ est le miroir exact de sa position en LTR : `x_rtl = largeur_fenêtre - droite_l
 ## Conventions d'allemand
 
 L'allemand (`de`, « Deutsch », de gauche à droite) est la quatrième langue de l'interface. Son catalogue (`de/*.tsv`) se
-construit par-dessus l'anglais (repli `de` → `en` → `fr`) ; `PARTIAL` contient `de` tant qu'il n'est pas complet. Écrit
+construit par-dessus l'anglais (repli `de` → `en` → `fr`) ; il est complet (1 477 textes, comme l'anglais et le persan) et `PARTIAL` est vide. Écrit
 par Claude, sans relecture par une personne de langue allemande : une relecture est la bienvenue.
 
 - **Tutoiement** (« du », « dein », « dir »), comme le français « tu » : jamais le « Sie » de politesse ni « Ihr/Ihre ». Ton

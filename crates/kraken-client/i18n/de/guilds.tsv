@@ -2,7 +2,7 @@
 # Une ligne « français<TAB>allemand » par texte ; règles : ../README.md (« Ajouter une langue », « Conventions d'allemand »).
 # Mêmes {variables} que le français, tutoiement (« du »), guillemets „…“, pas d'espace avant « : ? ! ; », chiffres latins.
 # Un texte absent d'ici s'affiche en anglais (repli), puis en français.
-# Fichier en construction : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui reste à traduire.
+# Fichier complet : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui manquerait après un ajout du code.
 # Journal d'audit (audit.rs) : une phrase entière par action, jamais des morceaux recollés
 # Journal d'audit : précisions, champs et valeurs avant / après, filtres, états
 # Salons : mode lent, création, rangement, paramètres d'un salon, droits par salon (channels.rs)
