@@ -180,7 +180,7 @@ test('I18N-F3 Réglages › Langue et heure : choisir « فارسی » recharge 
   const twelve = page.getByRole('dialog').getByRole('group', { name: 'قالب ساعت' }).getByRole('radio').nth(1);
   await expect(page.getByRole('dialog').getByRole('radio', { name: '12 ساعته' })).toBeVisible();
   await twelve.check();
-  await expect(said(page, 'نمونه').first()).toHaveText(/^نمونه: 2:30 PM$/);
+  await expect(said(page, 'نمونه').first()).toHaveText(/^نمونه: 2:30 ب\.ظ\.$/);
 
   // Dans l'autre sens : français, puis anglais (jamais de droite à gauche pour eux).
   await after.selectOption({ label: 'Français' });
@@ -451,6 +451,34 @@ test('I18N-F14 le nom de serveur proposé en persan est une donnée : sans marqu
   await page.getByRole('button', { name: 'ایجاد سرور', exact: true }).click();
   expect((await request).postDataJSON().name).not.toMatch(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/);
   await page.waitForURL(/\/channels\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/);
+});
+
+test('I18N-F15 Ctrl+K en persan : demi-espace tapé comme une espace, chiffres persans, « ك » et « ي » arabes trouvent les salons du modèle', async ({ signedIn, api }) => {
+  const a = await signedIn('fa-IR');
+  const { page } = a;
+  const as = await api(a.token);
+  const res = await as.post(`${API}/guilds`, { data: { name: 'Abyss', template: 'jeux', lang: 'fa' } });
+  expect(res.status(), await res.text()).toBe(201);
+  const g = await res.json();
+  const general = g.channels.find((c: { kind: string; name: string }) => c.kind === 'text' && c.name === 'عمومی');
+  await page.goto(`/channels/${g.guild.id}/${general.id}`);
+  await expect(page.getByRole('heading', { name: 'عمومی', level: 1 })).toBeVisible();
+  await page.keyboard.press('Control+k');
+  const dialog = page.getByRole('dialog', { name: 'رفتن به' });
+  await expect(dialog).toBeVisible();
+  const field = dialog.getByRole('combobox');
+  // Chaque saisie, avec les habitudes d'un clavier persan ou arabe, trouve le salon dont le nom est écrit autrement.
+  for (const [typed, found] of [
+    ['هم تیمی', 'یافتن-هم\u200cتیمی'],
+    ['#نکته ها', 'نکته\u200cها'],
+    ['بازی ۱', 'بازی 1'],
+    ['بازی ٢', 'بازی 2'],
+    ['نكته', 'نکته\u200cها'],
+    ['يافتن', 'یافتن-هم\u200cتیمی'],
+  ]) {
+    await field.fill(typed);
+    await expect(dialog.getByRole('option', { name: new RegExp(found.replace(/[-\u200c]/g, '.')) }).first(), typed).toBeVisible();
+  }
 });
 
 // ───────── le français et l'anglais ne changent pas ─────────

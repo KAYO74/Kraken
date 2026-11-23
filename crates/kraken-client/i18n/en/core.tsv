@@ -65,6 +65,8 @@ Exemple :	Example:
 Suit la langue de l'interface.	Follows the interface language.
 12 h	12-hour
 24 h	24-hour
+AM	AM
+PM	PM
 
 # Apparence et accessibilité (display.rs)
 Automatique (système)	Automatic (system)

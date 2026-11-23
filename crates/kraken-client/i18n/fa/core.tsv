@@ -68,6 +68,8 @@ Exemple :	نمونه:
 Suit la langue de l'interface.	از زبان رابط پیروی می‌کند.
 12 h	12 ساعته
 24 h	24 ساعته
+AM	ق.ظ.
+PM	ب.ظ.
 
 # Apparence et accessibilité (display.rs)
 Automatique (système)	خودکار (سیستم)
