@@ -7,8 +7,8 @@
 //! par des tirets) ; ceux des salons vocaux gardent leur casse et leurs espaces.
 //!
 //! Les noms des catégories et des salons existent en français et en anglais, côte à côte dans la même table
-//! ([`Label`]), et en persan quand `.fa("…")` le donne (sinon l'anglais, comme pour le catalogue de l'interface) :
-//! une seule source de vérité. Le serveur bâtit la structure dans la langue que le client lui
+//! ([`Label`]), et en persan ou en allemand quand `.fa("…")` ou `.de("…")` le donne (sinon l'anglais, comme pour le
+//! catalogue de l'interface) : une seule source de vérité. Le serveur bâtit la structure dans la langue que le client lui
 //! donne à la création ([`Lang`] ; une langue inconnue ou absente donne le français), et le client montre
 //! dans l'aperçu exactement ces noms. Le nom et la description d'un modèle ne servent qu'à la carte du client :
 //! ils restent du français que le catalogue de l'interface traduit.
@@ -18,13 +18,14 @@ use crate::i18n::Lang;
 /// Le modèle choisi quand on n'en nomme aucun : la structure d'avant les modèles.
 pub const DEFAULT_ID: &str = "vide";
 
-/// Un nom dans chaque langue de l'interface. Le français et l'anglais sont toujours là ; le persan est facultatif :
-/// sans lui, le nom anglais (la chaîne de repli de [`Lang::fallback`]).
+/// Un nom dans chaque langue de l'interface. Le français et l'anglais sont toujours là ; le persan et l'allemand sont
+/// facultatifs : sans eux, le nom anglais (la chaîne de repli de [`Lang::fallback`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Label {
     pub fr: &'static str,
     pub en: &'static str,
     pub fa: Option<&'static str>,
+    pub de: Option<&'static str>,
 }
 
 impl Label {
@@ -34,6 +35,10 @@ impl Label {
             Lang::Fr => self.fr,
             Lang::En => self.en,
             Lang::Fa => match self.fa {
+                Some(name) => name,
+                None => self.en,
+            },
+            Lang::De => match self.de {
                 Some(name) => name,
                 None => self.en,
             },
@@ -78,6 +83,12 @@ impl Slot {
     pub const fn fa(self, name: &'static str) -> Slot {
         Slot { name: Label { fa: Some(name), ..self.name }, ..self }
     }
+
+    /// Le nom allemand du salon (sinon l'anglais) : `text("général", "general").de("allgemein")`. Même règle pour un salon
+    /// textuel : minuscules, sans espace (mots liés par un tiret).
+    pub const fn de(self, name: &'static str) -> Slot {
+        Slot { name: Label { de: Some(name), ..self.name }, ..self }
+    }
 }
 
 impl Group {
@@ -85,21 +96,26 @@ impl Group {
     pub const fn fa(self, name: &'static str) -> Group {
         Group { name: Label { fa: Some(name), ..self.name }, ..self }
     }
+
+    /// Le nom allemand de la catégorie (sinon l'anglais).
+    pub const fn de(self, name: &'static str) -> Group {
+        Group { name: Label { de: Some(name), ..self.name }, ..self }
+    }
 }
 
 /// Un salon textuel : son nom en français, puis en anglais.
 const fn text(fr: &'static str, en: &'static str) -> Slot {
-    Slot { kind: SlotKind::Text, name: Label { fr, en, fa: None } }
+    Slot { kind: SlotKind::Text, name: Label { fr, en, fa: None, de: None } }
 }
 
 /// Un salon vocal : son nom en français, puis en anglais.
 const fn voice(fr: &'static str, en: &'static str) -> Slot {
-    Slot { kind: SlotKind::Voice, name: Label { fr, en, fa: None } }
+    Slot { kind: SlotKind::Voice, name: Label { fr, en, fa: None, de: None } }
 }
 
 /// Une catégorie : son nom en français, puis en anglais, et ses salons.
 const fn group(fr: &'static str, en: &'static str, slots: &'static [Slot]) -> Group {
-    Group { name: Label { fr, en, fa: None }, slots }
+    Group { name: Label { fr, en, fa: None, de: None }, slots }
 }
 
 /// Les modèles, dans l'ordre où on les propose ; le premier est celui par défaut.
@@ -386,11 +402,18 @@ mod tests {
 
     #[test]
     fn a_label_reads_in_each_language() {
-        let l = Label { fr: "général", en: "general", fa: None };
+        let l = Label { fr: "général", en: "general", fa: None, de: None };
         assert_eq!((l.get(Lang::Fr), l.get(Lang::En)), ("général", "general"));
         assert_eq!(l.get(Lang::Fa), "general", "sans nom persan : l'anglais");
+        assert_eq!(l.get(Lang::De), "general", "sans nom allemand : l'anglais");
         let l = Label { fa: Some("عمومی"), ..l };
         assert_eq!((l.get(Lang::Fr), l.get(Lang::En), l.get(Lang::Fa)), ("général", "general", "عمومی"));
+        assert_eq!(l.get(Lang::De), "general", "le nom persan ne sert pas à l'allemand");
+        let l = Label { de: Some("allgemein"), ..l };
+        assert_eq!(
+            (l.get(Lang::Fr), l.get(Lang::En), l.get(Lang::Fa), l.get(Lang::De)),
+            ("général", "general", "عمومی", "allgemein")
+        );
         for lang in Lang::ALL {
             assert_eq!(Lang::from_tag(lang.tag()), Some(lang));
         }
@@ -409,6 +432,35 @@ mod tests {
             ("خوش\u{200c}آمد", "Welcome", 1)
         );
         assert_eq!(voice("Pause", "Break").name.get(Lang::Fa), "Break");
+    }
+
+    #[test]
+    fn the_german_builder_sets_only_the_german_name() {
+        const SLOT: Slot = text("général", "general").de("allgemein");
+        assert_eq!(
+            (SLOT.kind, SLOT.name.fr, SLOT.name.en, SLOT.name.de, SLOT.name.fa),
+            (SlotKind::Text, "général", "general", Some("allgemein"), None)
+        );
+        const GROUP: Group = group("Accueil", "Welcome", &[SLOT]).de("Willkommen");
+        assert_eq!(
+            (GROUP.name.get(Lang::De), GROUP.name.get(Lang::En), GROUP.name.get(Lang::Fa), GROUP.slots.len()),
+            ("Willkommen", "Welcome", "Welcome", 1)
+        );
+        assert_eq!(voice("Pause", "Break").name.get(Lang::De), "Break");
+        // Les deux constructeurs se combinent sans s'écraser.
+        const BOTH: Slot = text("général", "general").fa("عمومی").de("allgemein");
+        assert_eq!((BOTH.name.get(Lang::Fa), BOTH.name.get(Lang::De)), ("عمومی", "allgemein"));
+    }
+
+    #[test]
+    fn german_names_follow_the_english_ones_until_they_are_given() {
+        for t in &ALL {
+            for g in t.groups {
+                for l in std::iter::once(g.name).chain(g.slots.iter().map(|s| s.name)) {
+                    assert_eq!(l.get(Lang::De), l.de.unwrap_or(l.en), "{} / {}", t.id, l.fr);
+                }
+            }
+        }
     }
 
     #[test]

@@ -59,7 +59,7 @@ pub async fn instance(State(state): State<AppState>) -> Json<Instance> {
 }
 
 /// La langue de l'interface que le client annonce avec une demande (`lang` de `CreateGuild`, `RegisterReq`, `EmailReq`,
-/// `ChangeEmail`) : un code (`fr`, `en`, `fa`) ou une étiquette régionale (`fa-IR`, `en_GB`), sans tenir compte de la casse.
+/// `ChangeEmail`) : un code (`fr`, `en`, `fa`, `de`) ou une étiquette régionale (`fa-IR`, `en_GB`, `de_CH`), sans tenir compte de la casse.
 /// Absente ou inconnue : le français.
 pub(crate) fn request_lang(tag: Option<&str>) -> Lang {
     tag.and_then(Lang::from_tag).unwrap_or(Lang::DEFAULT)

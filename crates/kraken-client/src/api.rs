@@ -188,7 +188,7 @@ pub fn upload<F: Fn(f64) + 'static>(
     }))
 }
 
-/// La langue de l'interface (`fr`, `en`, `fa`), qui part avec les demandes dont la réponse est un e-mail : le serveur
+/// La langue de l'interface (`fr`, `en`, `fa`, `de`), qui part avec les demandes dont la réponse est un e-mail : le serveur
 /// l'écrit dans cette langue (inscription, mot de passe oublié, changement d'adresse).
 fn mail_lang() -> Option<String> {
     Some(crate::i18n::lang().code().to_string())

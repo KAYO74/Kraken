@@ -11,22 +11,24 @@ Mode d'emploi et conventions : crates/kraken-client/i18n/README.md.
                                                   (`// i18n-ok` en fin de ligne : français à ne pas traduire, ignoré)
     python3 scripts/i18n-check.py --grep Fermer   les entrées de catalogue qui contiennent ce texte
     python3 scripts/i18n-check.py --missing       les lignes « français<TAB> » à compléter (clés sans entrée anglaise)
-    python3 scripts/i18n-check.py --missing --lang fa     idem pour une autre langue (le persan : tout ce qui reste à traduire)
+    python3 scripts/i18n-check.py --missing --lang fa     idem pour une autre langue (le persan, l'allemand : tout ce qui reste à traduire)
     python3 scripts/i18n-check.py --stats         clés à traduire, entrées et part traduite, par langue et par fichier
     python3 scripts/i18n-check.py -v              le contrôle complet, avec la liste des clés manquantes d'une langue partielle
     python3 scripts/i18n-check.py --server        les messages français du serveur (format! compris) que server.tsv ne couvre pas
 
-Contrôle complet, pour **chaque** langue qui a un dossier sous `i18n/` (`en`, `fa`). ERREURS (code de sortie 1) : un
+Contrôle complet, pour **chaque** langue qui a un dossier sous `i18n/` (`en`, `fa`, `de`). ERREURS (code de sortie 1) : un
 littéral passé à t(, tf(, tf_data(, tn(, tnf( ou tk!( sans entrée dans la langue ; un nom d'emoji, un texte de modèle ou un message
 du serveur sans entrée ; une entrée en double (dans un fichier ou entre fichiers) ; une ligne de catalogue mal formée ;
 des {variables} différentes entre la clé et la traduction ; une marque de sens d'écriture (U+200E, U+200F, U+061C,
-U+202A à U+202E, U+2066 à U+2069) dans une traduction ; un fichier .tsv absent de la liste du client (`EN`, `FA` de
+U+202A à U+202E, U+2066 à U+2069) dans une traduction ; un fichier .tsv absent de la liste du client (`EN`, `FA`, `DE` de
 src/i18n.rs) ; un dossier de langue que `kraken_core::i18n::Lang` ne connaît pas. Pour le persan, en plus : un chiffre
 persan ou arabo-indien (۰-۹, ٠-٩ : les chiffres sont latins), un demi-espace (U+200C) en tête ou en queue d'une ligne,
-un « ي » ou un « ك » arabes (le persan écrit « ی » et « ک »).
+un « ي » ou un « ك » arabes (le persan écrit « ی » et « ک »). Pour l'allemand, en plus : une espace insécable (U+00A0), fine
+insécable (U+202F) ou fine (U+2009) avant « : ? ! ; » (l'allemand n'a pas la ponctuation française).
 
 AVERTISSEMENTS : entrée de catalogue inutilisée (clé absente du code, sauf server.tsv, vérifié contre les sources du
-serveur) ; ponctuation française dans une traduction anglaise (espace avant : ? ! ;, guillemets « ») ; demi-espace collé à
+serveur) ; ponctuation française dans une traduction anglaise ou allemande (espace avant : ? ! ;, guillemets « » : l'allemand
+écrit „…“) ; demi-espace collé à
 une espace ou doublé (persan) ; et, **tant que la langue est dans `PARTIAL`**, ses clés sans traduction (comptées, et
 listées avec -v ou --missing --lang) : une langue partielle retombe sur son repli (`Lang::fallback`), la page marche déjà.
 `PARTIAL` se vide à la fin du travail de traduction : les clés manquantes deviennent alors des erreurs, comme en anglais.
@@ -48,18 +50,22 @@ EMOJI_SRC = ROOT / "crates" / "kraken-core" / "src" / "emoji.rs"
 # des catégories et des salons, eux, existent déjà dans les deux langues dans le noyau (`Label`, jamais au catalogue).
 TEMPLATES_SRC = ROOT / "crates" / "kraken-core" / "src" / "templates.rs"
 # Langues dont le catalogue est encore en construction : leurs clés manquantes sont des avertissements (comptés, listés avec
-# -v ou --missing --lang), pas des erreurs. À RETIRER à la fin de la PR qui ajoute la langue (le persan : PR #33).
-PARTIAL: set[str] = set()
+# -v ou --missing --lang), pas des erreurs. À RETIRER à la fin de la PR qui ajoute la langue (le persan : PR #33 ; l'allemand :
+# PR #35, en construction tant que les six fichiers de i18n/de/ ne sont pas traduits).
+PARTIAL: set[str] = {"de"}
 # La langue de référence : elle porte tous les messages du serveur (server.tsv), que chaque autre langue doit traduire aussi.
 REFERENCE = "en"
 # Le repli d'une langue (même table que `Lang::fallback` dans le noyau), pour le dire dans les messages.
-LANG_FALLBACK = {"fa": "en"}
+LANG_FALLBACK = {"fa": "en", "de": "en"}
 # Le noyau, où `Lang::code` dit quelles langues existent (chaque dossier de i18n/ doit y avoir son code).
 CORE_I18N = ROOT / "crates" / "kraken-core" / "src" / "i18n.rs"
 # Persan : chiffres persans (۰-۹) et arabo-indiens (٠-٩), lettres arabes ي et ك (le persan écrit ی et ک), demi-espace.
 INDIC_DIGITS = re.compile("[\u06f0-\u06f9\u0660-\u0669]")
 ARABIC_LETTERS = {"\u064a": "ی (U+06CC)", "\u0643": "ک (U+06A9)"}
 ZWNJ = "\u200c"
+# Allemand : pas de ponctuation française. Une espace insécable (U+00A0), fine insécable (U+202F) ou fine (U+2009) avant : ? ! ;
+# est une erreur ; une espace ordinaire (comme les guillemets « ») un avertissement, comme en anglais.
+NBSP_BEFORE_PUNCT = re.compile("[\u00a0\u202f\u2009]+[:?!;]")
 # Marques de sens d'écriture : jamais dans un catalogue (le client isole les valeurs lui-même, voir README « Droit-à-gauche »).
 BIDI_MARKS = re.compile("[\u200e\u200f\u061c\u202a-\u202e\u2066-\u2069]")
 # Fonctions dont les arguments littéraux sont des clés de traduction : nom -> numéros d'arguments (depuis 0).
@@ -484,12 +490,12 @@ def cmd_server():
 
 
 def lang_dirs():
-    """Les dossiers de langue sous i18n/ (`en`, `fa`), triés."""
+    """Les dossiers de langue sous i18n/ (`en`, `fa`, `de`), triés."""
     return sorted(p for p in CATALOGS.iterdir() if p.is_dir()) if CATALOGS.is_dir() else []
 
 
 def known_langs():
-    """Les codes de `Lang::code` dans le noyau (`fr`, `en`, `fa`) : chaque dossier de i18n/ doit y avoir le sien."""
+    """Les codes de `Lang::code` dans le noyau (`fr`, `en`, `fa`, `de`) : chaque dossier de i18n/ doit y avoir le sien."""
     if not CORE_I18N.is_file():
         return None
     m = re.search(r"pub fn code\(self\) -> &'static str \{(.*?)\n    \}", CORE_I18N.read_text(encoding="utf-8"), re.S)
@@ -603,6 +609,19 @@ def persian_problems(key, value):
     return found
 
 
+def german_problems(key, value):
+    """Ce qui ne va pas dans une traduction allemande : pas de ponctuation française (l'allemand ne met aucune espace avant
+    : ? ! ; et écrit „…“ au lieu de « … »)."""
+    found = []
+    if NBSP_BEFORE_PUNCT.search(value):
+        found.append(("erreur", "espace insécable ou fine avant : ? ! ; (ponctuation française : l'allemand n'a pas d'espace)"))
+    elif re.search(r"\s[:?!;]", value):
+        found.append(("avertissement", "espace avant : ? ! ; (ponctuation française)"))
+    if "«" in value or "»" in value:
+        found.append(("avertissement", "guillemets français « » : l'allemand écrit „…“ (sauf exemple de code)"))
+    return found
+
+
 def cmd_check(verbose=False):
     errors, warnings = [], []
     dirs = lang_dirs()
@@ -649,6 +668,9 @@ def cmd_check(verbose=False):
                 warnings.append(f"{rel(f)}:{no}: [{lang}] ponctuation française dans la traduction : {value[:60]!r}")
             if lang == "fa":
                 for level, what in persian_problems(key, value):
+                    (errors if level == "erreur" else warnings).append(f"{rel(f)}:{no}: [{lang}] {what} : {value[:60]!r}")
+            if lang == "de":
+                for level, what in german_problems(key, value):
                     (errors if level == "erreur" else warnings).append(f"{rel(f)}:{no}: [{lang}] {what} : {value[:60]!r}")
             if f.name == "server.tsv":
                 if shape(key) not in server_texts:

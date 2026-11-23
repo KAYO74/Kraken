@@ -34,7 +34,7 @@ impl User {
     }
 }
 
-/// `POST /auth/register`. `lang` : la langue de l'interface (`fr`, `en`, `fa`, ou une étiquette régionale comme `fa-IR`)
+/// `POST /auth/register`. `lang` : la langue de l'interface (`fr`, `en`, `fa`, `de`, ou une étiquette régionale comme `fa-IR` ou `de-AT`)
 /// dans laquelle écrire l'e-mail de confirmation ; absente ou inconnue, le français.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RegisterReq {

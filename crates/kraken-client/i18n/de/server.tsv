@@ -1,0 +1,5 @@
+# Catalogue allemand (de), groupe « server » : les messages d'erreur du serveur (français), traduits à l'affichage par api.rs (`from_server`) ; le français doit être le texte exact du serveur, avec ses gabarits à {variables} (voir en/server.tsv).
+# Une ligne « français<TAB>allemand » par texte ; règles : ../README.md (« Ajouter une langue », « Conventions d'allemand »).
+# Mêmes {variables} que le français, tutoiement (« du »), guillemets „…“, pas d'espace avant « : ? ! ; », chiffres latins.
+# Un texte absent d'ici s'affiche en anglais (repli), puis en français.
+# Fichier en construction : `python3 scripts/i18n-check.py --missing --lang de` liste ce qui reste à traduire.

@@ -147,7 +147,7 @@ pub async fn register(
     let email = req.email.trim();
     check_email(email)?;
     check_password(&req.password)?;
-    // La langue de l'interface : l'e-mail de confirmation part dans cette langue (le code normalisé `fr|en|fa` suit
+    // La langue de l'interface : l'e-mail de confirmation part dans cette langue (le code normalisé `fr|en|fa|de` suit
     // la tâche, qui peut attendre dans la file ; une langue absente ou inconnue donne le français).
     let lang = crate::api::request_lang(req.lang.as_deref());
     let hash = hash_password(req.password).await.ok_or_else(|| AppError::invalid("Mot de passe refusé."))?;

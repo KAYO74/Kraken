@@ -28,7 +28,7 @@
   // Langue de l'interface (même choix et même règle que src/i18n.rs et `kraken_core::i18n`) : `<html lang dir>` avant le
   // client WASM. `langs` : la table de `Lang::ALL` (français d'abord : le repli) ; `rtl` : celle de `Lang::dir` (le persan est
   // la première langue de droite à gauche livrée ; l'arabe et l'hébreu y sont déjà, que la feuille de style suit en direct).
-  var langs = ["fr", "en", "fa"];
+  var langs = ["fr", "en", "fa", "de"];
   var rtl = ["ar", "fa", "he"];
   var chosen = read("kraken.lang", ["auto"].concat(langs), "auto");
   try {
@@ -42,7 +42,7 @@
     lang = chosen;
   } else {
     // « Langue de l'appareil » : la première langue du navigateur que l'interface prend en charge (`fa`, `fa-IR`, `fa-AF`,
-    // `fa_IR` : seule la langue compte, pas la région), à défaut le français.
+    // `fa_IR`, `de`, `de-DE`, `de-AT`, `de-CH`, `de_DE` : seule la langue compte, pas la région), à défaut le français.
     var wanted = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
     for (var i = 0; i < wanted.length; i++) {
       var code = String(wanted[i] || "").replace(/^\s+|\s+$/g, "").split(/[-_]/)[0].toLowerCase();
