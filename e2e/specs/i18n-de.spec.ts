@@ -85,7 +85,7 @@ const overflowing = (p: Page) =>
     return [...found];
   });
 /**
- * Les mots plus larges que la boîte qui les porte, que `overflow-wrap: anywhere` (boutons, onglets, pastilles) coupe alors au
+ * Les mots plus larges que la boîte qui les porte, que `overflow-wrap: break-word` (boutons, pastilles) coupe alors au
  * milieu du mot au lieu de les laisser dépasser : « Berechtigu / ngen ». Ils ne débordent pas, mais ils se lisent mal.
  */
 const splitWords = (p: Page) =>
@@ -102,7 +102,8 @@ const splitWords = (p: Page) =>
       probe.style.letterSpacing = style.letterSpacing;
       probe.style.textTransform = style.textTransform;
       const room = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      for (const word of own.split(/\s+/)) {
+      // Le trait d'union est un point de coupe : « Desktop-Benachrichtigungen » passe à la ligne après « Desktop- ».
+      for (const word of own.split(/[\s\u002d\u2010\u2011]+/)) {
         if (word.length < 9) continue;
         probe.textContent = word;
         if (probe.getBoundingClientRect().width > room + 1) found.add(word);
@@ -112,10 +113,10 @@ const splitWords = (p: Page) =>
     return [...found];
   });
 /**
- * Les mots allemands qui se coupent encore au milieu du mot à 390 px et texte 20 : ils ne se coupent pas à la main ici, ils se
- * raccourcissent dans `i18n/de/*.tsv` (puis on les retire de cette liste). Ce sont les onglets d'un rôle (Serveur › Rollen).
+ * Les mots allemands qu'on accepte de voir coupés au milieu à 390 px et texte 20 : aucun. Un mot trop long se raccourcit dans
+ * `i18n/de/*.tsv` ou se met sur sa propre ligne (onglets), il ne se coupe pas sans trait d'union.
  */
-const SPLIT_WORDS = ['Berechtigungen', 'Mitglieder'];
+const SPLIT_WORDS: string[] = [];
 /**
  * Rien ne dépasse de sa boîte sur cet écran, et aucun mot ne s'y coupe au milieu (hors `SPLIT_WORDS`). Un texte allemand trop long
  * pour 390 px à texte 20 ne se coupe pas à la main : la ligne d'erreur dit l'élément et son texte.
@@ -503,7 +504,7 @@ test('I18N-D8 mise en page allemande : césure automatique du texte courant, jam
   expect(de.field).toBe('manual');
   expect(de.select).toBe('manual');
   expect(de.button?.whiteSpace).toBe('normal');
-  expect(de.button?.wrap).toBe('anywhere');
+  expect(de.button?.wrap).toBe('break-word');
   // Un bouton à une ligne garde sa hauteur d'avant (40 px au moins ; le texte a la place).
   expect(parseFloat(de.button!.height)).toBeGreaterThanOrEqual(40);
   // Français et anglais : rien ne change (pas de césure automatique, bouton sur une ligne).
@@ -566,6 +567,53 @@ test('I18N-D6 créer un serveur en allemand : la demande porte lang="de", les sa
   expect(english).not.toEqual(german);
   expect(await channels('nl')).toEqual(await channels('fr'));
   expect((await channels('fr')).text).toEqual(['aide', 'annonces', 'général', 'règles']);
+});
+
+// ───────── recherche : ä, ö, ü tapés « ae », « oe », « ue » ─────────
+
+test('I18N-D11 Ctrl+K et la complétion de @ et de # : « ae », « oe », « ue » trouvent « ä », « ö », « ü » (écriture sans clavier allemand), et « ü » tapé aussi', async ({ signedIn, api }) => {
+  const a = await signedIn('de-DE');
+  const b = await signedIn('de-DE');
+  const { page } = a;
+  const asA = await api(a.token);
+  const asB = await api(b.token);
+  expect((await asB.patch(`${API}/users/@me`, { data: { display_name: 'Jürgen Müller' } })).status()).toBe(200);
+  const res = await asA.post(`${API}/guilds`, { data: { name: 'Abyss', template: 'communaute', lang: 'de' } });
+  expect(res.status(), await res.text()).toBe(201);
+  const g = await res.json();
+  const general = g.channels.find((c: { kind: string; name: string }) => c.kind === 'text' && c.name === 'allgemein');
+  const { code } = await (await asA.post(`${API}/channels/${general.id}/invites`, { data: {} })).json();
+  expect((await asB.post(`${API}/invites/${code}`)).status()).toBeLessThan(300);
+  await page.goto(`/channels/${g.guild.id}/${general.id}`);
+  await expect(page.getByRole('heading', { name: 'allgemein', level: 1 })).toBeVisible();
+
+  // Ctrl+K : le salon « ankündigungen » se trouve tel quel, sans tréma, ou avec « ue ».
+  await page.keyboard.press('Control+k');
+  const dialog = page.getByRole('dialog', { name: 'Springen zu' });
+  await expect(dialog).toBeVisible();
+  const field = dialog.getByRole('combobox');
+  for (const typed of ['ankündigungen', 'ankundigungen', 'ankuendigungen', '#ankuendigungen']) {
+    await field.fill(typed);
+    await expect(dialog.getByRole('option', { name: /ankündigungen/ }).first(), typed).toBeVisible();
+  }
+  // Une saisie sans rapport ne ressort pas.
+  await field.fill('zzue');
+  await expect(dialog.getByRole('option', { name: /ankündigungen/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  // « @ » : « Jürgen Müller » se trouve par « jürgen », « juergen », « mueller » ; « # » : le salon par « #ankuend ».
+  const box = page.locator('textarea').first();
+  const list = page.getByRole('listbox');
+  for (const typed of ['@jürgen', '@jurgen', '@juergen', '@mueller', '@müller']) {
+    await box.fill('');
+    await box.pressSequentially(typed);
+    await expect(list.getByRole('option', { name: /Jürgen Müller/ }), typed).toBeVisible();
+  }
+  for (const typed of ['#ankünd', '#ankuend']) {
+    await box.fill('');
+    await box.pressSequentially(typed);
+    await expect(list.getByRole('option', { name: /#ankündigungen/ }), typed).toBeVisible();
+  }
 });
 
 // ───────── e-mails du serveur : la langue de l'interface part avec la demande ─────────
