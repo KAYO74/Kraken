@@ -232,3 +232,4 @@ fermer	close
 L'appli de bureau n'a pas les appels vocaux ici : son navigateur intégré (WebKitGTK sous Linux) est livré sans WebRTC. Ouvre cette page dans Chrome, Firefox ou un autre navigateur pour parler.	The desktop app can't do voice calls here: its built-in browser (WebKitGTK on Linux) ships without WebRTC. Open this page in Chrome, Firefox or another browser to talk.
 Ouvrir dans mon navigateur	Open in my browser
 Impossible d'ouvrir le navigateur.	Couldn't open the browser.
+Pas de vocal dans l'appli de bureau : réponds depuis ton navigateur.	No voice in the desktop app: answer from your browser.

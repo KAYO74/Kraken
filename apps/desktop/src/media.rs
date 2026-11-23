@@ -25,8 +25,12 @@ pub const COMMANDS: [&str; 1] = ["open_in_browser"];
 /// WebRTC : aucun réglage n'y change rien, la page n'a pas de salon vocal. Elle propose alors d'ouvrir la page
 /// de l'instance (et rien d'autre : l'adresse est lue ici, jamais donnée par la page) dans le navigateur du
 /// système.
+///
+/// Une page ne peut pas l'appeler en boucle pour ouvrir sa propre adresse : deux ouvertures sont espacées d'au
+/// moins [`OPEN_EVERY`].
 #[tauri::command]
 pub fn open_in_browser(webview: Webview) -> Result<(), String> {
+    static LAST: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
     let page = webview.url().map_err(|e| e.to_string())?;
     let ok = webview.label() == "main"
         && matches!(page.scheme(), "http" | "https")
@@ -34,8 +38,16 @@ pub fn open_in_browser(webview: Webview) -> Result<(), String> {
     if !ok {
         return Err("Commande réservée à la page de ton instance.".into());
     }
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    if last.is_some_and(|at| at.elapsed() < OPEN_EVERY) {
+        return Ok(()); // un second clic pressé : déjà ouvert, rien à dire
+    }
+    *last = Some(std::time::Instant::now());
     crate::update::open_external(page.as_str())
 }
+
+/// Délai minimal entre deux ouvertures du navigateur par la page.
+const OPEN_EVERY: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// L'origine d'une instance en http hors de cet ordinateur : sans réglage, le navigateur
 /// intégré n'y donne ni micro ni partage d'écran.

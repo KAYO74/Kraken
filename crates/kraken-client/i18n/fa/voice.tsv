@@ -236,3 +236,4 @@ fermer	بستن
 L'appli de bureau n'a pas les appels vocaux ici : son navigateur intégré (WebKitGTK sous Linux) est livré sans WebRTC. Ouvre cette page dans Chrome, Firefox ou un autre navigateur pour parler.	برنامه دسکتاپ در اینجا از تماس صوتی پشتیبانی نمی‌کند: مرورگر داخلی آن (WebKitGTK در لینوکس) بدون WebRTC عرضه می‌شود. برای صحبت کردن، این صفحه را در Chrome، Firefox یا مرورگر دیگری باز کنید.
 Ouvrir dans mon navigateur	باز کردن در مرورگر من
 Impossible d'ouvrir le navigateur.	باز کردن مرورگر ممکن نشد.
+Pas de vocal dans l'appli de bureau : réponds depuis ton navigateur.	تماس صوتی در برنامه دسکتاپ در دسترس نیست: از مرورگر خود پاسخ دهید.

@@ -76,12 +76,21 @@ test('F04-U4 appli de bureau sans WebRTC (WebKitGTK de Linux) : le message le di
   await expect(u.page.getByRole('button', { name: 'Rejoindre', exact: true })).toBeDisabled();
   await expect(u.page.getByText('livré sans WebRTC', { exact: false })).toBeVisible();
   const open = u.page.getByRole('button', { name: 'Ouvrir dans mon navigateur' });
+  // Message, puis le bouton, puis les détails ; l'erreur a sa ligne (vide) sous le bouton : rien ne bouge quand elle arrive.
+  const why = await u.page.getByText('livré sans WebRTC', { exact: false }).boundingBox();
+  const details = await u.page.getByText(/Détails : page en/).boundingBox();
+  const before = await open.boundingBox();
+  expect(why!.y).toBeLessThan(before!.y);
+  expect(before!.y).toBeLessThan(details!.y);
   await open.click();
   await expect.poll(() => u.page.evaluate(() => (window as unknown as { __calls: string[] }).__calls)).toContain('open_in_browser');
   await expect(u.page.getByRole('alert').filter({ hasText: /Impossible d.ouvrir le navigateur/ })).toHaveCount(0);
   await u.page.evaluate(() => ((window as unknown as Record<string, unknown>).__fail = true));
   await open.click();
   await expect(u.page.getByRole('alert').filter({ hasText: /Impossible d.ouvrir le navigateur/ })).toBeVisible();
+  const after = await open.boundingBox();
+  expect(after!.y).toBe(before!.y);
+  expect(after!.x).toBe(before!.x);
 });
 
 test('F04-U5 navigateur sans WebRTC : pas de bouton « Ouvrir dans mon navigateur », et l’appli de bureau n’est pas promise partout', async ({ user, api }) => {

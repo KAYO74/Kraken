@@ -264,3 +264,31 @@ test('F04-C3 sonnerie sans réponse : elle s’arrête seule, « Appel manqué �
   expect((await (await asB.post(`${API}/channels/${dm}/voice`, { data: join })).json()).code).toBe('call_blocked');
   await expect(b.page.getByRole('button', { name: 'Démarrer un appel' })).toBeDisabled();
 });
+
+test('F04-C8 appel entrant dans l’appli de bureau sans WebRTC : « Rejoindre » grisé, la raison dite, « Ouvrir dans mon navigateur » à côté', async ({
+  user,
+  api,
+}) => {
+  const a = await user('appelant8');
+  const b = await user('appele8');
+  await befriend(api, a, b);
+  await b.context.addInitScript(() => {
+    const w = window as unknown as Record<string, unknown>;
+    delete w.RTCPeerConnection;
+    delete w.webkitRTCPeerConnection;
+    const calls: string[] = [];
+    w.__calls = calls;
+    w.__TAURI_INTERNALS__ = { invoke: (cmd: string) => (calls.push(cmd), Promise.resolve(null)) };
+  });
+  await b.page.reload();
+  await a.page.getByRole('tab', { name: 'Tous' }).click();
+  await a.page.getByRole('button', { name: `Appeler ${b.name}` }).click();
+  await inCall(a);
+  const ring = incoming(b.page, a.name);
+  await expect(ring).toBeVisible();
+  await expect(ring.getByRole('button', { name: 'Rejoindre' })).toBeDisabled();
+  await expect(ring).toContainText('Pas de vocal dans l\'appli de bureau : réponds depuis ton navigateur.');
+  await ring.getByRole('button', { name: 'Ouvrir dans mon navigateur' }).click();
+  await expect.poll(() => b.page.evaluate(() => (window as unknown as { __calls: string[] }).__calls)).toContain('open_in_browser');
+  await a11y(b.page);
+});

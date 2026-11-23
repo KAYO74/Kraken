@@ -154,7 +154,7 @@ fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
             </button>
             {move || elsewhere.get().map(|c| view! { <p class="app-hint">{tf("Tu quitteras {salon}.", &[("salon", &c)])}</p> })}
             {move || error().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
-            {(!supported).then(|| view! { <p class="k-error">{voice::unsupported_message()}</p><p class="app-hint">{voice::unsupported_details()}</p>{voice::desktop().then(|| view! { <OpenInBrowser/> })} })}
+            {(!supported).then(|| view! { <p class="k-error">{voice::unsupported_message()}</p>{voice::desktop().then(|| view! { <OpenInBrowser/> })}<p class="app-hint">{voice::unsupported_details()}</p> })}
             {insecure.then(|| view! { <p class="app-hint">{t(voice::INSECURE)}</p> })}
         </div>
     }
@@ -963,17 +963,21 @@ pub fn DmCall(channel: Id) -> impl IntoView {
     }
 }
 
-/// Appli de bureau sans WebRTC (WebKitGTK de Linux) : continuer dans le navigateur du système.
+/// Appli de bureau sans WebRTC (WebKitGTK de Linux) : continuer dans le navigateur du système. L'erreur a sa place
+/// réservée (un paragraphe `alert` toujours là, sur sa ligne, d'une ligne de haut) : rien ne bouge quand elle arrive.
 #[component]
-fn OpenInBrowser() -> impl IntoView {
+fn OpenInBrowser(#[prop(optional)] small: bool) -> impl IntoView {
     let failed = RwSignal::new(None::<String>);
     view! {
-        <button class="k-btn" on:click=move |_| spawn_local(async move { failed.set(voice::open_in_browser().await.err()) })>
-            <Icon icon=lu::LuExternalLink/>{t("Ouvrir dans mon navigateur")}
+        <button class="k-btn" class:k-btn--sm=small on:click=move |_| spawn_local(async move { failed.set(voice::open_in_browser().await.err()) })>
+            <Icon icon=lu::LuExternalLink small=small/>{t("Ouvrir dans mon navigateur")}
         </button>
-        {move || failed.get().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
+        <p class="k-error app-open-error" role="alert">{move || failed.get()}</p>
     }
 }
+
+/// Sous l'appel entrant, dans l'appli de bureau sans WebRTC : pourquoi « Rejoindre » est grisé, et quoi faire.
+const RING_WHY: &str = tk!("Pas de vocal dans l'appli de bureau : réponds depuis ton navigateur.");
 
 /// L'infobulle d'un bouton d'appel : `normal`, ou pourquoi il est grisé quand WebRTC manque.
 pub fn call_title(normal: String) -> String {
@@ -1111,6 +1115,10 @@ fn RingCard(call: kraken_proto::Call) -> impl IntoView {
                 <Icon icon=lu::LuPhone small=true/><span>{t("Rejoindre")}</span>
             </button>
             {call_note(&format!("ring-no-{cid}"))}
+            {(voice::desktop() && !voice::supported()).then(|| view! {
+                <p class="app-ring-why">{t(RING_WHY)}</p>
+                <OpenInBrowser small=true/>
+            })}
             <button class="k-btn k-btn--sm k-btn--danger" on:click=decline>
                 <Icon icon=lu::LuPhoneOff small=true/><span>{decline_label()}</span>
             </button>
