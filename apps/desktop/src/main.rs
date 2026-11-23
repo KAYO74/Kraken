@@ -3,14 +3,16 @@
 //! - héberger sur cet ordinateur : l'appli fait tourner son propre serveur (`host.rs`).
 //!
 //! Le choix est gardé dans le dossier de configuration de l'appli ; le menu KRAKEN permet d'en
-//! changer. Micro et partage d'écran (salons vocaux) : `media.rs` ; contrôle à distance de cet
-//! ordinateur depuis un salon vocal : `remote.rs`. `--self-test` vérifie le mode
+//! changer. Micro et partage d'écran (salons vocaux) : `media.rs` ; vocal natif quand le navigateur
+//! intégré n'a pas WebRTC (Linux) : `native_voice.rs` ; contrôle à distance de cet ordinateur depuis un
+//! salon vocal : `remote.rs`. `--self-test` vérifie le mode
 //! « héberger », vocal compris, sans ouvrir de fenêtre (CI).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod host;
 mod media;
+mod native_voice;
 mod remote;
 mod selftest;
 mod update;
@@ -243,7 +245,14 @@ fn main() {
             remote::remote_end,
             update::update_status,
             update::update_install,
-            media::open_in_browser
+            media::open_in_browser,
+            native_voice::native_voice_available,
+            native_voice::native_voice_start,
+            native_voice::native_voice_answer,
+            native_voice::native_voice_set,
+            native_voice::native_voice_poll,
+            native_voice::native_voice_stop,
+            native_voice::native_voice_devices
         ])
         .setup(|app| {
             let saved = saved(app.handle());
@@ -327,6 +336,8 @@ fn main() {
                 .on_page_load(|w, p| {
                     if p.event() == tauri::webview::PageLoadEvent::Started {
                         remote::page_changed(w.app_handle());
+                        // Le vocal natif de la page précédente (et son micro) s'arrête de même.
+                        native_voice::page_changed();
                     }
                 });
             #[cfg(windows)]
@@ -351,8 +362,9 @@ fn main() {
         .build(context)
         .expect("KRAKEN n'a pas pu démarrer");
     app.run(|app, event| {
-        // PostgreSQL s'arrête proprement avec l'appli.
+        // Le vocal natif quitte le salon, et PostgreSQL s'arrête proprement avec l'appli.
         if let RunEvent::Exit = event {
+            native_voice::shutdown();
             app.state::<Hosting>().stop_and_wait();
         }
     });

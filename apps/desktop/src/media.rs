@@ -9,8 +9,10 @@
 //!   public : on y écoute et regarde seulement, sans parler ni partager.
 //! - Linux : WebRTC est désactivé par défaut dans WebKitGTK, et il faut une version compilée
 //!   avec. Debian et Ubuntu (WebKitGTK 2.52 vérifié) la compilent sans : `RTCPeerConnection` n'existe pas, même
-//!   réglage activé. Le client web le dit, et propose d'ouvrir la page dans le navigateur du système
-//!   ([`open_in_browser`]).
+//!   réglage activé. Le vocal natif (`native_voice.rs`, moteur Rust `kraken-voice-native`) prend alors le
+//!   relais : la page lui confie le micro, les haut-parleurs et la connexion au salon. Quand il n'est pas là
+//!   (page d'une instance trop ancienne, moteur refusé), le client web le dit et propose d'ouvrir la page dans
+//!   le navigateur du système ([`open_in_browser`]), en repli.
 //! - macOS : textes des demandes d'accès dans `Info.plist`, droits du runtime renforcé dans
 //!   `Entitlements.plist`.
 
@@ -31,19 +33,24 @@ pub const COMMANDS: [&str; 1] = ["open_in_browser"];
 #[tauri::command]
 pub fn open_in_browser(webview: Webview) -> Result<(), String> {
     static LAST: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
-    let page = webview.url().map_err(|e| e.to_string())?;
-    let ok = webview.label() == "main"
-        && matches!(page.scheme(), "http" | "https")
-        && crate::is_instance(webview.app_handle(), &page);
-    if !ok {
-        return Err("Commande réservée à la page de ton instance.".into());
-    }
+    let page = instance_page(&webview)?;
     let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
     if last.is_some_and(|at| at.elapsed() < OPEN_EVERY) {
         return Ok(()); // un second clic pressé : déjà ouvert, rien à dire
     }
     *last = Some(std::time::Instant::now());
     crate::update::open_external(page.as_str())
+}
+
+/// La garde des commandes réservées à l'instance (`open_in_browser`, `native_voice_*`) : l'appel vient de la
+/// fenêtre principale, d'une page en http ou https qui est celle de l'instance (celle qu'on a rejointe, ou le
+/// serveur hébergé ici). Rend l'adresse de la page, lue ici, jamais donnée par elle.
+pub fn instance_page(webview: &Webview) -> Result<Url, String> {
+    let page = webview.url().map_err(|e| e.to_string())?;
+    let ok = webview.label() == "main"
+        && matches!(page.scheme(), "http" | "https")
+        && crate::is_instance(webview.app_handle(), &page);
+    if ok { Ok(page) } else { Err("Commande réservée à la page de ton instance.".into()) }
 }
 
 /// Délai minimal entre deux ouvertures du navigateur par la page.
@@ -81,7 +88,11 @@ pub fn permission(webview: Webview, kind: PermissionKind) -> PermissionResponse 
     }
     match webview.url() {
         Ok(page) if crate::is_instance(webview.app_handle(), &page) => {
-            if cfg!(target_os = "linux") { PermissionResponse::Allow } else { PermissionResponse::Default }
+            if cfg!(target_os = "linux") {
+                PermissionResponse::Allow
+            } else {
+                PermissionResponse::Default
+            }
         }
         _ => PermissionResponse::Deny,
     }

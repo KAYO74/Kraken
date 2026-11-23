@@ -29,6 +29,10 @@
       "../../replica/brand/icons/icon.icns",
       "../../replica/brand/icons/icon.ico"
     ],
+    "linux": {
+      "deb": { "depends": ["libasound2 | libasound2t64"] },
+      "rpm": { "depends": ["alsa-lib"] }
+    },
     "macOS": {
       "signingIdentity": "-",
       "entitlements": "Entitlements.plist"

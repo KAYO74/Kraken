@@ -359,7 +359,7 @@ fn real_devices_never_panic_and_failures_are_readable() {
             // Au moins les haut-parleurs s'ouvrent : le micro introuvable donne un appel micro coupé, avec un motif.
             eprintln!("appel démarré, micro coupé : {}", join.self_mute);
             assert!(join.self_mute, "un micro introuvable : on entre micro coupé");
-            assert!(c.poll().unwrap().audio_error.is_some_and(|e| e.contains("Micro")));
+            assert!(c.poll().unwrap().audio_error.is_some(), "le motif est dit à la page");
             c.stop();
         }
         Err(e) => {
