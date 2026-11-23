@@ -61,6 +61,8 @@ struct Folded {
     origin: Vec<usize>,
 }
 
+const DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
 fn fold(text: &str, max: usize) -> Folded {
     let mut f = Folded { chars: Vec::new(), origin: Vec::new() };
     for (i, c) in text.chars().take(max).enumerate() {
@@ -87,6 +89,16 @@ fn fold(text: &str, max: usize) -> Folded {
                 '\u{a0}' | '\u{202f}' => " ",
                 // Les accents d'un texte décomposé (NFD) ne comptent pas.
                 '\u{300}'..='\u{36f}' => "",
+                // Persan et arabe : les habitudes de frappe ne doivent pas cacher un salon. Le demi-espace (ZWNJ) se tape
+                // souvent comme une espace ; « ك » et « ي » arabes sont les touches d'un clavier arabe, « ک » et « ی »
+                // celles du persan ; les chiffres persans et arabo-indiens valent les latins (le modèle de serveur écrit
+                // « بازی 1 ») ; voyelles brèves (tashkeel), alef suscrit et tatweel ne comptent pas.
+                '\u{200c}' => " ",
+                '\u{643}' => "\u{6a9}",
+                '\u{64a}' | '\u{649}' => "\u{6cc}",
+                '\u{660}'..='\u{669}' => DIGITS[usize::from(lower as u16 - 0x660)],
+                '\u{6f0}'..='\u{6f9}' => DIGITS[usize::from(lower as u16 - 0x6f0)],
+                '\u{64b}'..='\u{65f}' | '\u{670}' | '\u{640}' => "",
                 other => {
                     f.chars.push(other);
                     f.origin.push(i);
@@ -102,10 +114,23 @@ fn fold(text: &str, max: usize) -> Folded {
     f
 }
 
+/// Un texte replié comme pour la recherche (minuscules, sans accents, habitudes de frappe du persan et de l'arabe :
+/// demi-espace, ك et ي, chiffres), pour comparer des débuts de mots hors du commutateur (complétion de `@` et de `#`).
+pub fn fold_key(text: &str) -> String {
+    fold(text, usize::MAX).chars.into_iter().collect()
+}
+
+/// [`fold_key`] sans demi-espace, pour comparer un mot tapé avec ou sans (« علیرضا » et « علی‌رضا » se valent) : la
+/// complétion de `@` et de `#` coupe les noms aux seules espaces, le demi-espace fait partie du mot.
+pub fn fold_word(text: &str) -> String {
+    fold_key(&text.replace('\u{200c}', ""))
+}
+
 /// La requête repliée, espaces de bord retirés et suites d'espaces réduites à une.
 fn query_of(raw: &str) -> Vec<char> {
-    let words: Vec<&str> = raw.split_whitespace().collect();
-    fold(&words.join(" "), MAX_QUERY).chars
+    // On replie d'abord : un demi-espace persan en bord de requête devient une espace, qu'il faut aussi retirer.
+    let folded: String = fold(raw, MAX_QUERY).chars.into_iter().collect();
+    folded.split_whitespace().collect::<Vec<_>>().join(" ").chars().collect()
 }
 
 /// Les passages (indices dans le texte replié) en indices du texte d'origine, fusionnés.
@@ -267,6 +292,50 @@ mod tests {
 
     fn tier(q: &str, t: &str) -> Option<Tier> {
         find(q, t).map(|m| m.tier)
+    }
+
+    #[test]
+    fn fold_key_gives_the_same_key_as_the_search() {
+        assert_eq!(fold_key("علی رضایی"), fold_key("علي رضايي"));
+        assert!(fold_key("رضا‌ها").starts_with(&fold_key("رضا ")));
+        assert_eq!(fold_key("Ève ۱"), "eve 1");
+        assert_eq!(fold_key(""), "");
+    }
+
+    #[test]
+    fn fold_word_ignores_the_half_space() {
+        assert_eq!(fold_word("علی‌رضا"), fold_word("علیرضا"));
+        assert!(fold_word("نیم‌فاصله").starts_with(&fold_word("نیم‌فا")));
+        assert!(fold_word("نیم‌فاصله").starts_with(&fold_word("نیمفا")));
+        assert!(fold_word("علي‌رضا").starts_with(&fold_word("علیرض")));
+        assert_eq!(fold_word("Ève"), "eve");
+    }
+
+    #[test]
+    fn persian_typing_habits_do_not_hide_a_match() {
+        // Le demi-espace (ZWNJ) du nom, une espace ou rien : tous trouvent « هم‌تیمی ».
+        for q in ["هم‌تیمی", "هم تیمی", "هم\u{200c}", "نکته ها"] {
+            assert!(find(q, "یافتن-هم‌تیمی").is_some() || find(q, "نکته‌ها").is_some(), "{q:?}");
+        }
+        assert_eq!(tier("هم تیمی", "هم‌تیمی"), Some(Tier::Exact));
+        assert_eq!(tier("نکته ها", "نکته‌ها"), Some(Tier::Exact));
+        assert_eq!(tier("هم‌تیمی", "هم تیمی"), Some(Tier::Exact));
+        // Une requête qui finit par un demi-espace garde le préfixe.
+        assert_eq!(tier("نکته\u{200c}", "نکته‌ها"), Some(Tier::Prefix));
+        // Chiffres persans (clavier fa) et arabo-indiens contre les latins que le modèle écrit.
+        assert_eq!(tier("بازی ۱", "بازی 1"), Some(Tier::Exact));
+        assert_eq!(tier("بازی ١", "بازی 1"), Some(Tier::Exact));
+        assert_eq!(tier("بازی 2", "بازی ۲"), Some(Tier::Exact));
+        // « ك » et « ي » arabes (clavier arabe) contre « ک » et « ی » persans.
+        assert!(find("نكته", "نکته‌ها").is_some());
+        assert!(find("يافتن", "یافتن-هم‌تیمی").is_some());
+        assert_eq!(tier("نکته", "نكته"), Some(Tier::Exact));
+        // Voyelles brèves, alef suscrit et tatweel ne comptent pas.
+        assert_eq!(tier("كَتَبَ", "کتب"), Some(Tier::Exact));
+        assert_eq!(tier("عـربي", "عربی"), Some(Tier::Exact));
+        // Le latin ne bouge pas, ni les chiffres latins entre eux.
+        assert_eq!(tier("game 1", "Game 1"), Some(Tier::Exact));
+        assert!(find("نکته", "general").is_none());
     }
 
     #[test]

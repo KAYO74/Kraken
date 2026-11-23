@@ -13,7 +13,7 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 
-use crate::i18n::{lang, t, tf};
+use crate::i18n::{lang, t, tf, tf_data};
 use crate::icon_picker::{IconFile, IconPicker};
 use crate::icons::{Icon, lu};
 use crate::shell::first_text;
@@ -95,7 +95,7 @@ pub fn CreateGuild() -> impl IntoView {
         if !typed.get_untracked()
             && let Some(u) = s.me.get()
         {
-            name.set(tf("Serveur de {nom}", &[("nom", u.name())]));
+            name.set(tf_data("Serveur de {nom}", &[("nom", u.name())]));
         }
     });
     let code = RwSignal::new(String::new());

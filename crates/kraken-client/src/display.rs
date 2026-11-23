@@ -43,7 +43,7 @@ const CONTRASTS: &[Opt] = &[
 ];
 const CLOCKS: &[Opt] = &[
     ("auto", tk!("Automatique"), tk!("Suit la langue de l'interface.")),
-    ("12", tk!("12 h"), "2:30 PM"),
+    ("12", tk!("12 h"), tk!("2:30 PM")),
     ("24", tk!("24 h"), "14:30"),
 ];
 

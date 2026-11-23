@@ -1,5 +1,5 @@
 // Mise en page de droite à gauche (PR #32) : arabe, persan, hébreu.
-// Aucune langue de droite à gauche n'est livrée encore (les traductions viennent dans la PR suivante) : ces tests basculent
+// Le persan est livré (`i18n-fa.spec.ts` lit ses textes) ; l'arabe et l'hébreu ne le sont pas. Ces tests basculent
 // <html dir="rtl" lang="fa|ar|he"> EN DIRECT, sur une interface qui reste écrite en français, et mesurent la géométrie
 // (boîtes réelles) : tout doit suivre l'attribut `dir` sans rechargement (feuilles de style logiques, `--flip`, `.k-flip`,
 // sens des flèches et placement des menus lus à l'événement). Les écrans français et anglais (gauche à droite) ne bougent pas :

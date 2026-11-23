@@ -388,14 +388,18 @@ pub fn NotFound() -> impl IntoView {
 }
 
 /// L'heure locale de `ms`, au format choisi dans Réglages › Langue et heure : « 14:30 » en 24 h,
-/// « 2:30 PM » en 12 h, et d'après la langue de l'interface en « Automatique ». C'est le seul endroit
+/// « 2:30 PM » en 12 h (AM et PM sont dans le catalogue : « ب.ظ. » en persan), et d'après la langue de l'interface en « Automatique ». C'est le seul endroit
 /// qui écrit une heure : messages, « Exclu jusqu'à », sourdines, dates des invitations et des bans.
 pub fn clock(ms: i64) -> String {
     let d = js_sys::Date::new(&(ms as f64).into());
     let (h, m) = (d.get_hours(), d.get_minutes());
     match crate::prefs::get(&crate::prefs::CLOCK) {
         "24" => format!("{h:02}:{m:02}"),
-        "12" => format!("{}:{m:02} {}", if h % 12 == 0 { 12 } else { h % 12 }, if h < 12 { "AM" } else { "PM" }),
+        "12" => format!(
+            "{}:{m:02} {}",
+            if h % 12 == 0 { 12 } else { h % 12 },
+            if h < 12 { crate::i18n::t("AM") } else { crate::i18n::t("PM") }
+        ),
         _ => automatic_clock(&d).unwrap_or_else(|| format!("{h:02}:{m:02}")),
     }
 }

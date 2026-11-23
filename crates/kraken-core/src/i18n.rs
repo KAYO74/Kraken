@@ -2,9 +2,10 @@
 //!
 //! Le **français est la clé** : le texte français écrit dans le code sert de clé au catalogue de chaque
 //! autre langue (`français<TAB>traduction`), et reste le texte affiché quand une traduction manque. Ici :
-//! les langues et leur étiquette BCP-47, le choix (« Automatique », « Français », « English »), la règle de
-//! pluriel, la lecture d'un catalogue TSV et le remplacement des `{variables}`. `kraken-client/src/i18n.rs`
-//! y ajoute le navigateur (stockage, `navigator.languages`, `<html lang>`).
+//! les langues et leur étiquette BCP-47, le choix (« Automatique », « Français », « English », « فارسی »), la
+//! règle de pluriel, le sens d'écriture, la chaîne de repli (le persan retombe sur l'anglais, puis sur le français),
+//! la lecture d'un catalogue TSV et le remplacement des `{variables}`. `kraken-client/src/i18n.rs` y ajoute le
+//! navigateur (stockage, `navigator.languages`, `<html lang dir>`).
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -14,10 +15,11 @@ use std::collections::hash_map::Entry;
 pub enum Lang {
     Fr,
     En,
+    /// Le persan (farsi) : la première langue qui s'écrit de droite à gauche.
+    Fa,
 }
 
-/// Le sens d'écriture. Toutes les langues prises en charge s'écrivent de gauche à droite pour l'instant ;
-/// le type existe pour que rien ne suppose qu'il en sera toujours ainsi (`<html dir>`).
+/// Le sens d'écriture (`<html dir>`) : le français et l'anglais vont de gauche à droite, le persan de droite à gauche.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dir {
     Ltr,
@@ -43,25 +45,28 @@ pub enum Plural {
 
 impl Lang {
     /// Les langues prises en charge, dans l'ordre où le sélecteur les propose.
-    pub const ALL: [Lang; 2] = [Lang::Fr, Lang::En];
+    pub const ALL: [Lang; 3] = [Lang::Fr, Lang::En, Lang::Fa];
     /// La langue quand rien n'est choisi et que le navigateur n'en annonce aucune de prise en charge : celle
     /// des textes écrits dans le code.
     pub const DEFAULT: Lang = Lang::Fr;
 
-    /// Le code court : `fr`, `en` (stockage, nom de fichier, attribut `lang`).
+    /// Le code court : `fr`, `en`, `fa` (stockage, nom de dossier du catalogue, attribut `lang`).
     pub fn code(self) -> &'static str {
         match self {
             Self::Fr => "fr",
             Self::En => "en",
+            Self::Fa => "fa",
         }
     }
 
     /// L'étiquette BCP-47 donnée à `Intl` (dates, segmentation). Sans région : le client y ajoute celle du
-    /// navigateur quand elle va avec la langue (`en-GB`), sinon `Intl` choisit la plus courante.
+    /// navigateur quand elle va avec la langue (`en-GB`, `fa-AF`), sinon `Intl` choisit la plus courante. Le
+    /// calendrier est celui que `Intl` donne par défaut à la langue (le calendrier persan pour `fa`).
     pub fn tag(self) -> &'static str {
         match self {
             Self::Fr => "fr",
             Self::En => "en",
+            Self::Fa => "fa",
         }
     }
 
@@ -70,6 +75,7 @@ impl Lang {
         match self {
             Self::Fr => "Français",
             Self::En => "English",
+            Self::Fa => "فارسی",
         }
     }
 
@@ -77,25 +83,38 @@ impl Lang {
     pub fn dir(self) -> Dir {
         match self {
             Self::Fr | Self::En => Dir::Ltr,
+            Self::Fa => Dir::Rtl,
         }
     }
 
-    /// La langue d'un code court exact (`fr`, `en`).
+    /// La langue dont le catalogue complète celui-ci quand une traduction manque. `None` : le texte français écrit
+    /// dans le code (le français est la clé, et la dernière marche de toute chaîne). Le persan retombe sur l'anglais,
+    /// puis sur le français : un texte pas encore traduit en persan s'affiche en anglais, jamais en panne.
+    pub fn fallback(self) -> Option<Lang> {
+        match self {
+            Self::Fr | Self::En => None,
+            Self::Fa => Some(Self::En),
+        }
+    }
+
+    /// La langue d'un code court exact (`fr`, `en`, `fa`).
     pub fn from_code(code: &str) -> Option<Lang> {
         Self::ALL.into_iter().find(|l| l.code() == code)
     }
 
-    /// La langue d'une étiquette BCP-47 : `fr`, `fr-FR`, `fr_CA`, `en-GB`… (sans tenir compte de la casse ;
+    /// La langue d'une étiquette BCP-47 : `fr`, `fr-FR`, `fr_CA`, `en-GB`, `fa-IR`, `fa-AF`… (sans tenir compte de la casse ;
     /// seule la langue compte, pas la région). Une autre langue, ou rien qui y ressemble : `None`.
     pub fn from_tag(tag: &str) -> Option<Lang> {
         let primary = tag.trim().split(['-', '_']).next()?;
         Self::ALL.into_iter().find(|l| primary.eq_ignore_ascii_case(l.code()))
     }
 
-    /// La forme du pluriel pour `n` : en français, 0 et 1 sont au singulier ; en anglais, seul 1 l'est.
+    /// La forme du pluriel pour `n` (règles CLDR) : en français et en persan, 0 et 1 sont au singulier ; en anglais,
+    /// seul 1 l'est. Le persan n'accorde pas le nom après un nombre (« 2 روز »), mais le catalogue a deux clés par
+    /// pluriel : les deux traductions peuvent être identiques.
     pub fn plural(self, n: u64) -> Plural {
         let one = match self {
-            Self::Fr => n < 2,
+            Self::Fr | Self::Fa => n < 2,
             Self::En => n == 1,
         };
         if one { Plural::One } else { Plural::Other }
@@ -110,7 +129,7 @@ pub enum LangPref {
 }
 
 impl LangPref {
-    /// Ce qui est gardé dans le stockage : `auto`, `fr`, `en`.
+    /// Ce qui est gardé dans le stockage : `auto`, `fr`, `en`, `fa`.
     pub fn code(self) -> &'static str {
         match self {
             Self::Auto => "auto",
@@ -175,10 +194,37 @@ impl Catalog {
         }
     }
 
+    /// Lit un fichier TSV de plus, dont les entrées **remplacent** celles déjà là (la dernière gagne), au lieu de
+    /// compter un doublon comme [`Catalog::add`]. C'est ainsi qu'une langue se pose sur son repli : on charge d'abord
+    /// le catalogue de repli, puis celui de la langue, qui l'emporte entrée par entrée. Au sein d'un même fichier,
+    /// un doublon reste compté et la première ligne gagne, comme partout.
+    pub fn add_over(&mut self, src: &str) {
+        let layer = parse_catalog(src);
+        self.malformed += layer.malformed;
+        self.duplicates += layer.duplicates;
+        self.entries.extend(layer.entries);
+    }
+
     /// La traduction d'un texte français, s'il y en a une.
     pub fn get(&self, key: &str) -> Option<&str> {
         self.entries.get(key).map(String::as_str)
     }
+}
+
+/// Le catalogue d'une langue avec sa chaîne de repli ([`Lang::fallback`]) : celui du repli d'abord, puis les fichiers de
+/// la langue par-dessus (la dernière entrée gagne). `sources` donne les fichiers TSV d'une langue, dans l'ordre ; le
+/// français n'en a aucun (ses textes sont les clés). Le persan donne donc : l'anglais, complété et corrigé par le persan ;
+/// ce que ni l'un ni l'autre ne connaît reste en français.
+pub fn catalog_for(lang: Lang, sources: &dyn Fn(Lang) -> &'static [&'static str]) -> Catalog {
+    let mut catalog = Catalog::default();
+    let layered = lang.fallback().is_some();
+    if let Some(base) = lang.fallback() {
+        catalog = catalog_for(base, sources);
+    }
+    for src in sources(lang) {
+        if layered { catalog.add_over(src) } else { catalog.add(src) }
+    }
+    catalog
 }
 
 /// Lit un catalogue TSV (voir [`Catalog::add`]).
@@ -310,6 +356,18 @@ mod tests {
             ("en-US", Some(Lang::En)),
             ("en-GB", Some(Lang::En)),
             (" en-AU ", Some(Lang::En)),
+            ("fa", Some(Lang::Fa)),
+            ("fa-IR", Some(Lang::Fa)),
+            ("fa-AF", Some(Lang::Fa)),
+            ("FA-ir", Some(Lang::Fa)),
+            ("fa_IR", Some(Lang::Fa)),
+            (" fa-IR ", Some(Lang::Fa)),
+            ("fa-u-nu-latn", Some(Lang::Fa)),
+            ("far", None),
+            ("fas", None),
+            ("persian", None),
+            ("ar", None),
+            ("he", None),
             ("de", None),
             ("de-CH", None),
             ("fra", None),
@@ -322,15 +380,43 @@ mod tests {
         }
         assert_eq!(Lang::from_code("fr"), Some(Lang::Fr));
         assert_eq!(Lang::from_code("en"), Some(Lang::En));
+        assert_eq!(Lang::from_code("fa"), Some(Lang::Fa));
         assert_eq!(Lang::from_code("fr-FR"), None);
+        assert_eq!(Lang::from_code("fa-IR"), None);
+        assert_eq!(Lang::ALL, [Lang::Fr, Lang::En, Lang::Fa], "l'ordre du sélecteur");
         for l in Lang::ALL {
             assert_eq!(Lang::from_code(l.code()), Some(l));
             assert_eq!(Lang::from_tag(l.tag()), Some(l));
-            assert_eq!(l.dir(), Dir::Ltr);
+            assert_eq!(l.tag(), l.code(), "l'étiquette est sans région : le client y ajoute celle du navigateur");
         }
         assert_eq!(Dir::Ltr.as_str(), "ltr");
         assert_eq!(Dir::Rtl.as_str(), "rtl");
-        assert_eq!((Lang::Fr.autonym(), Lang::En.autonym()), ("Français", "English"));
+        assert_eq!((Lang::Fr.autonym(), Lang::En.autonym(), Lang::Fa.autonym()), ("Français", "English", "فارسی"));
+        assert_eq!((Lang::Fa.code(), Lang::Fa.tag()), ("fa", "fa"));
+    }
+
+    #[test]
+    fn only_persian_is_written_right_to_left() {
+        assert_eq!((Lang::Fr.dir(), Lang::En.dir(), Lang::Fa.dir()), (Dir::Ltr, Dir::Ltr, Dir::Rtl));
+        assert_eq!(Lang::Fa.dir().as_str(), "rtl");
+        assert_eq!(Lang::DEFAULT, Lang::Fr, "le défaut reste le français");
+    }
+
+    #[test]
+    fn persian_falls_back_on_english_then_on_french() {
+        assert_eq!(Lang::Fa.fallback(), Some(Lang::En));
+        assert_eq!(Lang::En.fallback(), None, "l'anglais retombe sur le texte français, qui est la clé");
+        assert_eq!(Lang::Fr.fallback(), None);
+        // Aucune boucle dans la chaîne.
+        for l in Lang::ALL {
+            let mut seen = vec![l];
+            let mut cur = l;
+            while let Some(next) = cur.fallback() {
+                assert!(!seen.contains(&next), "boucle de repli depuis {l:?}");
+                seen.push(next);
+                cur = next;
+            }
+        }
     }
 
     #[test]
@@ -340,11 +426,20 @@ mod tests {
         assert_eq!(auto.resolve(&["de-DE", "fr-CA", "en"]), Lang::Fr, "la première langue prise en charge");
         assert_eq!(auto.resolve(&["de", "ja"]), Lang::Fr, "repli sur le français");
         assert_eq!(auto.resolve(&[]), Lang::Fr);
+        assert_eq!(auto.resolve(&["fa-IR"]), Lang::Fa);
+        assert_eq!(auto.resolve(&["fa-AF", "en"]), Lang::Fa);
+        assert_eq!(auto.resolve(&["ar-SA", "fa", "fr"]), Lang::Fa, "l'arabe n'est pas pris en charge : la suivante");
+        assert_eq!(auto.resolve(&["en-US", "fa-IR"]), Lang::En, "l'ordre du navigateur compte");
         assert_eq!(LangPref::Fixed(Lang::En).resolve(&["fr-FR"]), Lang::En, "le choix passe avant le navigateur");
         assert_eq!(LangPref::Fixed(Lang::Fr).resolve(&["en-US"]), Lang::Fr);
-        for p in [LangPref::Auto, LangPref::Fixed(Lang::Fr), LangPref::Fixed(Lang::En)] {
+        assert_eq!(LangPref::Fixed(Lang::Fa).resolve(&["fr-FR", "en"]), Lang::Fa);
+        assert_eq!(LangPref::Fixed(Lang::Fr).resolve(&["fa-IR"]), Lang::Fr);
+        for p in [LangPref::Auto, LangPref::Fixed(Lang::Fr), LangPref::Fixed(Lang::En), LangPref::Fixed(Lang::Fa)] {
             assert_eq!(LangPref::from_code(p.code()), Some(p));
         }
+        assert_eq!(LangPref::Fixed(Lang::Fa).code(), "fa");
+        assert_eq!(LangPref::from_code("fa"), Some(LangPref::Fixed(Lang::Fa)));
+        assert_eq!(LangPref::from_code("fa-IR"), None);
         assert_eq!(LangPref::from_code("de"), None);
         assert_eq!(LangPref::from_code(""), None);
         assert_eq!(LangPref::from_code("AUTO"), None);
@@ -359,6 +454,9 @@ mod tests {
         // Anglais : seul 1 au singulier.
         assert!(!one(Lang::En, 0) && one(Lang::En, 1));
         assert!(!one(Lang::En, 2) && !one(Lang::En, 21));
+        // Persan (CLDR) : « one » pour 0 et 1, « other » pour le reste.
+        assert!(one(Lang::Fa, 0) && one(Lang::Fa, 1));
+        assert!(!one(Lang::Fa, 2) && !one(Lang::Fa, 21) && !one(Lang::Fa, 100) && !one(Lang::Fa, u64::MAX));
     }
 
     #[test]
@@ -394,6 +492,61 @@ mod tests {
         assert_eq!((all.entries.len(), all.duplicates), (2, 1));
         assert_eq!(all.get("Salut"), Some("Hello"));
         assert_eq!(parse_catalog(""), Catalog::default());
+    }
+
+    #[test]
+    fn a_layered_catalog_lets_the_last_entry_win() {
+        let mut c = Catalog::default();
+        c.add_over("Salut\tHello\nMerci\tThanks\nOui\tYes\n");
+        c.add_over("# persan\nMerci\tسپاس\nNon\tنه\n");
+        assert_eq!(
+            (c.get("Salut"), c.get("Merci"), c.get("Oui"), c.get("Non")),
+            (Some("Hello"), Some("سپاس"), Some("Yes"), Some("نه"))
+        );
+        assert_eq!(
+            (c.entries.len(), c.duplicates, c.malformed),
+            (4, 0, 0),
+            "écraser une entrée de repli n'est pas un doublon"
+        );
+        // Dans un même fichier, un doublon reste compté et la première ligne gagne ; une ligne mal formée aussi.
+        c.add_over("Oui\tبله\nOui\tآری\nmal formée\n");
+        assert_eq!((c.get("Oui"), c.duplicates, c.malformed), (Some("بله"), 1, 1));
+    }
+
+    #[test]
+    fn a_language_catalog_is_built_on_its_fallback() {
+        const EN: &[&str] = &["Salut\tHello\nMerci\tThanks\n", "Oui\tYes\n"];
+        const FA: &[&str] = &["# en construction\n", "Merci\tسپاس\n"];
+        let sources = |l: Lang| -> &'static [&'static str] {
+            match l {
+                Lang::Fr => &[],
+                Lang::En => EN,
+                Lang::Fa => FA,
+            }
+        };
+        // Le français n'a pas de catalogue : ses textes sont les clés.
+        assert_eq!(catalog_for(Lang::Fr, &sources), Catalog::default());
+        // L'anglais : ses fichiers, rien d'autre.
+        let en = catalog_for(Lang::En, &sources);
+        assert_eq!(
+            (en.get("Salut"), en.get("Merci"), en.get("Oui"), en.entries.len()),
+            (Some("Hello"), Some("Thanks"), Some("Yes"), 3)
+        );
+        // Le persan : l'anglais d'abord, puis le persan par-dessus.
+        let fa = catalog_for(Lang::Fa, &sources);
+        assert_eq!(fa.get("Salut"), Some("Hello"), "pas de persan : l'anglais");
+        assert_eq!(fa.get("Merci"), Some("سپاس"), "le persan l'emporte sur l'anglais");
+        assert_eq!(fa.get("Oui"), Some("Yes"));
+        assert_eq!(fa.get("Inconnu"), None, "ni l'un ni l'autre : le client garde le français");
+        assert_eq!((fa.entries.len(), fa.duplicates, fa.malformed), (3, 0, 0));
+        // Un catalogue persan vide (en construction) : exactement l'anglais.
+        let empty = |l: Lang| -> &'static [&'static str] {
+            match l {
+                Lang::Fa => &["# rien encore\n"],
+                other => sources(other),
+            }
+        };
+        assert_eq!(catalog_for(Lang::Fa, &empty).entries, en.entries);
     }
 
     #[test]

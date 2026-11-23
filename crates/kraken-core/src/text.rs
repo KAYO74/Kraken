@@ -128,11 +128,18 @@ pub fn clusters(s: &str) -> Vec<&str> {
     out
 }
 
+/// Une marque de sens d'écriture (LRM, RLM, embedding, override, isolat) : invisible, jamais une lettre.
+fn is_bidi_control(c: char) -> bool {
+    matches!(u32::from(c), 0x200E | 0x200F | 0x202A..=0x202E | 0x2066..=0x2069)
+}
+
 /// Les initiales d'un nom pour un avatar sans photo : le premier « caractère » de chacun des deux premiers
 /// mots, sinon les deux premiers « caractères » du mot, « ? » pour un nom vide. Mises en capitales pour les
 /// écritures qui ont une casse (les autres n'en changent pas). `split(mot, n)` rend les `n` premiers
 /// « caractères » d'un mot : `Intl.Segmenter` dans le navigateur, [`clusters`] à défaut.
 pub fn initials(name: &str, split: impl Fn(&str, usize) -> Vec<String>) -> String {
+    // Un nom venu d'un texte isolé pour le sens d'écriture (U+2066 à U+2069) ne doit pas compter ces marques comme lettres.
+    let name: String = name.chars().filter(|c| !is_bidi_control(*c)).collect();
     let words: Vec<&str> = name.split_whitespace().collect();
     let letters: Vec<String> = match words.as_slice() {
         [a, b, ..] => split(a, 1).into_iter().chain(split(b, 1)).collect(),
@@ -273,6 +280,9 @@ mod tests {
         // Le découpage vient de l'appelant : ici, le premier char, comme le faisait l'ancien code.
         let naive = |w: &str, n: usize| w.chars().take(n).map(String::from).collect::<Vec<_>>();
         assert_eq!(initials("Ada Lovelace", naive), "AL");
+        // Un nom isolé pour le sens d'écriture (FSI … PDI) donne les mêmes initiales que le nom seul.
+        assert_eq!(initials("\u{2068}Ada\u{2069} Lovelace", naive), "AL");
+        assert_eq!(initials("سرور \u{2068}رضا\u{2069}", naive), initials("سرور رضا", naive));
     }
 
     #[test]

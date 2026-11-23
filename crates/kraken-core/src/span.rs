@@ -1,10 +1,12 @@
 //! Durées et temps écoulé, écrits dans la langue de l'interface pour les phrases (« pendant 1 h »,
-//! « il y a 5 min »). Aucune horloge ici : l'appelant donne la langue et les nombres.
+//! « il y a 5 min »). Aucune horloge ici : l'appelant donne la langue et les nombres. Les chiffres sont latins
+//! dans toutes les langues, le persan compris (« 5 دقیقه پیش ») : c'est le choix de toute l'interface (`-u-nu-latn`).
 
 use crate::i18n::{Lang, Plural};
 
 /// Une durée en secondes, courte : « 45 s », « 1 min », « 1 h 30 », « 2 h », « 1 jour », « 7 jours »,
-/// « 1 jour 6 h » (en anglais : « 1 h 30 min », « 1 day », « 7 days »). Zéro : « 0 s ».
+/// « 1 jour 6 h » (en anglais : « 1 h 30 min », « 1 day », « 7 days » ; en persan : « 45 ثانیه », « 1 ساعت و 30 دقیقه »,
+/// « 2 روز », « 1 روز و 6 ساعت »). Zéro : « 0 s » (« 0 ثانیه »). Le persan garde le nom au singulier après un nombre.
 pub fn duration(lang: Lang, secs: u64) -> String {
     let (days, hours, mins) = (secs / 86_400, secs % 86_400 / 3600, secs % 3600 / 60);
     let day = |n: u64| match (lang, lang.plural(n)) {
@@ -12,29 +14,45 @@ pub fn duration(lang: Lang, secs: u64) -> String {
         (Lang::Fr, Plural::Other) => format!("{n} jours"),
         (Lang::En, Plural::One) => format!("{n} day"),
         (Lang::En, Plural::Other) => format!("{n} days"),
+        (Lang::Fa, _) => format!("{n} روز"),
     };
+    // Le persan écrit « 1 دقیقه و 30 ثانیه » : les parties se lient par « و », le nom reste au singulier.
+    let fa = lang == Lang::Fa;
     match (days, hours, mins) {
+        (0, 0, 0) if fa => format!("{secs} ثانیه"),
         (0, 0, 0) => format!("{secs} s"),
-        (0, 0, m) if secs < 3600 && secs.is_multiple_of(60) => format!("{m} min"),
+        (0, 0, m) if secs < 3600 && secs.is_multiple_of(60) => {
+            if fa {
+                format!("{m} دقیقه")
+            } else {
+                format!("{m} min")
+            }
+        }
+        (0, 0, _) if fa => format!("{} دقیقه و {} ثانیه", secs / 60, secs % 60),
         (0, 0, _) => format!("{} min {} s", secs / 60, secs % 60),
+        (0, h, 0) if fa => format!("{h} ساعت"),
         (0, h, 0) => format!("{h} h"),
+        (0, h, m) if fa => format!("{h} ساعت و {m} دقیقه"),
         (0, h, m) if lang == Lang::En => format!("{h} h {m} min"),
         (0, h, m) => format!("{h} h {m:02}"),
         (d, 0, _) => day(d),
+        (d, h, _) if fa => format!("{} و {h} ساعت", day(d)),
         (d, h, _) => format!("{} {h} h", day(d)),
     }
 }
 
 /// Le temps écoulé depuis un événement récent : « à l'instant » sous la minute, « il y a 5 min » sous
-/// l'heure (« just now », « 5 min ago »). `None` au-delà (ou pour une date dans le futur d'une horloge un
-/// peu en avance, qui compte comme « à l'instant ») : l'appelant affiche alors l'heure.
+/// l'heure (« just now », « 5 min ago » ; « الان », « 5 دقیقه پیش »). `None` au-delà (ou pour une date dans le futur
+/// d'une horloge un peu en avance, qui compte comme « à l'instant ») : l'appelant affiche alors l'heure.
 pub fn ago(lang: Lang, elapsed_ms: i64) -> Option<String> {
     let secs = elapsed_ms.max(0) / 1000;
     match (secs, lang) {
         (0..=59, Lang::Fr) => Some("à l'instant".into()),
         (0..=59, Lang::En) => Some("just now".into()),
+        (0..=59, Lang::Fa) => Some("الان".into()),
         (60..=3599, Lang::Fr) => Some(format!("il y a {} min", secs / 60)),
         (60..=3599, Lang::En) => Some(format!("{} min ago", secs / 60)),
+        (60..=3599, Lang::Fa) => Some(format!("{} دقیقه پیش", secs / 60)),
         _ => None,
     }
 }
@@ -66,6 +84,36 @@ mod tests {
     }
 
     #[test]
+    fn persian_durations_use_latin_digits_and_the_conjunction() {
+        let d = |s| duration(Lang::Fa, s);
+        assert_eq!(
+            [d(0), d(5), d(45), d(60), d(300), d(3599)],
+            ["0 ثانیه", "5 ثانیه", "45 ثانیه", "1 دقیقه", "5 دقیقه", "59 دقیقه و 59 ثانیه"]
+        );
+        assert_eq!([d(3600), d(5400), d(7200), d(3660)], ["1 ساعت", "1 ساعت و 30 دقیقه", "2 ساعت", "1 ساعت و 1 دقیقه"]);
+        assert_eq!([d(86_400), d(172_800), d(604_800), d(28 * 86_400)], ["1 روز", "2 روز", "7 روز", "28 روز"]);
+        assert_eq!(d(86_400 + 6 * 3600), "1 روز و 6 ساعت");
+        assert_eq!(d(90), "1 دقیقه و 30 ثانیه");
+        // Jamais de chiffres persans ou arabo-indiens, jamais d'espace en bord ni de demi-espace en tête ou en queue.
+        for secs in [0, 1, 59, 60, 61, 3599, 3600, 3661, 86_399, 86_400, 90_061, 604_800, u32::MAX as u64] {
+            let text = d(secs);
+            assert!(!text.chars().any(|c| ('۰'..='۹').contains(&c) || ('٠'..='٩').contains(&c)), "{text}");
+            assert!(text.chars().any(|c| c.is_ascii_digit()), "{text}");
+            assert_eq!(text, text.trim(), "{text}");
+            assert!(!text.starts_with('\u{200c}') && !text.ends_with('\u{200c}'), "{text}");
+        }
+    }
+
+    #[test]
+    fn every_language_has_the_same_cases() {
+        // Mêmes seuils dans les trois langues : un texte distinct par plage, jamais vide.
+        for secs in [0, 5, 45, 60, 90, 300, 3599, 3600, 3660, 5400, 7200, 86_400, 90_000, 172_800, 28 * 86_400] {
+            let all: Vec<String> = Lang::ALL.into_iter().map(|l| duration(l, secs)).collect();
+            assert!(all.iter().all(|t| !t.is_empty() && t.chars().any(|c| c.is_ascii_digit())), "{secs} : {all:?}");
+        }
+    }
+
+    #[test]
     fn recent_events_are_relative_and_old_ones_are_not() {
         let fr = |ms| ago(Lang::Fr, ms);
         assert_eq!(fr(-5000).as_deref(), Some("à l'instant"));
@@ -79,5 +127,12 @@ mod tests {
         assert_eq!(en(60_000).as_deref(), Some("1 min ago"));
         assert_eq!(en(5 * 60_000 + 10).as_deref(), Some("5 min ago"));
         assert_eq!(en(3_600_000), None);
+        let fa = |ms| ago(Lang::Fa, ms);
+        assert_eq!(fa(-5000).as_deref(), Some("الان"));
+        assert_eq!(fa(59_999).as_deref(), Some("الان"));
+        assert_eq!(fa(60_000).as_deref(), Some("1 دقیقه پیش"));
+        assert_eq!(fa(5 * 60_000 + 10).as_deref(), Some("5 دقیقه پیش"));
+        assert_eq!(fa(3_599_999).as_deref(), Some("59 دقیقه پیش"));
+        assert_eq!(fa(3_600_000), None);
     }
 }

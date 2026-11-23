@@ -1,0 +1,238 @@
+# Catalogue persan (fa), groupe « app ».
+# Une ligne « français<TAB>persan » par texte ; règles : ../README.md (« Ajouter une langue »).
+# Mêmes {variables} que le français, chiffres latins (0-9, jamais ۰-۹ ni ٠-٩), demi-espace (U+200C) seulement entre
+# deux lettres, jamais en tête ni en queue. Un texte absent d'ici s'affiche en anglais (repli), puis en français.
+# Catalogue complet (1 469 textes) : `python3 scripts/i18n-check.py --missing --lang fa` doit rester vide. Traduction par Claude, sans relecture humaine.
+
+# Écrans pas encore construits (app.rs)
+Fils et forum	رشته‌ها و انجمن
+Recherche de messages	جستجوی پیام‌ها
+Explorer les serveurs	کاوش سرورها
+Profil	نمایه
+
+# Amis : onglets, liste, demandes, ajout (home.rs)
+En attente	در انتظار
+Bloqués	مسدود‌شده‌ها
+Ajouter un ami	افزودن دوست
+à accepter ou refuser	برای پذیرفتن یا رد کردن
+Filtrer les amis	فیلتر دوستان
+Chercher	جستجو
+Chercher parmi tes amis	جستجو در میان دوستان شما
+Personne en ligne pour l'instant	فعلاً کسی آنلاین نیست
+Tes amis apparaîtront ici dès qu'ils se connectent.	به محض اینکه دوستان شما آنلاین شوند، اینجا نمایش داده می‌شوند.
+Aucune demande en attente	هیچ درخواستی در انتظار نیست
+Les demandes reçues et envoyées s'affichent ici.	درخواست‌های دریافتی و ارسالی اینجا نمایش داده می‌شوند.
+Tu n'as bloqué personne	شما کسی را مسدود نکرده‌اید
+Un compte bloqué ne peut plus t'écrire en privé ni te demander en ami.	حساب مسدود‌شده دیگر نمی‌تواند به شما پیام خصوصی بدهد یا درخواست دوستی بفرستد.
+Pas encore d'amis	هنوز دوستی ندارید
+Ajoute quelqu'un avec son pseudo pour commencer.	برای شروع، کسی را با نام کاربری‌اش اضافه کنید.
+Activité	فعالیت
+Où sont tes amis	دوستان شما کجا هستند
+Aucun salon vocal occupé	هیچ کانال صوتی در حال استفاده نیست
+Les salons vocaux où tes amis discutent s'afficheront ici, pour les rejoindre en un clic.	کانال‌های صوتی که دوستان شما در آن‌ها گفتگو می‌کنند اینجا نمایش داده می‌شوند تا با یک کلیک به آن‌ها بپیوندید.
+Demande reçue	درخواست دریافتی
+Demande envoyée	درخواست ارسالی
+Bloqué	مسدود
+Message	پیام
+Appeler {nom}	تماس با {nom}
+Appeler	تماس
+Retirer de tes amis	حذف از دوستان
+Bloquer {nom}	مسدود کردن {nom}
+Bloquer	مسدود کردن
+Accepter la demande de {nom}	پذیرفتن درخواست {nom}
+Refuser la demande de {nom}	رد کردن درخواست {nom}
+Annuler la demande à {nom}	لغو درخواست برای {nom}
+Débloquer {nom}	رفع مسدودی {nom}
+{nom} t'avait déjà demandé : vous êtes maintenant amis.	{nom} پیش‌تر برای شما درخواست دوستی فرستاده بود: اکنون با هم دوست هستید.
+Demande envoyée à {nom} (@{pseudo}). Elle apparaît dans « En attente ».	درخواست برای {nom} (@{pseudo}) ارسال شد. این درخواست در «در انتظار» نمایش داده می‌شود.
+Tape son pseudo KRAKEN, celui qui commence par @ sous son nom.	نام کاربری KRAKEN او را بنویسید، همان که زیر نامش با @ شروع می‌شود.
+pseudo	نام کاربری
+Pseudo de ton ami	نام کاربری دوست شما
+Envoyer la demande	ارسال درخواست
+
+# Carte de profil et Réglages › Mon profil (profile.rs)
+Lire l'animation	پخش انیمیشن
+À propos	درباره
+Membre depuis	عضو از
+Sur ce serveur depuis	در این سرور از
+Profil de {nom}	نمایه {nom}
+Vous êtes maintenant amis.	اکنون با هم دوست هستید.
+Demande d'ami envoyée.	درخواست دوستی ارسال شد.
+Compte débloqué.	مسدودی حساب برداشته شد.
+Modifier mon profil	ویرایش نمایه من
+Ajouter en ami	افزودن به دوستان
+Accepter la demande	پذیرفتن درخواست
+Ami	دوست
+Envoyer un message	ارسال پیام
+Fermer le profil (Échap)	بستن نمایه (Esc)
+Ce que les autres voient	آنچه دیگران می‌بینند
+Nom affiché	نام نمایشی
+Ton pseudo unique @{pseudo} ne change pas ici : il reste écrit en dessous.	نام کاربری یکتای شما @{pseudo} در اینجا تغییر نمی‌کند: همچنان در زیر آن نوشته می‌شود.
+Pronoms	ضمایر
+elle/elles, il/lui, iel/iels…	she/her, he/him, they/them…
+Facultatif. {n} / {max}	اختیاری. {n} / {max}
+À propos de toi	درباره شما
+Quelques mots sur toi, tes jeux, ta façon de discuter…	چند کلمه درباره خودتان، بازی‌هایتان، شیوه گفتگویتان…
+Profil enregistré.	نمایه ذخیره شد.
+Photo et bannière	عکس و بنر
+Aperçu de ta carte	پیش‌نمایش کارت شما
+
+# Photo, bannière et fenêtre de recadrage (avatar.rs)
+Photo enregistrée.	عکس ذخیره شد.
+Bannière enregistrée.	بنر ذخیره شد.
+Emoji ajouté.	ایموجی افزوده شد.
+Photo retirée.	عکس حذف شد.
+Bannière retirée.	بنر حذف شد.
+Emoji retiré.	ایموجی حذف شد.
+Changer la photo	تغییر عکس
+PNG, JPEG, WebP ou GIF, {n} Mo max. Un GIF ou un WebP animé reste animé (il n'est pas recadré).	PNG، JPEG، WebP یا GIF، حداکثر {n} مگابایت. تصویر GIF یا WebP متحرک، متحرک باقی می‌ماند (برش داده نمی‌شود).
+Ta bannière actuelle	بنر فعلی شما
+Pas de bannière	بدون بنر
+Changer la bannière	تغییر بنر
+Retirer la bannière	حذف بنر
+PNG, JPEG, WebP ou GIF, {n} Mo max, de forme large (3 pour 1). Un GIF ou un WebP animé reste animé (il n'est pas recadré).	PNG، JPEG، WebP یا GIF، حداکثر {n} مگابایت، به شکل عریض (نسبت 3 به 1). تصویر GIF یا WebP متحرک، متحرک باقی می‌ماند (برش داده نمی‌شود).
+Impossible de préparer l'image. Essaie-en une autre.	آماده‌سازی تصویر ممکن نشد. تصویر دیگری را امتحان کنید.
+Recadrer ta photo	برش عکس شما
+Recadrer ta bannière	برش بنر شما
+Recadrer ton emoji	برش ایموجی شما
+Recadrer l'icône	برش آیکون
+Moyen	متوسط
+Dans un message	در پیام
+Dans la liste	در فهرست
+Zone de recadrage : les flèches déplacent l'image, + et − zooment.	ناحیه برش: کلیدهای فلش تصویر را جابه‌جا می‌کنند، + و − بزرگ‌نمایی می‌کنند.
+Zoom	بزرگ‌نمایی
+Glisse l'image pour la placer, ou utilise les flèches du clavier. Le cadre montre ce qui sera gardé.	تصویر را بکشید تا جابه‌جا شود یا از کلیدهای فلش صفحه‌کلید استفاده کنید. کادر نشان می‌دهد چه بخشی نگه داشته می‌شود.
+Appliquer	اعمال
+
+# Choisir des amis, groupes et confirmations (social.rs)
+Groupe vide	گروه خالی
+Ajouter au groupe	افزودن به گروه
+Ouvrir la conversation	باز کردن گفتگو
+Créer le groupe	ایجاد گروه
+Un groupe réunit {max} personnes au plus : encore {room} place(s).	یک گروه حداکثر {max} نفر را در بر می‌گیرد: {room} جای خالی باقی مانده است.
+Un ami pour un message privé, plusieurs pour un groupe ({max} au plus).	یک دوست برای پیام خصوصی، چند دوست برای گروه (حداکثر {max}).
+Chercher un ami	جستجوی دوست
+Tes amis	دوستان شما
+Aucun ami ne correspond, ou ils sont déjà tous dans ce groupe.	هیچ دوستی مطابقت ندارد یا همه آن‌ها از قبل در این گروه هستند.
+Ajoute d'abord des amis, depuis l'onglet « Ajouter un ami ».	ابتدا از زبانه «افزودن دوست» چند دوست اضافه کنید.
+{n} sur {room} choisi(s)	{n} از {room} انتخاب‌شده
+Nom du groupe (facultatif)	نام گروه (اختیاری)
+Les prénoms des membres, sinon	نام کوچک اعضا (در صورت خالی ماندن)
+Nom du groupe	نام گروه
+Laisse vide pour afficher les prénoms des membres. Tout le groupe voit le changement.	برای نمایش نام کوچک اعضا، خالی بگذارید. همه اعضای گروه این تغییر را می‌بینند.
+Retirer {nom} de tes amis ?	{nom} از دوستان شما حذف شود؟
+Vos messages privés restent. Pour redevenir amis, l'un de vous devra renvoyer une demande.	پیام‌های خصوصی شما باقی می‌مانند. برای دوباره دوست شدن، یکی از شما باید درخواست جدیدی بفرستد.
+Bloquer {nom} ?	{nom} مسدود شود؟
+Vous ne serez plus amis. Ce compte ne pourra plus t'écrire en privé ni te demander en ami, et ses messages seront repliés dans les salons que vous partagez. Il n'en est pas prévenu.	شما دیگر دوست نخواهید بود. این حساب دیگر نمی‌تواند به شما پیام خصوصی بدهد یا درخواست دوستی بفرستد و پیام‌هایش در کانال‌هایی که با هم مشترک هستید به‌صورت جمع‌شده نمایش داده می‌شوند. به او اطلاع داده نمی‌شود.
+Quitter « {nom} » ?	«{nom}» ترک شود؟
+Tu ne verras plus ce groupe ni ses messages. Pour y revenir, il faudra qu'un membre t'y ajoute.	دیگر این گروه و پیام‌های آن را نخواهید دید. برای بازگشت، باید یکی از اعضا دوباره شما را به آن اضافه کند.
+Retirer {nom} du groupe ?	{nom} از گروه حذف شود؟
+Cette personne ne verra plus « {groupe} » ni ses messages. Tu pourras l'y ajouter de nouveau plus tard.	این فرد دیگر «{groupe}» و پیام‌های آن را نخواهد دید. بعداً می‌توانید او را دوباره به آن اضافه کنید.
+Tu es le propriétaire de ce serveur : tu ne peux pas le quitter tant qu'il t'appartient. Transfère-le d'abord à un autre membre, puis tu pourras partir.	شما مالک این سرور هستید: تا زمانی که مالک آن هستید نمی‌توانید آن را ترک کنید. ابتدا آن را به عضو دیگری منتقل کنید، سپس می‌توانید بروید.
+Tu ne verras plus ce serveur, ses salons ni ses membres. Pour y revenir, il te faudra une nouvelle invitation, et tes rôles ne te seront pas rendus.	دیگر این سرور، کانال‌ها و اعضای آن را نخواهید دید. برای بازگشت، به دعوت‌نامه جدیدی نیاز دارید و نقش‌های شما بازگردانده نمی‌شوند.
+Expulser {nom} ?	{nom} اخراج شود؟
+Cette personne sort du serveur et perd ses rôles, mais ses messages restent. Elle pourra revenir avec une invitation.	این فرد از سرور خارج می‌شود و نقش‌هایش را از دست می‌دهد، اما پیام‌هایش باقی می‌مانند. او می‌تواند با دعوت‌نامه برگردد.
+Bannir {nom} ?	{nom} بن شود؟
+Cette personne sort du serveur et ne pourra plus le rejoindre par invitation, tant que tu ne l'auras pas débannie dans les réglages du serveur.	این فرد از سرور خارج می‌شود و تا زمانی که در تنظیمات سرور بن او را برنداشته باشید، نمی‌تواند با دعوت‌نامه دوباره به آن بپیوندد.
+Supprimer le rôle « {nom} » ?	نقش «{nom}» حذف شود؟
+Tous ceux qui l'ont le perdent, avec les droits qu'il leur donnait. Cette action est définitive.	همه کسانی که این نقش را دارند آن را از دست می‌دهند، همراه با دسترسی‌هایی که به آن‌ها می‌داد. این کار قابل بازگشت نیست.
+Supprimer le rôle	حذف نقش
+Supprimer la catégorie « {nom} » ?	دسته‌بندی «{nom}» حذف شود؟
+Les salons qu'elle contient ne sont pas supprimés : ils sortent de la catégorie.{suite} Cette action est définitive.	کانال‌های داخل آن حذف نمی‌شوند: از دسته‌بندی خارج می‌شوند.{suite} این کار قابل بازگشت نیست.
+Ses salons gardent les mêmes règles d'accès.	کانال‌های آن همان قوانین دسترسی را حفظ می‌کنند.
+Supprimer le salon vocal « {nom} » ?	کانال صوتی «{nom}» حذف شود؟
+Le salon disparaît pour tout le monde, et les personnes qui s'y trouvent sont déconnectées. Cette action est définitive.	کانال برای همه ناپدید می‌شود و اتصال افراد حاضر در آن قطع می‌شود. این کار قابل بازگشت نیست.
+Supprimer #{nom} ?	#{nom} حذف شود؟
+Le salon et tous ses messages, avec leurs fichiers, sont supprimés pour tout le monde. Cette action est définitive.	کانال و همه پیام‌های آن، همراه با فایل‌هایشان، برای همه حذف می‌شوند. این کار قابل بازگشت نیست.
+Donner « {serveur} » à {nom} ?	«{serveur}» به {nom} واگذار شود؟
+Cette personne devient propriétaire : elle aura tous les droits, et tu seras un membre comme un autre. Tu ne pourras pas le reprendre sans son accord.	این فرد مالک می‌شود: همه دسترسی‌ها را خواهد داشت و شما یک عضو عادی خواهید بود. بدون موافقت او نمی‌توانید آن را پس بگیرید.
+Supprimer ses messages	حذف پیام‌های او
+Rien{contexte}	هیچ{contexte}
+24 h{contexte}	24 ساعت{contexte}
+
+# Réglages : compte, mot de passe, comptes bloqués, notifications (settings.rs)
+Déconnexion	خروج
+Ferme la session sur cet appareil.	شما را از این دستگاه خارج می‌کند.
+Se déconnecter partout	خروج از همه جا
+Tous les appareils	همه دستگاه‌ها
+Ferme toutes tes sessions, y compris celle-ci. Utile après la perte d'un appareil.	همه نشست‌های شما، از جمله این نشست، بسته می‌شوند. پس از گم شدن یک دستگاه مفید است.
+Supprimer le compte	حذف حساب کاربری
+Ton compte est fermé tout de suite et effacé au bout de 14 jours. Tes messages restent, signés « compte supprimé ».	حساب شما بلافاصله بسته می‌شود و پس از 14 روز پاک می‌شود. پیام‌های شما باقی می‌مانند و با عنوان «حساب کاربری حذف‌شده» نمایش داده می‌شوند.
+Supprimer ton compte ?	حساب کاربری شما حذف شود؟
+Tu ne pourras plus te connecter. Confirme avec ton mot de passe.	دیگر نمی‌توانید وارد شوید. با رمز عبور خود تأیید کنید.
+Supprimer définitivement	حذف دائمی
+Ton pseudo est maintenant @{pseudo}.	نام کاربری شما اکنون @{pseudo} است.
+Ton pseudo actuel est @{pseudo}. C'est celui que tes amis tapent pour t'ajouter : minuscules, chiffres, points et tirets bas. Tu peux le changer {n} fois par heure au plus.	نام کاربری فعلی شما @{pseudo} است. دوستانتان برای اضافه کردن شما همین را وارد می‌کنند: حروف کوچک، ارقام، نقطه و زیرخط. حداکثر {n} بار در ساعت می‌توانید آن را تغییر دهید.
+Nouveau pseudo	نام کاربری جدید
+Mot de passe actuel	رمز عبور فعلی
+Changer le pseudo	تغییر نام کاربری
+Un message de confirmation est parti vers {adresse}. Ton adresse actuelle reste valable jusqu'à ce que tu ouvres le lien.	پیام تأیید به {adresse} ارسال شد. تا زمانی که پیوند را باز نکنید، نشانی فعلی شما معتبر می‌ماند.
+Adresse enregistrée.	نشانی ذخیره شد.
+Chargement de ton adresse…	در حال بارگذاری نشانی شما…
+Ton adresse actuelle est {adresse}.	نشانی فعلی شما {adresse} است.
+Ton adresse actuelle est {adresse} (pas encore confirmée).	نشانی فعلی شما {adresse} است (هنوز تأیید نشده).
+Aucune adresse n'est enregistrée.	هیچ نشانی ذخیره نشده است.
+En attente de confirmation : {adresse}. Ouvre le lien reçu à cette adresse ; d'ici là, l'ancienne reste valable.	در انتظار تأیید: {adresse}. پیوندی را که به این نشانی ارسال شده باز کنید؛ تا آن زمان، نشانی قبلی معتبر می‌ماند.
+Nouvelle adresse e-mail	نشانی ایمیل جدید
+Changer l'adresse	تغییر نشانی
+Mot de passe changé. Tes autres appareils ont été déconnectés.	رمز عبور تغییر کرد. سایر دستگاه‌های شما از حساب خارج شدند.
+8 caractères au moins. Tes autres appareils seront déconnectés ; celui-ci reste ouvert.	حداقل 8 کاراکتر. سایر دستگاه‌های شما از حساب خارج می‌شوند؛ این دستگاه همچنان وارد حساب می‌ماند.
+Changer le mot de passe	تغییر رمز عبور
+Comptes bloqués	حساب‌های مسدود‌شده
+Un compte bloqué ne peut plus t'écrire en privé ni te demander en ami ; ses messages sont repliés dans les salons que vous partagez. Il n'est prévenu de rien.	حساب مسدود‌شده دیگر نمی‌تواند به شما پیام خصوصی بدهد یا درخواست دوستی بفرستد؛ پیام‌هایش در کانال‌هایی که با هم مشترک هستید به‌صورت جمع‌شده نمایش داده می‌شوند. هیچ اطلاعی به او داده نمی‌شود.
+Personne n'est bloqué	هیچ‌کس مسدود نشده است
+Bloque quelqu'un depuis ta liste d'amis ou ses demandes.	از فهرست دوستان یا درخواست‌ها، کسی را مسدود کنید.
+Ton navigateur a refusé. Autorise les notifications pour ce site dans ses réglages, puis réessaie.	مرورگر شما رد کرد. در تنظیمات مرورگر، اعلان‌ها را برای این سایت مجاز کنید و دوباره تلاش کنید.
+Notifications sur le bureau	اعلان‌های دسکتاپ
+Quand KRAKEN n'est pas au premier plan : tes mentions, tes messages privés, et tout salon réglé sur « Tous les messages ». Un clic ouvre la conversation. Réglage propre à cet appareil.	وقتی KRAKEN در پیش‌زمینه نیست: منشن‌های شما، پیام‌های خصوصی شما و هر کانالی که روی «همه پیام‌ها» تنظیم شده است. یک کلیک، گفتگو را باز می‌کند. این تنظیم مخصوص همین دستگاه است.
+Ce navigateur (ou cette appli) ne sait pas afficher de notifications système. Les badges et le compteur de l'onglet restent là.	این مرورگر (یا برنامه) نمی‌تواند اعلان‌های سیستمی نمایش دهد. نشان‌ها و شمارنده زبانه همچنان کار می‌کنند.
+Les notifications sont bloquées pour ce site dans ton navigateur.	اعلان‌ها برای این سایت در مرورگر شما مسدود شده‌اند.
+Par serveur et par salon	برای هر سرور و هر کانال
+Clic droit sur un serveur, un salon ou une conversation (ou Maj+F10 au clavier) : « Marquer comme lu », sourdine de 15 minutes à sans fin, et ce qui te prévient : tous les messages, les mentions seulement, ou rien. La cloche en haut d'un salon ou de la liste des salons ouvre les mêmes réglages. Ils te suivent sur tous tes appareils.	روی یک سرور، کانال یا گفتگو کلیک راست کنید (یا با صفحه‌کلید Shift+F10): «علامت‌گذاری به‌عنوان خوانده‌شده»، بی‌صدا کردن از 15 دقیقه تا همیشه، و اینکه چه چیزی به شما اعلان بدهد: همه پیام‌ها، فقط منشن‌ها یا هیچ‌چیز. زنگ بالای کانال یا فهرست کانال‌ها همین تنظیمات را باز می‌کند. این تنظیمات در همه دستگاه‌های شما همراهتان هستند.
+Le nombre de mentions en attente s'affiche aussi dans le titre de l'onglet. Alt+Maj+↑ et Alt+Maj+↓ mènent au salon non lu précédent ou suivant.	تعداد منشن‌های در انتظار در عنوان زبانه هم نمایش داده می‌شود. Alt+Shift+↑ و Alt+Shift+↓ به کانال خوانده‌نشده قبلی یا بعدی می‌روند.
+
+# Pages légales : Confidentialité et Conditions d'utilisation (legal.rs)
+Connexion	ورود
+Qui s'occupe de tes données	چه کسی داده‌های شما را مدیریت می‌کند
+L'exploitant de cette instance KRAKEN, c'est-à-dire la personne ou l'organisation qui l'héberge. Contact :	بهره‌بردار این سامانه KRAKEN، یعنی شخص یا سازمانی که آن را میزبانی می‌کند. راه ارتباطی:
+non renseigné par l'exploitant	توسط بهره‌بردار مشخص نشده است
+Ce qui est enregistré	آنچه ذخیره می‌شود
+Ton adresse e-mail, ton pseudo, ton nom affiché, ton mot de passe sous forme hachée (argon2id, jamais en clair), tes serveurs et tes messages, et tes sessions (navigateur et date de connexion).	نشانی ایمیل، نام کاربری، نام نمایشی، رمز عبور شما به‌صورت هش‌شده (argon2id، هرگز به‌صورت متن ساده)، سرورها و پیام‌های شما، و نشست‌های شما (مرورگر و تاریخ ورود).
+Ce qui ne l'est pas	آنچه ذخیره نمی‌شود
+Ni publicité, ni traceur, ni mesure d'audience, ni numéro de téléphone, ni pièce d'identité. Ton adresse IP sert seulement à limiter les essais de connexion : elle reste en mémoire une minute et n'est pas enregistrée.	نه تبلیغات، نه ردیاب، نه سنجش مخاطب، نه شماره تلفن و نه مدرک شناسایی. نشانی IP شما فقط برای محدود کردن تلاش‌های ورود به کار می‌رود: یک دقیقه در حافظه می‌ماند و ذخیره نمی‌شود.
+Cookies	کوکی‌ها
+Un seul, indispensable : celui qui garde ta session ouverte.	فقط یک کوکی، و ضروری: همان که نشست شما را باز نگه می‌دارد.
+Sous-traitants	ارائه‌دهندگان خدمات
+L'hébergeur du serveur et, si les e-mails sont activés, le service d'envoi choisis par l'exploitant.	میزبان سرور و، اگر ایمیل‌ها فعال باشند، سرویس ارسال ایمیل؛ هر دو را بهره‌بردار انتخاب می‌کند.
+Durée et suppression	مدت نگهداری و حذف
+Tes données restent tant que ton compte existe. Depuis Réglages, Compte et sécurité, tu peux le supprimer : il est fermé tout de suite et effacé au bout de 14 jours. Tes messages restent dans les salons, signés « compte supprimé ».	داده‌های شما تا زمانی که حساب شما وجود دارد باقی می‌مانند. از تنظیمات، بخش حساب کاربری و امنیت، می‌توانید آن را حذف کنید: حساب بلافاصله بسته می‌شود و پس از 14 روز پاک می‌شود. پیام‌های شما در کانال‌ها باقی می‌مانند و با عنوان «حساب کاربری حذف‌شده» نمایش داده می‌شوند.
+Tes droits	حقوق شما
+Accès, rectification, effacement, portabilité, opposition : écris au contact ci-dessus. Tu peux aussi saisir l'autorité de protection des données de ton pays (la CNIL en France).	دسترسی، اصلاح، پاک‌سازی، انتقال‌پذیری، اعتراض: به راه ارتباطی بالا بنویسید. همچنین می‌توانید به مرجع حفاظت از داده‌های کشور خود (در فرانسه CNIL) شکایت کنید.
+Conditions d'utilisation	شرایط استفاده
+Le service	سرویس
+KRAKEN est gratuit, sans formule payante. Il est fourni tel quel, sans garantie de disponibilité.	KRAKEN رایگان است و طرح پولی ندارد. به همین شکل که هست ارائه می‌شود و تضمینی برای در دسترس بودن آن وجود ندارد.
+Logiciel libre	نرم‌افزار آزاد
+KRAKEN est publié sous licence AGPL-3.0.	KRAKEN با مجوز AGPL-3.0 منتشر شده است.
+Code source de cette instance	کد منبع این سامانه
+Règles	قوانین
+Pas de contenu illégal, de harcèlement, de menaces, de spam ni de partage de données d'autrui sans son accord. Tu dois avoir l'âge que la loi de ton pays demande pour t'inscrire seul (15 ans en France).	محتوای غیرقانونی، آزار و اذیت، تهدید، هرزنامه و اشتراک‌گذاری داده‌های دیگران بدون رضایت آن‌ها ممنوع است. برای ثبت‌نام مستقل باید به سنی رسیده باشید که قانون کشورتان تعیین می‌کند (در فرانسه 15 سال).
+Modération	نظارت
+Chaque serveur est modéré par ses propriétaires. L'exploitant de l'instance peut retirer un contenu ou fermer un compte qui enfreint ces règles ou la loi.	هر سرور توسط مالکان خود نظارت می‌شود. بهره‌بردار سامانه می‌تواند محتوایی را حذف کند یا حسابی را که این قوانین یا قانون را نقض می‌کند ببندد.
+Contact	راه ارتباطی
+Non renseigné par l'exploitant.	توسط بهره‌بردار مشخص نشده است.
+
+# Mise à jour de l'appli de bureau (update.rs)
+Mise à jour v{v} disponible	به‌روزرسانی v{v} در دسترس است
+Téléchargement… {p} %	در حال دانلود… {p} درصد
+Téléchargement…	در حال دانلود…
+Installation…	در حال نصب…
+Redémarrage…	در حال راه‌اندازی مجدد…
+Couper l'appel et installer	قطع تماس و نصب
+Installer et redémarrer	نصب و راه‌اندازی مجدد
+Mise à jour	به‌روزرسانی
+KRAKEN v{v} est disponible	KRAKEN v{v} در دسترس است
+Nouveautés	تازه‌ها
+Tu es en appel : le redémarrage va le couper.	شما در تماس هستید: راه‌اندازی مجدد تماس را قطع می‌کند.
+Avancement de la mise à jour	پیشرفت به‌روزرسانی
+Plus tard	بعداً
+Mettre à jour vers v{v}	به‌روزرسانی به v{v}

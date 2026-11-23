@@ -1,24 +1,68 @@
 # Traductions de l'interface
 
-Le **français est la clé** : `t("Ouvrir les réglages")` rend ce texte en français, et sa traduction (`en/*.tsv`)
-en anglais. Un texte absent du catalogue reste en français (jamais de panne). On n'invente aucun identifiant.
+Le **français est la clé** : `t("Ouvrir les réglages")` rend ce texte en français, et sa traduction (`en/*.tsv`,
+`fa/*.tsv`) en anglais ou en persan. Un texte absent du catalogue reste en français (jamais de panne), et le **persan
+a une chaîne de repli** : persan, puis anglais, puis le texte français (voir « Chaîne de repli »). On n'invente aucun
+identifiant.
 
 - Code : `src/i18n.rs` (`t`, `tf`, `tn`, `tk!`, `LangSelect`), logique pure et testée : `kraken-core/src/i18n.rs`.
-- La langue est lue une fois au démarrage (choix `kraken.lang` : `auto`, `fr`, `en`, puis `navigator.languages`,
+- La langue est lue une fois au démarrage (choix `kraken.lang` : `auto`, `fr`, `en`, `fa`, puis `navigator.languages`,
   repli français). Changer de langue enregistre et recharge la page : rien n'est réactif.
 - Contrôle : `python3 scripts/i18n-check.py` (zéro erreur avant de rendre), `--todo [fichier…]` (les textes français
   pas encore enveloppés ; heuristique : relis aussi ton fichier à la main, et `// i18n-ok` en fin de ligne écarte un
-  faux positif comme un nom d'exemple), `--missing` (les lignes `français<TAB>` à compléter), `--grep texte`
-  (cherche une entrée existante), `--server` (les messages du serveur, `format!` compris, que `server.tsv` ne couvre pas).
+  faux positif comme un nom d'exemple), `--missing [--lang fa]` (les lignes `français<TAB>` à compléter dans une langue),
+  `--stats` (clés à traduire, entrées et part traduite par langue et par fichier), `-v` (liste aussi les clés qui
+  manquent à une langue partielle), `--grep texte` (cherche une entrée existante), `--server` (les messages du serveur,
+  `format!` compris, que `server.tsv` ne couvre pas).
 
 ## Catalogue
 
-`i18n/en/<groupe>.tsv`, une ligne `français<TAB>anglais`. Échappements `\n`, `\t`, `\\` (et `\#` pour un texte qui
+`i18n/<langue>/<groupe>.tsv`, une ligne `français<TAB>traduction`. Échappements `\n`, `\t`, `\\` (et `\#` pour un texte qui
 commence par `#`) ; lignes vides et lignes `#…` ignorées. Mêmes `{variables}` des deux côtés. Pas d'espace en bord de
-texte : mets l'espace dans le code (`{t("Voici")}" "<a>…`). Un texte n'a qu'**une** entrée, tous fichiers confondus
-(le doublon est une erreur) : cherche d'abord (`--grep`). Groupes : `core` (socle, réglages d'affichage), `chat`,
-`guilds`, `voice`, `app`, `server` (messages du serveur, voir plus bas). Un fichier de plus : le lister dans `EN`
-de `src/i18n.rs`.
+texte : mets l'espace dans le code (`{t("Voici")}" "<a>…`). Un texte n'a qu'**une** entrée par langue, tous fichiers confondus
+(le doublon est une erreur) : cherche d'abord (`--grep`). Groupes (les mêmes six fichiers pour chaque langue) : `core`
+(socle, réglages d'affichage), `chat`, `guilds`, `voice`, `app`, `server` (messages du serveur, voir plus bas). Un fichier de
+plus : le lister dans `EN` **et** dans `FA` de `src/i18n.rs` (le contrôle le dit sinon).
+
+## Chaîne de repli
+
+Un texte se cherche dans le catalogue de la langue, puis dans celui de son repli (`Lang::fallback`, `kraken-core`), puis reste
+le texte français de la clé. Le français n'a pas de catalogue ; l'anglais retombe sur le français ; **le persan retombe sur
+l'anglais**, puis sur le français. Le catalogue persan se construit donc en chargeant d'abord les six fichiers `en/`, puis
+les six fichiers `fa/` par-dessus (`kraken_core::i18n::catalog_for`, `Catalog::add_over` : la dernière entrée gagne) ; un
+texte pas encore traduit en persan s'affiche en anglais, jamais en panne, et `fa/*.tsv` n'a besoin que de ce qui est traduit.
+`sources(lang)` de `src/i18n.rs` donne les fichiers propres à une langue, la chaîne de repli est celle de `Lang::fallback`.
+Les noms des salons d'un modèle de serveur suivent la même chaîne : `.fa("…")` sur un `text(…)`, `voice(…)` ou `group(…)` de
+`kraken-core/src/templates.rs` donne le nom persan, sinon l'anglais. Pendant la construction du catalogue persan, un pluriel
+(`tn`) en repli suit la règle du persan, pas celle de l'anglais : « 0 member » au lieu de « 0 members » tant que la paire
+n'est pas traduite (les deux formes persanes sont identiques, le défaut disparaît avec la traduction).
+
+`scripts/i18n-check.py` traite chaque dossier de langue : clés sans traduction, doublons, lignes mal formées et
+`{variables}` différentes sont des **erreurs** pour toutes, **sauf** les clés manquantes d'une langue de `PARTIAL` (constante
+en tête du script : `{"fa"}` tant que le persan est en construction), qui sont comptées et signalées en avertissement
+(`-v` ou `--missing --lang fa` les listent). `PARTIAL` se vide à la fin du travail : les clés manquantes deviennent alors des
+erreurs, comme en anglais. Les entrées en trop (clé absente du code) restent des avertissements.
+
+## Ajouter une langue
+
+1. **`kraken-core/src/i18n.rs`** : une variante de `Lang`, puis chaque `match` (le compilateur les montre) : `code`, `tag`
+   (BCP-47 sans région), `autonym` (le nom de la langue dans son écriture), `dir` (`Dir::Rtl` pour une langue de droite à
+   gauche), `fallback` (l'anglais, en général), `plural` (règle CLDR de la langue), `Lang::ALL` (l'ordre du sélecteur).
+   `from_tag` reconnaît seule `fa`, `fa-IR`, `fa_AF`… Tests : `tags_map_to_languages`, `plural_rules_follow_the_language`,
+   `persian_falls_back_on_english_then_on_french`, à compléter.
+2. **`kraken-core/src/span.rs`** : `duration` et `ago` dans la langue (mêmes cas que les autres, une branche par langue,
+   chiffres latins), un test par cas ; **`templates.rs`** : `Label::get` (le nom d'un salon de modèle, sinon l'anglais).
+3. **Le catalogue** : `i18n/<code>/` avec les six fichiers (`core`, `chat`, `guilds`, `voice`, `app`, `server`), au début
+   un commentaire `#` ; la liste de la langue dans `src/i18n.rs` (une constante de six `include_str!`, et `sources`).
+   `python3 scripts/i18n-check.py --missing --lang <code>` donne les lignes `français<TAB>` à compléter.
+4. **`boot.js`** : la table `langs` (celle de `Lang::ALL`) et, si la langue s'écrit de droite à gauche, `rtl` (celle de
+   `Lang::dir`) : `<html lang dir>` est posé avant le client WASM, avec la même règle de résolution que `LangPref::resolve`.
+5. **Le sélecteur** (`LangSelect`) lit `Lang::ALL` : la langue y apparaît seule, avec son `lang` et son nom dans son écriture.
+6. **Le vérificateur** : mets la langue dans `PARTIAL` tant que le catalogue est incomplet (`LANG_FALLBACK` dit son repli),
+   et retire-la à la fin. Contrôles propres à une langue : `persian_problems` dans `scripts/i18n-check.py`.
+7. **Tests** : `e2e/specs/i18n-fa.spec.ts` est le modèle (sélecteur, rechargement, repli, `navigator.languages`, dates et
+   durées, 390 px, axe), et les options attendues du sélecteur dans `i18n.spec.ts` et `display-accessibility.spec.ts`.
+8. **Écriture de droite à gauche** : rien à écrire de plus, voir « Droit-à-gauche ».
 
 ## Envelopper un texte
 
@@ -53,7 +97,7 @@ valeurs `data-*`, `console`/logs/`expect`, noms de produit (KRAKEN), codes d'err
 
 Les noms des catégories et des salons d'un **modèle de serveur** ne passent pas non plus par le catalogue : le serveur
 les bâtit dans la langue que le client lui envoie (`CreateGuild.lang`), et l'aperçu « Sera créé » montre les mêmes noms,
-lus dans `kraken_core::templates` (`Label { fr, en }`, une seule table). Seuls le nom et la description de la carte du
+lus dans `kraken_core::templates` (`Label { fr, en, fa }`, `fa` facultatif : sans lui l'anglais ; une seule table). Seuls le nom et la description de la carte du
 modèle sont des clés du catalogue.
 
 ## Dates, heures, durées
@@ -62,7 +106,14 @@ Toute mise en forme passe par la langue active : `crate::ui::clock` / `when` (12
 `crate::i18n::locale()` pour `Intl` (`to_locale_date_string(&locale(), …)` : jamais `"fr-FR"` écrit en dur ni
 `navigator.language`), `crate::i18n::duration(secs)` et `ago(ms)` (durées et « il y a 5 min »). Plus de mois, de jours,
 de « hier » écrits à la main : `t("Aujourd'hui")` / `t("Hier")` pour les mots, `Intl` pour le reste. Les chiffres sont
-latins (`-u-nu-latn`). Les initiales d'avatar : `ui::initials` (premier graphème, `Intl.Segmenter`).
+latins (`-u-nu-latn`), dans toutes les langues, le persan compris. La locale est celle de la langue de l'interface, avec la
+région du navigateur quand elle va avec (`en-GB`, `fa-AF`) : `fa-u-nu-latn` pour le persan. Le calendrier est celui que `Intl`
+donne par défaut à la langue : **le calendrier persan** (solaire hégirien : 2 آذر 1405, ordre « année mois jour, jour de la
+semaine » pour la date longue, c'est le motif CLDR), qu'on garde. Le format 12 / 24 h en « Automatique » suit la langue :
+24 h pour le persan (`h23` d'`Intl`), 12 h pour l'anglais américain, 24 h pour le français ; le choix « 12 h » ou « 24 h »
+écrit « 2:30 PM » (le suffixe `AM`/`PM` est le même dans toutes les langues). `span::duration` et `span::ago` écrivent les
+durées de chaque langue (persan : « 5 دقیقه پیش », « الان », « 1 ساعت و 30 دقیقه », « 2 روز »). Les initiales d'avatar :
+`ui::initials` (premier graphème, `Intl.Segmenter`).
 
 ## Erreurs du serveur
 
@@ -89,10 +140,14 @@ Un nouveau message d'erreur du serveur : l'ajouter à `server.tsv` (gabarit s'il
 
 ## Droit-à-gauche
 
-Arabe, persan, hébreu : la mise en page est prête, les traductions viennent après (aucune langue de droite à gauche
-n'est encore dans `Lang`). `boot.js` pose `<html dir="rtl">` pour `ar`, `fa`, `he` (la même table que `Lang::dir`), et
-**tout suit l'attribut en direct** : les tests de `e2e/specs/rtl.spec.ts` le basculent à la main (`dir="rtl"` et `lang="fa"`
-dans la console) sur une interface encore française. Pour voir un écran : `document.documentElement.dir = "rtl"`.
+Le **persan (`fa`) est la première langue de droite à gauche livrée** ; l'arabe et l'hébreu suivront avec leurs traductions.
+`Lang::dir` donne `Dir::Rtl` pour `fa`, `init()` (`src/i18n.rs`) pose `<html lang="fa" dir="rtl">` au démarrage et `boot.js`
+le pose avant le client (même table : `rtl` pour `ar`, `fa`, `he`), puis **tout suit l'attribut en direct**. Les tests de
+`e2e/specs/rtl.spec.ts` basculent `dir="rtl"` et `lang="fa"` à la main sur une interface française pour la géométrie ;
+`e2e/specs/i18n-fa.spec.ts` vérifie la vraie langue (sélecteur, rechargement, `navigator.languages`). Pour voir un écran :
+choisis « فارسی » dans Réglages › Langue et heure, ou `document.documentElement.dir = "rtl"` dans la console. Un texte qui
+n'est pas encore traduit en persan s'affiche en anglais (repli) dans une page de droite à gauche : sa ponctuation de fin
+saute de côté (« .Sign in »), c'est le comportement du texte bidirectionnel, qui disparaît avec la traduction.
 
 **Feuilles de style : que des propriétés logiques.** `margin-inline-start`, `padding-inline-end`, `inset-inline-start`,
 `border-inline-start`, `text-align: start`, `border-start-start-radius`, `float: inline-end`, `resize: inline`. Jamais
@@ -140,9 +195,11 @@ début ».
   à gauche : un nom en latin au milieu d'une phrase arabe ne retourne pas la ponctuation voisine. Un `@` ou un `#` collé
   devant une `{variable}` est repris dans l'isolat. Les nombres de `{n}` restent nus. Côté traduction : mets la ponctuation
   de la phrase **hors** de la variable (`« {name} : … »`), jamais une marque de sens d'écriture dans le catalogue.
+  Un texte qui devient une **donnée** (valeur d'un champ qui part au serveur, nom enregistré) se remplit avec `tf_data(` : même
+  gabarit, jamais d'isolat (le serveur refuse ces marques dans un nom).
 
 **Polices et interligne.** Un bloc `:lang(ar), :lang(fa), :lang(he)` (fin de `components.css`) prend une pile de polices du
-**système** : jetons `font.arabic` et `font.hebrew`, avec Inter d'abord pour le latin, puis la première police du système qui
+**système** (la langue persane y entre par `<html lang="fa">`, et chaque `<option lang="fa">` du sélecteur) : jetons `font.arabic` et `font.hebrew`, avec Inter d'abord pour le latin, puis la première police du système qui
 a l'écriture. Aucun fichier de police, aucune requête réseau. `--line-scale` (1 par défaut, 1,25 en arabe et en persan, 1,1 en
 hébreu) agrandit l'interligne ; l'espacement des lettres et l'italique sont coupés en arabe et en persan (écriture cursive).
 Le code garde JetBrains Mono.
@@ -159,4 +216,25 @@ est le miroir exact de sa position en LTR : `x_rtl = largeur_fenêtre - droite_l
 - Casse : phrase (« Create a channel »), pas de capitales à chaque mot, sauf noms propres.
 - Pluriel : deux clés (`tn`), l'anglais compte « 0 members » au pluriel.
 - Libellé de bouton : un verbe d'action, court. Un nom accessible reste cohérent avec le texte visible.
+- Un texte qui existe déjà garde la même traduction partout (`--grep`).
+
+## Conventions de persan
+
+- Ton neutre et naturel, jamais mot à mot ; un seul registre (tutoiement ou forme de politesse) dans toute l'interface, choisi
+  par la personne qui traduit et noté en tête de `fa/core.tsv`.
+- **Chiffres latins** (0-9), jamais persans (۰-۹) ni arabo-indiens (٠-٩) : c'est le choix de toute l'interface (`-u-nu-latn`) et
+  `scripts/i18n-check.py` refuse les autres dans une traduction. Le nombre d'un pluriel est un `{n}` latin.
+- **Lettres persanes** : « ی » (U+06CC) et « ک » (U+06A9), jamais le « ي » (U+064A) et le « ك » (U+0643) arabes (erreur du
+  contrôle).
+- **Demi-espace** (ZWNJ, U+200C) pour joindre les morceaux d'un mot qui ne se lient pas : « می‌خواهم », « کتاب‌خانه »,
+  « برنامه‌ها ». Jamais en tête ni en queue d'un texte ou d'une ligne (erreur), jamais doublé ni collé à une espace
+  (avertissement). Le client ne l'ajoute pas : `kraken_core::text::has_hidden` le laisse passer entre deux lettres dans un nom.
+- Ponctuation persane : « ، » (virgule), « ؟ » (point d'interrogation), « ؛ » (point-virgule), guillemets « » ; le point et
+  les deux-points sont ceux du latin. **Jamais de marque de sens d'écriture** (U+200E, U+200F, U+061C, U+202A à U+202E,
+  U+2066 à U+2069 : erreur du contrôle) : `tf` isole les valeurs insérées quand la page est de droite à gauche, la ponctuation
+  de la phrase se met **hors** de la `{variable}`.
+- Pluriel : deux clés comme partout (`tn`), le persan n'accorde pas le nom après un nombre : les deux traductions sont
+  identiques (« {n} عضو »). Règle CLDR : « un » pour 0 et 1, « autre » sinon.
+- Les noms de produit et les termes techniques (KRAKEN, WebRTC, `@pseudo`) restent en latin dans la phrase persane ; un
+  fragment technique isolé garde `<bdi dir="ltr">` côté code.
 - Un texte qui existe déjà garde la même traduction partout (`--grep`).
