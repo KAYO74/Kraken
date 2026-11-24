@@ -12,23 +12,12 @@ use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, SizedSample};
-use serde::{Deserialize, Serialize};
 
 use crate::Error;
+pub use crate::audio::DeviceInfo;
 use crate::audio::{Capture, FRAME, Frame, Playback, SAMPLE_RATE};
 use crate::resample::Resampler;
 use crate::ring::{RingRx, RingTx, ring};
-
-/// Un périphérique audio que l'on peut choisir.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeviceInfo {
-    /// Son nom, tel qu'on l'affiche (à donner à [`CpalCapture::open`] et [`CpalPlayback::open`]).
-    pub name: String,
-    /// Son identifiant cpal (`alsa:default`…), stable et sans ambiguïté : `open` le prend aussi.
-    pub id: String,
-    /// C'est le périphérique par défaut du système.
-    pub is_default: bool,
-}
 
 /// Micros disponibles.
 pub fn input_devices() -> Result<Vec<DeviceInfo>, Error> {

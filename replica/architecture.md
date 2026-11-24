@@ -35,7 +35,7 @@ crates/kraken-core     domaine : moteur de permissions, markdown, règles (sans 
 crates/kraken-db       sqlx, migrations/ (0001 = replica/schema.sql)
 crates/kraken-server   axum : REST, gateway, workers, fichiers ; binaire
 crates/kraken-voice    SFU str0m, signalisation, MLS
-crates/kraken-voice-native  client vocal natif (Opus, str0m, cpal) pour l'appli de bureau Linux, sans WebRTC dans la webview
+crates/kraken-voice-native  client vocal natif (Opus, str0m, cpal) pour l'appli de bureau Linux, sans WebRTC dans la webview ; `control::Controller` = surface de la page (commandes Tauri `native_voice_*`), exemple `bridge` pour les tests e2e
 crates/kraken-client   Leptos (WASM)
 crates/kraken-desktop  Tauri 2 (desktop + mobile)
 ```

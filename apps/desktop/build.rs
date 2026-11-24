@@ -40,7 +40,8 @@ fn main() {
     embed_vc_runtime();
     // Les commandes de l'appli passent par l'ACL : seule la page locale a droit aux quatre
     // premières (capabilities/default.json) ; celles du contrôle à distance, seulement la page de
-    // l'instance (capacité ajoutée au lancement, `remote.rs`) ; `update_status`, `update_install` et `open_in_browser`, de même.
+    // l'instance (capacité ajoutée au lancement, `remote.rs`) ; `update_status`, `update_install`, `open_in_browser` et les
+    // commandes du vocal natif (`native_voice_*`, `native_voice.rs`), de même.
     let manifest = tauri_build::AppManifest::new().commands(&[
         "join",
         "host_start",
@@ -52,6 +53,13 @@ fn main() {
         "update_status",
         "update_install",
         "open_in_browser",
+        "native_voice_available",
+        "native_voice_start",
+        "native_voice_answer",
+        "native_voice_set",
+        "native_voice_poll",
+        "native_voice_stop",
+        "native_voice_devices",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest)).expect("tauri-build");
 }

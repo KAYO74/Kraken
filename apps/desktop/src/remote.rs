@@ -316,7 +316,7 @@ impl Remote {
 pub struct StopItem(pub MenuItem<Wry>);
 
 /// Donne à la page de cette origine (l'instance) le droit d'appeler les trois commandes (et celles
-/// des mises à jour, `update.rs`), et rien d'autre. Sans effet si c'est déjà fait ; ignoré si l'origine ne fait pas un motif valide.
+/// des mises à jour, `update.rs`, de `media.rs` et du vocal natif, `native_voice.rs`), et rien d'autre. Sans effet si c'est déjà fait ; ignoré si l'origine ne fait pas un motif valide.
 pub fn allow_origin(app: &AppHandle, url: &Url) {
     let origin = url.origin().ascii_serialization();
     if !matches!(url.scheme(), "http" | "https") || origin == "null" {
@@ -335,7 +335,9 @@ pub fn allow_origin(app: &AppHandle, url: &Url) {
         .remote(origin.clone())
         .local(false)
         .window("main");
-    for command in COMMANDS.iter().chain(crate::update::COMMANDS.iter()).chain(crate::media::COMMANDS.iter()) {
+    let others =
+        crate::update::COMMANDS.iter().chain(crate::media::COMMANDS.iter()).chain(crate::native_voice::COMMANDS.iter());
+    for command in COMMANDS.iter().chain(others) {
         capability = capability.permission(format!("allow-{}", command.replace('_', "-")));
     }
     if app.add_capability(capability).is_ok() {

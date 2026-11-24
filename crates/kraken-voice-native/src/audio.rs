@@ -14,6 +14,8 @@ use std::f64::consts::TAU;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
+use serde::{Deserialize, Serialize};
+
 /// Fréquence d'échantillonnage du moteur, en Hz (celle d'Opus pour la voix large bande).
 pub const SAMPLE_RATE: u32 = 48_000;
 /// Échantillons d'une trame : 20 ms.
@@ -23,6 +25,17 @@ pub const FRAME_DURATION: Duration = Duration::from_millis(20);
 
 /// Une trame de 20 ms.
 pub type Frame = [f32; FRAME];
+
+/// Un périphérique audio que l'on peut choisir (micro ou haut-parleurs), tel que la page l'affiche.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeviceInfo {
+    /// Son nom, tel qu'on l'affiche (à donner à `CpalCapture::open` et `CpalPlayback::open`).
+    pub name: String,
+    /// Son identifiant (cpal : `alsa:default`…), stable et sans ambiguïté : `open` le prend aussi.
+    pub id: String,
+    /// C'est le périphérique par défaut du système.
+    pub is_default: bool,
+}
 
 /// Le micro : fournit des trames, dans l'ordre, au rythme du périphérique.
 pub trait Capture: Send {
@@ -106,9 +119,19 @@ impl Capture for ToneCapture {
 }
 
 /// Ce que le puits a reçu, partagé avec [`SinkPlayback`].
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct SinkData {
     samples: Vec<f32>,
+    /// Échantillons reçus depuis le début, ceux qu'on a oubliés compris.
+    total: u64,
+    /// Nombre d'échantillons à garder au moins ; au-delà du double, les plus anciens sont oubliés.
+    keep: usize,
+}
+
+impl Default for SinkData {
+    fn default() -> Self {
+        Self { samples: Vec::new(), total: 0, keep: usize::MAX }
+    }
 }
 
 /// Le côté « lecture des résultats » d'un [`SinkPlayback`] : on le garde dans le test pendant
@@ -126,9 +149,15 @@ impl Sink {
         self.lock().samples.clone()
     }
 
-    /// Nombre d'échantillons reçus.
+    /// Nombre d'échantillons gardés (tous ceux reçus, sauf avec [`SinkPlayback::bounded`]).
     pub fn len(&self) -> usize {
         self.lock().samples.len()
+    }
+
+    /// Nombre d'échantillons reçus depuis le début, y compris ceux que [`SinkPlayback::bounded`] a
+    /// oubliés ou que [`Sink::clear`] a effacés.
+    pub fn total(&self) -> u64 {
+        self.lock().total
     }
 
     /// Rien reçu pour l'instant.
@@ -168,6 +197,15 @@ impl SinkPlayback {
         (Self { sink: sink.clone(), queued: 0.0, at: Instant::now() }, sink)
     }
 
+    /// Un puits qui n'engloutit pas la mémoire : il garde au moins les `keep` derniers échantillons
+    /// (jusqu'au double), et [`Sink::total`] compte tout ce qu'il a reçu. Pour ce qui tourne longtemps
+    /// (le mode synthétique de [`crate::control::Controller`]).
+    pub fn bounded(keep: usize) -> (Self, Sink) {
+        let (playback, sink) = Self::new();
+        sink.lock().keep = keep.max(FRAME);
+        (playback, sink)
+    }
+
     /// Le périphérique a joué ce que le temps écoulé lui a laissé jouer.
     fn advance(&mut self) {
         let now = Instant::now();
@@ -186,7 +224,13 @@ impl Playback for SinkPlayback {
     fn write_frame(&mut self, frame: &Frame) {
         self.advance();
         self.queued += FRAME as f64;
-        self.sink.lock().samples.extend_from_slice(frame);
+        let mut data = self.sink.lock();
+        data.samples.extend_from_slice(frame);
+        data.total += FRAME as u64;
+        if data.samples.len() > data.keep.saturating_mul(2) {
+            let forget = data.samples.len() - data.keep;
+            data.samples.drain(..forget);
+        }
     }
 }
 
@@ -268,5 +312,18 @@ mod tests {
         assert_eq!(sink.last(3), [0.25; 3]);
         sink.clear();
         assert!(sink.is_empty());
+        assert_eq!(sink.total(), (written * FRAME) as u64, "le total survit à clear()");
+    }
+
+    #[test]
+    fn bounded_sink_forgets_the_oldest_but_counts_everything() {
+        let (mut playback, sink) = SinkPlayback::bounded(2 * FRAME);
+        for n in 0..10 {
+            playback.write_frame(&[n as f32; FRAME]);
+        }
+        assert_eq!(sink.total(), 10 * FRAME as u64);
+        assert!(sink.len() >= 2 * FRAME && sink.len() <= 4 * FRAME + FRAME, "{} échantillons gardés", sink.len());
+        assert_eq!(sink.last(1), [9.0], "le plus récent est toujours là");
+        assert_eq!(sink.last(2 * FRAME)[0], 8.0, "au moins les deux dernières trames");
     }
 }

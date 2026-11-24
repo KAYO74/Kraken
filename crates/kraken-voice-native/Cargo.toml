@@ -27,3 +27,5 @@ cpal = { version = "0.18", optional = true }
 
 [dev-dependencies]
 kraken-voice.workspace = true
+# Serveur HTTP de l'exemple `bridge` (tests de bout en bout du client web) : un fil par requête, sans runtime.
+tiny_http = "0.12"

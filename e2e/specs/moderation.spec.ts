@@ -158,7 +158,10 @@ test('S22-H2 exclure : la personne est renvoyée à l’accueil et peut revenir 
   expect((await (await api(crew.token)).post(`${API}/invites/${code}`)).status()).toBe(200);
 });
 
-test('S22-H3 bannir puis débannir : plus de retour par invitation, liste des bannis dans les réglages', async ({ user, api }) => {
+test('S22-H3 bannir puis débannir : plus de retour par invitation, liste des bannis dans les réglages', async ({ user, api, allow }) => {
+  // La page du propriétaire accuse réception du message affiché (POST …/ack/{id}) pendant que le bannissement l'efface : le serveur
+  // répond 404, la page l'ignore, le navigateur le note dans la console. Selon la vitesse de la machine, ça arrive ou non.
+  allow.push(/status of 404/);
   const owner = await user('amiral');
   const crew = await user('pirate');
   const [gid, cid] = await createGuild(owner.page, 'Corsaires');

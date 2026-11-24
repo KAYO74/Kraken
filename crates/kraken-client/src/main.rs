@@ -20,6 +20,7 @@ mod icon_picker;
 mod icons;
 mod legal;
 mod markdown;
+mod native_voice;
 mod new_guild;
 mod overview;
 mod photo;

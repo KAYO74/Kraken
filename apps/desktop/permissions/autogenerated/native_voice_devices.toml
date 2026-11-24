@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-native-voice-devices"
+description = "Enables the native_voice_devices command without any pre-configured scope."
+commands.allow = ["native_voice_devices"]
+
+[[permission]]
+identifier = "deny-native-voice-devices"
+description = "Denies the native_voice_devices command without any pre-configured scope."
+commands.deny = ["native_voice_devices"]
