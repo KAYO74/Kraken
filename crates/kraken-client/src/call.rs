@@ -156,7 +156,12 @@ fn Lobby(guild: Option<Id>, channel: Id, name: String) -> impl IntoView {
             </button>
             {move || voice::native().then(|| view! { <NativeLimits id="lobby-native-why"/> })}
             {move || elsewhere.get().map(|c| view! { <p class="app-hint">{tf("Tu quitteras {salon}.", &[("salon", &c)])}</p> })}
-            {move || error().map(|e| view! { <p class="k-error" role="alert">{e}</p> })}
+            // Vocal natif : la ligne d'erreur a sa place réservée (la pile est centrée : rien ne monte quand elle arrive).
+            {move || if voice::native() {
+                view! { <p class="k-error app-lobby-error" role="alert">{move || error().unwrap_or_default()}</p> }.into_any()
+            } else {
+                error().map(|e| view! { <p class="k-error" role="alert">{e}</p> }).into_any()
+            }}
             {move || (!supported()).then(|| view! { <p class="k-error">{voice::unsupported_message()}</p>{voice::desktop().then(|| view! { <OpenInBrowser/> })}<p class="app-hint">{voice::unsupported_details()}</p> })}
             {move || insecure().then(|| view! { <p class="app-hint">{t(voice::INSECURE)}</p> })}
         </div>

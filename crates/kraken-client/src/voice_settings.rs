@@ -605,14 +605,17 @@ fn LevelSlider(
         <div class="k-field">
             <label class="k-label" for=id>{t(label)}</label>
             <div class="app-level">
-                <input id=id type="range" class="k-slider" min="0" max=max.to_string() step=native_voice::LEVEL_STEP.to_string()
-                    prop:value=move || level.get().to_string()
-                    aria-valuetext=move || native_voice::percent(level.get())
-                    on:input=move |e| {
-                        let now = event_target_value(&e).parse::<f32>().map_or(1.0, |x| x.clamp(0.0, max));
-                        level.set(now);
-                        native_voice::remember_level(key, now);
-                    }/>
+                // Un repère à 100 % (le niveau normal) : le pouce n'est pas au bout quand le maximum est de 200 ou 400 %.
+                <div class="app-level-track" style=format!("--at: {}", 1.0 / max)>
+                    <input id=id type="range" class="k-slider" min="0" max=max.to_string() step=native_voice::LEVEL_STEP.to_string()
+                        prop:value=move || level.get().to_string()
+                        aria-valuetext=move || native_voice::percent(level.get())
+                        on:input=move |e| {
+                            let now = event_target_value(&e).parse::<f32>().map_or(1.0, |x| x.clamp(0.0, max));
+                            level.set(now);
+                            native_voice::remember_level(key, now);
+                        }/>
+                </div>
                 <output for=id>{move || native_voice::percent(level.get())}</output>
             </div>
         </div>
