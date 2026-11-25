@@ -6,7 +6,8 @@
 //!   (le serveur hébergé s'ouvre donc par localhost). Une instance en http sur le réseau local est
 //!   traitée comme sécurisée sous Windows (argument de WebView2, au démarrage seulement : l'appli
 //!   se relance) et sous Linux (réglage de WebKitGTK 2.42 et plus). macOS n'a pas de réglage
-//!   public : on y écoute et regarde seulement, sans parler ni partager.
+//!   public : sur une telle instance, la page confie l'appel au vocal natif (`native_voice.rs`, voix
+//!   seulement) au lieu de n'y laisser qu'écouter et regarder.
 //! - Linux : WebRTC est désactivé par défaut dans WebKitGTK, et il faut une version compilée
 //!   avec. Debian et Ubuntu (WebKitGTK 2.52 vérifié) la compilent sans : `RTCPeerConnection` n'existe pas, même
 //!   réglage activé. Le vocal natif (`native_voice.rs`, moteur Rust `kraken-voice-native`) prend alors le

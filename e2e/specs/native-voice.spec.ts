@@ -1,8 +1,14 @@
-// F04 Vocal natif de l'appli de bureau Linux (étape 2b) : le navigateur intégré (WebKitGTK) n'a pas WebRTC,
-// l'appli de bureau fait l'appel avec son moteur Rust et la page le pilote par les commandes `native_voice_*`.
+// F04 Vocal natif de l'appli de bureau (Linux, macOS, Windows) : quand le navigateur intégré ne peut pas faire l'appel
+// (pas de WebRTC : WebKitGTK de Linux ; pas de micro possible : WKWebView de macOS sur une instance en http), l'appli de
+// bureau le fait avec son moteur Rust et la page le pilote par les commandes `native_voice_*`. Quand il le peut (WebRTC,
+// contexte sécurisé, `navigator.mediaDevices`), le chemin du navigateur reste celui d'avant. La règle est une seule
+// fonction du client, `voice::browser_can_call`. Sa constante `ALWAYS_NATIVE` (« partout natif » : le moteur sert dans
+// toute l'appli de bureau où il répond) est à `false` : l'autre valeur n'est pas testée ici (elle changerait V13, qui
+// attend le navigateur quand tout y est).
 //
-// Un « faux bureau » : `window.__TAURI_INTERNALS__.invoke` simulé et `RTCPeerConnection` supprimé (comme
-// `voice-unsupported.spec.ts`).
+// Un « faux bureau » : `window.__TAURI_INTERNALS__.invoke` simulé, et le navigateur privé de ce qui lui manque : par défaut
+// `RTCPeerConnection` supprimé (comme `voice-unsupported.spec.ts`), ou (V11, V12) WebRTC présent mais ni contexte sécurisé ni
+// `navigator.mediaDevices`, ou (V13) un navigateur complet.
 //  (a) `invoke` répond en JavaScript, sans moteur : états, « parle », micro coupé, quitter, ce qui manque, erreurs ;
 //  (b) `invoke` est routé vers le vrai pont (`target/release/examples/bridge`, le moteur synthétique en HTTP) :
 //      un vrai Chromium A et le faux bureau B entrent dans le même salon, à travers le vrai SFU, et le puits du
@@ -24,7 +30,7 @@ test.use({ launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake
 type Api = (token?: string) => Promise<APIRequestContext>;
 type Win = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-const NO_VIDEO = "Pas de caméra ni de partage d'écran dans l'appli Linux pour l'instant : ouvre cette page dans ton navigateur.";
+const NO_VIDEO = "Pas de caméra ni de partage d'écran dans l'appli de bureau pour l'instant : ouvre cette page dans ton navigateur.";
 const tiles = (page: Page) => page.getByRole('list', { name: 'Participants' }).getByRole('listitem');
 const bar = (page: Page) => page.getByRole('group', { name: "Commandes de l'appel" });
 const panel = (page: Page) => page.getByRole('region', { name: 'Connexion vocale' });
@@ -63,16 +69,25 @@ type Mock = {
   devices: { inputs: unknown[]; outputs: unknown[] };
 };
 
+/** Ce que le navigateur intégré du faux bureau sait faire : rien (Linux : ni WebRTC), WebRTC sans micro possible (macOS, instance en http), ou tout. */
+type Webview = 'no-webrtc' | 'insecure' | 'full';
+
 /**
- * Le faux bureau de la partie (a) : WebRTC supprimé, `invoke` répond comme le moteur (voir `__native`). Chaque appel est noté.
- * `local` : des valeurs de `localStorage` posées avant le chargement de la page ; `start` : l'état du faux moteur dès le chargement
- * (ce que `native_voice_available` répond au démarrage ne se change plus après).
+ * Le faux bureau de la partie (a) : le navigateur intégré selon `webview` (par défaut sans WebRTC), `invoke` répond comme le moteur
+ * (voir `__native`). Chaque appel est noté. `local` : des valeurs de `localStorage` posées avant le chargement de la page ; `start` :
+ * l'état du faux moteur dès le chargement (ce que `native_voice_available` répond au démarrage ne se change plus après).
  */
-async function fakeEngine(u: User, local: Record<string, string> = {}, start: Partial<Mock> = {}) {
-  await u.context.addInitScript(({ keep, start }) => {
+async function fakeEngine(u: User, local: Record<string, string> = {}, start: Partial<Mock> = {}, webview: Webview = 'no-webrtc') {
+  await u.context.addInitScript(({ keep, start, webview }) => {
     const w = window as unknown as Win;
-    delete w.RTCPeerConnection;
-    delete w.webkitRTCPeerConnection;
+    if (webview === 'no-webrtc') {
+      delete w.RTCPeerConnection;
+      delete w.webkitRTCPeerConnection;
+    } else if (webview === 'insecure') {
+      // WKWebView sur une instance en http hors de cet ordinateur : WebRTC existe, mais ni contexte sécurisé ni `mediaDevices`.
+      Object.defineProperty(window, 'isSecureContext', { value: false, configurable: true });
+      Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true });
+    }
     for (const [k, v] of Object.entries(keep)) localStorage.setItem(k, v);
     const native: Mock = {
       calls: [],
@@ -129,7 +144,7 @@ async function fakeEngine(u: User, local: Record<string, string> = {}, start: Pa
         }
       },
     };
-  }, { keep: local, start });
+  }, { keep: local, start, webview });
   await u.page.reload();
 }
 
@@ -360,7 +375,7 @@ test('F04-V3 caméra et partage d’écran grisés avec leur phrase, l’image d
   await expect.poll(async () => (await calls(b.page, 'open_in_browser')).length).toBe(1);
 
   // Quelqu'un partage son écran, puis allume sa caméra : une phrase dit que l'image ne s'affiche pas ici, et pas de « Regarder ».
-  const unseen = b.page.getByRole('status').filter({ hasText: "l'image ne s'affiche pas dans l'appli Linux" });
+  const unseen = b.page.getByRole('status').filter({ hasText: "l'image ne s'affiche pas dans l'appli de bureau" });
   await expect(unseen).toHaveCount(0);
   await here(a, { streaming: true });
   await expect(unseen).toContainText(`Écran partagé ou caméra allumée chez ${a.name}`);
@@ -543,7 +558,7 @@ test('F04-V8 Réglages › Voix et vidéo : appareils du moteur, niveaux, phrase
   // Ce qui n'existe pas, en toutes lettres (et pas de boutons qui ne feraient rien).
   await expect(b.page.getByText(NO_VIDEO)).toBeVisible();
   await expect(b.page.getByText('un casque évite l’écho'.replace('’', "'"), { exact: false })).toBeVisible();
-  await expect(b.page.getByText("Le test du micro n'existe pas encore dans l'appli Linux", { exact: false })).toBeVisible();
+  await expect(b.page.getByText("Le test du micro n'existe pas encore dans l'appli de bureau", { exact: false })).toBeVisible();
   await expect(b.page.getByRole('button', { name: 'Tester le micro' })).toHaveCount(0);
   await expect(b.page.getByRole('button', { name: 'Aperçu de la caméra' })).toHaveCount(0);
   await expect(b.page.getByRole('switch', { name: "Annulation d'écho" })).toHaveCount(0);
@@ -603,6 +618,125 @@ test('F04-V10 à 390 px et texte à 20 : rien ne déborde dans le salon, l’app
   await settings(b.page);
   await expect(b.page.getByLabel('Volume du micro')).toBeVisible();
   expect(await overflow()).toBeLessThanOrEqual(0);
+});
+
+test('F04-V11 WebRTC présent mais contexte non sécurisé (WKWebView, instance en http) : le moteur natif prend le relais, « Rejoindre » marche', async ({
+  user,
+  api,
+}) => {
+  test.setTimeout(90_000);
+  const a = await user('hote');
+  const b = await user('wkwebview');
+  const g = await guild(api, a, b);
+  await fakeEngine(b, {}, {}, 'insecure');
+  await fakeServerAnswer(b.page);
+  await lobby(b, g);
+  // La page est bien dans le cas simulé : WebRTC est là, mais le contexte n'est pas sécurisé et il n'y a pas de `mediaDevices`.
+  expect(await b.page.evaluate(() => [typeof RTCPeerConnection, window.isSecureContext, typeof navigator.mediaDevices])).toEqual([
+    'function',
+    false,
+    'undefined',
+  ]);
+  // Le moteur est interrogé une fois ; « Rejoindre » est permis, sans le message « Connexion non sécurisée » (le natif parle et écoute).
+  expect((await calls(b.page, 'native_voice_available')).length).toBe(1);
+  await expect(b.page.getByRole('button', { name: 'Rejoindre', exact: true })).toBeEnabled();
+  await expect(b.page.getByText('Connexion non sécurisée', { exact: false })).toHaveCount(0);
+  await expect(b.page.getByText(NO_VIDEO)).toBeVisible();
+  await expect(open(b.page)).toBeVisible();
+  await a11y(b.page);
+
+  await join(b);
+  await engine(b.page, { snapshot: { state: { kind: 'connected' } } });
+  await expect(panel(b.page).getByRole('status')).toHaveText('En appel');
+  expect((await calls(b.page, 'native_voice_start')).length).toBe(1);
+  // Le chemin du navigateur n'a pas servi : pas de message de micro refusé, caméra et partage grisés comme avec le moteur.
+  await expect(b.page.getByText('Connexion non sécurisée', { exact: false })).toHaveCount(0);
+  await expect(bar(b.page).getByRole('button', { name: 'Caméra' })).toBeDisabled();
+  await expect(bar(b.page).getByRole('button', { name: 'Partager ton écran' })).toBeDisabled();
+  await a11y(b.page);
+  // Seul macOS reçoit l'avis « Micro silencieux » : ici le niveau reste à zéro et rien ne vient.
+  await b.page.waitForTimeout(8_000);
+  await expect(b.page.getByText('Micro silencieux', { exact: false })).toHaveCount(0);
+});
+
+test('F04-V12 contexte non sécurisé et moteur natif absent : comme avant, on écoute seulement, avec le message du navigateur', async ({ user, api }) => {
+  const a = await user('hote');
+  const b = await user('http');
+  const g = await guild(api, a, b);
+  await fakeEngine(b, {}, { available: false }, 'insecure');
+  await lobby(b, g);
+  await expect(b.page.getByRole('button', { name: 'Rejoindre', exact: true })).toBeEnabled();
+  await expect(b.page.getByText('Connexion non sécurisée', { exact: false })).toBeVisible();
+  await expect(b.page.getByText(NO_VIDEO)).toHaveCount(0);
+  expect((await calls(b.page, 'native_voice_available')).length).toBe(1);
+  expect((await calls(b.page, 'native_voice_start')).length).toBe(0);
+});
+
+test('F04-V13 appli de bureau dont le navigateur peut tout (WebRTC, contexte sécurisé, micro) : le chemin d’avant, caméra et partage compris, le moteur natif n’est jamais sollicité', async ({
+  user,
+  api,
+}) => {
+  test.setTimeout(90_000);
+  const a = await user('hote');
+  const b = await user('complet');
+  const g = await guild(api, a, b);
+  await fakeEngine(b, {}, {}, 'full');
+  await lobby(b, g);
+  await expect(b.page.getByRole('button', { name: 'Rejoindre', exact: true })).toBeEnabled();
+  await expect(b.page.getByText(NO_VIDEO)).toHaveCount(0);
+  await expect(open(b.page)).toHaveCount(0);
+  // Le vrai WebRTC de Chromium (micro factice), contre le vrai serveur.
+  await join(b);
+  await expect(panel(b.page).getByRole('status')).toHaveText('En appel', { timeout: 20_000 });
+  await expect(bar(b.page).getByRole('button', { name: 'Caméra' })).toBeEnabled();
+  await expect(bar(b.page).getByRole('button', { name: 'Partager ton écran' })).toBeEnabled();
+  await expect(b.page.getByText(NO_VIDEO)).toHaveCount(0);
+  await expect(open(b.page)).toHaveCount(0);
+  // Pas une seule commande du moteur natif, pas même « est-il là ? ».
+  const natives = await b.page.evaluate(() =>
+    ((window as unknown as Win).__native.calls as { cmd: string }[]).map((c) => c.cmd).filter((c) => c.startsWith('native_voice_')),
+  );
+  expect(natives).toEqual([]);
+  await a11y(b.page);
+});
+
+test('F04-V14 macOS : un micro ouvert qui reste à zéro plusieurs secondes — « Micro silencieux » avec le chemin des réglages, jamais micro coupé', async ({
+  user,
+  api,
+}) => {
+  test.setTimeout(90_000);
+  const a = await user('hote');
+  const b = await user('mac');
+  const g = await guild(api, a, b);
+  // WKWebView dit « Macintosh » dans son identifiant : c'est ce que la page lit.
+  await b.context.addInitScript(() => {
+    const mac = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
+    Object.defineProperty(navigator, 'userAgent', { get: () => mac, configurable: true });
+  });
+  await fakeEngine(b, {}, {}, 'insecure');
+  await fakeServerAnswer(b.page);
+  await lobby(b, g);
+  await join(b);
+  await engine(b.page, { snapshot: { state: { kind: 'connected' }, mic_level: 0 } });
+  await expect(panel(b.page).getByRole('status')).toHaveText('En appel');
+  const notice = b.page.getByRole('status').filter({ hasText: 'Micro silencieux' });
+  // Micro coupé par la personne : le silence est normal, rien n'est dit.
+  const mic = bar(b.page).getByRole('button', { name: 'Couper le micro' });
+  await mic.click();
+  await expect(mic).toHaveAttribute('aria-pressed', 'true');
+  await b.page.waitForTimeout(8_000);
+  await expect(notice).toHaveCount(0);
+  // Micro rouvert, toujours à zéro : l'avis arrive au bout de quelques secondes, avec où regarder.
+  await mic.click();
+  await expect(mic).toHaveAttribute('aria-pressed', 'false');
+  await expect(notice).toBeVisible({ timeout: 20_000 });
+  await expect(notice).toContainText('Réglages Système › Confidentialité et sécurité › Micro');
+  await a11y(b.page);
+  // Dit une fois par appel : une fois masqué, il ne revient pas.
+  await b.page.getByRole('button', { name: 'Masquer ce message' }).click();
+  await expect(notice).toHaveCount(0);
+  await b.page.waitForTimeout(8_000);
+  await expect(notice).toHaveCount(0);
 });
 
 // ───── (b) le vrai pont, le vrai SFU ─────

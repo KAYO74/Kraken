@@ -1,7 +1,8 @@
 //! Les vrais micro et haut-parleurs, par cpal (ALSA sous Linux, donc aussi PulseAudio et
-//! PipeWire par leurs modules ALSA).
+//! PipeWire par leurs modules ALSA ; CoreAudio sous macOS ; WASAPI sous Windows).
 //!
-//! Le périphérique a sa fréquence, son nombre de voies et son format d'échantillons ; le moteur ne
+//! Le périphérique a sa fréquence, son nombre de voies et son format d'échantillons (cpal rend `f32`,
+//! `i16`, `u16`… selon le système : [`CpalCapture::open`] et [`CpalPlayback::open`] les prennent tous) ; le moteur ne
 //! connaît que des trames de 48 kHz mono. [`CpalCapture`] et [`CpalPlayback`] convertissent
 //! (moyenne des voies et rééchantillonnage vers 48 kHz à l'entrée ; rééchantillonnage et copie
 //! sur toutes les voies à la sortie) et se parlent avec le rappel temps réel de cpal par un
@@ -11,7 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, Sample, SampleFormat, SizedSample};
+use cpal::{FromSample, I24, Sample, SampleFormat, SizedSample, U24};
 
 use crate::Error;
 pub use crate::audio::DeviceInfo;
@@ -191,9 +192,11 @@ impl CpalCapture {
             SampleFormat::F64 => input_stream::<f64>(&device, config, channels, rate, tx, &state),
             SampleFormat::I8 => input_stream::<i8>(&device, config, channels, rate, tx, &state),
             SampleFormat::I16 => input_stream::<i16>(&device, config, channels, rate, tx, &state),
+            SampleFormat::I24 => input_stream::<I24>(&device, config, channels, rate, tx, &state),
             SampleFormat::I32 => input_stream::<i32>(&device, config, channels, rate, tx, &state),
             SampleFormat::U8 => input_stream::<u8>(&device, config, channels, rate, tx, &state),
             SampleFormat::U16 => input_stream::<u16>(&device, config, channels, rate, tx, &state),
+            SampleFormat::U24 => input_stream::<U24>(&device, config, channels, rate, tx, &state),
             SampleFormat::U32 => input_stream::<u32>(&device, config, channels, rate, tx, &state),
             other => Err(Error::Device(format!("format d'échantillons non pris en charge : {other}"))),
         }?;
@@ -290,9 +293,11 @@ impl CpalPlayback {
             SampleFormat::F64 => output_stream::<f64>(&device, config, channels, rx, &state),
             SampleFormat::I8 => output_stream::<i8>(&device, config, channels, rx, &state),
             SampleFormat::I16 => output_stream::<i16>(&device, config, channels, rx, &state),
+            SampleFormat::I24 => output_stream::<I24>(&device, config, channels, rx, &state),
             SampleFormat::I32 => output_stream::<i32>(&device, config, channels, rx, &state),
             SampleFormat::U8 => output_stream::<u8>(&device, config, channels, rx, &state),
             SampleFormat::U16 => output_stream::<u16>(&device, config, channels, rx, &state),
+            SampleFormat::U24 => output_stream::<U24>(&device, config, channels, rx, &state),
             SampleFormat::U32 => output_stream::<u32>(&device, config, channels, rx, &state),
             other => Err(Error::Device(format!("format d'échantillons non pris en charge : {other}"))),
         }?;
@@ -431,6 +436,100 @@ mod tests {
         let (frames, out) = converter.convert(&[128u8, 255, 0, 128]);
         assert_eq!(frames, 4);
         assert!(out[0].abs() < 0.01 && (out[1] - 1.0).abs() < 0.01 && (out[2] + 1.0).abs() < 0.01);
+    }
+
+    /// Les formats que cpal rend selon le système (CoreAudio : `f32` ; WASAPI : `f32`, parfois `i16` ou 24 bits ; ALSA : `i16`,
+    /// `i32`, 24 bits…) donnent tous le même signal, à l'entrée comme à la sortie.
+    #[test]
+    fn every_sample_format_the_system_may_use_gives_the_same_signal() {
+        let tone = sine(1000.0, 0.5, 4800, 48_000.0);
+        fn captured<T: Copy>(tone: &[f32], to: impl Fn(f32) -> T) -> Vec<f32>
+        where
+            f32: FromSample<T>,
+        {
+            let data: Vec<T> = tone.iter().flat_map(|x| [to(*x), to(*x)]).collect();
+            InputConverter::new(2, 48_000).convert(&data).1.to_vec()
+        }
+        fn played<T: Sample + FromSample<f32>>(tone: &[f32]) -> Vec<f32>
+        where
+            f32: FromSample<T>,
+        {
+            let mut data = vec![T::EQUILIBRIUM; tone.len() * 2];
+            write_interleaved(&mut data, 2, tone);
+            assert!(data.chunks(2).all(|c| c[0].to_sample::<f32>() == c[1].to_sample::<f32>()), "voies identiques");
+            data.chunks(2).map(|c| c[0].to_sample::<f32>()).collect()
+        }
+        let heard = [
+            ("f32", captured(&tone, |x| x)),
+            ("f64", captured(&tone, f64::from)),
+            ("i8", captured(&tone, i8::from_sample)),
+            ("i16", captured(&tone, i16::from_sample)),
+            ("i24", captured(&tone, I24::from_sample)),
+            ("i32", captured(&tone, i32::from_sample)),
+            ("u8", captured(&tone, u8::from_sample)),
+            ("u16", captured(&tone, u16::from_sample)),
+            ("u24", captured(&tone, U24::from_sample)),
+            ("u32", captured(&tone, u32::from_sample)),
+        ];
+        let spoken = [
+            ("f32", played::<f32>(&tone)),
+            ("f64", played::<f64>(&tone)),
+            ("i8", played::<i8>(&tone)),
+            ("i16", played::<i16>(&tone)),
+            ("i24", played::<I24>(&tone)),
+            ("i32", played::<i32>(&tone)),
+            ("u8", played::<u8>(&tone)),
+            ("u16", played::<u16>(&tone)),
+            ("u24", played::<U24>(&tone)),
+            ("u32", played::<u32>(&tone)),
+        ];
+        for (format, signal) in heard.iter().chain(&spoken) {
+            assert_eq!(signal.len(), tone.len(), "{format}");
+            let worst = signal.iter().zip(&tone).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+            assert!(worst < 0.01, "{format} : écart {worst}");
+        }
+    }
+
+    /// Des voies et des fréquences que les cartes son rendent (micro d'ordinateur portable, interface USB à 4 entrées, sortie
+    /// 7.1 à 96 kHz, 192 kHz) : toujours une seule voix à 48 kHz, au même niveau.
+    #[test]
+    fn any_channel_count_and_rate_becomes_the_same_mono_signal() {
+        for (channels, rate) in
+            [(1, 44_100), (1, 48_000), (2, 48_000), (4, 44_100), (6, 48_000), (8, 96_000), (2, 192_000)]
+        {
+            let tone = sine(1000.0, 0.5, rate as usize, f64::from(rate));
+            let data: Vec<f32> = tone.iter().flat_map(|x| vec![*x; channels]).collect();
+            let mut converter = InputConverter::new(channels, rate);
+            let mut out = Vec::new();
+            for block in data.chunks(channels * 480) {
+                out.extend_from_slice(converter.convert(block).1);
+            }
+            assert!(
+                (out.len() as i64 - 48_000).abs() < 400,
+                "{channels} voies à {rate} Hz : {} échantillons pour 1 s",
+                out.len()
+            );
+            let body = &out[12_000..36_000];
+            assert!(tone_share(body, 1000.0) > 0.999, "{channels} voies à {rate} Hz");
+            let peak = body.iter().fold(0.0f32, |m, x| m.max(x.abs()));
+            assert!((peak - 0.5).abs() < 0.02, "{channels} voies à {rate} Hz : crête {peak}");
+        }
+    }
+
+    /// Ce que la liste donne se retrouve : par son nom comme par son identifiant (qui change de forme selon le système :
+    /// `alsa:…`, un UID CoreAudio, un identifiant de point de terminaison WASAPI). Sans carte son, la liste est vide ou refusée.
+    #[test]
+    fn a_listed_device_is_found_again_by_name_and_by_id() {
+        for input in [true, false] {
+            let Ok(listed) = list(input) else { continue };
+            assert!(listed.iter().all(|d| !d.name.is_empty() && !d.id.is_empty()), "nom et identifiant non vides");
+            for d in &listed {
+                let by_name = find(input, Some(&d.name)).expect("trouvé par son nom");
+                let by_id = find(input, Some(&d.id)).expect("trouvé par son identifiant");
+                assert_eq!(id_of(&by_id), d.id);
+                assert_eq!(name_of(&by_name).as_deref(), Some(d.name.as_str()));
+            }
+        }
     }
 
     #[test]

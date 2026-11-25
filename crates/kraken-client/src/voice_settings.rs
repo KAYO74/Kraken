@@ -50,14 +50,14 @@ const NEEDS_HTTPS: &str =
     tk!("Le micro et la caméra demandent l'instance en HTTPS (ou ouverte sur cet ordinateur, via localhost).");
 const TAB_REFUSED: &str = tk!("La touche Tab sert à naviguer dans la page : choisis-en une autre.");
 const ENTER_REFUSED: &str = tk!("La touche Entrée seule ne peut pas servir : choisis-en une autre.");
-// Vocal natif (appli de bureau Linux) : des clés de traduction, comme les textes ci-dessus.
+// Vocal natif (appli de bureau) : des clés de traduction, comme les textes ci-dessus.
 const NATIVE_INTRO: &str = tk!(
     "Ces réglages restent sur cet appareil. Le micro et la sortie choisis servent au prochain appel : pour en changer pendant un appel, quitte le salon et rejoins-le."
 );
 const NATIVE_LEVELS: &str =
     tk!("Le volume du micro et celui des autres s'appliquent tout de suite, même pendant un appel.");
 const NATIVE_TEST: &str =
-    tk!("Le test du micro n'existe pas encore dans l'appli Linux. Pendant un appel, la barre suit ton micro.");
+    tk!("Le test du micro n'existe pas encore dans l'appli de bureau. Pendant un appel, la barre suit ton micro.");
 /// Le micro se referme un peu après le relâchement : la fin d'un mot n'est pas coupée.
 const RELEASE_MS: u32 = 200;
 /// L'annonce vocale attend que l'état se pose : des appuis rapprochés ne la font pas bavarder.
@@ -302,7 +302,7 @@ fn CameraPreview(stream: RwSignal<Option<MediaStream>, LocalStorage>) -> impl In
     }
 }
 
-/// Réglages › Voix et vidéo (S10) : ceux du navigateur (WebRTC), ou ceux du moteur natif de l'appli de bureau Linux.
+/// Réglages › Voix et vidéo (S10) : ceux du navigateur (WebRTC), ou ceux du moteur natif de l'appli de bureau.
 #[component]
 pub fn VoiceSettings() -> impl IntoView {
     // Le moteur natif n'est connu qu'un instant après le démarrage : le choix suit le signal.
@@ -622,7 +622,7 @@ fn LevelSlider(
     }
 }
 
-/// Les réglages quand l'appel passe par le moteur natif de l'appli de bureau Linux : les micros et haut-parleurs du système
+/// Les réglages quand l'appel passe par le moteur natif de l'appli de bureau : les micros et haut-parleurs du système
 /// (relevés par le moteur), le gain et le volume (tout de suite, même en appel), appuyer pour parler. Le test du micro, la
 /// caméra, l'annulation d'écho et la réduction du bruit n'existent pas : la page le dit.
 #[component]

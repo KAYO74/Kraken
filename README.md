@@ -100,7 +100,7 @@ irm https://raw.githubusercontent.com/KAYO74/Kraken/main/install.ps1 | iex      
 
 Le script installe Docker s'il manque, pose une seule question (ton nom de domaine, facultatif), crée les mots de passe et démarre KRAKEN : PostgreSQL 18, Caddy pour le HTTPS automatique, sauvegarde quotidienne. Sans nom de domaine, un serveur loué reçoit une adresse `<ip>.sslip.io` avec un vrai HTTPS (ouvre aussi les ports 80 et 443 dans le pare-feu de l'hébergeur) ; un ordinateur à la maison sert ton réseau local. `sh install.sh --help` liste les options (`--domain`, `--local`, `--dir`, `--yes`).
 
-Salons vocaux (voix et partage d'écran) : le son et l'image passent en direct par le port UDP 3478 (`KRAKEN_RTC_PORT`), qui doit être joignable par les navigateurs : le script l'ouvre dans ufw, à toi de l'ouvrir chez l'hébergeur ou de le rediriger sur ta box. Pas de serveur relais (TURN) pour l'instant. Parler et partager son écran demandent une instance en HTTPS ; en HTTP simple sur le réseau local, on écoute et on regarde.
+Salons vocaux (voix et partage d'écran) : le son et l'image passent en direct par le port UDP 3478 (`KRAKEN_RTC_PORT`), qui doit être joignable par les navigateurs : le script l'ouvre dans ufw, à toi de l'ouvrir chez l'hébergeur ou de le rediriger sur ta box. Pas de serveur relais (TURN) pour l'instant. Parler et partager son écran demandent une instance en HTTPS ; en HTTP simple sur le réseau local, un navigateur écoute et regarde seulement. L'appli de bureau fait mieux : son moteur vocal natif (voix seulement, sans caméra ni partage d'écran) parle quand son navigateur intégré ne le peut pas, par exemple sur macOS avec une instance en HTTP sur le réseau local.
 
 Mise à jour : relance la même commande (avec `sudo` si tu as installé avec `sudo`) ; tes réglages et tes données sont gardés. Sauvegardes dans `backups/` du dossier d'installation (14 jours) ; restauration : `docker compose exec -T db pg_restore -U kraken -d kraken --clean < backups/kraken-AAAA-MM-JJ.dump`. Sonde de disponibilité : `https://<domaine>/api/v1/health` répond `ok`.
 
@@ -123,7 +123,7 @@ npx playwright test                       # serveur lancé avec KRAKEN_AUTH_PER_
 | `crates/kraken-db` | PostgreSQL : migrations, requêtes, file de tâches |
 | `crates/kraken-server` | REST `/api/v1`, gateway `/gateway`, client web |
 | `crates/kraken-voice` | salons vocaux : SFU WebRTC (str0m) sur un port UDP |
-| `crates/kraken-voice-native` | client vocal natif (Opus, str0m, cpal) pour l'appli de bureau Linux, dont la webview n'a pas WebRTC |
+| `crates/kraken-voice-native` | client vocal natif (Opus, str0m, cpal) pour l'appli de bureau (Linux, macOS, Windows) quand sa webview ne peut pas faire l'appel : pas de WebRTC sous Linux, pas de micro pour une instance en HTTP sous macOS |
 | `crates/kraken-client` | client Leptos (WASM) |
 | `apps/desktop` | appli de bureau (Tauri) : rejoindre ou héberger, construite par `.github/workflows/desktop.yml` |
 | `install.sh`, `install.ps1` | installation en une commande (Linux et macOS, Windows) |

@@ -30,12 +30,16 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
-      # libasound2-dev : le vocal natif (cpal, ALSA) ; cmake : libopus (opusic-sys), déjà sur l'image des
-      # runners mais listé pour ne pas en dépendre.
+      # Vocal natif (cpal : ALSA sous Linux, CoreAudio sous macOS, WASAPI sous Windows ; libopus compilée et liée
+      # statiquement par cmake). Linux : libasound2-dev, et cmake (déjà sur l'image, listé pour ne pas en dépendre) ;
+      # macOS et Windows : cmake est sur l'image, et on le vérifie ici plutôt que dans une erreur de compilation.
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf libasound2-dev cmake
+      - if: runner.os != 'Linux'
+        shell: bash
+        run: cmake --version
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin,wasm32-unknown-unknown' || 'wasm32-unknown-unknown' }}
@@ -81,9 +85,18 @@ jobs:
               release/kraken-desktop.exe --self-test
               ;;
             macOS)
+              # Le vocal natif ouvre le micro hors de la webview : sans cette phrase dans Info.plist, macOS ferme l'appli
+              # à la première prise du micro.
+              for app in ${{ matrix.target }}/release/bundle/macos/*.app; do
+                plutil -extract NSMicrophoneUsageDescription raw "$app/Contents/Info.plist" > /dev/null \
+                  || { echo "$app : NSMicrophoneUsageDescription absent d'Info.plist"; exit 1; }
+                codesign -d --entitlements - "$app" || true
+              done
               for bin in ${{ matrix.target }}/release/bundle/macos/*.app/Contents/MacOS/*; do
-                # Rien de Homebrew : absent des Mac des gens, l'appli n'y démarrerait pas.
-                if otool -L "$bin" | grep -E '/opt/homebrew|/usr/local'; then echo "$bin dépend de Homebrew"; exit 1; fi
+                # Rien de Homebrew : absent des Mac des gens, l'appli n'y démarrerait pas. Libopus (vocal natif) est liée
+                # statiquement : ni elle ni rien d'autre que le système ne doit apparaître.
+                otool -L "$bin"
+                if otool -L "$bin" | grep -E '/opt/homebrew|/usr/local|libopus'; then echo "$bin dépend de Homebrew ou de libopus"; exit 1; fi
                 "$bin" --self-test
               done
               ;;

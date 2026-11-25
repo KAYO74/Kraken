@@ -233,14 +233,15 @@ L'appli de bureau n'a pas les appels vocaux ici : son navigateur intégré (WebK
 Ouvrir dans mon navigateur	Open in my browser
 Impossible d'ouvrir le navigateur.	Couldn't open the browser.
 Pas de vocal dans l'appli de bureau : réponds depuis ton navigateur.	No voice in the desktop app: answer from your browser.
-# Vocal natif de l'appli de bureau Linux (étape 2b) : réglages, avis du moteur, ce qui manque.
-Pas de caméra ni de partage d'écran dans l'appli Linux pour l'instant : ouvre cette page dans ton navigateur.	No camera or screen sharing in the Linux app for now: open this page in your browser.
-Écran partagé ou caméra allumée chez {noms} : l'image ne s'affiche pas dans l'appli Linux pour l'instant. Ouvre cette page dans ton navigateur pour la voir.	Screen shared or camera on for {noms}: the picture doesn't show in the Linux app for now. Open this page in your browser to see it.
-Pas d'annulation d'écho ni de réduction de bruit dans l'appli Linux pour l'instant : un casque évite l'écho.	No echo cancellation or noise reduction in the Linux app for now: a headset avoids echo.
+# Vocal natif de l'appli de bureau (étape 2b) : réglages, avis du moteur, ce qui manque.
+Pas de caméra ni de partage d'écran dans l'appli de bureau pour l'instant : ouvre cette page dans ton navigateur.	No camera or screen sharing in the desktop app for now: open this page in your browser.
+Écran partagé ou caméra allumée chez {noms} : l'image ne s'affiche pas dans l'appli de bureau pour l'instant. Ouvre cette page dans ton navigateur pour la voir.	Screen shared or camera on for {noms}: the picture doesn't show in the desktop app for now. Open this page in your browser to see it.
+Pas d'annulation d'écho ni de réduction de bruit dans l'appli de bureau pour l'instant : un casque évite l'écho.	No echo cancellation or noise reduction in the desktop app for now: a headset avoids echo.
 {nom} (par défaut)	{nom} (default)
 {n} %	{n}%
 Aucun micro n'est utilisable : tu es en sourdine. Branche-en un, puis quitte le salon et rejoins-le.	No usable microphone: you're muted. Plug one in, then leave the channel and join again.
 L'audio ne répond plus : le micro ou les haut-parleurs ont été débranchés ou repris par une autre application.	Audio stopped responding: the microphone or speakers were unplugged or taken over by another application.
+Micro silencieux : si personne ne t'entend, vérifie Réglages Système › Confidentialité et sécurité › Micro, et autorise KRAKEN.	Silent microphone: if nobody can hear you, check System Settings › Privacy & Security › Microphone, and allow KRAKEN.
 Le vocal natif ne répond pas.	Native voice isn't responding.
 Impossible d'ouvrir une connexion réseau pour le vocal.	Couldn't open a network connection for voice.
 Le vocal natif n'a pas pu démarrer.	Native voice couldn't start.
@@ -252,11 +253,10 @@ Micro indisponible : tu entres micro coupé.	Microphone unavailable: you're join
 Haut-parleurs indisponibles : tu n'entendras personne.	Speakers unavailable: you won't hear anyone.
 Ni micro ni haut-parleurs utilisables : vérifie le son du système.	No usable microphone or speakers: check your system sound settings.
 Cette version de KRAKEN n'a pas de pilote audio.	This version of KRAKEN has no audio driver.
-Le vocal natif n'existe que sous Linux.	Native voice only exists on Linux.
 Le vocal natif s'est arrêté brutalement.	Native voice stopped unexpectedly.
 Ces réglages restent sur cet appareil. Le micro et la sortie choisis servent au prochain appel : pour en changer pendant un appel, quitte le salon et rejoins-le.	These settings stay on this device. The microphone and output you pick are used for your next call: to change them during a call, leave the channel and join again.
 Le volume du micro et celui des autres s'appliquent tout de suite, même pendant un appel.	Microphone volume and the volume of others apply immediately, even during a call.
-Le test du micro n'existe pas encore dans l'appli Linux. Pendant un appel, la barre suit ton micro.	The microphone test doesn't exist yet in the Linux app. During a call, the bar follows your microphone.
+Le test du micro n'existe pas encore dans l'appli de bureau. Pendant un appel, la barre suit ton micro.	The microphone test doesn't exist yet in the desktop app. During a call, the bar follows your microphone.
 Niveaux	Levels
 Volume du micro	Microphone volume
 Volume des autres	Others' volume

@@ -7,9 +7,10 @@
 //! Les objets JavaScript (connexion, pistes) vivent dans `SESSION`, hors des signaux. Chaque
 //! connexion a son numéro (`GEN`) : un rappel d'une connexion fermée ne touche plus à rien.
 //!
-//! Sans WebRTC dans le navigateur (WebKitGTK de l'appli de bureau Linux), l'appel passe par le moteur
-//! natif de l'appli (`native_voice.rs`) : voix seulement, la page garde la même session, les mêmes
-//! états et les mêmes boutons.
+//! Quand le navigateur intégré de l'appli de bureau ne peut pas faire l'appel lui-même (pas de WebRTC :
+//! WebKitGTK de Linux ; pas de micro possible : instance en http sur macOS, voir [`browser_can_call`]), l'appel
+//! passe par le moteur natif de l'appli (`native_voice.rs`) : voix seulement, la page garde la même session,
+//! les mêmes états et les mêmes boutons.
 //!
 //! Contrôle à distance : celui qui regarde un écran demande à le contrôler ; le serveur relaie
 //! demande, réponse, actions et fin par le canal de données. Seule l'appli de bureau peut être
@@ -275,21 +276,36 @@ pub fn browser_webrtc() -> bool {
     js_sys::Reflect::has(&window(), &"RTCPeerConnection".into()).unwrap_or(false)
 }
 
-/// Les appels vocaux marchent ici : par le WebRTC du navigateur, ou par le moteur natif de l'appli de bureau Linux
+/// La politique du vocal natif dans l'appli de bureau (Linux, macOS, Windows ; un navigateur ordinaire n'y est jamais
+/// concerné). Faux, « en secours » : le moteur natif ne sert que si le navigateur intégré ne peut pas faire l'appel
+/// ([`browser_can_call`]) ; sinon le chemin du navigateur, avec caméra et partage d'écran, reste celui d'avant. Vrai,
+/// « partout natif » : toute l'appli de bureau où le moteur répond passe par lui, voix seulement. L'autre choix se fait
+/// en changeant cette seule ligne.
+const ALWAYS_NATIVE: bool = false;
+
+/// Le navigateur intégré sait faire l'appel tout seul : WebRTC, et de quoi capter le micro (contexte sécurisé et
+/// `navigator.mediaDevices`, que WKWebView refuse à une page en http hors de cet ordinateur). C'est la seule règle qui décide
+/// entre le navigateur et le moteur natif : [`supported`], [`native`], `native_now` et `native_voice::init` la suivent.
+pub fn browser_can_call() -> bool {
+    !ALWAYS_NATIVE && browser_webrtc() && window().is_secure_context() && devices().is_some()
+}
+
+/// Les appels vocaux marchent ici : par le WebRTC du navigateur, ou par le moteur natif de l'appli de bureau
 /// (qui n'est connu qu'un instant après le démarrage : dans une vue, cette fonction suit le signal).
 pub fn supported() -> bool {
     browser_webrtc() || native_voice::available()
 }
 
-/// L'appel passe par le moteur natif : le navigateur n'a pas WebRTC et l'appli de bureau a de quoi le remplacer. La
-/// voix seulement : ni caméra, ni partage d'écran, ni écran des autres. Suit le signal, comme [`supported`].
+/// L'appel passe par le moteur natif : l'appli de bureau a le moteur, et son navigateur ne peut pas faire l'appel
+/// ([`browser_can_call`]). La voix seulement : ni caméra, ni partage d'écran, ni écran des autres. Suit le signal,
+/// comme [`supported`].
 pub fn native() -> bool {
-    !browser_webrtc() && native_voice::available()
+    !browser_can_call() && native_voice::available()
 }
 
 /// [`native`] pour le code qui ne suit rien (gestionnaires, tâches asynchrones).
 fn native_now() -> bool {
-    !browser_webrtc() && native_voice::available_now()
+    !browser_can_call() && native_voice::available_now()
 }
 
 /// Pourquoi les appels vocaux manquent : l'appli de bureau sans WebRTC d'abord (le navigateur du système en a), puis une
