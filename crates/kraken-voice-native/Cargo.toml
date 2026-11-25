@@ -1,6 +1,6 @@
 [package]
 name = "kraken-voice-native"
-description = "Client vocal natif pour le SFU de KRAKEN : un « navigateur » sans navigateur (Opus, WebRTC), pour l'appli de bureau Linux"
+description = "Client vocal natif pour le SFU de KRAKEN : un « navigateur » sans navigateur (Opus, WebRTC), pour l'appli de bureau (Linux, macOS, Windows)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,8 +8,8 @@ repository.workspace = true
 
 [features]
 default = ["device"]
-# Vrais micro et haut-parleurs, par cpal (ALSA sous Linux, donc aussi PulseAudio et PipeWire ;
-# demande `libasound2-dev` à la compilation). Sans elle : les sources et puits synthétiques seulement.
+# Vrais micro et haut-parleurs, par cpal (ALSA sous Linux, donc aussi PulseAudio et PipeWire, et `libasound2-dev` à
+# la compilation ; CoreAudio sous macOS ; WASAPI sous Windows). Sans elle : les sources et puits synthétiques seulement.
 device = ["dep:cpal"]
 
 [dependencies]

@@ -4,8 +4,8 @@
 //!
 //! Le choix est gardé dans le dossier de configuration de l'appli ; le menu KRAKEN permet d'en
 //! changer. Micro et partage d'écran (salons vocaux) : `media.rs` ; vocal natif quand le navigateur
-//! intégré n'a pas WebRTC (Linux) : `native_voice.rs` ; contrôle à distance de cet ordinateur depuis un
-//! salon vocal : `remote.rs`. `--self-test` vérifie le mode
+//! intégré ne peut pas faire l'appel (Linux sans WebRTC, instance en http sur macOS) : `native_voice.rs` ;
+//! contrôle à distance de cet ordinateur depuis un salon vocal : `remote.rs`. `--self-test` vérifie le mode
 //! « héberger », vocal compris, sans ouvrir de fenêtre (CI).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]

@@ -1,13 +1,15 @@
-//! Vocal natif (Linux seulement) : le moteur de `kraken-voice-native` piloté par la page de l'instance.
+//! Vocal natif (Linux, macOS, Windows) : le moteur de `kraken-voice-native` piloté par la page de l'instance.
 //!
-//! Le navigateur intégré de Linux (WebKitGTK de Debian, Ubuntu, Fedora) n'a pas WebRTC : la page
-//! web fait donc l'appel HTTP (`POST /channels/{id}/voice`, elle a la session) et laisse ce module
-//! fabriquer l'offre, jouer le son et capter le micro. Les sept commandes enveloppent un seul
-//! [`Controller`](engine::Controller), partagé par toute l'appli (un appel à la fois) :
+//! Le navigateur intégré ne sait pas toujours faire l'appel : celui de Linux (WebKitGTK de Debian, Ubuntu, Fedora)
+//! n'a pas WebRTC, et celui de macOS (WKWebView) ou de Windows (WebView2) ne donne pas le micro à une instance en
+//! http hors de cet ordinateur. La page web fait alors l'appel HTTP (`POST /channels/{id}/voice`, elle a la
+//! session) et laisse ce module fabriquer l'offre, jouer le son et capter le micro (cpal : ALSA, CoreAudio ou
+//! WASAPI ; la règle qui décide est dans le client, `voice::browser_can_call`). Les sept commandes enveloppent un seul
+//! [`Controller`], partagé par toute l'appli (un appel à la fois) :
 //!
 //! | Commande | Arguments (`invoke`) | Réponse |
 //! |---|---|---|
-//! | `native_voice_available` | | `true` sous Linux, `false` ailleurs |
+//! | `native_voice_available` | | `true` : le moteur est là (avec son pilote audio) |
 //! | `native_voice_start` | `opts` : `StartOpts`, facultatif | `VoiceJoin` : le corps de `POST /channels/{id}/voice` |
 //! | `native_voice_answer` | `sdp` : la réponse du serveur | rien |
 //! | `native_voice_set` | `patch` : `StatePatch` | rien |
@@ -20,8 +22,7 @@
 //!
 //! Même garde que `open_in_browser` ([`crate::media::instance_page`]) : seule la page de l'instance, dans la
 //! fenêtre principale, en http ou https, y a droit (capacité ajoutée à son origine, `remote::allow_origin`,
-//! et adresse revérifiée à chaque appel). Windows et macOS ont WebRTC dans leur webview : les commandes
-//! existent (la page n'a pas à deviner) mais `native_voice_available` y rend `false` et les autres refusent.
+//! et adresse revérifiée à chaque appel).
 //!
 //! Hors du fil principal : ouvrir un périphérique ou attendre le moteur peut prendre un moment. L'appel
 //! ne survit pas à la page qui l'a lancé : un rechargement, un changement de page ([`page_changed`]) ou
@@ -29,9 +30,10 @@
 
 use std::sync::OnceLock;
 
+use kraken_proto::VoiceJoin;
+use kraken_voice_native::Snapshot;
+use kraken_voice_native::control::{Controller, Devices, StartOpts, StatePatch};
 use tauri::Webview;
-
-use engine::{Controller, Devices, Snapshot, StartOpts, StatePatch, VoiceJoin};
 
 /// Commandes de ce module (build.rs, capacité de l'instance).
 pub const COMMANDS: [&str; 7] = [
@@ -44,67 +46,16 @@ pub const COMMANDS: [&str; 7] = [
     "native_voice_devices",
 ];
 
-/// Ce que dit la page, hors de Linux, à qui appelle une commande autre que `native_voice_available`.
-const ONLY_LINUX: &str = "Le vocal natif n'existe que sous Linux.";
-
-/// Le moteur de cette plateforme : le vrai sous Linux.
-#[cfg(target_os = "linux")]
-mod engine {
-    pub use kraken_proto::VoiceJoin;
-    pub use kraken_voice_native::Snapshot;
-    pub use kraken_voice_native::control::{Controller, Devices, StartOpts, StatePatch};
-}
-
-/// Ailleurs : mêmes noms, rien dedans (les commandes refusent avant, voir [`ready`]).
-#[cfg(not(target_os = "linux"))]
-mod engine {
-    use serde_json::Value;
-
-    pub type VoiceJoin = Value;
-    pub type Snapshot = Value;
-    pub type StartOpts = Value;
-    pub type StatePatch = Value;
-    pub type Devices = Value;
-
-    pub struct Controller;
-
-    impl Controller {
-        pub fn new() -> Self {
-            Self
-        }
-        pub fn available(&self) -> bool {
-            false
-        }
-        pub fn start(&self, _: StartOpts) -> Result<VoiceJoin, String> {
-            Err(super::ONLY_LINUX.into())
-        }
-        pub fn answer(&self, _: &str) -> Result<(), String> {
-            Err(super::ONLY_LINUX.into())
-        }
-        pub fn set(&self, _: StatePatch) -> Result<(), String> {
-            Err(super::ONLY_LINUX.into())
-        }
-        pub fn poll(&self) -> Option<Snapshot> {
-            None
-        }
-        pub fn stop(&self) {}
-        pub fn devices(&self) -> Result<Devices, String> {
-            Err(super::ONLY_LINUX.into())
-        }
-    }
-}
-
 /// Le moteur de l'appli, créé au premier appel.
 fn controller() -> &'static Controller {
     static CONTROLLER: OnceLock<Controller> = OnceLock::new();
     CONTROLLER.get_or_init(Controller::new)
 }
 
-/// La garde de toutes les commandes : la page est celle de l'instance (comme `open_in_browser`), et ce
-/// système a un vocal natif.
+/// La garde de toutes les commandes : la page est celle de l'instance (comme `open_in_browser`).
 fn ready(webview: &Webview) -> Result<&'static Controller, String> {
     crate::media::instance_page(webview)?;
-    if cfg!(target_os = "linux") { Ok(controller()) } else { Err(ONLY_LINUX.into()) }
+    Ok(controller())
 }
 
 /// Un appel qui peut durer (périphérique à ouvrir, fin du moteur à attendre), hors du fil principal et des
@@ -116,17 +67,15 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Sen
 /// Une nouvelle page se charge (rechargement, autre instance, accueil) : l'appel de la précédente n'a plus
 /// de page pour le montrer ni le couper, et le micro resterait ouvert. On l'arrête.
 pub fn page_changed() {
-    #[cfg(target_os = "linux")]
     drop(tauri::async_runtime::spawn_blocking(|| controller().stop()));
 }
 
 /// Fermeture de l'appli : le serveur voit le départ tout de suite.
 pub fn shutdown() {
-    #[cfg(target_os = "linux")]
     controller().stop();
 }
 
-/// Vrai sous Linux : la page choisit le vocal natif quand son navigateur n'a pas WebRTC.
+/// Vrai quand le moteur est là : la page l'utilise quand son navigateur intégré ne peut pas faire l'appel.
 #[tauri::command(async)]
 pub fn native_voice_available(webview: Webview) -> Result<bool, String> {
     crate::media::instance_page(&webview)?;

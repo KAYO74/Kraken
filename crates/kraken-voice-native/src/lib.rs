@@ -1,5 +1,6 @@
 //! Le vocal de KRAKEN sans navigateur : un client natif pour le SFU de `kraken-voice`, pour
-//! l'appli de bureau Linux, dont le navigateur intégré (WebKitGTK) n'a pas WebRTC.
+//! l'appli de bureau (Linux, macOS, Windows) quand son navigateur intégré ne peut pas faire l'appel : pas de WebRTC
+//! (WebKitGTK de Linux), pas de micro pour une page en http (WKWebView de macOS).
 //!
 //! C'est un « navigateur » de plus pour le SFU : même offre (quatre transceivers `sendonly`, micro,
 //! image de l'écran, son de l'écran et caméra, dans cet ordre, et le canal de données `kraken`),
@@ -26,7 +27,7 @@
 //! Le moteur ne voit que des trames de 20 ms (48 kHz, mono, `f32` : [`audio::FRAME`] échantillons)
 //! par les traits [`Capture`] et [`Playback`]. Avec la fonction `device` (par défaut),
 //! [`device::CpalCapture`] et [`device::CpalPlayback`] les branchent sur de vrais périphériques
-//! (cpal : ALSA, donc aussi PulseAudio et PipeWire) ; sans carte son, [`audio::ToneCapture`] et
+//! (cpal : ALSA sous Linux, donc aussi PulseAudio et PipeWire, CoreAudio sous macOS, WASAPI sous Windows) ; sans carte son, [`audio::ToneCapture`] et
 //! [`audio::SinkPlayback`] les remplacent, ce que font les tests.
 //!
 //! Émission : micro, gain, Opus (voix, 32 kbit/s, correction d'erreur intégrée), un paquet toutes les

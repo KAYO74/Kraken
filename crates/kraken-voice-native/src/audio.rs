@@ -31,7 +31,7 @@ pub type Frame = [f32; FRAME];
 pub struct DeviceInfo {
     /// Son nom, tel qu'on l'affiche (à donner à `CpalCapture::open` et `CpalPlayback::open`).
     pub name: String,
-    /// Son identifiant (cpal : `alsa:default`…), stable et sans ambiguïté : `open` le prend aussi.
+    /// Son identifiant (cpal : `alsa:default` sous Linux, un identifiant CoreAudio ou WASAPI ailleurs), stable et sans ambiguïté : `open` le prend aussi.
     pub id: String,
     /// C'est le périphérique par défaut du système.
     pub is_default: bool,
