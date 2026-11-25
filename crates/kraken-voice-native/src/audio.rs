@@ -100,10 +100,11 @@ impl ToneCapture {
     }
 }
 
-impl Capture for ToneCapture {
-    fn read_frame(&mut self, frame: &mut Frame) -> bool {
+impl ToneCapture {
+    /// [`Capture::read_frame`] à l'instant `now` (les tests font avancer une heure fabriquée, sans dormir : la vraie
+    /// horloge d'une machine chargée n'a pas la précision qu'ils demandent).
+    fn read_frame_at(&mut self, frame: &mut Frame, now: Instant) -> bool {
         if self.paced {
-            let now = Instant::now();
             let due = *self.next.get_or_insert(now);
             if now < due {
                 return false;
@@ -115,6 +116,12 @@ impl Capture for ToneCapture {
         }
         self.fill(frame);
         true
+    }
+}
+
+impl Capture for ToneCapture {
+    fn read_frame(&mut self, frame: &mut Frame) -> bool {
+        self.read_frame_at(frame, Instant::now())
     }
 }
 
@@ -206,23 +213,22 @@ impl SinkPlayback {
         (playback, sink)
     }
 
-    /// Le périphérique a joué ce que le temps écoulé lui a laissé jouer.
-    fn advance(&mut self) {
-        let now = Instant::now();
-        let played = now.duration_since(self.at).as_secs_f64() * f64::from(SAMPLE_RATE);
+    /// Le périphérique a joué ce que le temps écoulé lui a laissé jouer, à l'instant `now`.
+    fn advance(&mut self, now: Instant) {
+        let played = now.saturating_duration_since(self.at).as_secs_f64() * f64::from(SAMPLE_RATE);
         self.queued = (self.queued - played).max(0.0);
-        self.at = now;
+        self.at = self.at.max(now);
     }
-}
 
-impl Playback for SinkPlayback {
-    fn needs_frame(&mut self) -> bool {
-        self.advance();
+    /// [`Playback::needs_frame`] à l'instant `now` (les tests font avancer une heure fabriquée, sans dormir).
+    fn needs_frame_at(&mut self, now: Instant) -> bool {
+        self.advance(now);
         self.queued < Self::TARGET
     }
 
-    fn write_frame(&mut self, frame: &Frame) {
-        self.advance();
+    /// [`Playback::write_frame`] à l'instant `now`.
+    fn write_frame_at(&mut self, frame: &Frame, now: Instant) {
+        self.advance(now);
         self.queued += FRAME as f64;
         let mut data = self.sink.lock();
         data.samples.extend_from_slice(frame);
@@ -231,6 +237,16 @@ impl Playback for SinkPlayback {
             let forget = data.samples.len() - data.keep;
             data.samples.drain(..forget);
         }
+    }
+}
+
+impl Playback for SinkPlayback {
+    fn needs_frame(&mut self) -> bool {
+        self.needs_frame_at(Instant::now())
+    }
+
+    fn write_frame(&mut self, frame: &Frame) {
+        self.write_frame_at(frame, Instant::now());
     }
 }
 
@@ -284,12 +300,27 @@ mod tests {
     fn paced_tone_follows_the_clock() {
         let mut tone = ToneCapture::new(440.0, 0.5);
         let mut frame = [0.0; FRAME];
-        assert!(tone.read_frame(&mut frame), "la première trame est prête tout de suite");
-        assert!(!tone.read_frame(&mut frame), "la suivante attend 20 ms");
-        std::thread::sleep(Duration::from_millis(45));
-        assert!(tone.read_frame(&mut frame));
-        assert!(tone.read_frame(&mut frame), "le retard se rattrape trame par trame");
-        assert!(!tone.read_frame(&mut frame));
+        let t0 = Instant::now();
+        assert!(tone.read_frame_at(&mut frame, t0), "la première trame est prête tout de suite");
+        assert!(!tone.read_frame_at(&mut frame, t0), "la suivante attend 20 ms");
+        assert!(!tone.read_frame_at(&mut frame, t0 + Duration::from_millis(19)));
+        let later = t0 + Duration::from_millis(45);
+        assert!(tone.read_frame_at(&mut frame, later));
+        assert!(tone.read_frame_at(&mut frame, later), "le retard se rattrape trame par trame");
+        assert!(!tone.read_frame_at(&mut frame, later));
+    }
+
+    #[test]
+    fn paced_tone_restarts_after_a_long_stall() {
+        let mut tone = ToneCapture::new(440.0, 0.5);
+        let mut frame = [0.0; FRAME];
+        let t0 = Instant::now();
+        assert!(tone.read_frame_at(&mut frame, t0));
+        // Plus de 100 ms de retard : le périphérique a perdu des trames, il repart d'ici, sans rafale.
+        let stalled = t0 + Duration::from_millis(500);
+        assert!(tone.read_frame_at(&mut frame, stalled));
+        assert!(!tone.read_frame_at(&mut frame, stalled), "pas de rattrapage en rafale");
+        assert!(tone.read_frame_at(&mut frame, stalled + FRAME_DURATION));
     }
 
     #[test]
@@ -297,18 +328,18 @@ mod tests {
         let (mut playback, sink) = SinkPlayback::new();
         assert!(sink.is_empty());
         let frame = [0.25; FRAME];
+        // Une heure fabriquée, figée : la file visée est de deux trames, exactement.
+        let t0 = Instant::now();
         let mut written = 0;
-        while playback.needs_frame() {
-            playback.write_frame(&frame);
+        while playback.needs_frame_at(t0) {
+            playback.write_frame_at(&frame, t0);
             written += 1;
-            assert!(written <= 3, "la file visée est de deux trames");
+            assert!(written <= 2, "la file visée est de deux trames");
         }
-        // Le périphérique joue déjà : quelques microsecondes de plus et il en veut une troisième.
-        assert!((2..=3).contains(&written), "{written} trames");
+        assert_eq!(written, 2);
         assert_eq!(sink.len(), written * FRAME);
         // Le temps passe : le périphérique a joué une trame, il en demande une autre.
-        std::thread::sleep(Duration::from_millis(25));
-        assert!(playback.needs_frame());
+        assert!(playback.needs_frame_at(t0 + Duration::from_millis(25)));
         assert_eq!(sink.last(3), [0.25; 3]);
         sink.clear();
         assert!(sink.is_empty());
