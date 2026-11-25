@@ -237,14 +237,15 @@ L'appli de bureau n'a pas les appels vocaux ici : son navigateur intégré (WebK
 Ouvrir dans mon navigateur	باز کردن در مرورگر من
 Impossible d'ouvrir le navigateur.	باز کردن مرورگر ممکن نشد.
 Pas de vocal dans l'appli de bureau : réponds depuis ton navigateur.	تماس صوتی در برنامه دسکتاپ در دسترس نیست: از مرورگر خود پاسخ دهید.
-# Vocal natif de l'appli de bureau Linux (étape 2b) : réglages, avis du moteur, ce qui manque.
-Pas de caméra ni de partage d'écran dans l'appli Linux pour l'instant : ouvre cette page dans ton navigateur.	فعلاً در برنامه لینوکس دوربین و اشتراک‌گذاری صفحه نمایش وجود ندارد: این صفحه را در مرورگر خود باز کنید.
-Écran partagé ou caméra allumée chez {noms} : l'image ne s'affiche pas dans l'appli Linux pour l'instant. Ouvre cette page dans ton navigateur pour la voir.	اشتراک‌گذاری صفحه نمایش یا دوربین روشن از طرف {noms}: تصویر فعلاً در برنامه لینوکس نمایش داده نمی‌شود. برای دیدن آن، این صفحه را در مرورگر خود باز کنید.
-Pas d'annulation d'écho ni de réduction de bruit dans l'appli Linux pour l'instant : un casque évite l'écho.	فعلاً در برنامه لینوکس حذف اکو و کاهش نویز وجود ندارد: با هدست اکو ایجاد نمی‌شود.
+# Vocal natif de l'appli de bureau (étape 2b) : réglages, avis du moteur, ce qui manque.
+Pas de caméra ni de partage d'écran dans l'appli de bureau pour l'instant : ouvre cette page dans ton navigateur.	فعلاً در برنامه دسکتاپ دوربین و اشتراک‌گذاری صفحه نمایش وجود ندارد: این صفحه را در مرورگر خود باز کنید.
+Écran partagé ou caméra allumée chez {noms} : l'image ne s'affiche pas dans l'appli de bureau pour l'instant. Ouvre cette page dans ton navigateur pour la voir.	اشتراک‌گذاری صفحه نمایش یا دوربین روشن از طرف {noms}: تصویر فعلاً در برنامه دسکتاپ نمایش داده نمی‌شود. برای دیدن آن، این صفحه را در مرورگر خود باز کنید.
+Pas d'annulation d'écho ni de réduction de bruit dans l'appli de bureau pour l'instant : un casque évite l'écho.	فعلاً در برنامه دسکتاپ حذف اکو و کاهش نویز وجود ندارد: با هدست اکو ایجاد نمی‌شود.
 {nom} (par défaut)	{nom} (پیش‌فرض)
 {n} %	{n}%
 Aucun micro n'est utilisable : tu es en sourdine. Branche-en un, puis quitte le salon et rejoins-le.	هیچ میکروفون قابل استفاده‌ای نیست: بی‌صدا هستید. یکی وصل کنید، سپس کانال را ترک کنید و دوباره بپیوندید.
 L'audio ne répond plus : le micro ou les haut-parleurs ont été débranchés ou repris par une autre application.	صدا دیگر پاسخ نمی‌دهد: میکروفون یا بلندگوها جدا شده‌اند یا برنامه دیگری آن‌ها را در اختیار گرفته است.
+Micro silencieux : si personne ne t'entend, vérifie Réglages Système › Confidentialité et sécurité › Micro, et autorise KRAKEN.	میکروفون بی‌صدا است: اگر کسی صدای شما را نمی‌شنود، تنظیمات سیستم › حریم خصوصی و امنیت › میکروفون را بررسی کنید و به KRAKEN اجازه دهید.
 Le vocal natif ne répond pas.	تماس صوتی بومی پاسخ نمی‌دهد.
 Impossible d'ouvrir une connexion réseau pour le vocal.	باز کردن اتصال شبکه برای تماس صوتی ممکن نشد.
 Le vocal natif n'a pas pu démarrer.	تماس صوتی بومی شروع نشد.
@@ -256,11 +257,10 @@ Micro indisponible : tu entres micro coupé.	میکروفون در دسترس ن
 Haut-parleurs indisponibles : tu n'entendras personne.	بلندگوها در دسترس نیستند: صدای هیچ‌کس را نخواهید شنید.
 Ni micro ni haut-parleurs utilisables : vérifie le son du système.	نه میکروفون و نه بلندگو قابل استفاده است: صدای سیستم را بررسی کنید.
 Cette version de KRAKEN n'a pas de pilote audio.	این نسخه از KRAKEN درایور صدا ندارد.
-Le vocal natif n'existe que sous Linux.	تماس صوتی بومی فقط در لینوکس وجود دارد.
 Le vocal natif s'est arrêté brutalement.	تماس صوتی بومی ناگهان متوقف شد.
 Ces réglages restent sur cet appareil. Le micro et la sortie choisis servent au prochain appel : pour en changer pendant un appel, quitte le salon et rejoins-le.	این تنظیمات روی همین دستگاه می‌مانند. میکروفون و خروجی انتخاب‌شده برای تماس بعدی استفاده می‌شوند: برای تغییر آن‌ها در حین تماس، کانال را ترک کنید و دوباره بپیوندید.
 Le volume du micro et celui des autres s'appliquent tout de suite, même pendant un appel.	بلندی صدای میکروفون و صدای دیگران بلافاصله اعمال می‌شود، حتی در حین تماس.
-Le test du micro n'existe pas encore dans l'appli Linux. Pendant un appel, la barre suit ton micro.	آزمایش میکروفون هنوز در برنامه لینوکس وجود ندارد. در حین تماس، نوار سطح میکروفون شما را نشان می‌دهد.
+Le test du micro n'existe pas encore dans l'appli de bureau. Pendant un appel, la barre suit ton micro.	آزمایش میکروفون هنوز در برنامه دسکتاپ وجود ندارد. در حین تماس، نوار سطح میکروفون شما را نشان می‌دهد.
 Niveaux	سطوح صدا
 Volume du micro	بلندی صدای میکروفون
 Volume des autres	بلندی صدای دیگران

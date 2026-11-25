@@ -1,8 +1,9 @@
-//! Vocal natif de l'appli de bureau Linux, vu de la page.
+//! Vocal natif de l'appli de bureau (Linux, macOS, Windows), vu de la page.
 //!
-//! Le navigateur intégré de Linux (WebKitGTK de la distribution) n'a pas WebRTC. L'appli de bureau
-//! y fait alors l'appel à la place de la page : un moteur Rust (`kraken-voice-native`, voir
-//! `replica/native-voice.md`) capte le micro, parle au SFU du serveur et joue le son. La page, elle,
+//! Le navigateur intégré ne peut pas toujours faire l'appel : celui de Linux (WebKitGTK de la distribution)
+//! n'a pas WebRTC, celui de macOS (WKWebView) ne donne pas le micro à une instance en http hors de cet ordinateur
+//! (règle : `voice::browser_can_call`). L'appli de bureau fait alors l'appel à la place de la page : un moteur Rust
+//! (`kraken-voice-native`, voir `replica/native-voice.md`) capte le micro, parle au SFU du serveur et joue le son. La page, elle,
 //! garde la session : elle poste l'offre à `POST /channels/{id}/voice` (comme avec WebRTC), rend la
 //! réponse au moteur, puis le questionne quelques fois par seconde et lui passe ce que la personne
 //! règle. Les sept commandes Tauri `native_voice_*` sont la seule surface (`apps/desktop/src/native_voice.rs`) ;
@@ -60,23 +61,30 @@ pub const LEVEL_STEP: f32 = 0.05;
 const POLL_MS: u32 = 120;
 /// Relevés qui échouent à la suite avant de tenir l'appel pour perdu.
 const POLL_FAILURES: u32 = 5;
+/// Durée d'un micro ouvert au niveau zéro avant de le dire (macOS), en millisecondes.
+const SILENT_MS: f64 = 6_000.0;
 
 // Les textes ci-dessous sont des clés de traduction : `t(…)` à l'affichage.
 /// Ce que la page dit de la caméra et du partage d'écran, partout où ils manquent.
 pub const NO_VIDEO: &str = tk!(
-    "Pas de caméra ni de partage d'écran dans l'appli Linux pour l'instant : ouvre cette page dans ton navigateur."
+    "Pas de caméra ni de partage d'écran dans l'appli de bureau pour l'instant : ouvre cette page dans ton navigateur."
 );
 /// Quelqu'un partage son écran ou allume sa caméra : l'image n'arrive pas jusqu'ici.
 pub const CANT_SHOW: &str = tk!(
-    "Écran partagé ou caméra allumée chez {noms} : l'image ne s'affiche pas dans l'appli Linux pour l'instant. Ouvre cette page dans ton navigateur pour la voir."
+    "Écran partagé ou caméra allumée chez {noms} : l'image ne s'affiche pas dans l'appli de bureau pour l'instant. Ouvre cette page dans ton navigateur pour la voir."
 );
-pub const NO_ECHO_CANCEL: &str =
-    tk!("Pas d'annulation d'écho ni de réduction de bruit dans l'appli Linux pour l'instant : un casque évite l'écho.");
+pub const NO_ECHO_CANCEL: &str = tk!(
+    "Pas d'annulation d'écho ni de réduction de bruit dans l'appli de bureau pour l'instant : un casque évite l'écho."
+);
 pub const BY_DEFAULT: &str = tk!("{nom} (par défaut)");
 pub const PERCENT: &str = tk!("{n} %");
 /// Le micro manque et la personne veut le rouvrir : il faut un nouvel appel (le moteur ne le change pas à chaud).
 pub const NO_MIC: &str =
     tk!("Aucun micro n'est utilisable : tu es en sourdine. Branche-en un, puis quitte le salon et rejoins-le.");
+/// macOS : un micro refusé à l'appli ne donne aucune erreur (cpal ne le signale pas), seulement du silence parfait.
+const MIC_SILENT: &str = tk!(
+    "Micro silencieux : si personne ne t'entend, vérifie Réglages Système › Confidentialité et sécurité › Micro, et autorise KRAKEN."
+);
 const AUDIO_FAILED: &str = tk!(
     "L'audio ne répond plus : le micro ou les haut-parleurs ont été débranchés ou repris par une autre application."
 );
@@ -101,7 +109,6 @@ const ENGINE_TEXTS: &[&str] = &[
     tk!("Haut-parleurs indisponibles : tu n'entendras personne."),
     tk!("Ni micro ni haut-parleurs utilisables : vérifie le son du système."),
     tk!("Cette version de KRAKEN n'a pas de pilote audio."),
-    tk!("Le vocal natif n'existe que sous Linux."),
     tk!("Le vocal natif s'est arrêté brutalement."),
 ];
 
@@ -135,10 +142,10 @@ pub fn available_now() -> bool {
     AVAILABLE.with(|a| a.get_untracked())
 }
 
-/// Au démarrage de la page : dans l'appli de bureau sans WebRTC, demande si le moteur natif est utilisable
-/// (Linux avec un pilote audio). Un navigateur, Windows et macOS n'appellent rien.
+/// Au démarrage de la page : dans l'appli de bureau dont le navigateur intégré ne peut pas faire l'appel
+/// (`voice::browser_can_call`), demande si le moteur natif est utilisable. Un navigateur n'appelle rien.
 pub fn init() {
-    if !voice::desktop() || voice::browser_webrtc() {
+    if !voice::desktop() || voice::browser_can_call() {
         return;
     }
     spawn_local(async {
@@ -152,6 +159,11 @@ pub fn init() {
 /// Le micro manque à l'appel en cours (il est entré micro coupé).
 pub fn no_mic() -> bool {
     NO_MIC_NOW.get()
+}
+
+/// L'appli de bureau tourne sous macOS : son navigateur intégré (WKWebView) le dit dans son identifiant.
+fn macos() -> bool {
+    window().navigator().user_agent().is_ok_and(|ua| ua.contains("Macintosh"))
 }
 
 // ───── les commandes ─────
@@ -253,6 +265,16 @@ struct Snapshot {
     self_speaking: bool,
     mic_level: f32,
     audio_error: Option<String>,
+}
+
+/// Ce que `follow` retient d'un relevé à l'autre.
+#[derive(Default)]
+struct Seen {
+    /// La dernière panne audio dite (une fois par panne).
+    error: Option<String>,
+    /// Depuis quand le micro ouvert est au niveau zéro (`Date.now()`), et si c'est déjà dit pour cet appel.
+    silent_since: Option<f64>,
+    told: bool,
 }
 
 /// Un périphérique audio que le moteur sait ouvrir.
@@ -383,7 +405,7 @@ impl Voice {
 
     /// Relève l'état de l'appel tant que la connexion `n` est la bonne.
     async fn follow(self, n: u64) {
-        let (mut failures, mut said) = (0, None::<String>);
+        let (mut failures, mut seen) = (0, Seen::default());
         while current(n) {
             TimeoutFuture::new(POLL_MS).await;
             if !current(n) {
@@ -411,14 +433,14 @@ impl Voice {
             if !current(n) {
                 break;
             }
-            if !self.apply_snapshot(snapshot, &mut said) {
+            if !self.apply_snapshot(snapshot, &mut seen) {
                 break;
             }
         }
     }
 
     /// Pose l'état relevé dans les signaux de la page. Faux : l'appel est perdu, on arrête de relever.
-    fn apply_snapshot(self, s: Snapshot, said: &mut Option<String>) -> bool {
+    fn apply_snapshot(self, s: Snapshot, seen: &mut Seen) -> bool {
         match s.state.kind.as_str() {
             "lost" => {
                 self.lost(lost_reason(s.state.reason.as_deref().unwrap_or_default()));
@@ -443,11 +465,26 @@ impl Voice {
             self.mic_level.set(s.mic_level);
         }
         // Micro ou haut-parleurs en panne : un avis, une fois par panne.
-        if s.audio_error != *said {
+        if s.audio_error != seen.error {
             if let Some(error) = &s.audio_error {
                 self.notice.set(Some(audio_text(error)));
             }
-            *said = s.audio_error;
+            seen.error = s.audio_error;
+        }
+        // macOS : un micro ouvert qui reste à zéro quelques secondes est sans doute refusé à l'appli (aucune erreur ne le dit).
+        let silent = macos()
+            && s.state.kind == "connected"
+            && s.mic_level <= 0.0
+            && !self.mic_off()
+            && self.native_mic_gain() > 0.0;
+        if !silent {
+            seen.silent_since = None;
+        } else if !seen.told {
+            let since = *seen.silent_since.get_or_insert_with(js_sys::Date::now);
+            if js_sys::Date::now() - since >= SILENT_MS {
+                seen.told = true;
+                self.notice.set(Some(t(MIC_SILENT)));
+            }
         }
         true
     }

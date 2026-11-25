@@ -999,7 +999,7 @@ pub fn DmCall(channel: Id) -> impl IntoView {
     }
 }
 
-/// Appli de bureau sans WebRTC (WebKitGTK de Linux) : continuer dans le navigateur du système. L'erreur a sa place
+/// Appli de bureau sans appel dans son navigateur intégré (ou avec la voix seulement) : continuer dans le navigateur du système. L'erreur a sa place
 /// réservée (un paragraphe `alert` toujours là, sur sa ligne, d'une ligne de haut) : rien ne bouge quand elle arrive.
 #[component]
 pub(crate) fn OpenInBrowser(#[prop(optional)] small: bool) -> impl IntoView {
@@ -1012,7 +1012,7 @@ pub(crate) fn OpenInBrowser(#[prop(optional)] small: bool) -> impl IntoView {
     }
 }
 
-/// Vocal natif (appli de bureau Linux) : ce que l'appel ne fait pas encore, dit en toutes lettres, et le moyen d'y
+/// Vocal natif (appli de bureau) : ce que l'appel ne fait pas encore, dit en toutes lettres, et le moyen d'y
 /// arriver par le navigateur du système. `id` : ce que citent les boutons grisés par `aria-describedby`.
 #[component]
 fn NativeLimits(id: &'static str) -> impl IntoView {
