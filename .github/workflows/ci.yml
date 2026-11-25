@@ -44,6 +44,25 @@ jobs:
       - run: python3 scripts/css-logical-check.py
       - run: python3 scripts/i18n-check.py
 
+  # Vocal natif sur Mac et Windows : cpal (CoreAudio, WASAPI) et libopus (compilée par cmake, déjà sur ces images, liée
+  # statiquement ; sous Windows avec MSVC) doivent se compiler, et les tests du moteur passent avec la carte son synthétique
+  # (ces machines n'ont pas de son : la liste des périphériques y est vide ou refusée, sans panique). Linux est dans `rust`.
+  native-voice:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cmake --version
+      - run: cargo test -p kraken-voice-native
+      - run: cargo clippy -p kraken-voice-native --all-targets -- -D warnings
+
   # Image Docker : sur main, amd64 + arm64 publiées sur ghcr.io/<propriétaire>/kraken (latest et
   # le commit) ; sur une PR, amd64 seulement, rien de publié. Compilation croisée, pas d'émulation.
   # Seulement une fois les tests passés ; actions fixées par commit (ce job peut publier l'image).
